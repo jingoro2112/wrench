@@ -1,0 +1,9 @@
+tests/000_
+tests/001_operations.c
+tests/002_comments.c
+tests/003_if.c
+tests/004_unit.c
+tests/005_loops.c
+tests/006_logic.c
+tests/007_arrays.c
+tests/008_userData.c
