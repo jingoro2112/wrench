@@ -31,10 +31,16 @@ the code size at the cost of being able to only load/run bytecode
 /***********************************************************************/
 
 /************************************************************************
-The interpreter normally loads partial blocks, with this defined it will
-assume the loader function returns a single time with the entire
-program. The returned block should be as large as practical, minimum of
-16 bytes is reccomended
+For efficiency The interpreter expects a pointer to a single contiguous
+block of bytecode, and it will never call the loader again.
+
+IF YOU WANT TO DO PARTIAL LOADS: You must comment out the following!
+
+This will compile in the bounds-checking and call the loader whenever
+it detects execution space outside of the current block. The loader
+must return a pointer to the requested offset in the bytecode and the
+size of the mapped block. return AT LEAST 16 BYTES or "bad things"
+happen
 */
 #define SINGLE_COMPLETE_BYTECODE_LOAD
 /***********************************************************************/
@@ -71,11 +77,164 @@ longer function
 #define SPRINTF_OPERATIONS
 /***********************************************************************/
 
-#define WRENCH_VERSION 101
+#define WRENCH_VERSION 102
 
 #include <stdint.h>
+struct WRState;
+struct WRValue;
 
-//------------------------------------------------------------------------------
+/***************************************************************/
+/**************************************************************/
+//                       State Management
+
+// create/destroy a WRState object that can run multiple contexts/threads
+WRState* wr_newState( int stackSize =DEFAULT_STACK_SIZE );
+void wr_destroyState( WRState* w );
+
+
+
+/***************************************************************/
+/**************************************************************/
+//                        Running Code
+
+//     function to load, run and call back to the interpreter
+// Callback to load bytecode, see note above regarding :
+// SINGLE_COMPLETE_BYTECODE_LOAD
+// by default this will be called one time and expects the entire
+// bytecode to be mapped to the 'block' pointer. wr_run() has a
+// built-in simple version for ease of use.
+//
+// offset: where in the bytecode wrench needs loaded (will be zero
+//         unless SINGLE_COMPLETE_BYTECODE_LOAD is defined)
+// block:  pointer to pointer where the lock is mapped, this can be ROM
+// usr:    opaque pointer passed to each load call (optional)
+typedef unsigned int (*WR_LOAD_BLOCK_FUNC)( int offset, const unsigned char** block, void* usr );
+
+// compile a block of code and return a new'ed block of bytecode ready
+// for wr_run()
+// return value is a WRError
+int wr_compile( const char* source, const int size, unsigned char** out, int* outLen );
+
+// run a block of code, either as a single block or with a loader that
+// will be called back. PLEASE SEE NOTES ABOVE REGARDING: SINGLE_COMPLETE_BYTECODE_LOAD
+
+// w:      state
+// block/size: location of bytecode
+// loader/usr: callback for loader and a void* pointer that will be
+//             passed to the loader opaquely (optional)
+// RETURNS: a contextId which must be passed to callFunction when
+//          multiple scripts are loaded into a single state
+//          'global' state is NOT SHARED between contexts
+int wr_run( WRState* w, const unsigned char* block, const int size );
+int wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr =0 );
+
+
+// after has run, this allows any function contained inside it to be
+// called with the given arguments, returning a single value
+// contextId:    the context in which the function was loaded
+// functionName: plaintext name of the function to be called
+// argv:         array of WRValues to call the function with (optional)
+// argn:         how many arguments argv contains (optional, but if
+//               zero then argv will be ignored)
+int wr_callFunction( WRState* w, const int contextId, const char* functionName, const WRValue* argv =0, const int argn =0 );
+int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const WRValue* argv =0, const int argn =0 );
+
+// use this to destroy a context you no longer need and free up all the
+// memeory it was using
+void wr_destroyContext( WRState* w, const int contextId );
+
+
+/***************************************************************/
+/***************************************************************/
+//                Calling back to c++ from wrench                         
+
+// register a function inside a state that can be called (by ALL
+// contexts)
+// callback will contain:
+// w:             state it was called back from
+// argv:          pointer to number of arguments function was called
+//                with (may be null!)
+// argn:          how many arguments it was called with
+// retVal:        this value will be passed back, default zero
+// usr:           opaque pointer function was registered with
+typedef void (*WR_C_CALLBACK)(WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr );
+
+// IMPORTANT: The values passed may be references (keepin' it real) so
+// always use the getters inside the WRValue class:
+
+// int: WRValue.asInt();
+// float: WRValue.asFloat();
+// string: WRValue.asString();
+
+
+// w:        state to register with (will be available to all contexts)
+// name:     name of the function
+// function: callback (see typdef above)
+// usr:      opaque pointer that will be passed to the callback (optional)
+int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr =0 );
+
+
+
+/***************************************************************/
+/**************************************************************/
+//              wrench types and how to make them!
+
+// The WRValue is the basic data unit inside wrench, it can be a
+// float/int/array whatever... think of it as a thneed. Its 8 bytes on
+// a 32 bit system and you can create one on the stack no problemo, no
+// heap RAM will be harmed
+
+// load a value up and make it ready for calling a function
+void wr_makeInt( WRValue* val, int i );
+void wr_makeFloat( WRValue* val, float f );
+
+// So you want to access memory directly? This is how you do that. with
+// a custom User type. creating a UserData is like creating a struct,
+// its a container that can be accessed by wrench with dot notation:
+//
+// someUserData.value1      <- simple value
+// someUserData.value2[20]  <- array
+
+// STEP 1:    create the user data. This will be the 'top level' object
+// the other members are loaded into. It can be passed to any function as
+// a parameter
+void wr_makeUserData( WRValue* value );
+
+// STEP 2:    load it up!
+//
+// add the given value to the userData, which will be accessible by
+// 'name' as in:  theObject.name 
+
+// userData:  User data object created with wr_makeUserData() above
+// name:      what the array will be called inside wrench
+// data/len:  pointer to a user-managed memory space which will be
+//            accessible via .name inside wrench
+// value:     pointer to a plain user-mananged WRValue
+void wr_addUserValue( WRValue* userData, const char* name, WRValue* value );
+void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned char* data, const int len );
+void wr_addUserIntArray( WRValue* userData, const char* name, const int* data, const int len );
+void wr_addUserFloatArray( WRValue* userData, const char* name, const float* data, const int len );
+
+// STEP 3:    use it!
+// the userData object can now be used in any call into wrench and be
+// accessible as shown above. All structures will be freed when WRValue
+// falls out of scope, alternately they can be manually freed by
+// calling the clear() method from WRValue
+
+
+
+// NOTE: for efficiency there is no constructor on WRValue despite it
+// having pointers! This is because 99.99% of the time one is
+// created it's immediately loaded with values, so a constructor would
+// be wasted cycles in all cases. But this also means it's your
+// responsibility to call "wr_makeXXX or at LEAST .init() after
+// creating one!
+
+
+/***************************************************************/
+/***************************************************************/
+//                          Errors
+
 // in order to minimize text segment size, only a minimum of strings
 // are embedded in the code. error messages are very verbose enums
 enum WRError
@@ -97,7 +256,7 @@ enum WRError
 	WR_ERR_break_keyword_not_in_looping_structure,
 	WR_ERR_continue_keyword_not_in_looping_structure,
 	WR_ERR_expected_while,
-	
+
 	WR_ERR_execute_must_be_called_by_itself_first,
 	WR_ERR_hash_table_size_exceeded,
 	WR_ERR_wrench_function_not_found,
@@ -110,60 +269,40 @@ enum WRError
 	WR_ERR_usr_data_refernce_not_found,
 
 	WR_warning_enums_follow,
-	
+
 	WR_WARN_c_function_not_found,
-
-	WR_WARN_run_gc,
-
 };
 
-struct WRState;
-struct WRValue;
-
+// after wrench executes it may have set an error code, this is how to
+// retreive it. This sytems is coarse at the moment. Re-entering the
+// interpreter clears the last error
 WRError wr_getLastError( WRState* w );
 
-// the rest of the API is pretty simplified and straightforward
 
-typedef unsigned int (*WR_LOAD_BLOCK_FUNC)( int offset, unsigned char** block, void* usr );
+/******************************************************************/
+//                    "standard" functions
 
-typedef void (*WR_C_CALLBACK)(WRState* s, WRValue* argv, int argn, WRValue& retVal, void* usr );
+// just some simple stuff I needed to make my project work
 
-WRError wr_compile( const char* source, const int size, unsigned char** out, int* outLen );
+extern int32_t wr_Seed; // make sure you set this to something random on startup if you are going to use rnd
 
-int wr_run( WRState* w, const unsigned char* block, const int size );
-int wr_run( WRState* w, WR_LOAD_BLOCK_FUNC, void* usr );
-int wr_callFunction( WRState* w, const int contextId =0, const char* functionName =0, const WRValue* argv =0, const int argn =0 );
+// return a number between 0 and range such that:
+// wr_rand( 100 );  -- will return 0 to 99
+// wr_rand( 2 );  -- will return 0 or 1
+//
+// in other words: under the hood it's "rescramble with seed, return (seed % range)"
+int32_t wr_rand( int32_t range ); 
 
-void wr_destroyContext( WRState* w, const int contextId );
+// hashing function used inside wrench, it's a stripped down murmer,
+// not academically fantastic but very good and very fast
+uint32_t wr_hash( const void* dat, const int len );
+uint32_t wr_hashStr( const char* dat );
 
-void wr_makeInt( WRValue* val, int i );
-void wr_makeFloat( WRValue* val, float f );
-void wr_makeString( WRValue* val, const char* s );
 
-void wr_makeArray( WRValue* val, const int len, const char* registerNameAs =0, WRValue* registerInUserData =0 );
-void wr_makeCharArray( WRValue* val, const int len, const unsigned char* preAllocated =0, const char* registerNameAs =0, WRValue* registerInUserData =0 );
-void wr_makeIntArray( WRValue* val, const int len, const int* preAllocated =0, const char* registerNameAs =0, WRValue* registerInUserData =0 );
-void wr_makeFloatArray(WRValue* val, const int len, const float* preAllocated =0, const char* registerNameAs =0, WRValue* registerInUserData =0 );
 
-void wr_makeUserData( WRValue* val, void* usr =0 );
-void wr_destroyValue( WRValue* val );
-
-struct WRUserData;
-void wr_registerUserValue( WRValue* userData, const char* key, WRValue* value );
-WRValue* wr_getUserValue( WRValue* userData, const char* key );
-void* wr_getUserPointer( WRValue* userData );
-
-WRState* wr_newState();
-void wr_destroyState( WRState* w );
-
-int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr =0 );
-
-char* wr_valueToString( WRValue const& value, char* string );
-int wr_valueToInt( WRValue const& value );
-float wr_valueToFloat( WRValue const& value );
-
-struct WRUserData;
-class WRStaticValueArray;
+// inside-baseball time. This has to be here so stuff that includes
+// "wrench.h" can create a WRValue. nothing to see here.. smile and
+// wave...
 
 //------------------------------------------------------------------------------
 enum WRValueType
@@ -176,36 +315,56 @@ enum WRValueType
 };
 
 //------------------------------------------------------------------------------
+class WRUserData;
+class WRStaticValueArray;
 struct WRValue
 {
-	union
-	{
-		int32_t i;
-		float f;
-		void* p;
-		WRValue* r;
-		WRStaticValueArray* va;
-		WRUserData* u;
-	};
+	int asInt() const { return type == WR_REF ? r->asInt() : type == WR_FLOAT ? (int)f : i; }
+	float asFloat() const { return type == WR_REF ? r->asFloat() : type == WR_FLOAT ? f : (float)i; }
 
-	union
-	{
-		uint8_t type;
-		uint32_t arrayElement;
-	};
-			
-	void clear() { p = 0; arrayElement = WR_INT; }
+	// string: must point to a buffer long enough to contain the string in
+	// the case value is an array of chars. the pointer will be passed back
+	char* asString( char* string ) const;
 
+
+/*
+	// argv
+	int wr_valueToInt( WRValue const& value );
+	float wr_valueToFloat( WRValue const& value );
+	// string: must point to a buffer long enough to contain the string in
+	// the case value is an array of chars. the pointer will be passed back
+	char* wr_valueToString( WRValue const& value, char* string );
+*/
+	
+	
+	void init() { p = 0; arrayElement = 0; } // call upon first create or when you're sure no memory is hanging from one
+	void free(); // treat this object as if it owns any memory allocated on u or va pointer
+
+	// easy access to the void* dynamically typed
 	WRValue* asValueArray( int* len =0 );
 	unsigned char* asCharArray( int* len =0 );
 	int* asIntArray( int* len =0 );
 	float* asFloatArray( int* len =0 );
 
-};
+	~WRValue() { free(); }
 
-//--------------------- STD functions
-extern int32_t wr_Seed;
-int32_t wr_rnd( int32_t range );
+	//-----------------
+	union // first 4 bytes
+	{
+		int32_t i;
+		float f;
+		const void* p;
+		WRValue* r;
+		WRStaticValueArray* va;
+		WRUserData* u;
+	};
+
+	union // next 4 bytes
+	{
+		uint8_t type; // carries the type
+		uint32_t arrayElement; // if this is a reference to an array, this carries the currently indexed item in the top 24 bits
+	};
+};
 
 
 #ifndef WRENCH_COMBINED

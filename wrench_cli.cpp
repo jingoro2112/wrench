@@ -5,7 +5,6 @@
 #include "discrete_src/str.h"
 
 int runTests( int number =0 );
-int testRembrandt();
 
 //------------------------------------------------------------------------------
 void blobToHeader( WRstr const& blob, WRstr const& variableName, WRstr& header )
@@ -86,22 +85,23 @@ int usage()
 }
 
 //------------------------------------------------------------------------------
-void getIndexed( WRState* w, void* usr, WRValue* index, WRValue* out )
-{
-	out->type = WR_INT;
-	out->i = 10;
-	
-}
-
-//------------------------------------------------------------------------------
-static void log( WRState* s, WRValue* argv, int argn, WRValue& retVal, void* usr )
+static void log( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
 		char buf[256];
-		printf( "%s", wr_valueToString(argv[i], buf) );
+		printf( "%s", argv[i].asString(buf) );
 	}
 	printf( "\n" );
+}
+
+//------------------------------------------------------------------------------
+static void rnd( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	if ( argn )
+	{
+		wr_makeInt( &retVal, wr_rand(argv[0].i) );
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -117,10 +117,6 @@ int main( int argn, char* argv[] )
 	if ( command == "t" )
 	{
 		runTests( (argn >= 3) ? atoi(argv[2]) : 0 );
-	}
-	else if ( command == "r" )
-	{
-		testRembrandt();
 	}
 	else if ( (command == "xb" || command == "xs") && argn == 3 )
 	{
@@ -160,10 +156,10 @@ int main( int argn, char* argv[] )
 		WRState* w = wr_newState();
 		wr_registerFunction( w, "log", log );
 
-		int err = wr_run( w, (const unsigned char *)bytes.c_str(), bytes.size() );
-		if ( err )
+		wr_run( w, (const unsigned char *)bytes.c_str(), bytes.size() );
+		if ( wr_getLastError( w ) )
 		{
-			printf( "err: %d\n", err );
+			printf( "err: %d\n", (int)wr_getLastError(w) );
 		}
 	}
 	else if ( command == "cb" || command == "ch" )
@@ -249,20 +245,20 @@ int main( int argn, char* argv[] )
 }
 
 //------------------------------------------------------------------------------
-static void emit( WRState* s, WRValue* argv, int argn, WRValue& retVal, void* usr )
+static void emit( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	if ( argn >= 1 )
 	{
 		char buf[256];
-		((WRstr*)usr)->appendFormat( "%s\n", wr_valueToString(*argv, buf) );
+		((WRstr*)usr)->appendFormat( "%s\n", argv->asString(buf) );
 	}
 }
 
 //------------------------------------------------------------------------------
-unsigned int cliTestLoader( int offset, unsigned char** block, void* usr )
+unsigned int cliTestLoader( const int offset, const unsigned char** block, void* usr )
 {
 	*block = (unsigned char *)usr + offset;
-	return 16;
+	return 16; // return only 16 bytes at a time to be nasty
 }
 
 //------------------------------------------------------------------------------
@@ -272,28 +268,33 @@ int runTests( int number )
 	WRstr codeName;
 
 	WRValue userData;
-	WRValue charArray;
-	WRValue intArray;
-	WRValue floatArray;
+	WRValue userval;
 	unsigned char userChar[10];
 	int usrInt[10];
 	float usrFloat[10];
 	wr_makeUserData( &userData );
-	wr_makeCharArray( &charArray, 10, userChar, "ac", &userData );
-	wr_makeIntArray( &intArray, 10, usrInt, "ai", &userData );
-	wr_makeFloatArray( &floatArray, 10, usrFloat, "af", &userData );
+
+	wr_addUserCharArray( &userData, "ac", userChar, 10 );
+	wr_addUserIntArray( &userData, "ai", usrInt, 10 );
+	wr_addUserFloatArray( &userData, "af", usrFloat, 10 );
+
+	wr_makeInt( &userval, 0 );
+	wr_addUserValue( &userData, "val", &userval );
+
 
 /*
 	user.ac[10]
 	user.ai[10]
 	user.af[10]
 */
+	
 	FILE* tfile = fopen( "test_files.txt", "r" );
 	char buf[256];
 	int fileNumber = 0;
-	WRError err = WR_ERR_None;
+	int err = 0;
 
 	WRState* w = wr_newState();
+	wr_registerFunction(w, "rand", rnd);
 
 	while( fgets(buf, 255, tfile) && (err==0) )
 	{
@@ -376,71 +377,13 @@ int runTests( int number )
 
 	wr_destroyState( w );
 
-	wr_destroyValue( &userData );
-	wr_destroyValue( &charArray );
-	wr_destroyValue( &intArray );
-	wr_destroyValue( &floatArray );
+	//wr_destroyValue( &userData );
+	//wr_destroyValue( &charArray );
+	//wr_destroyValue( &intArray );
+	//wr_destroyValue( &floatArray );
 
 	fclose( tfile );
 	return err;
 }
 
 
-//------------------------------------------------------------------------------
-#include "rembrandt/effects.h"
-#include "rembrandt/wrench_effects.h"
-AddressableChannel addrChannel[NUM_EFFECT_CHANNELS];
-RGBChannel rgbChannel[NUM_RGB_CHANNELS];
-EEPROMConstants constants;
-WRValue clock;
-
-
-//------------------------------------------------------------------------------
-int testRembrandt()
-{
-	unsigned char* out;
-	int outLen;
-	WRstr infile;
-	infile.fileToBuffer( "arduino_effects.c" );
-	wr_compile( infile, infile.size(), &out, &outLen );
-
-	WRState* w = wr_newState();
-	
-	setupWrench();
-	for( int c=0; c<NUM_EFFECT_CHANNELS; ++c )
-	{
-		addrChannel[c].threadId = wr_run( w, wrenchEffects_bytecode, wrenchEffects_bytecodeSize );
-		printf( "%d\n", addrChannel[c].threadId );
-	}
-
-	for( int c=0; c<NUM_RGB_CHANNELS; ++c )
-	{
-		rgbChannel[c].threadId = wr_run( w, wrenchEffects_bytecode, wrenchEffects_bytecodeSize );
-		printf( "%d\n", rgbChannel[c].threadId );
-	}
-
-	for(;;)// clock.i=0; clock.i<100000; ++clock.i )
-	{
-		for( int c=0; c<NUM_EFFECT_CHANNELS; ++c )
-		{
-			if ( --addrChannel[c].ticksToNextCall.i < 0 )
-			{
-				addrChannel[c].ticksToNextCall.i = 0;
-				wr_callFunction( w, addrChannel[c].threadId, "tick_addr", &addrChannel[c].userData, 1 );
-			}
-		}
-
-		for( int c=0; c<NUM_RGB_CHANNELS; ++c )
-		{
-			if ( --rgbChannel[c].ticksToNextCall.i < 0 )
-			{
-				rgbChannel[c].ticksToNextCall.i = 0;
-				wr_callFunction( w, rgbChannel[c].threadId, "tick_rgb", &rgbChannel[c].userData, 1 );
-			}
-		}
-		
-//		printf( "%d\n", r[5].i );
-	}
-
-	return 0;
-}

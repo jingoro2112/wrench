@@ -1,0 +1,121 @@
+Big picture: wrench is very c-like without the types
+
+// single line comments are fine
+/* as are block comments */
+
+
+-----------------------------------------------------------------
+                         Variable
+
+Enter any label the namespace by declaring them with a value:
+
+a = 10;
+b = 20.5;
+c = "some string";
+
+-----------------------------------------------------------------
+                          Arrays
+
+Arrays are 0-based and statically allocated, the first time an array is encountered 
+it's size is set:
+
+ar[100];  // creates a 100-element array
+
+ar[20] = 40;
+
+b = ar[232]; // any index past the last will return the last (this returns element 99)
+
+
+-----------------------------------------------------------------
+                        if/then/else
+
+familiar syntax I hope:
+
+if ( a == 2 )
+{
+    // do something
+}
+else if ( b < 2 )
+{
+    // do something else
+}
+else
+{
+    // thrice
+}
+
+common logical operators are supported: > < >= <= == != 
+in addition any expression can be used logically 
+
+g = 0;
+if ( g )
+{
+    // will NOT be executed
+}
+
+if ( !g )
+{
+    // WILL be executed
+}
+
+-----------------------------------------------------------------
+                            for
+
+Very c-like:
+
+for( i=0; i<10; ++i )
+{
+    // will execute 10 times 0-9
+}
+
+-----------------------------------------------------------------
+                          do/while
+
+
+while ( condition )
+{
+    // will execute as long as 'condition' evaluates true (non-zero)
+}
+
+do
+{
+    // will execute at least once and then again as long as condition is true
+} while ( condition );
+
+
+-----------------------------------------------------------------
+                         operators
+
+All the common and most of the uncommon ones are suypported
+                         
++ - / * % | & ^ || && == != << >>
++=
+-=
+/=
+*=
+%=
+>>=
+<<=
+
+
+++ -- (pre and post)
+!
+
+-----------------------------------------------------------------
+                         functions
+
+the keyword 'function' creates a function at the top level:
+
+// function taking a single argument:
+function foo( a )
+{
+
+}
+
+
+arguments are always optional, they will be filled in with '0' if not specified,
+if too many arguments are specified the extra ones will be dropped:
+
+foo( 10, 20 30 ); // will call the 'foo' function above with '10' as a
+
+functions always return a value, if not specified that value is zero

@@ -1460,6 +1460,118 @@ WRTargetFunc wr_binaryMod[5][5] =
 };
 
 //------------------------------------------------------------------------------
+void doBinaryLeftShift_R_R( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( to->r->type == WR_ARRAY )
+	{
+		WRValue element;
+		arrayToValue( to, &element );
+		wr_binaryLeftShift[element.type][from->type](&element, from, target);
+	}
+	else if ( from->r->type == WR_ARRAY )
+	{
+		WRValue element;
+		arrayToValue( from, &element );
+		wr_binaryLeftShift[to->r->type][element.type]( to->r, &element, target);
+	}
+	else
+	{
+		wr_binaryLeftShift[to->r->type][from->r->type](to->r, from->r, target);
+	}
+}
+void doBinaryLeftShift_R_I( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( to->r->type == WR_ARRAY )
+	{
+		WRValue element;
+		arrayToValue( to, &element );
+		wr_binaryLeftShift[element.type][WR_INT](&element, from, target);
+	}
+	else
+	{
+		wr_binaryLeftShift[to->r->type][WR_INT](to->r, from, target);
+	}
+}
+void doBinaryLeftShift_I_R( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( from->r->type == WR_ARRAY )
+	{
+		WRValue element;
+		arrayToValue( from, &element );
+		wr_binaryLeftShift[WR_INT][element.type](to, &element, target);
+	}
+	else
+	{
+		wr_binaryLeftShift[WR_INT][from->r->type](to, from->r, target);
+	}
+}
+void doBinaryLeftShift_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i << from->i; }
+WRTargetFunc wr_binaryLeftShift[5][5] = 
+{
+	{  doBinaryLeftShift_I_I,  doBinaryLeftShift_I_R,  doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank },
+	{  doBinaryLeftShift_R_I,  doBinaryLeftShift_R_R,  doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank },
+	{      doTargetFuncBlank,      doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank },
+	{      doTargetFuncBlank,      doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank },
+	{      doTargetFuncBlank,      doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank },
+};
+
+//------------------------------------------------------------------------------
+void doBinaryRightShift_R_R( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( to->r->type == WR_ARRAY )
+	{
+		WRValue element;
+		arrayToValue( to, &element );
+		wr_binaryRightShift[element.type][from->type](&element, from, target);
+	}
+	else if ( from->r->type == WR_ARRAY )
+	{
+		WRValue element;
+		arrayToValue( from, &element );
+		wr_binaryRightShift[to->r->type][element.type]( to->r, &element, target);
+	}
+	else
+	{
+		wr_binaryRightShift[to->r->type][from->r->type](to->r, from->r, target);
+	}
+}
+void doBinaryRightShift_R_I( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( to->r->type == WR_ARRAY )
+	{
+		WRValue element;
+		arrayToValue( to, &element );
+		wr_binaryRightShift[element.type][WR_INT](&element, from, target);
+	}
+	else
+	{
+		wr_binaryRightShift[to->r->type][WR_INT](to->r, from, target);
+	}
+}
+void doBinaryRightShift_I_R( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( from->r->type == WR_ARRAY )
+	{
+		WRValue element;
+		arrayToValue( from, &element );
+		wr_binaryRightShift[WR_INT][element.type](to, &element, target);
+	}
+	else
+	{
+		wr_binaryRightShift[WR_INT][from->r->type](to, from->r, target);
+	}
+}
+void doBinaryRightShift_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i >> from->i; }
+WRTargetFunc wr_binaryRightShift[5][5] = 
+{
+	{ doBinaryRightShift_I_I,  doBinaryRightShift_I_R,  doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank },
+	{ doBinaryRightShift_R_I,  doBinaryRightShift_R_R,  doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank },
+	{      doTargetFuncBlank,       doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank },
+	{      doTargetFuncBlank,       doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank },
+	{      doTargetFuncBlank,       doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank,  doTargetFuncBlank },
+};
+
+//------------------------------------------------------------------------------
 void doBinaryOr_R_R( WRValue* to, WRValue* from, WRValue* target )
 {
 	if ( to->r->type == WR_ARRAY )
@@ -2343,9 +2455,9 @@ void doUserHash_R( WRValue* value, WRValue* target, int32_t hash )
 }
 void doUserHash_U( WRValue* value, WRValue* target, int32_t hash )
 {
-	if ( !(target->r = value->u->index.getItem(hash)) )
+	if ( !(target->r = value->u->get(hash)) )
 	{
-		target->clear();
+		target->init();
 	}
 	else
 	{

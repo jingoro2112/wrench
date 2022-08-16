@@ -81,8 +81,8 @@ const WROperation c_operations[] =
 	{ "&",   11, O_BinaryAnd,           true,  WR_OPER_BINARY_COMMUTE },
 	{ "^",   11, O_BinaryXOR,           true,  WR_OPER_BINARY_COMMUTE },
 
-	{ ">>",   7, O_BitwiseRightShift,   true,  WR_OPER_BINARY },
-	{ "<<",   7, O_BitwiseLeftShift,    true,  WR_OPER_BINARY },
+	{ ">>",   7, O_BinaryRightShift,    true,  WR_OPER_BINARY },
+	{ "<<",   7, O_BinaryLeftShift,     true,  WR_OPER_BINARY },
 
 	{ "+=",  16, O_AddAssign,           true,  WR_OPER_BINARY },
 	{ "-=",  16, O_SubtractAssign,      true,  WR_OPER_BINARY },
@@ -191,7 +191,7 @@ struct WRExpressionContext
 		global = false;
 		stackPosition = -1;
 		token.clear();
-		value.clear();
+		value.init();
 		bytecode.clear();
 
 		return this;

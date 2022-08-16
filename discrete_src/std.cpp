@@ -26,9 +26,40 @@ SOFTWARE.
 
 int32_t wr_Seed;
 
-int32_t wr_rnd( int32_t range )
+//------------------------------------------------------------------------------
+int32_t wr_rand( int32_t range )
 {
 	int32_t	k = wr_Seed / 127773;
 	wr_Seed = 16807 * ( wr_Seed - k * 127773 ) - 2836 * k;
 	return wr_Seed % range;
+}
+
+//------------------------------------------------------------------------------
+uint32_t wr_hash( const void *dat, const int len )
+{
+	// in-place implementation of murmer
+	uint32_t hash = 0x811C9DC5;
+	const unsigned char* data = (const unsigned char *)dat;
+
+	for( int i=0; i<len; ++i )
+	{
+		hash ^= (uint32_t)data[i];
+		hash *= 0x1000193;
+	}
+
+	return hash;
+}
+
+//------------------------------------------------------------------------------
+uint32_t wr_hashStr( const char* dat )
+{
+	uint32_t hash = 0x811C9DC5;
+	const char* data = dat;
+	while ( *data )
+	{
+		hash ^= (uint32_t)(*data++);
+		hash *= 0x1000193;
+	}
+
+	return hash;
 }

@@ -107,9 +107,9 @@ float* WRValue::asFloatArray( int* len )
 }
 
 //------------------------------------------------------------------------------
-WRState* wr_newState()
+WRState* wr_newState( int stackSize )
 {
-	return new WRState;
+	return new WRState( stackSize );
 }
 
 //------------------------------------------------------------------------------
@@ -138,19 +138,19 @@ WRRunContext::~WRRunContext()
 }
 
 //------------------------------------------------------------------------------
-WRState::WRState( int stackSize )
+WRState::WRState( int EntriesInStack )
 {
 	contextIdGenerator = 0;
 	
 	err = WR_ERR_None;
 
+	stackSize = EntriesInStack;
 	stack = new WRValue[ stackSize ];
 	for( int i=0; i<stackSize; ++i )
 	{
-		stack[i].clear();
+		stack[i].init();
 	}
 	stackTop = stack;
-
 
 	loader = 0;
 	usr = 0;
@@ -167,7 +167,11 @@ WRState::~WRState()
 		delete contextList;
 		contextList = next;
 	}
-	
+
+	for( int i=0; i<stackSize; ++i )
+	{
+		stack[i].init();
+	}
 	delete[] stack;
 }
 
@@ -175,21 +179,23 @@ WRState::~WRState()
 WRStaticValueArray* WRRunContext::getSVA( int size, WRStaticValueArrayType type )
 {
 	// gc before every alloc may seem a bit much but we want to be miserly
-	if ( w->err == WR_WARN_run_gc && svAllocated )
+	if ( svAllocated )
 	{
-		// mark
+		// mark stack
 		for( WRValue* s=w->stack; s<w->stackTop; ++s)
 		{
 			// an array in the chain?
-			if ( s->type == WR_ARRAY && (s->va->m_type & SV_GC) )
+			if ( s->type == WR_ARRAY && !(s->va->m_type & SV_PRE_ALLOCATED) )
 			{
 				gcArray( s->va );
 			}
 		}
+		
+		// mark context's global
 		for( int i=0; i<globals; ++i )
 		{
 			// an array in the chain?
-			if ( globalSpace[i].type == WR_ARRAY && (globalSpace[i].va->m_type & SV_GC) )
+			if ( globalSpace[i].type == WR_ARRAY && !(globalSpace[i].va->m_type & SV_PRE_ALLOCATED) )
 			{
 				gcArray( globalSpace[i].va );
 			}
@@ -223,8 +229,6 @@ WRStaticValueArray* WRRunContext::getSVA( int size, WRStaticValueArrayType type 
 		}
 	}
 
-
-
 	
 	WRStaticValueArray* ret = new WRStaticValueArray( size, type );
 	if ( type == SV_VALUE )
@@ -232,11 +236,10 @@ WRStaticValueArray* WRRunContext::getSVA( int size, WRStaticValueArrayType type 
 		WRValue *array = (WRValue *)ret->m_data;
 		for( int i=0; i<size; ++i )
 		{
-			array[i].clear();
+			array[i].init();
 		}
 	}
 
-	ret->m_type |= SV_GC;
 	ret->m_next = svAllocated;
 	svAllocated = ret;
 
@@ -255,7 +258,7 @@ void WRRunContext::gcArray( WRStaticValueArray* sva )
 		WRValue* top = (WRValue*)sva->m_data + (sva->m_size & ~0x40000000);
 		for( WRValue* i = (WRValue*)sva->m_data; i<top; ++i )
 		{
-			if ( i->type == WR_ARRAY && (i->va->m_type & SV_GC) )
+			if ( i->type == WR_ARRAY && !(i->va->m_type & SV_PRE_ALLOCATED) )
 			{
 				gcArray( i->va );
 			}
@@ -270,7 +273,7 @@ void wr_destroyState( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-unsigned int wr_loadSingleBlock( int offset, unsigned char** block, void* usr )
+unsigned int wr_loadSingleBlock( int offset, const unsigned char** block, void* usr )
 {
 	*block = (unsigned char *)usr;
 	return 0xFFFFFFF; // larger than any bytecode possible
@@ -286,13 +289,18 @@ WRError wr_getLastError( WRState* w )
 int wr_runEx( WRState* w )
 {
 	int context_id = ++w->contextIdGenerator;
+	if ( context_id == 0 ) // catch wraparound
+	{
+		++context_id;
+	}
+	
 	WRRunContext* C = new WRRunContext( w );
 	C->next = w->contextList;
 	w->contextList = C;
 	
 	w->contexts.set( context_id, C );
 
-	if ( wr_callFunction(w, context_id) )
+	if ( wr_callFunction(w, context_id, (int32_t)0) )
 	{
 		w->contextIdGenerator--;
 		delete C;
@@ -322,8 +330,8 @@ int wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr )
 //------------------------------------------------------------------------------
 void wr_destroyContext( WRState* w, const int contextId )
 {
-	WRRunContext* context = w->contexts.getItem( contextId );
-	if ( !context )
+	WRRunContext* context;
+	if ( !contextId || !(context = w->contexts.getItem(contextId)) )
 	{
 		return;
 	}
@@ -353,7 +361,7 @@ void wr_destroyContext( WRState* w, const int contextId )
 
 	delete context;
 }
-					  
+
 //------------------------------------------------------------------------------
 int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr )
 {
@@ -375,124 +383,70 @@ int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, v
 #include <stdio.h>
 #endif
 //------------------------------------------------------------------------------
-char* wr_valueToString( WRValue const& value, char* string )
+char* WRValue::asString( char* string ) const
 {
-	if ( string )
+	switch( type )
 	{
-		switch( value.type )
-		{
 #ifdef SPRINTF_OPERATIONS
-			case WR_INT: { sprintf( string, "%d", value.i ); break; }
-			case WR_FLOAT: { sprintf( string, "%g", value.f ); break; }
+		case WR_INT: { sprintf( string, "%d", i ); break; }
+		case WR_FLOAT: { sprintf( string, "%g", f ); break; }
 #else
-			case WR_INT: 
-			case WR_FLOAT:
-			{
-				string[0] = 0;
-				break;
-			}
+		case WR_INT: 
+		case WR_FLOAT:
+		{
+			string[0] = 0;
+			break;
+		}
 #endif
-			case WR_REF:
+		case WR_REF:
+		{
+			if ( r->type == WR_ARRAY )
 			{
-				if ( value.r->type == WR_ARRAY )
-				{
-					WRValue temp;
-					arrayToValue( &value, &temp );
-					return wr_valueToString( temp, string );
-				}
-				else
-				{
-					return wr_valueToString( *value.r, string );
-				}
+				WRValue temp;
+				arrayToValue( this, &temp );
+				return temp.asString( string );
 			}
-			case WR_USR:
+			else
 			{
-				return string;
-			}
-
-			case WR_ARRAY:
-			{
-				unsigned int s = 0;
-
-				for( ; s<value.va->m_size; ++s )
-				{
-					switch( value.va->m_type & 0x3)
-					{
-						case SV_VALUE: string[s] = ((WRValue *)value.va->m_data)[s].i; break;
-						case SV_CHAR: string[s] = ((char *)value.va->m_data)[s]; break;
-						case SV_INT: string[s] = ((int *)value.va->m_data)[s]; break;
-						case SV_FLOAT: string[s] = (char)((float *)value.va->m_data)[s]; break;
-					}
-				}
-				string[s] = 0;
-				break;
+				return r->asString( string );
 			}
 		}
-	}
+		case WR_USR:
+		{
+			return string;
+		}
 
+		case WR_ARRAY:
+		{
+			unsigned int s = 0;
+
+			for( ; s<va->m_size; ++s )
+			{
+				switch( va->m_type & 0x3)
+				{
+					case SV_VALUE: string[s] = ((WRValue *)va->m_data)[s].i; break;
+					case SV_CHAR: string[s] = ((char *)va->m_data)[s]; break;
+					default: break;
+				}
+			}
+			string[s] = 0;
+			break;
+		}
+	}
+	
 	return string;
-}
-
-//------------------------------------------------------------------------------
-int wr_valueToInt( WRValue const& value )
-{
-	if ( value.type == WR_INT )
-	{
-		return value.i;
-	}
-	else if ( value.type == WR_FLOAT )
-	{
-		return (int)value.f;
-	}
-	else  if ( value.type == WR_REF )
-	{
-		return wr_valueToInt( *value.r );
-	}
-
-	return 0;
-}
-
-//------------------------------------------------------------------------------
-float wr_valueToFloat( WRValue const& value )
-{
-	if ( value.type == WR_INT )
-	{
-		return (float)value.i;
-	}
-	else if ( value.type == WR_FLOAT )
-	{
-		return value.f;
-	}
-	else  if ( value.type == WR_REF )
-	{
-		return wr_valueToFloat( *value.r );
-	}
-
-	return 0;
-}
-
-//------------------------------------------------------------------------------
-void wr_registerUserValue( WRValue* val, const char* key, WRValue* value )
-{
-	val->u->registerValue( key, value );
-}
-
-//------------------------------------------------------------------------------
-WRValue* wr_getUserValue( WRValue* val, const char* key )
-{
-	return val->u->index.getItem( wr_hashStr(key) );
-}
-
-//------------------------------------------------------------------------------
-void* wr_getUserPointer( WRValue* val )
-{
-	return val->u->usr;
 }
 
 //------------------------------------------------------------------------------
 int wr_callFunction( WRState* w, const int contextId, const char* functionName, const WRValue* argv, const int argn )
 {
-	unsigned char* pc;
+	return wr_callFunction( w, contextId, wr_hashStr(functionName), argv, argn );
+}
+
+//------------------------------------------------------------------------------
+int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const WRValue* argv, const int argn )
+{
+	const unsigned char* pc;
 	WRValue* tempValue;
 	WRValue* tempValue2;
 	WRValue* frameBase = 0;
@@ -528,12 +482,12 @@ int wr_callFunction( WRState* w, const int contextId, const char* functionName, 
 	// cache these values they are used a lot
 	WR_LOAD_BLOCK_FUNC loader = w->loader;
 	void* usr = w->usr;
-	unsigned char* top = 0;
+	const unsigned char* top = 0;
 	pc = 0;
 	int absoluteBottom = 0; // pointer to where in the codebase out bottom actually points to
 #endif
 		
-	if ( functionName )
+	if ( hash )
 	{
 		// if a function name is provided it is meant to be called
 		// directly. Set that up with a return vector of "stop"
@@ -542,7 +496,7 @@ int wr_callFunction( WRState* w, const int contextId, const char* functionName, 
 			return w->err = WR_ERR_execute_must_be_called_by_itself_first;
 		}
 
-		F = context->localFunctionRegistry.getItem( wr_hashStr(functionName) );
+		F = context->localFunctionRegistry.getItem( hash );
 
 		if ( !F )
 		{
@@ -641,7 +595,7 @@ int wr_callFunction( WRState* w, const int contextId, const char* functionName, 
 
 			case O_LiteralZero:
 			{
-				(stackTop++)->clear();
+				(stackTop++)->init();
 				continue;
 			}
 			
@@ -702,7 +656,7 @@ int wr_callFunction( WRState* w, const int contextId, const char* functionName, 
 				frameBase = stackTop;
 				for( unsigned char i=0; i<*pc; ++i )
 				{
-					(++stackTop)->clear();
+					(++stackTop)->init();
 				}
 				++pc;
 				continue;
@@ -715,7 +669,7 @@ int wr_callFunction( WRState* w, const int contextId, const char* functionName, 
 				context->globalSpace = new WRValue[ context->globals ];
 				for( unsigned char i=0; i<context->globals; ++i )
 				{
-					context->globalSpace[i].clear();
+					context->globalSpace[i].init();
 				}
 				continue;
 			}
@@ -758,6 +712,8 @@ int wr_callFunction( WRState* w, const int contextId, const char* functionName, 
 			case O_BinaryMultiplication: { targetFunc = wr_binaryMultiply; goto targetFuncOp; }
 			case O_BinarySubtraction: { targetFunc = wr_binarySubtract; goto targetFuncOp; }
 			case O_BinaryDivision: { targetFunc = wr_binaryDivide; goto targetFuncOp; }
+			case O_BinaryRightShift: { targetFunc = wr_binaryRightShift; goto targetFuncOp; }
+			case O_BinaryLeftShift: { targetFunc = wr_binaryLeftShift; goto targetFuncOp; }
 			case O_BinaryMod: { targetFunc = wr_binaryMod; goto targetFuncOp; }
 			case O_BinaryOr: { targetFunc = wr_binaryOr; goto targetFuncOp; }
 			case O_BinaryXOR: { targetFunc = wr_binaryXOR; goto targetFuncOp; }
@@ -839,7 +795,7 @@ binaryTableOpAndPop:
 					}
 					else
 					{
-						stackTop->clear();
+						stackTop->init();
 						cF->function( w, stackTop - args, args, *stackTop, cF->usr );
 						*(stackTop - args) = *stackTop;
 						stackTop -= args - 1;
@@ -849,7 +805,7 @@ binaryTableOpAndPop:
 				{
 					w->err = WR_WARN_c_function_not_found;
 					stackTop -= args;
-					(stackTop++)->clear(); // push a fake return value
+					(stackTop++)->init(); // push a fake return value
 				}
 				continue;
 			}
@@ -902,7 +858,7 @@ callFunction:
 					{
 						for( char a=args; a < F->arguments; ++a )
 						{
-							(stackTop++)->clear();
+							(stackTop++)->init();
 						}
 					}
 				}
@@ -911,7 +867,7 @@ callFunction:
 				// up for the locals in the function
 				for( int i=0; i<F->frameSpaceNeeded; ++i )
 				{
-					(stackTop++)->clear();
+					(stackTop++)->init();
 				}
 
 				// temp value contains return vector
@@ -945,24 +901,6 @@ callFunction:
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - F->frameBaseAdjustment;
 
-				// for no space no args
-				// -1 [top] old framebase
-				// -2 [return vector]  FB<
-				// -3 ... calling top
-
-				// for no space 1 arg
-				// -1 [top] old framebase
-				// -2 [return vector]
-				// -3 arg 1             FB<
-				// -4 ... calling top 
-
-				// for 2 space 1 arg
-				// -1 [top] old framebase
-				// -2 [return vector]
-				// -3 local 1
-				// -4 arg 1            FB<
-				// -5 ... calling top
-				
 				continue;
 			}
 
@@ -1161,129 +1099,52 @@ void wr_makeFloat( WRValue* val, float f )
 }
 
 //------------------------------------------------------------------------------
-void wr_makeString( WRValue* val, const char* s )
-{
-	int len;
-	for( len=0; s[len]; ++len );
-
-	wr_makeArray( val, len );
-	
-	for( int c=0; c<len; ++c )
-	{
-		((WRValue *)val->va->m_data)[c].i = s[c];
-		((WRValue*)val->va->m_data)[c].type = WR_INT;
-	}
-}
-
-//------------------------------------------------------------------------------
-void wr_makeArray( WRValue* val, const int len, const char* registerNameAs, WRValue* registerInUserData )
-{
-	val->type = WR_ARRAY;
-	val->va = new WRStaticValueArray( len, SV_VALUE );
-	if ( registerNameAs && registerInUserData )
-	{
-		wr_registerUserValue( registerInUserData, registerNameAs, val );
-	}
-}
-
-//------------------------------------------------------------------------------
-void wr_makeCharArray( WRValue* val, const int len, const unsigned char* preAllocated, const char* registerNameAs, WRValue* registerInUserData )
-{
-	val->type = WR_ARRAY;
-	val->va = new WRStaticValueArray( len, SV_CHAR, preAllocated);
-	if ( registerNameAs && registerInUserData )
-	{
-		wr_registerUserValue( registerInUserData, registerNameAs, val );
-	}
-}
-
-//------------------------------------------------------------------------------
-void wr_makeIntArray(WRValue* val, const int len, const int* preAllocated, const char* registerNameAs, WRValue* registerInUserData )
-{
-	val->type = WR_ARRAY;
-	val->va = new WRStaticValueArray(len, SV_INT, preAllocated);
-	if ( registerNameAs && registerInUserData )
-	{
-		wr_registerUserValue( registerInUserData, registerNameAs, val );
-	}
-}
-
-//------------------------------------------------------------------------------
-void wr_makeFloatArray(WRValue* val, const int len, const float* preAllocated, const char* registerNameAs, WRValue* registerInUserData )
-{
-	val->type = WR_ARRAY;
-	val->va = new WRStaticValueArray(len, SV_FLOAT, preAllocated);
-	if ( registerNameAs && registerInUserData )
-	{
-		wr_registerUserValue( registerInUserData, registerNameAs, val );
-	}
-}
-
-//------------------------------------------------------------------------------
-void wr_makeUserData( WRValue* val, void* usr )
+void wr_makeUserData( WRValue* val )
 {
 	val->type = WR_USR;
 	val->u = new WRUserData;
-	val->u->usr = usr;
 }
 
 //------------------------------------------------------------------------------
-void wr_destroyValue( WRValue* val )
+void wr_addUserValue( WRValue* userData, const char* key, WRValue* value )
 {
-	switch( val->type )
-	{
-		case WR_REF:
-		{
-			wr_destroyValue( val->r );
-			break;
-		}
-
-		case WR_USR:
-		{
-			delete val->u;
-			break;
-		}
-
-		case WR_ARRAY:
-		{
-			delete val->va;
-			break;
-		}
-
-		case WR_INT:
-		case WR_FLOAT:
-		default:
-			break;
-	}
-}
-
-
-//------------------------------------------------------------------------------
-uint32_t wr_hash( const void *dat, const int len )
-{
-	// in-place implementation of murmer
-	uint32_t hash = 0x811C9DC5;
-	const unsigned char* data = (const unsigned char *)dat;
-
-	for( int i=0; i<len; ++i )
-	{
-		hash ^= (uint32_t)data[i];
-		hash *= 0x1000193;
-	}
-
-	return hash;
+	userData->u->registerValue( key, value );
 }
 
 //------------------------------------------------------------------------------
-uint32_t wr_hashStr( const char* dat )
+void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned char* data, const int len )
 {
-	uint32_t hash = 0x811C9DC5;
-	const char* data = dat;
-	while ( *data )
-	{
-		hash ^= (uint32_t)(*data++);
-		hash *= 0x1000193;
-	}
-
-	return hash;
+	WRValue* val = userData->u->addValue( name );
+	val->type = WR_ARRAY;
+	val->va = new WRStaticValueArray( len, SV_CHAR, data );
 }
+
+//------------------------------------------------------------------------------
+void wr_addUserIntArray( WRValue* userData, const char* name, const int* data, const int len )
+{
+	WRValue* val = userData->u->addValue( name );
+	val->type = WR_ARRAY;
+	val->va = new WRStaticValueArray( len, SV_INT, data );
+}
+
+//------------------------------------------------------------------------------
+void wr_addUserFloatArray( WRValue* userData, const char* name, const float* data, const int len )
+{
+	WRValue* val = userData->u->addValue( name );
+	val->type = WR_ARRAY;
+	val->va = new WRStaticValueArray( len, SV_FLOAT, data );
+}
+
+//------------------------------------------------------------------------------
+void WRValue::free()
+{
+	if ( type == WR_USR )
+	{
+		delete u;
+	}
+	else if ( type == WR_ARRAY && (va->m_type & SV_PRE_ALLOCATED) )
+	{
+		delete va;
+	}
+}
+

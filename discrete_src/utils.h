@@ -249,7 +249,12 @@ public:
 	~WRHashTable() { delete[] m_list; }
 
 	//------------------------------------------------------------------------------
-	void clear() { delete[] m_list; m_mod = c_primeTable[0]; m_list = new Node[m_mod]; }
+	void clear()
+	{
+		delete[] m_list;
+		m_mod = c_primeTable[0];
+		m_list = new Node[m_mod];
+	}
 
 	//------------------------------------------------------------------------------
 	T* get( uint32_t hash )
@@ -307,6 +312,7 @@ public:
 
 			Node* newList = new Node[newMod];
 
+
 			int h = 0;
 			for( ; h<m_mod; ++h )
 			{
@@ -349,8 +355,5 @@ private:
 	Node* m_list;
 	int m_mod;
 };
-
-uint32_t wr_hash( const void* dat, const int len );
-uint32_t wr_hashStr( const char* dat );
 
 #endif

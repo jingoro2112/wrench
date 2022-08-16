@@ -61,6 +61,8 @@ enum WROpcode
 	O_BinarySubtraction,
 	O_BinaryMultiplication,
 	O_BinaryDivision,
+	O_BinaryRightShift,
+	O_BinaryLeftShift,
 	O_BinaryMod,
 	O_BinaryAnd,
 	O_BinaryOr,
@@ -114,8 +116,6 @@ enum WROpcode
 	O_LogicalOr, // ||
 	O_LogicalNot, // !
 
-	O_BitwiseRightShift,
-	O_BitwiseLeftShift,
 
 	O_LAST,
 };
@@ -152,6 +152,8 @@ const char* c_opcodeName[]=
 	"O_BinarySubtraction",
 	"O_BinaryMultiplication",
 	"O_BinaryDivision",
+	"O_BinaryRightShift",
+	"O_BinaryLeftShift",
 	"O_BinaryMod",
 	"O_BinaryAnd",
 	"O_BinaryOr",
@@ -197,8 +199,6 @@ const char* c_opcodeName[]=
 	"O_LogicalAnd",
 	"O_LogicalOr",
 	"O_LogicalNot",
-	"O_BitwiseRightShift",
-	"O_BitwiseLeftShift",
 };
 #else
 #define D_OPCODE(a)

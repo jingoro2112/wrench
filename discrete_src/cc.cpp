@@ -2165,7 +2165,7 @@ WRError WRCompilationContext::compile( const char* source, const int size, unsig
 }
 
 //------------------------------------------------------------------------------
-WRError wr_compile( const char* source, const int size, unsigned char** out, int* outLen )
+int wr_compile( const char* source, const int size, unsigned char** out, int* outLen )
 {
 	assert( sizeof(float) == 4 );
 	assert( sizeof(int) == 4 );
@@ -2179,7 +2179,7 @@ WRError wr_compile( const char* source, const int size, unsigned char** out, int
 
 #else // WRENCH_WITHOUT_COMPILER
 
-WRError wr_compile( const char* source, const int size, unsigned char** out, int* outLen )
+int wr_compile( const char* source, const int size, unsigned char** out, int* outLen )
 {
 	return WR_ERR_compiler_not_loaded;
 }
