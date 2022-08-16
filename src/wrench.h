@@ -71,7 +71,7 @@ and there will be no [practical] upper bound
 /***********************************************************************/
 
 /************************************************************************
-wr_valueToString() uses sprintf from stdio. If you don't want to
+.asString() uses sprintf from stdio. If you don't want to
 include or use that library then undefine this and that method will no
 longer function
 */
@@ -314,6 +314,8 @@ enum WRValueType
 	WR_USR =   0x03,
 	WR_ARRAY = 0x04,
 };
+
+char* wr_valueToString( WRValue const& value, char* string );
 
 //------------------------------------------------------------------------------
 class WRUserData;
