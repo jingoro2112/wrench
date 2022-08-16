@@ -378,6 +378,12 @@ int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, v
 	return 0;
 }
 
+//------------------------------------------------------------------------------
+char* wr_valueToString( WRValue const& value, char* string )
+{
+	return value.asString( string );
+}
+
 
 #ifdef SPRINTF_OPERATIONS
 #include <stdio.h>
