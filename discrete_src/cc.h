@@ -137,6 +137,8 @@ struct BytecodeJumpOffset
 {
 	int offset;
 	WRarray<int> references;
+	
+	BytecodeJumpOffset() : offset(0) {}
 };
 
 //------------------------------------------------------------------------------
@@ -305,7 +307,7 @@ struct WRUnitContext
 struct WRCompilationContext
 {
 public:
-	WRError compile( const char* data, const int size, unsigned char** out, int* outLen );
+	WRError compile( const char* data, const int size, unsigned char** out, int* outLen, char* erroMsg =0 );
 	
 private:
 	

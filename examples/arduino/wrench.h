@@ -35,7 +35,7 @@ the code size at the cost of being able to only load/run bytecode
 For efficiency The interpreter expects a pointer to a single contiguous
 block of bytecode, and it will never call the loader again.
 
-IF YOU WANT TO DO PARTIAL LOADS: You must comment out the following!
+IF YOU WANT TO DO PARTIAL LOADS: You must define the following!
 
 This will compile in the bounds-checking and call the loader whenever
 it detects execution space outside of the current block. The loader
@@ -43,7 +43,7 @@ must return a pointer to the requested offset in the bytecode and the
 size of the mapped block. return AT LEAST 16 BYTES or "bad things"
 happen
 */
-#define SINGLE_COMPLETE_BYTECODE_LOAD
+//#define PARTIAL_BYTECODE_LOADS
 /***********************************************************************/
 
 /************************************************************************
@@ -71,7 +71,7 @@ and there will be no [practical] upper bound
 /***********************************************************************/
 
 /************************************************************************
-wr_valueToString() uses sprintf from stdio. If you don't want to
+.asString() uses sprintf from stdio. If you don't want to
 include or use that library then undefine this and that method will no
 longer function
 */
@@ -98,15 +98,20 @@ void wr_destroyState( WRState* w );
 /**************************************************************/
 //                        Running Code
 
-//     function to load, run and call back to the interpreter
-// Callback to load bytecode, see note above regarding :
-// SINGLE_COMPLETE_BYTECODE_LOAD
-// by default this will be called one time and expects the entire
-// bytecode to be mapped to the 'block' pointer. wr_run() has a
-// built-in simple version for ease of use.
+//     function the interpreter calls to get a block of bytecode
+// if PARTIAL_BYTECODE_LOADS is defined, it expects at least 16 bytes
+// of code returned per call, and will re-call it any time code is
+// needed from outside the returned region.
+//
+// if PARTIAL_BYTECODE_LOADS is NOT defined (default) this will be
+// called exactly one time and expect the entire code block to be
+// returned.
+//
+// NOTE: The returned memory IS USED IN PLACE. it is NOT mapped internally so
+// it must remain valid for the life of the exection
 //
 // offset: where in the bytecode wrench needs loaded (will be zero
-//         unless SINGLE_COMPLETE_BYTECODE_LOAD is defined)
+//         for PARTIAL_BYTECODE_LOADS)
 // block:  pointer to pointer where the lock is mapped, this can be ROM
 // usr:    opaque pointer passed to each load call (optional)
 typedef unsigned int (*WR_LOAD_BLOCK_FUNC)( int offset, const unsigned char** block, void* usr );
@@ -114,10 +119,10 @@ typedef unsigned int (*WR_LOAD_BLOCK_FUNC)( int offset, const unsigned char** bl
 // compile a block of code and return a new'ed block of bytecode ready
 // for wr_run()
 // return value is a WRError
-int wr_compile( const char* source, const int size, unsigned char** out, int* outLen );
+int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg =0 );
 
 // run a block of code, either as a single block or with a loader that
-// will be called back. PLEASE SEE NOTES ABOVE REGARDING: SINGLE_COMPLETE_BYTECODE_LOAD
+// will be called back. PLEASE SEE NOTES ABOVE REGARDING: PARTIAL_BYTECODE_LOADS
 
 // w:      state
 // block/size: location of bytecode
@@ -198,8 +203,9 @@ void wr_makeFloat( WRValue* val, float f );
 
 // STEP 1:    create the user data. This will be the 'top level' object
 // the other members are loaded into. It can be passed to any function as
-// a parameter
-void wr_makeUserData( WRValue* value );
+// a parameter. "SizeHint" allows a right-sized hash table to be made
+// instead of growing, which can help reduce memory fragmentation
+void wr_makeUserData( WRValue* value, int sizeHint =0 );
 
 // STEP 2:    load it up!
 //
@@ -257,6 +263,7 @@ enum WRError
 	WR_ERR_break_keyword_not_in_looping_structure,
 	WR_ERR_continue_keyword_not_in_looping_structure,
 	WR_ERR_expected_while,
+	WR_ERR_compiler_panic,
 
 	WR_ERR_execute_must_be_called_by_itself_first,
 	WR_ERR_hash_table_size_exceeded,
@@ -304,7 +311,7 @@ uint32_t wr_hashStr( const char* dat );
 // inside-baseball time. This has to be here so stuff that includes
 // "wrench.h" can create a WRValue. nothing to see here.. smile and
 // wave...
-
+/*
 //------------------------------------------------------------------------------
 enum WRValueType
 {
@@ -314,6 +321,22 @@ enum WRValueType
 	WR_USR =   0x03,
 	WR_ARRAY = 0x04,
 };
+*/
+
+
+//------------------------------------------------------------------------------
+enum WRValueType
+{
+	WR_INT =   0x00,    // 0000
+	WR_REF =   0x01,    // 0001
+	WR_FLOAT = 0x02,    // 0010
+	WR_USR =   0x03,    // 0011
+	WR_ARRAY = 0x04,    // 0100
+	WR_REFARRAY = 0x05, // 0101
+};
+
+
+char* wr_valueToString( WRValue const& value, char* string );
 
 //------------------------------------------------------------------------------
 class WRUserData;
@@ -327,16 +350,6 @@ struct WRValue
 	// the case value is an array of chars. the pointer will be passed back
 	char* asString( char* string ) const;
 
-
-/*
-	// argv
-	int wr_valueToInt( WRValue const& value );
-	float wr_valueToFloat( WRValue const& value );
-	// string: must point to a buffer long enough to contain the string in
-	// the case value is an array of chars. the pointer will be passed back
-	char* wr_valueToString( WRValue const& value, char* string );
-*/
-	
 	
 	void init() { p = 0; arrayElement = 0; } // call upon first create or when you're sure no memory is hanging from one
 	void free(); // treat this object as if it owns any memory allocated on u or va pointer
@@ -347,7 +360,7 @@ struct WRValue
 	int* asIntArray( int* len =0 );
 	float* asFloatArray( int* len =0 );
 
-	~WRValue() { free(); }
+	inline ~WRValue() { if ( type > WR_FLOAT ) { free(); } }
 
 	//-----------------
 	union // first 4 bytes
@@ -364,6 +377,7 @@ struct WRValue
 	{
 		uint8_t type; // carries the type
 		uint32_t arrayElement; // if this is a reference to an array, this carries the currently indexed item in the top 24 bits
+		WRValueType enumType;
 	};
 };
 

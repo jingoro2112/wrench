@@ -404,19 +404,7 @@ char* WRValue::asString( char* string ) const
 			break;
 		}
 #endif
-		case WR_REF:
-		{
-			if ( r->type == WR_ARRAY )
-			{
-				WRValue temp;
-				arrayToValue( this, &temp );
-				return temp.asString( string );
-			}
-			else
-			{
-				return r->asString( string );
-			}
-		}
+		case WR_REF: { return r->asString( string ); }
 		case WR_USR:
 		{
 			return string;
@@ -438,16 +426,27 @@ char* WRValue::asString( char* string ) const
 			string[s] = 0;
 			break;
 		}
+
+		case WR_REFARRAY:
+		{
+			WRValue temp;
+			arrayToValue(this, &temp);
+			return temp.asString(string);
+		}
 	}
 	
 	return string;
 }
+
 
 //------------------------------------------------------------------------------
 int wr_callFunction( WRState* w, const int contextId, const char* functionName, const WRValue* argv, const int argn )
 {
 	return wr_callFunction( w, contextId, wr_hashStr(functionName), argv, argn );
 }
+
+void testFunc1( int a, int b );
+void testFunc2( int a, int b );
 
 //------------------------------------------------------------------------------
 int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const WRValue* argv, const int argn )
@@ -459,7 +458,8 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 	WRFunctionRegistry* F;
 	unsigned char args;
 	WRValue* stackTop = w->stack;
-#ifdef _WIN32
+
+#ifdef _DEBUG_OPCODES
 	WROpcode opcode;
 #endif
 
@@ -473,12 +473,12 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 	
 	union
 	{
-		WRVoidFunc (*voidFunc)[5];
-		WRReturnFunc (*returnFunc)[5];
-		WRTargetFunc (*targetFunc)[5];
+		WRVoidFunc* voidFunc;
+		WRReturnFunc* returnFunc;
+		WRTargetFunc* targetFunc;
 	};
 
-#ifdef SINGLE_COMPLETE_BYTECODE_LOAD
+#ifndef PARTIAL_BYTECODE_LOADS
 	if ( !(pc = context->bottom) )
 	{
 		w->loader( 0, &pc, w->usr );
@@ -518,7 +518,7 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 			}
 		}
 
-#ifdef SINGLE_COMPLETE_BYTECODE_LOAD
+#ifndef PARTIAL_BYTECODE_LOADS
 		pc = context->bottom + context->stopLocation;
 #else
 		unsigned int size = loader( absoluteBottom = context->stopLocation, &pc, usr );
@@ -530,7 +530,6 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 
 	for(;;)
 	{
-
 		if ( w->err )
 		{
 			if ( w->err > WR_warning_enums_follow )
@@ -551,7 +550,7 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 			w->err = WR_ERR_None;
 		}
 
-#ifndef SINGLE_COMPLETE_BYTECODE_LOAD
+#ifdef PARTIAL_BYTECODE_LOADS
 		if ( pc >= top )
 		{
 			unsigned int size = loader( absoluteBottom += (pc - context->bottom), &pc, usr );
@@ -560,8 +559,9 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 		}
 #endif
 
-#ifdef _WIN32
+#ifdef _DEBUG_OPCODES
 		opcode = (WROpcode)*pc;
+		opcode = opcode;
 #endif
 
 		D_OPCODE(printf( "s[%p] top[%p] size[%d] %d:%s\n", w->stack, stackTop, (int)(stackTop - w->stack), (int)*pc, c_opcodeName[*pc]));
@@ -575,7 +575,7 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 				context->localFunctions[ index ].frameSpaceNeeded = (stackTop - 3)->i;
 				context->localFunctions[ index ].hash = (stackTop - 2)->i;
 				
-#ifdef SINGLE_COMPLETE_BYTECODE_LOAD
+#ifndef PARTIAL_BYTECODE_LOADS
 				context->localFunctions[index].offset = (stackTop - 1)->i + context->bottom; // absolute
 #else
 				context->localFunctions[index].offsetI = (stackTop - 1)->i; // relative
@@ -644,7 +644,7 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 				{
 					((unsigned char *)stackTop->va->m_data)[c] = *pc++;
 
-#ifndef SINGLE_COMPLETE_BYTECODE_LOAD
+#ifdef PARTIAL_BYTECODE_LOADS
 					if ( pc >= top )
 					{
 						unsigned int size = loader( absoluteBottom += (pc - context->bottom), &pc, usr );
@@ -689,13 +689,25 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 
 			case O_LoadFromGlobal:
 			{
-				/*
-				stackTop->type = WR_REF;
-				(stackTop++)->p = w->stack + *pc++;
-				*/
 				stackTop->type = WR_REF;
 				(stackTop++)->p = context->globalSpace + *pc++;
 
+				continue;
+			}
+
+			case O_AssignToGlobalAndPop:
+			{
+				tempValue = context->globalSpace + *pc++;
+				tempValue2 = --stackTop;
+				wr_assign[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
+				continue;
+			}
+
+			case O_AssignToLocalAndPop:
+			{
+				tempValue = frameBase + *pc++;
+				tempValue2 = --stackTop;
+				wr_assign[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
 				continue;
 			}
 
@@ -703,7 +715,7 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 			{
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
-				wr_index[tempValue->type][tempValue2->type]( context, tempValue, tempValue2 );
+				wr_index[tempValue->type*6+tempValue2->type]( context, tempValue, tempValue2 );
 				continue;
 			}
 
@@ -721,16 +733,16 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 			case O_BinaryRightShift: { targetFunc = wr_binaryRightShift; goto targetFuncOp; }
 			case O_BinaryLeftShift: { targetFunc = wr_binaryLeftShift; goto targetFuncOp; }
 			case O_BinaryMod: { targetFunc = wr_binaryMod; goto targetFuncOp; }
-			case O_BinaryOr: { targetFunc = wr_binaryOr; goto targetFuncOp; }
+			case O_BinaryOr: { targetFunc = wr_binaryOR; goto targetFuncOp; }
 			case O_BinaryXOR: { targetFunc = wr_binaryXOR; goto targetFuncOp; }
-			case O_BinaryAnd: { targetFunc = wr_binaryAnd; goto targetFuncOp; }
+			case O_BinaryAnd: { targetFunc = wr_binaryAND; goto targetFuncOp; }
 			case O_BinaryAddition:
 			{
 				targetFunc = wr_binaryAddition;
 targetFuncOp:
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
-				targetFunc[tempValue->type][tempValue2->type]( tempValue, tempValue2, tempValue2 );
+				targetFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2, tempValue2 );
 				continue;
 			}
 
@@ -750,7 +762,7 @@ targetFuncOp:
 binaryTableOp:
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
-				voidFunc[tempValue->type][tempValue2->type]( tempValue, tempValue2 );
+				voidFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
 				continue;
 			}
 
@@ -767,10 +779,11 @@ binaryTableOp:
 			case O_AssignAndPop:
 			{
 				voidFunc = wr_assign;
+
 binaryTableOpAndPop:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
-				voidFunc[tempValue->type][tempValue2->type]( tempValue, tempValue2 );
+				voidFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
 				continue;
 			}
 
@@ -880,7 +893,7 @@ callFunction:
 				tempValue = stackTop++; // return vector
 				tempValue->type = WR_INT;
 				
-#ifdef SINGLE_COMPLETE_BYTECODE_LOAD
+#ifndef PARTIAL_BYTECODE_LOADS
 				tempValue->p = pc; // simple for big-blob case
 				pc = F->offset;
 #else
@@ -912,10 +925,7 @@ callFunction:
 
 			case O_Stop:
 			{
-				// leave the global space allocated at the top alone so
-				// functions can be called BACK when necessary, but
-				// return the top of the stack which is where the
-				// "return value" will be
+				// stack will be zero at this point, stop execution
 				w->returnValue = stackTop--;
 				context->stopLocation = (pc - 1) - context->bottom;
 				return WR_ERR_None;
@@ -923,7 +933,7 @@ callFunction:
 
 			case O_Return:
 			{
-#ifdef SINGLE_COMPLETE_BYTECODE_LOAD
+#ifndef PARTIAL_BYTECODE_LOADS
 				// copy the return value
 				pc = (unsigned char*)((stackTop - 3)->p); // grab new PC in case function clobbers it
 #else
@@ -981,38 +991,44 @@ callFunction:
 				pc += offset;
 				continue;
 			}
-			
+
+			case O_RelativeJump8:
+			{
+				pc += (int8_t)*pc;
+				continue;
+			}
+
 			case O_BZ:
 			{
 				tempValue = --stackTop;
-				if ( wr_ZeroCheck[tempValue->type](tempValue) )
-				{
-					int16_t offset = *pc;
-					offset = (offset<<8) | *(pc+1);
-					pc += offset;
-					continue;
-				}
-
-				pc += 2;
+				pc += wr_ZeroCheck[tempValue->type](tempValue) ? (((int16_t)*pc)<< 8) | *(pc+1) : 2;
 				continue;
 			}
+			
+			case O_BZ8:
+			{
+				tempValue = --stackTop;
+				pc += wr_ZeroCheck[tempValue->type](tempValue) ? (int8_t)*pc : 2;
+				continue;
+			}
+
 			case O_BNZ:
 			{
 				tempValue = --stackTop;
-				if ( wr_ZeroCheck[tempValue->type](tempValue) )
-				{
-					pc += 2;
-					continue;
-				}
-
-				int16_t offset = *pc;
-				offset = (offset<<8) | *(pc+1);
-				pc += offset;
+				pc += wr_ZeroCheck[tempValue->type](tempValue) ? 2 : (((int16_t)*pc)<< 8) | *(pc+1);
+				continue;
+			}
+			
+			case O_BNZ8:
+			{
+				tempValue = --stackTop;
+				pc += wr_ZeroCheck[tempValue->type](tempValue) ? 2 : (int8_t)*pc;
 				continue;
 			}
 
-			case O_LogicalAnd: { returnFunc = wr_LogicalAnd; goto returnFuncNormal; }
-			case O_LogicalOr: { returnFunc = wr_LogicalOr; goto returnFuncNormal; }
+
+			case O_LogicalAnd: { returnFunc = wr_LogicalAND; goto returnFuncNormal; }
+			case O_LogicalOr: { returnFunc = wr_LogicalOR; goto returnFuncNormal; }
 			case O_CompareLE: { returnFunc = wr_CompareGT; goto returnFuncInverted; }
 			case O_CompareGE: { returnFunc = wr_CompareLT; goto returnFuncInverted; }
 			case O_CompareGT: { returnFunc = wr_CompareGT; goto returnFuncNormal; }
@@ -1023,7 +1039,7 @@ callFunction:
 returnFuncNormal:
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
-				tempValue2->i = (int)returnFunc[tempValue->type][tempValue2->type]( tempValue, tempValue2 );
+				tempValue2->i = (int)returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
 				tempValue2->type = WR_INT;
 				continue;
 			}
@@ -1034,8 +1050,56 @@ returnFuncNormal:
 returnFuncInverted:
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
-				tempValue2->i = (int)!returnFunc[tempValue->type][tempValue2->type]( tempValue, tempValue2 );
+				tempValue2->i = (int)!returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
 				tempValue2->type = WR_INT;
+				continue;
+			}
+
+			case O_CompareBLE: { returnFunc = wr_CompareGT; goto returnFuncBInverted; }
+			case O_CompareBGE: { returnFunc = wr_CompareLT; goto returnFuncBInverted; }
+			case O_CompareBGT: { returnFunc = wr_CompareGT; goto returnFuncBNormal; }
+			case O_CompareBLT: { returnFunc = wr_CompareLT; goto returnFuncBNormal; }
+			case O_CompareBEQ:
+			{
+				returnFunc = wr_CompareEQ;
+returnFuncBNormal:
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? 2 : (((int16_t)*pc)<< 8) | *(pc+1);
+				continue;
+			}
+
+			case O_CompareBNE:
+			{
+				returnFunc = wr_CompareEQ;
+returnFuncBInverted:
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? (((int16_t)*pc)<< 8) | *(pc+1) : 2;
+				continue;
+			}
+
+			case O_CompareBLE8: { returnFunc = wr_CompareGT; goto returnFuncBInverted8; }
+			case O_CompareBGE8: { returnFunc = wr_CompareLT; goto returnFuncBInverted8; }
+			case O_CompareBGT8: { returnFunc = wr_CompareGT; goto returnFuncBNormal8; }
+			case O_CompareBLT8: { returnFunc = wr_CompareLT; goto returnFuncBNormal8; }
+			case O_CompareBEQ8:
+			{
+				returnFunc = wr_CompareEQ;
+returnFuncBNormal8:
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? 2 : *pc;
+				continue;
+			}
+
+			case O_CompareBNE8:
+			{
+				returnFunc = wr_CompareEQ;
+returnFuncBInverted8:
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? *pc : 2;
 				continue;
 			}
 
@@ -1105,10 +1169,10 @@ void wr_makeFloat( WRValue* val, float f )
 }
 
 //------------------------------------------------------------------------------
-void wr_makeUserData( WRValue* val )
+void wr_makeUserData( WRValue* val, int sizeHint )
 {
 	val->type = WR_USR;
-	val->u = new WRUserData;
+	val->u = new WRUserData( sizeHint );
 }
 
 //------------------------------------------------------------------------------

@@ -509,10 +509,69 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 		unsigned int a = bytecode.all.size() - 1;
 
 		// incorporate a keyhole optimizer
-		if ( opcode == O_PopOne )
+		if ( opcode == O_BZ )
+		{
+			if ( bytecode.opcodes[o] == O_CompareEQ ) // assign+pop is very common
+			{
+				bytecode.all[a] = O_CompareBEQ;
+				bytecode.opcodes[o] = O_CompareBEQ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CompareLT ) // assign+pop is very common
+			{
+				bytecode.all[a] = O_CompareBLT;
+				bytecode.opcodes[o] = O_CompareBLT;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CompareGT ) // assign+pop is very common
+			{
+				bytecode.all[a] = O_CompareBGT;
+				bytecode.opcodes[o] = O_CompareBGT;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CompareGE ) // assign+pop is very common
+			{
+				bytecode.all[a] = O_CompareBGE;
+				bytecode.opcodes[o] = O_CompareBGE;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CompareLE ) // assign+pop is very common
+			{
+				bytecode.all[a] = O_CompareBLE;
+				bytecode.opcodes[o] = O_CompareBLE;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CompareNE ) // assign+pop is very common
+			{
+				bytecode.all[a] = O_CompareBNE;
+				bytecode.opcodes[o] = O_CompareBNE;
+				return;
+			}
+		}
+		else if ( opcode == O_PopOne )
 		{
 			if ( bytecode.opcodes[o] == O_Assign ) // assign+pop is very common
 			{
+				if ( o > 1 )
+				{
+					// save three opcodes if its just an assignment to
+					// a variable that is not going to be used.. this is super common
+					if ( bytecode.opcodes[ o - 1 ] == O_LoadFromGlobal )
+					{
+						bytecode.all[ a - 2 ] = O_AssignToGlobalAndPop;
+						bytecode.all.shave(1);
+						bytecode.opcodes.shave(1);
+						return;
+					}
+					else if ( bytecode.opcodes[ o - 1 ] == O_LoadFromLocal )
+					{
+						bytecode.all[ a - 2 ] = O_AssignToLocalAndPop;
+						bytecode.all.shave(1);
+						bytecode.opcodes.shave(1);
+						return;
+					}
+				}
+								
 				bytecode.all[a] = O_AssignAndPop;
 				bytecode.opcodes[o] = O_AssignAndPop;
 				return;
@@ -611,7 +670,7 @@ void WRCompilationContext::addRelativeJumpSource( WRBytecode& bytecode, WROpcode
 {
 	pushOpcode( bytecode, opcode );
 	bytecode.jumpOffsetTargets[relativeJumpTarget].references.append() = bytecode.all.size();
-	pushData( bytecode, "0xABCD", 2 );
+	pushData( bytecode, "0xE1E2", 2 );
 }
 
 //------------------------------------------------------------------------------
@@ -622,7 +681,69 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 		for( unsigned int t=0; t<bytecode.jumpOffsetTargets[j].references.count(); ++t )
 		{
 			int16_t diff = bytecode.jumpOffsetTargets[j].offset - bytecode.jumpOffsetTargets[j].references[t];
-			pack16( diff, bytecode.all.p_str(bytecode.jumpOffsetTargets[j].references[t]) );
+			
+			int offset = bytecode.jumpOffsetTargets[j].references[t];
+			WROpcode o = (WROpcode) * (bytecode.all.c_str(offset - 1));
+
+			char* i1 = bytecode.all.p_str(offset);
+
+			if ( (diff < 128) && (diff > -129) )
+			{
+				switch( o )
+				{
+					case O_RelativeJump: *bytecode.all.p_str(offset - 1) = O_RelativeJump8; break;
+					case O_BZ: *bytecode.all.p_str(offset - 1) = O_BZ8; break;
+					case O_BNZ: *bytecode.all.p_str(offset - 1) = O_BNZ8; break;
+
+					case O_CompareBEQ: *bytecode.all.p_str(offset - 1) = O_CompareBEQ8; break;
+					case O_CompareBNE: *bytecode.all.p_str(offset - 1) = O_CompareBNE8; break;
+					case O_CompareBGE: *bytecode.all.p_str(offset - 1) = O_CompareBGE8; break;
+					case O_CompareBLE: *bytecode.all.p_str(offset - 1) = O_CompareBLE8; break;
+					case O_CompareBGT: *bytecode.all.p_str(offset - 1) = O_CompareBGT8; break;
+					case O_CompareBLT: *bytecode.all.p_str(offset - 1) = O_CompareBLT8; break;
+						
+					// no work to be done, already visited
+					case O_RelativeJump8:
+					case O_BZ8:
+					case O_BNZ8:
+					case O_CompareBLE8:
+					case O_CompareBGE8:
+					case O_CompareBGT8:
+					case O_CompareBLT8:
+					case O_CompareBEQ8:
+					case O_CompareBNE8:
+						break;
+
+					default:
+						D_OPCODE(printf("opcode was [%s]\n", c_opcodeName[o]));
+						m_err = WR_ERR_compiler_panic;
+						return;
+				}
+
+				*i1 = (int8_t)diff;
+			}
+			else
+			{
+				switch( o )
+				{
+					// check to see if any were pushed into 16-bit land
+					// that were previously optimized
+					case O_RelativeJump8: *bytecode.all.p_str(offset - 1) = O_RelativeJump; break;
+					case O_BZ8: *bytecode.all.p_str(offset - 1) = O_BZ; break;
+					case O_BNZ8: *bytecode.all.p_str(offset - 1) = O_BNZ; break;
+					case O_CompareBEQ8: *bytecode.all.p_str(offset - 1) = O_CompareBEQ; break;
+					case O_CompareBNE8: *bytecode.all.p_str(offset - 1) = O_CompareBNE; break;
+					case O_CompareBGE8: *bytecode.all.p_str(offset - 1) = O_CompareBGE; break;
+					case O_CompareBLE8: *bytecode.all.p_str(offset - 1) = O_CompareBLE; break;
+					case O_CompareBGT8: *bytecode.all.p_str(offset - 1) = O_CompareBGT; break;
+					case O_CompareBLT8: *bytecode.all.p_str(offset - 1) = O_CompareBLT; break;
+									   
+					default:
+						break;
+				}
+				
+				pack16( diff, bytecode.all.p_str(bytecode.jumpOffsetTargets[j].references[t]) );
+			}
 		}
 	}
 }
@@ -973,7 +1094,10 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 		// this is a really cool optimization but -=, += etc
 		// breaks it in some cases :/ --TODO really want this
 		// to work, come back to it
+
 /*
+
+		
 		case WR_OPER_BINARY_COMMUTE:
 		{
 			// this operation allows the arguments to be pushed
@@ -996,7 +1120,7 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 			{
 				if ( expression.context[first].stackPosition == -1 )
 				{
-					loadExpressionContext( expression, first ); 
+					loadExpressionContext( expression, first, o ); 
 				}
 				else if ( expression.context[first].stackPosition != 0 )
 				{
@@ -1004,7 +1128,7 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 					expression.swapWithTop( expression.context[first].stackPosition );
 				}
 
-				loadExpressionContext( expression, second );
+				loadExpressionContext( expression, second, o );
 			}
 			else if ( expression.context[first].stackPosition == -1 )
 			{
@@ -1014,7 +1138,7 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 				}
 
 				// just load the second to top
-				loadExpressionContext( expression, first );
+				loadExpressionContext( expression, first, o );
 			}
 			else if ( expression.context[second].stackPosition == 1 )
 			{
@@ -1043,8 +1167,23 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 
 			break;
 		}
-*/
+
+
+
+
+*/		
 		case WR_OPER_BINARY_COMMUTE:
+
+
+
+
+
+
+
+
+
+
+		
 
 		case WR_OPER_BINARY:
 		{
@@ -2021,8 +2160,11 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 	}
 
 	// reserve global space
-	code += O_ReserveGlobalFrame;
-	code += (unsigned char)(m_units[0].bytecode.localSpace.count());
+	if ( m_units[0].bytecode.localSpace.count() )
+	{
+		code += O_ReserveGlobalFrame;
+		code += (unsigned char)(m_units[0].bytecode.localSpace.count());
+	}
 
 	// append all the unit code
 	for( unsigned int u=0; u<m_units.count(); ++u )
@@ -2080,7 +2222,11 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 }
 
 //------------------------------------------------------------------------------
-WRError WRCompilationContext::compile( const char* source, const int size, unsigned char** out, int* outLen )
+WRError WRCompilationContext::compile( const char* source,
+									   const int size,
+									   unsigned char** out,
+									   int* outLen,
+									   char* errorMsg )
 {
 	m_source = source;
 	m_sourceLen = size;
@@ -2147,6 +2293,11 @@ WRError WRCompilationContext::compile( const char* source, const int size, unsig
 
 		msg.appendFormat( "     ^\n" );
 
+		if ( errorMsg )
+		{
+			strncpy( errorMsg, msg, msg.size() + 1 );
+		}
+
 		printf( "%s", msg.c_str() );
 		
 		return m_err;
@@ -2165,17 +2316,114 @@ WRError WRCompilationContext::compile( const char* source, const int size, unsig
 }
 
 //------------------------------------------------------------------------------
-int wr_compile( const char* source, const int size, unsigned char** out, int* outLen )
+int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg )
 {
 	assert( sizeof(float) == 4 );
 	assert( sizeof(int) == 4 );
 	assert( sizeof(char) == 1 );
+	assert( O_LAST < 255 );
 
 	// create a compiler context that has all the necessary stuff so it's completely unloaded when complete
 	WRCompilationContext comp; 
 
-	return comp.compile( source, size, out, outLen );
+	return comp.compile( source, size, out, outLen, errMsg );
 }
+
+//------------------------------------------------------------------------------
+#ifdef DEBUG_OPCODE_NAMES
+const char* c_opcodeName[] = 
+{
+	"O_RegisterFunction",
+	"O_FunctionListSize",
+	"O_LiteralZero",
+	"O_LiteralInt8",
+	"O_LiteralInt32",
+	"O_LiteralFloat",
+	"O_LiteralString",
+	"O_LoadLabel",
+	"O_CallFunctionByHash",
+	"O_CallFunctionByHashAndPop",
+	"O_CallFunctionByIndex",
+	"O_Index",
+	"O_IndexHash",
+	"O_Assign",
+	"O_AssignAndPop",
+	"O_StackSwap",
+	"O_ReserveFrame",
+	"O_ReserveGlobalFrame",
+	"O_LoadFromLocal",
+	"O_LoadFromGlobal",
+	"O_PopOne",
+	"O_Return",
+	"O_Stop",
+	"O_BinaryAddition",
+	"O_BinarySubtraction",
+	"O_BinaryMultiplication",
+	"O_BinaryDivision",
+	"O_BinaryRightShift",
+	"O_BinaryLeftShift",
+	"O_BinaryMod",
+	"O_BinaryAnd",
+	"O_BinaryOr",
+	"O_BinaryXOR",
+	"O_BitwiseNOT",
+	"O_CoerceToInt",
+	"O_CoerceToString",
+	"O_CoerceToFloat",
+	"O_RelativeJump",
+	"O_RelativeJump8",
+	"O_BZ",
+	"O_BZ8",
+	"O_BNZ",
+	"O_BNZ8",
+	"O_CompareEQ",
+	"O_CompareNE",
+	"O_CompareGE",
+	"O_CompareLE",
+	"O_CompareGT",
+	"O_CompareLT",
+	"O_CompareBEQ",
+	"O_CompareBNE",
+	"O_CompareBGE",
+	"O_CompareBLE",
+	"O_CompareBGT",
+	"O_CompareBLT",
+	"O_CompareBEQ8",
+	"O_CompareBNE8",
+	"O_CompareBGE8",
+	"O_CompareBLE8",
+	"O_CompareBGT8",
+	"O_CompareBLT8",
+	"O_PostIncrement",
+	"O_PostDecrement",
+	"O_PreIncrement",
+	"O_PreDecrement",
+	"O_Negate",
+	"O_SubtractAssign",
+	"O_AddAssign",
+	"O_ModAssign",
+	"O_MultiplyAssign",
+	"O_DivideAssign",
+	"O_ORAssign",
+	"O_ANDAssign",
+	"O_XORAssign",
+	"O_RightShiftAssign",
+	"O_LeftShiftAssign",
+	"O_SubtractAssignAndPop",
+	"O_AddAssignAndPop",
+	"O_ModAssignAndPop",
+	"O_MultiplyAssignAndPop",
+	"O_DivideAssignAndPop",
+	"O_ORAssignAndPop",
+	"O_ANDAssignAndPop",
+	"O_XORAssignAndPop",
+	"O_RightShiftAssignAndPop",
+	"O_LeftShiftAssignAndPop",
+	"O_LogicalAnd",
+	"O_LogicalOr",
+	"O_LogicalNot",
+};
+#endif
 
 #else // WRENCH_WITHOUT_COMPILER
 

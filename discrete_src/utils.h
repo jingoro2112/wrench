@@ -198,7 +198,7 @@ const char* wr_asciiDump( const void* d, unsigned int len, WRstr* str =0 );
 //------------------------------------------------------------------------------
 const int32_t c_primeTable[] =
 {
-	2,
+//	2,
 	5,
 	11,
 	17,
@@ -245,7 +245,18 @@ const int32_t c_primeTable[] =
 template <class T> class WRHashTable
 {
 public:
-	WRHashTable() : m_list(0) { clear(); }
+	WRHashTable( int sizeHint =0 )
+	{
+		for( int i=0; c_primeTable[i]; ++i )
+		{
+			if ( sizeHint < c_primeTable[i] )
+			{
+				m_mod = c_primeTable[i];
+				m_list = new Node[m_mod];
+				break;
+			}
+		}
+	}
 	~WRHashTable() { delete[] m_list; }
 
 	//------------------------------------------------------------------------------
@@ -305,13 +316,13 @@ public:
 				}
 			}
 
-			if ( newMod == 0 ) // should not be trying past this point on a memory fotprint this small, just use lua!
+			if ( newMod == 0 )
 			{
 				return false;
 			}
 
+			// this causes a bad fragmentation on small memory systems
 			Node* newList = new Node[newMod];
-
 
 			int h = 0;
 			for( ; h<m_mod; ++h )

@@ -45,6 +45,8 @@ enum WROpcode
 	
 	O_Assign,
 	O_AssignAndPop,
+	O_AssignToGlobalAndPop,
+	O_AssignToLocalAndPop,
 	O_StackSwap,
 
 	O_ReserveFrame,
@@ -74,8 +76,11 @@ enum WROpcode
 	O_CoerceToFloat,
 
 	O_RelativeJump,
+	O_RelativeJump8,
 	O_BZ,
+	O_BZ8,
 	O_BNZ,
+	O_BNZ8,
 
 	O_CompareEQ, 
 	O_CompareNE, 
@@ -83,6 +88,20 @@ enum WROpcode
 	O_CompareLE,
 	O_CompareGT,
 	O_CompareLT,
+
+	O_CompareBEQ,
+	O_CompareBNE,
+	O_CompareBGE,
+	O_CompareBLE,
+	O_CompareBGT,
+	O_CompareBLT,
+
+	O_CompareBEQ8,
+	O_CompareBNE8,
+	O_CompareBGE8,
+	O_CompareBLE8,
+	O_CompareBGT8,
+	O_CompareBLT8,
 
 	O_PostIncrement, // a++
 	O_PostDecrement, // a--
@@ -116,90 +135,13 @@ enum WROpcode
 	O_LogicalOr, // ||
 	O_LogicalNot, // !
 
-
 	O_LAST,
 };
 
 //#define DEBUG_OPCODE_NAMES
 #ifdef DEBUG_OPCODE_NAMES
 #define D_OPCODE(a) a
-const char* c_opcodeName[]=
-{
-	"O_RegisterFunction",
-	"O_FunctionListSize",
-	"O_LiteralZero",
-	"O_LiteralInt8",
-	"O_LiteralInt32",
-	"O_LiteralFloat",
-	"O_LiteralString",
-	"O_LoadLabel",
-	"O_CallFunctionByHash",
-	"O_CallFunctionByHashAndPop",
-	"O_CallFunctionByIndex",
-	"O_Index",
-	"O_IndexHash",
-	"O_Assign",
-	"O_AssignAndPop",
-	"O_StackSwap",
-	"O_ReserveFrame",
-	"O_ReserveGlobalFrame",
-	"O_LoadFromLocal",
-	"O_LoadFromGlobal",
-	"O_PopOne",
-	"O_Return",
-	"O_Stop",
-	"O_BinaryAddition",
-	"O_BinarySubtraction",
-	"O_BinaryMultiplication",
-	"O_BinaryDivision",
-	"O_BinaryRightShift",
-	"O_BinaryLeftShift",
-	"O_BinaryMod",
-	"O_BinaryAnd",
-	"O_BinaryOr",
-	"O_BinaryXOR",
-	"O_BitwiseNOT",
-	"O_CoerceToInt",
-	"O_CoerceToString",
-	"O_CoerceToFloat",
-	"O_RelativeJump",
-	"O_BZ",
-	"O_BNZ",
-	"O_CompareEQ",
-	"O_CompareNE",
-	"O_CompareGE",
-	"O_CompareLE",
-	"O_CompareGT",
-	"O_CompareLT",
-	"O_PostIncrement",
-	"O_PostDecrement",
-	"O_PreIncrement",
-	"O_PreDecrement",
-	"O_Negate",
-	"O_SubtractAssign",
-	"O_AddAssign",
-	"O_ModAssign",
-	"O_MultiplyAssign",
-	"O_DivideAssign",
-	"O_ORAssign",
-	"O_ANDAssign",
-	"O_XORAssign",
-	"O_RightShiftAssign",
-	"O_LeftShiftAssign",
-	"O_SubtractAssignAndPop",
-	"O_AddAssignAndPop",
-	"O_ModAssignAndPop",
-	"O_MultiplyAssignAndPop",
-	"O_DivideAssignAndPop",
-	"O_ORAssignAndPop",
-	"O_ANDAssignAndPop",
-	"O_XORAssignAndPop",
-	"O_RightShiftAssignAndPop",
-	"O_LeftShiftAssignAndPop",
-	"O_LogicalAnd",
-	"O_LogicalOr",
-	"O_LogicalNot",
-};
+extern const char* c_opcodeName[];
 #else
 #define D_OPCODE(a)
 #endif

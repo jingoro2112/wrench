@@ -56,7 +56,7 @@ public:
 	WRValue* get( const char* key ) { UDNode* N = m_index.getItem( wr_hashStr(key) ); return N ? N->val : 0; }
 	WRValue* get( const int32_t hash ) { UDNode* N = m_index.getItem(hash); return N ? N->val : 0; }
 
-	WRUserData() : m_head(0), m_nodeOnlyHead(0) {}
+	WRUserData( int sizeHint =0 ) : m_head(0), m_nodeOnlyHead(0), m_index(sizeHint) {}
 	~WRUserData()
 	{
 		while( m_head )
@@ -241,57 +241,62 @@ void intValueToArray( const WRValue* array, int32_t I );
 void floatValueToArray( const WRValue* array, float F );
 
 typedef void (*WRVoidFunc)( WRValue* to, WRValue* from );
-extern WRVoidFunc wr_assign[5][5];
-extern WRVoidFunc wr_SubtractAssign[5][5];
-extern WRVoidFunc wr_AddAssign[5][5];
-extern WRVoidFunc wr_ModAssign[5][5];
-extern WRVoidFunc wr_MultiplyAssign[5][5];
-extern WRVoidFunc wr_DivideAssign[5][5];
-extern WRVoidFunc wr_ORAssign[5][5];
-extern WRVoidFunc wr_ANDAssign[5][5];
-extern WRVoidFunc wr_XORAssign[5][5];
-extern WRVoidFunc wr_RightShiftAssign[5][5];
-extern WRVoidFunc wr_LeftShiftAssign[5][5];
+extern WRVoidFunc wr_assign[36];
+
+extern WRVoidFunc wr_SubtractAssign[36];
+extern WRVoidFunc wr_AddAssign[36];
+extern WRVoidFunc wr_ModAssign[36];
+extern WRVoidFunc wr_MultiplyAssign[36];
+extern WRVoidFunc wr_DivideAssign[36];
+extern WRVoidFunc wr_ORAssign[36];
+extern WRVoidFunc wr_ANDAssign[36];
+extern WRVoidFunc wr_XORAssign[36];
+extern WRVoidFunc wr_RightShiftAssign[36];
+extern WRVoidFunc wr_LeftShiftAssign[36];
 
 
 typedef void (*WRTargetFunc)( WRValue* to, WRValue* from, WRValue* target );
-extern WRTargetFunc wr_binaryAddition[5][5];
-extern WRTargetFunc wr_binaryMultiply[5][5];
-extern WRTargetFunc wr_binarySubtract[5][5];
-extern WRTargetFunc wr_binaryDivide[5][5];
-extern WRTargetFunc wr_binaryLeftShift[5][5];
-extern WRTargetFunc wr_binaryRightShift[5][5];
-extern WRTargetFunc wr_binaryMod[5][5];
-extern WRTargetFunc wr_binaryAnd[5][5];
-extern WRTargetFunc wr_binaryOr[5][5];
-extern WRTargetFunc wr_binaryXOR[5][5];
+extern WRTargetFunc wr_binaryAddition[36];
+
+extern WRTargetFunc wr_binaryAddition2[36];
+
+
+extern WRTargetFunc wr_binaryMultiply[36];
+extern WRTargetFunc wr_binarySubtract[36];
+extern WRTargetFunc wr_binaryDivide[36];
+extern WRTargetFunc wr_binaryLeftShift[36];
+extern WRTargetFunc wr_binaryRightShift[36];
+extern WRTargetFunc wr_binaryMod[36];
+extern WRTargetFunc wr_binaryAND[36];
+extern WRTargetFunc wr_binaryOR[36];
+extern WRTargetFunc wr_binaryXOR[36];
 
 typedef void (*WRStateFunc)( WRRunContext* c, WRValue* to, WRValue* from );
-extern WRStateFunc wr_index[5][5];
+extern WRStateFunc wr_index[36];
 
 typedef bool (*WRReturnFunc)( WRValue* to, WRValue* from );
-extern WRReturnFunc wr_CompareEQ[5][5];
-extern WRReturnFunc wr_CompareGT[5][5];
-extern WRReturnFunc wr_CompareLT[5][5];
-extern WRReturnFunc wr_LogicalAnd[5][5];
-extern WRReturnFunc wr_LogicalOr[5][5];
+extern WRReturnFunc wr_CompareEQ[36];
+extern WRReturnFunc wr_CompareGT[36];
+extern WRReturnFunc wr_CompareLT[36];
+extern WRReturnFunc wr_LogicalAND[36];
+extern WRReturnFunc wr_LogicalOR[36];
 
 typedef void (*WRUnaryFunc)( WRValue* value );
-extern WRUnaryFunc wr_BitwiseNot[5];
-extern WRUnaryFunc wr_negate[5];
-extern WRUnaryFunc wr_preinc[5];
-extern WRUnaryFunc wr_predec[5];
-extern WRVoidFunc wr_postinc[5];
-extern WRVoidFunc wr_postdec[5];
+extern WRUnaryFunc wr_BitwiseNot[6];
+extern WRUnaryFunc wr_negate[6];
+extern WRUnaryFunc wr_preinc[6];
+extern WRUnaryFunc wr_predec[6];
+extern WRVoidFunc wr_postinc[6];
+extern WRVoidFunc wr_postdec[6];
 
 typedef bool (*WRReturnSingleFunc)( WRValue* value );
-extern WRReturnSingleFunc wr_LogicalNot[5];
+extern WRReturnSingleFunc wr_LogicalNot[6];
 
 typedef bool (*WRValueCheckFunc)( WRValue* value );
-extern WRValueCheckFunc wr_ZeroCheck[5];
+extern WRValueCheckFunc wr_ZeroCheck[6];
 
 typedef void (*WRUserHashFunc)( WRValue* value, WRValue* target, int32_t hash );
-extern WRUserHashFunc wr_UserHash[5];
+extern WRUserHashFunc wr_UserHash[6];
 
 
 #endif
