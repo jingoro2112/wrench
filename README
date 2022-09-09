@@ -1,0 +1,90 @@
+wrench: a full-featured interpreter that uses a bare
+minimum of ram and program space.
+
+How little? The wrench interpreter compiles to around 40k on Arduino, and
+uses less than 1k of ram to operate.
+
+wrench: 
+
+- Is weakly typed, supporting native 32-bit int, float and string.
+  Code is easy to write and intuitive.
+
+- Lightning-fast, 30-40% faster than lua. 
+
+- Produces very compact bytecode, and is endian-neutral; compile
+  anywhere-run-anywhere.
+
+- Can execute directy from ROM, no local copy of the 
+code is made, and a single state supports multiple contexts.
+
+- Supports dynamic run-time loading of code that might be located
+  off-chip (like an I2C EEPROM)
+
+- Supports everything a good interpreter should: if/then/else/do/while/for/functions/operators/etc..
+
+- Can operate directly on native data/arrays, no thunking required.
+
+- Can call back and forth to native code with minimal overhead
+
+- Memory is garbage-collected but only for dynamic arrays. Unless
+  you are allocating/de-allocating arrays the gc _never_ runs.
+
+- MIT licence
+
+- Includes a handy command-line tool
+
+- Easy to integrate, here is a complete example:
+
+
+----- Step 1: while the entire source is included, it is wrapped up in two 
+              files, src/wrench.h and src/wrench.cpp simply include these in 
+              your build and you have everything.
+
+----- Step 2: Here is a complete source-code example:
+
+#include <stdio.h>
+#include <string.h>
+#include "wrench.h" // or wherever you located it
+
+void log( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	// simple/naive logging solution
+	char buf[512];
+	for( int i=0; i<argn; ++i )
+	{
+		printf( "%s", wr_valueToString(argv[i], buf) );
+	}
+}
+
+const char* wrenchCode = 
+"log( \"Hello World!\\n\" ); " // hi!
+"for( i=0; i<10; i++ )       " // do.. SOMETHING interesting..
+"{                           "
+"    log( i );               "
+"}                           ";
+ 
+int main( int argn, char** argv )
+{
+	WRState* w = wr_newState(); // create the state
+
+	wr_registerFunction( w, "log", log ); // bind a function
+
+	unsigned char* outBytes; // compiled code is alloc'ed
+	int outLen;
+	
+	int err = wr_compile( wrenchCode, strlen(wrenchCode), &outBytes, &outLen );                     
+	if ( err == 0 )
+	{
+		wr_run( w, outBytes, outLen ); // load and run the code!
+		delete[] outBytes; // clean up 
+	}
+
+	wr_destroyState( w );
+}
+
+
+---- Step 3: compile the above with something like: 
+
+            g++ -o example example.c wrench.cpp
+
+---- Step 4: done!
