@@ -15,12 +15,13 @@ wrench:
   anywhere-run-anywhere.
 
 - Can execute directy from ROM, no local copy of the 
-code is made, and a single state supports multiple contexts.
+  code is made, and a single state supports multiple contexts.
 
 - Supports dynamic run-time loading of code that might be located
   off-chip (like an I2C EEPROM)
 
 - Supports everything a good interpreter should: if/then/else/do/while/for/functions/operators/etc..
+  wrench code looks just like c with the types removed.
 
 - Can operate directly on native data/arrays, no thunking required.
 
