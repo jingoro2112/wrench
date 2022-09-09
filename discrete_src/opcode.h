@@ -35,13 +35,18 @@ enum WROpcode
 	O_LiteralFloat,
 	O_LiteralString,
 
-	O_LoadLabel, // [label key:] push this label onto the stack
 	O_CallFunctionByHash,
 	O_CallFunctionByHashAndPop,
 	O_CallFunctionByIndex,
+	O_CallLibFunction,
+	O_CallLibFunctionAndPop,
 
 	O_Index,
-	O_IndexHash,
+	O_IndexLiteral8,
+	O_IndexLiteral32,
+	O_StackIndexHash,
+	O_GlobalIndexHash,
+	O_LocalIndexHash,
 	
 	O_Assign,
 	O_AssignAndPop,
@@ -72,11 +77,11 @@ enum WROpcode
 	O_BitwiseNOT,
 
 	O_CoerceToInt,
-	O_CoerceToString,
 	O_CoerceToFloat,
 
 	O_RelativeJump,
 	O_RelativeJump8,
+	
 	O_BZ,
 	O_BZ8,
 	O_BNZ,
@@ -135,15 +140,23 @@ enum WROpcode
 	O_LogicalOr, // ||
 	O_LogicalNot, // !
 
+	O_LiteralInt8ToGlobal,
+	O_LiteralInt32ToLocal,
+	O_LiteralInt8ToLocal,
+	O_LiteralFloatToGlobal,
+	O_LiteralFloatToLocal,
+	O_LiteralInt32ToGlobal,
+	
 	O_LAST,
+	
+	O_HASH_PLACEHOLDER,
 };
 
 //#define DEBUG_OPCODE_NAMES
 #ifdef DEBUG_OPCODE_NAMES
-#define D_OPCODE(a) a
+#define D_OPCODE
 extern const char* c_opcodeName[];
 #else
-#define D_OPCODE(a)
 #endif
 
 #endif

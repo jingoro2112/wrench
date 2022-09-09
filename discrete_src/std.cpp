@@ -27,14 +27,6 @@ SOFTWARE.
 int32_t wr_Seed;
 
 //------------------------------------------------------------------------------
-int32_t wr_rand( int32_t range )
-{
-	int32_t	k = wr_Seed / 127773;
-	wr_Seed = 16807 * ( wr_Seed - k * 127773 ) - 2836 * k;
-	return wr_Seed % range;
-}
-
-//------------------------------------------------------------------------------
 uint32_t wr_hash( const void *dat, const int len )
 {
 	// in-place implementation of murmer
@@ -62,4 +54,245 @@ uint32_t wr_hashStr( const char* dat )
 	}
 
 	return hash;
+}
+
+//------------------------------------------------------------------------------
+void wr_std_rand( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_INT;
+
+	int32_t	k = wr_Seed / 127773;
+	wr_Seed = 16807 * ( wr_Seed - k * 127773 ) - 2836 * k;
+	stackTop->i = (uint32_t)wr_Seed % (uint32_t)(stackTop - argn)->asInt();
+}
+
+//------------------------------------------------------------------------------
+void wr_std_srand( WRValue* stackTop, const int argn )
+{
+	wr_Seed = (stackTop - argn)->asInt();
+}
+
+#include <math.h>
+
+//------------------------------------------------------------------------------
+void wr_math_sin( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = sinf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_cos( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = cosf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_tan( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = tanf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_sinh( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = sinhf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_cosh( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = coshf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_tanh( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = tanhf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_asin( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = asinf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_acos( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = acosf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_atan( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = atanf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_atan2( WRValue* stackTop, const int argn )
+{
+	if ( argn == 2 )
+	{
+		stackTop->type = WR_FLOAT;
+		stackTop->f = atan2f( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_math_log( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = logf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_log10( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = log10f( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_exp( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = expf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_sqrt( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = sqrtf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_ceil( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = ceilf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_floor( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = floorf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_abs( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = (float)fabs( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_pow( WRValue* stackTop, const int argn )
+{
+	if ( argn == 2 )
+	{
+		stackTop->type = WR_FLOAT;
+		stackTop->f = powf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_math_fmod( WRValue* stackTop, const int argn )
+{
+	if ( argn == 2 )
+	{
+		stackTop->type = WR_FLOAT;
+		stackTop->f = fmodf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_math_trunc( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = truncf( (stackTop - argn)->asFloat() );
+}
+
+//------------------------------------------------------------------------------
+void wr_math_ldexp( WRValue* stackTop, const int argn )
+{
+	if ( argn == 2 )
+	{
+		stackTop->type = WR_FLOAT;
+		stackTop->f = ldexpf( (stackTop - 1)->asFloat(), (stackTop - 2)->asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
+const float wr_PI = 3.14159265358979323846264338327950288419716939937510582f;
+const float wr_toDegrees = (180.f / wr_PI);
+const float wr_toRadians = (1.f / wr_toDegrees);
+
+//------------------------------------------------------------------------------
+void wr_math_rad2deg( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = wr_toDegrees * (stackTop - argn)->asFloat();
+}
+
+//------------------------------------------------------------------------------
+void wr_math_deg2rad( WRValue* stackTop, const int argn )
+{
+	stackTop->type = WR_FLOAT;
+	stackTop->f = wr_toRadians * (stackTop - argn)->asFloat();
+}
+
+//------------------------------------------------------------------------------
+void wr_loadAllLibs( WRState* w )
+{
+	wr_loadMathLib( w );
+	wr_loadStdLib( w );
+}
+
+//------------------------------------------------------------------------------
+void wr_loadMathLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "math::sin", wr_math_sin );
+	wr_registerLibraryFunction( w, "math::cos", wr_math_cos );
+	wr_registerLibraryFunction( w, "math::tan", wr_math_tan );
+	wr_registerLibraryFunction( w, "math::sinh", wr_math_sinh );
+	wr_registerLibraryFunction( w, "math::cosh", wr_math_cosh );
+	wr_registerLibraryFunction( w, "math::tanh", wr_math_tanh );
+	wr_registerLibraryFunction( w, "math::asin", wr_math_asin );
+	wr_registerLibraryFunction( w, "math::acos", wr_math_acos );
+	wr_registerLibraryFunction( w, "math::atan", wr_math_atan );
+	wr_registerLibraryFunction( w, "math::atan2", wr_math_atan2 );
+	wr_registerLibraryFunction( w, "math::log", wr_math_log );
+	wr_registerLibraryFunction( w, "math::ln", wr_math_log );
+	wr_registerLibraryFunction( w, "math::log10", wr_math_log10 );
+	wr_registerLibraryFunction( w, "math::exp", wr_math_exp );
+	wr_registerLibraryFunction( w, "math::pow", wr_math_pow );
+	wr_registerLibraryFunction( w, "math::fmod", wr_math_fmod );
+	wr_registerLibraryFunction( w, "math::trunc", wr_math_trunc );
+	wr_registerLibraryFunction( w, "math::sqrt", wr_math_sqrt );
+	wr_registerLibraryFunction( w, "math::ceil", wr_math_ceil );
+	wr_registerLibraryFunction( w, "math::floor", wr_math_floor );
+	wr_registerLibraryFunction( w, "math::abs", wr_math_abs );
+	wr_registerLibraryFunction( w, "math::ldexp", wr_math_ldexp );
+
+	wr_registerLibraryFunction( w, "math::deg2rad", wr_math_deg2rad );
+	wr_registerLibraryFunction( w, "math::rad2deg", wr_math_rad2deg );
+
+}
+
+//------------------------------------------------------------------------------
+void wr_loadStdLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "std::rand", wr_std_rand );
+	wr_registerLibraryFunction( w, "std::srand", wr_std_srand );
 }

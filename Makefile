@@ -1,11 +1,12 @@
 OPT ?= -O3
+#OPT ?= -O0 -ggdb
 PERF ?=
 
 #FLAGS ?= $(OPT) $(PERF) -std=c++11
 FLAGS ?= $(OPT) $(PERF) -I.
 
-#FLAGS = -O3 -pg
-#FLAGS = -O0 -ggdb $(PERF)
+#FLAGS = $(OPT) -pg
+#FLAGS = $(OPT) $(PERF)
 
 all: wrench valgrind
 

@@ -236,7 +236,8 @@ WRStaticValueArray* WRRunContext::getSVA( int size, WRStaticValueArrayType type 
 		WRValue *array = (WRValue *)ret->m_data;
 		for( int i=0; i<size; ++i )
 		{
-			array[i].init();
+			array[i].p = 0;
+			array[i].p2 = 0;
 		}
 	}
 
@@ -379,6 +380,12 @@ int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, v
 }
 
 //------------------------------------------------------------------------------
+void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLBACK function )
+{
+	w->c_libFunctionRegistry.set( wr_hashStr(signature), function );
+}
+
+//------------------------------------------------------------------------------
 char* wr_valueToString( WRValue const& value, char* string )
 {
 	return value.asString( string );
@@ -430,7 +437,7 @@ char* WRValue::asString( char* string ) const
 		case WR_REFARRAY:
 		{
 			WRValue temp;
-			arrayToValue(this, &temp);
+			wr_arrayToValue(this, &temp);
 			return temp.asString(string);
 		}
 	}
@@ -445,12 +452,132 @@ int wr_callFunction( WRState* w, const int contextId, const char* functionName, 
 	return wr_callFunction( w, contextId, wr_hashStr(functionName), argv, argn );
 }
 
-void testFunc1( int a, int b );
-void testFunc2( int a, int b );
+
+#ifdef D_OPCODE
+#define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)*pc, c_opcodeName[*pc]);
+#else
+#define PER_INSTRUCTION
+#endif
+
+#ifdef JUMPTABLE_INTERPRETER
+#define CONTINUE { goto *opcodeJumptable[*pc++]; PER_INSTRUCTION; }
+#define CASE(LABEL) LABEL
+#else
+#define CONTINUE continue
+#define CASE(LABEL) case O_##LABEL
+#endif
+
 
 //------------------------------------------------------------------------------
 int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const WRValue* argv, const int argn )
 {
+#ifdef JUMPTABLE_INTERPRETER
+	const void* opcodeJumptable[] =
+	{
+		&&RegisterFunction,
+		&&FunctionListSize,
+		&&LiteralZero,
+		&&LiteralInt8,
+		&&LiteralInt32,
+		&&LiteralFloat,
+		&&LiteralString,
+		&&CallFunctionByHash,
+		&&CallFunctionByHashAndPop,
+		&&CallFunctionByIndex,
+		&&CallLibFunction,
+		&&CallLibFunctionAndPop,
+		&&Index,
+		&&IndexLiteral8,
+		&&IndexLiteral32,
+		&&StackIndexHash,
+		&&GlobalIndexHash,
+		&&LocalIndexHash,
+		&&Assign,
+		&&AssignAndPop,
+		&&AssignToGlobalAndPop,
+		&&AssignToLocalAndPop,
+		&&StackSwap,
+		&&ReserveFrame,
+		&&ReserveGlobalFrame,
+		&&LoadFromLocal,
+		&&LoadFromGlobal,
+		&&PopOne,
+		&&Return,
+		&&Stop,
+		&&BinaryAddition,
+		&&BinarySubtraction,
+		&&BinaryMultiplication,
+		&&BinaryDivision,
+		&&BinaryRightShift,
+		&&BinaryLeftShift,
+		&&BinaryMod,
+		&&BinaryAnd,
+		&&BinaryOr,
+		&&BinaryXOR,
+		&&BitwiseNOT,
+		&&CoerceToInt,
+		&&CoerceToFloat,
+		&&RelativeJump,
+		&&RelativeJump8,
+		&&BZ,
+		&&BZ8,
+		&&BNZ,
+		&&BNZ8,
+		&&CompareEQ,
+		&&CompareNE,
+		&&CompareGE,
+		&&CompareLE,
+		&&CompareGT,
+		&&CompareLT,
+		&&CompareBEQ,
+		&&CompareBNE,
+		&&CompareBGE,
+		&&CompareBLE,
+		&&CompareBGT,
+		&&CompareBLT,
+		&&CompareBEQ8,
+		&&CompareBNE8,
+		&&CompareBGE8,
+		&&CompareBLE8,
+		&&CompareBGT8,
+		&&CompareBLT8,
+		&&PostIncrement,
+		&&PostDecrement,
+		&&PreIncrement,
+		&&PreDecrement,
+		&&Negate,
+		&&SubtractAssign,
+		&&AddAssign,
+		&&ModAssign,
+		&&MultiplyAssign,
+		&&DivideAssign,
+		&&ORAssign,
+		&&ANDAssign,
+		&&XORAssign,
+		&&RightShiftAssign,
+		&&LeftShiftAssign,
+		&&SubtractAssignAndPop,
+		&&AddAssignAndPop,
+		&&ModAssignAndPop,
+		&&MultiplyAssignAndPop,
+		&&DivideAssignAndPop,
+		&&ORAssignAndPop,
+		&&ANDAssignAndPop,
+		&&XORAssignAndPop,
+		&&RightShiftAssignAndPop,
+		&&LeftShiftAssignAndPop,
+		&&LogicalAnd,
+		&&LogicalOr,
+		&&LogicalNot,
+		&&LiteralInt8ToGlobal,
+		&&LiteralInt32ToLocal,
+		&&LiteralInt8ToLocal,
+		&&LiteralFloatToGlobal,
+		&&LiteralFloatToLocal,
+		&&LiteralInt32ToGlobal,
+	};
+#endif
+
 	const unsigned char* pc;
 	WRValue* tempValue;
 	WRValue* tempValue2;
@@ -458,10 +585,6 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 	WRFunctionRegistry* F;
 	unsigned char args;
 	WRValue* stackTop = w->stack;
-
-#ifdef _DEBUG_OPCODES
-	WROpcode opcode;
-#endif
 
 	w->err = WR_ERR_None;
 	
@@ -528,47 +651,37 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 		goto callFunction;
 	}
 
+#ifdef JUMPTABLE_INTERPRETER
+
+	CONTINUE;
+	
+#else
+
 	for(;;)
 	{
+		#ifndef WRENCH_IGNORE_BYTECODE_WARNINGS
+		/* // yeah... well... 
 		if ( w->err )
 		{
-			if ( w->err > WR_warning_enums_follow )
-			{
-				//if ( !w->ignoreWarnings )
-				{
-					// then do something I guess
-				}
-				//else
-				{
-				}
-			}
-			else
-			{
-				return w->err;
-			}
-
+			// then do something I guess
 			w->err = WR_ERR_None;
 		}
+		*/
+        #endif
 
-#ifdef PARTIAL_BYTECODE_LOADS
+        #ifdef PARTIAL_BYTECODE_LOADS
 		if ( pc >= top )
 		{
 			unsigned int size = loader( absoluteBottom += (pc - context->bottom), &pc, usr );
 			top = pc + (size - 6);
 			context->bottom = pc;
 		}
-#endif
+        #endif
 
-#ifdef _DEBUG_OPCODES
-		opcode = (WROpcode)*pc;
-		opcode = opcode;
-#endif
-
-		D_OPCODE(printf( "s[%p] top[%p] size[%d] %d:%s\n", w->stack, stackTop, (int)(stackTop - w->stack), (int)*pc, c_opcodeName[*pc]));
-		
 		switch( *pc++)
 		{
-			case O_RegisterFunction:
+#endif
+			CASE(RegisterFunction):
 			{
 				int index = (stackTop - 5)->i;
 				context->localFunctions[ index ].arguments = (stackTop - 4)->i;
@@ -588,52 +701,50 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 				context->localFunctionRegistry.set( context->localFunctions[ index ].hash,
 													context->localFunctions + index );
 				stackTop -= 5;
-				continue;
+				CONTINUE;
 			}
 
-			case O_FunctionListSize:
+			CASE(FunctionListSize):
 			{
 				delete context->localFunctions;
 				context->localFunctionRegistry.clear();
 				context->localFunctions = new WRFunctionRegistry[ *pc++ ];
-				continue;
+				CONTINUE;
 			}
 
-			case O_LiteralZero:
+			CASE(LiteralZero):
 			{
-				(stackTop++)->init();
-				continue;
+				stackTop->p = 0;
+				(stackTop++)->p2 = 0;
+				CONTINUE;
 			}
 			
-			case O_LiteralInt8:
+			CASE(LiteralInt8):
 			{
 				stackTop->type = WR_INT;
 				(stackTop++)->i = (int32_t)(int8_t)*pc++;
-				continue;
+				CONTINUE;
 			}
 			
-			case O_LiteralFloat:
+			CASE(LiteralFloat):
 			{
 				stackTop->type = WR_FLOAT;
-				(stackTop++)->i = (((int32_t)*pc) << 24)
-								  | (((int32_t)*(pc+1)) << 16)
-								  | (((int32_t)*(pc+2)) << 8)
-								  | ((int32_t)*(pc+3));
-				pc += 4;
-				continue;
+				goto load32ToStackTop;
 			}
-			case O_LiteralInt32:
+			
+			CASE(LiteralInt32):
 			{
 				stackTop->type = WR_INT;
+load32ToStackTop:
 				(stackTop++)->i = (((int32_t)*pc) << 24)
 								  | (((int32_t)*(pc+1)) << 16)
 								  | (((int32_t)*(pc+2)) << 8)
 								  | ((int32_t)*(pc+3));
 				pc += 4;
-				continue;
+				CONTINUE;
 			}
 
-			case O_LiteralString:
+			CASE(LiteralString):
 			{
 				int16_t len = (((int16_t)*pc)<<8) | (int16_t)*(pc + 1);
 				pc += 2;
@@ -654,129 +765,183 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 #endif
 				}
 				++stackTop;
-				continue;
+				CONTINUE;
 			}
 			
-			case O_ReserveFrame:
+			CASE(ReserveFrame):
 			{
 				frameBase = stackTop;
 				for( unsigned char i=0; i<*pc; ++i )
 				{
-					(++stackTop)->init();
+					(stackTop)->p = 0;
+					(++stackTop)->p2 = 0;
+
 				}
 				++pc;
-				continue;
+				CONTINUE;
 			}
 
-			case O_ReserveGlobalFrame:
+			CASE(ReserveGlobalFrame):
 			{
 				delete[] context->globalSpace;
 				context->globals = *pc++;
 				context->globalSpace = new WRValue[ context->globals ];
 				for( unsigned char i=0; i<context->globals; ++i )
 				{
-					context->globalSpace[i].init();
+					context->globalSpace[i].p = 0;
+					context->globalSpace[i].p2 = 0;
 				}
-				continue;
+				CONTINUE;
 			}
 
-			case O_LoadFromLocal:
+			CASE(LoadFromLocal):
 			{
 				stackTop->type = WR_REF;
 				(stackTop++)->p = frameBase + *pc++;
-				continue;
+				CONTINUE;
 			}
 
-			case O_LoadFromGlobal:
+			CASE(LoadFromGlobal):
 			{
 				stackTop->type = WR_REF;
 				(stackTop++)->p = context->globalSpace + *pc++;
-
-				continue;
+				CONTINUE;
 			}
 
-			case O_AssignToGlobalAndPop:
+			CASE(AssignToGlobalAndPop):
 			{
 				tempValue = context->globalSpace + *pc++;
 				tempValue2 = --stackTop;
 				wr_assign[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				continue;
+				CONTINUE;
 			}
 
-			case O_AssignToLocalAndPop:
+			CASE(AssignToLocalAndPop):
 			{
 				tempValue = frameBase + *pc++;
 				tempValue2 = --stackTop;
 				wr_assign[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				continue;
+				CONTINUE;
 			}
 
-			case O_Index:
+			CASE(Index):
 			{
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
 				wr_index[tempValue->type*6+tempValue2->type]( context, tempValue, tempValue2 );
-				continue;
+				CONTINUE;
 			}
 
-			case O_IndexHash:
+			CASE(IndexLiteral32):
 			{
-				tempValue = --stackTop;
-				tempValue2 = stackTop - 1;
-				wr_UserHash[ tempValue->type ]( tempValue, tempValue2, tempValue2->i );
-				continue;
+				stackTop->i = (((int32_t)*pc) << 24) |
+					(((int32_t) * (pc + 1)) << 16) |
+					(((int32_t) * (pc + 2)) << 8) |
+					(int32_t) * (pc + 3);
+				pc += 4;
+				goto indexLiteral;
 			}
 
-			case O_BinaryMultiplication: { targetFunc = wr_binaryMultiply; goto targetFuncOp; }
-			case O_BinarySubtraction: { targetFunc = wr_binarySubtract; goto targetFuncOp; }
-			case O_BinaryDivision: { targetFunc = wr_binaryDivide; goto targetFuncOp; }
-			case O_BinaryRightShift: { targetFunc = wr_binaryRightShift; goto targetFuncOp; }
-			case O_BinaryLeftShift: { targetFunc = wr_binaryLeftShift; goto targetFuncOp; }
-			case O_BinaryMod: { targetFunc = wr_binaryMod; goto targetFuncOp; }
-			case O_BinaryOr: { targetFunc = wr_binaryOR; goto targetFuncOp; }
-			case O_BinaryXOR: { targetFunc = wr_binaryXOR; goto targetFuncOp; }
-			case O_BinaryAnd: { targetFunc = wr_binaryAND; goto targetFuncOp; }
-			case O_BinaryAddition:
+			CASE(IndexLiteral8):
+			{
+				stackTop->i = *pc++;
+indexLiteral:
+				tempValue = stackTop - 1;
+				wr_index[WR_INT*6+tempValue->type]( context, stackTop, tempValue );
+				CONTINUE;
+			}
+
+			CASE(StackIndexHash):
+			{
+				tempValue = stackTop - 1;
+				wr_UserHash[ tempValue->type ]( tempValue,
+												tempValue,
+												(((int32_t)*pc) << 24) |
+												(((int32_t)*(pc+1)) << 16) |
+												(((int32_t)*(pc+2)) << 8) |
+												(int32_t)*(pc+3) );
+				pc += 4;
+				CONTINUE;
+			}
+
+			CASE(GlobalIndexHash):
+			{
+				tempValue = context->globalSpace + *pc++;
+				goto indexHash;
+			}
+
+			CASE(LocalIndexHash):
+			{
+				tempValue = frameBase + *pc++;
+indexHash:
+				wr_UserHash[ tempValue->type ]( tempValue,
+												stackTop++,
+												(((int32_t)*pc) << 24) |
+												(((int32_t)*(pc+1)) << 16) |
+												(((int32_t)*(pc+2)) << 8) |
+												(int32_t)*(pc+3) );
+				pc += 4;
+				CONTINUE;
+			}
+			
+			CASE(BinaryMultiplication): { targetFunc = wr_binaryMultiply; goto targetFuncOp; }
+			CASE(BinarySubtraction): { targetFunc = wr_binarySubtract; goto targetFuncOp; }
+			CASE(BinaryDivision): { targetFunc = wr_binaryDivide; goto targetFuncOp; }
+			CASE(BinaryRightShift): { targetFunc = wr_binaryRightShift; goto targetFuncOp; }
+			CASE(BinaryLeftShift): { targetFunc = wr_binaryLeftShift; goto targetFuncOp; }
+			CASE(BinaryMod): { targetFunc = wr_binaryMod; goto targetFuncOp; }
+			CASE(BinaryOr): { targetFunc = wr_binaryOR; goto targetFuncOp; }
+			CASE(BinaryXOR): { targetFunc = wr_binaryXOR; goto targetFuncOp; }
+			CASE(BinaryAnd): { targetFunc = wr_binaryAND; goto targetFuncOp; }
+			CASE(BinaryAddition):
 			{
 				targetFunc = wr_binaryAddition;
 targetFuncOp:
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
 				targetFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2, tempValue2 );
-				continue;
+				CONTINUE;
 			}
 
-			case O_SubtractAssign: { voidFunc = wr_SubtractAssign; goto binaryTableOp; }
-			case O_AddAssign: { voidFunc = wr_AddAssign; goto binaryTableOp; }
-			case O_ModAssign: { voidFunc = wr_ModAssign; goto binaryTableOp; }
-			case O_MultiplyAssign: { voidFunc = wr_MultiplyAssign; goto binaryTableOp; }
-			case O_DivideAssign: { voidFunc = wr_DivideAssign; goto binaryTableOp; }
-			case O_ORAssign: { voidFunc = wr_ORAssign; goto binaryTableOp; }
-			case O_ANDAssign: { voidFunc = wr_ANDAssign; goto binaryTableOp; }
-			case O_XORAssign: { voidFunc = wr_XORAssign; goto binaryTableOp; }
-			case O_RightShiftAssign: { voidFunc = wr_RightShiftAssign; goto binaryTableOp; }
-			case O_LeftShiftAssign: { voidFunc = wr_LeftShiftAssign; goto binaryTableOp; }
-			case O_Assign:
+			CASE(BitwiseNOT):
+			{
+				tempValue = stackTop - 1;
+				wr_bitwiseNot[ tempValue->type ]( tempValue );
+				CONTINUE;
+			}
+
+
+			CASE(SubtractAssign): { voidFunc = wr_SubtractAssign; goto binaryTableOp; }
+			CASE(AddAssign): { voidFunc = wr_AddAssign; goto binaryTableOp; }
+			CASE(ModAssign): { voidFunc = wr_ModAssign; goto binaryTableOp; }
+			CASE(MultiplyAssign): { voidFunc = wr_MultiplyAssign; goto binaryTableOp; }
+			CASE(DivideAssign): { voidFunc = wr_DivideAssign; goto binaryTableOp; }
+			CASE(ORAssign): { voidFunc = wr_ORAssign; goto binaryTableOp; }
+			CASE(ANDAssign): { voidFunc = wr_ANDAssign; goto binaryTableOp; }
+			CASE(XORAssign): { voidFunc = wr_XORAssign; goto binaryTableOp; }
+			CASE(RightShiftAssign): { voidFunc = wr_RightShiftAssign; goto binaryTableOp; }
+			CASE(LeftShiftAssign): { voidFunc = wr_LeftShiftAssign; goto binaryTableOp; }
+			CASE(Assign):
 			{
 				voidFunc = wr_assign;
 binaryTableOp:
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
 				voidFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				continue;
+				CONTINUE;
 			}
 
-			case O_SubtractAssignAndPop: { voidFunc = wr_SubtractAssign; goto binaryTableOpAndPop; }
-			case O_AddAssignAndPop: { voidFunc = wr_AddAssign; goto binaryTableOpAndPop; }
-			case O_ModAssignAndPop: { voidFunc = wr_ModAssign; goto binaryTableOpAndPop; }
-			case O_MultiplyAssignAndPop: { voidFunc = wr_MultiplyAssign; goto binaryTableOpAndPop; }
-			case O_DivideAssignAndPop: { voidFunc = wr_DivideAssign; goto binaryTableOpAndPop; }
-			case O_ORAssignAndPop: { voidFunc = wr_ORAssign; goto binaryTableOpAndPop; }
-			case O_ANDAssignAndPop: { voidFunc = wr_ANDAssign; goto binaryTableOpAndPop; }
-			case O_XORAssignAndPop: { voidFunc = wr_XORAssign; goto binaryTableOpAndPop; }
-			case O_RightShiftAssignAndPop: { voidFunc = wr_RightShiftAssign; goto binaryTableOpAndPop; }
-			case O_LeftShiftAssignAndPop: { voidFunc = wr_LeftShiftAssign; goto binaryTableOpAndPop; }
-			case O_AssignAndPop:
+			CASE(SubtractAssignAndPop): { voidFunc = wr_SubtractAssign; goto binaryTableOpAndPop; }
+			CASE(AddAssignAndPop): { voidFunc = wr_AddAssign; goto binaryTableOpAndPop; }
+			CASE(ModAssignAndPop): { voidFunc = wr_ModAssign; goto binaryTableOpAndPop; }
+			CASE(MultiplyAssignAndPop): { voidFunc = wr_MultiplyAssign; goto binaryTableOpAndPop; }
+			CASE(DivideAssignAndPop): { voidFunc = wr_DivideAssign; goto binaryTableOpAndPop; }
+			CASE(ORAssignAndPop): { voidFunc = wr_ORAssign; goto binaryTableOpAndPop; }
+			CASE(ANDAssignAndPop): { voidFunc = wr_ANDAssign; goto binaryTableOpAndPop; }
+			CASE(XORAssignAndPop): { voidFunc = wr_XORAssign; goto binaryTableOpAndPop; }
+			CASE(RightShiftAssignAndPop): { voidFunc = wr_RightShiftAssign; goto binaryTableOpAndPop; }
+			CASE(LeftShiftAssignAndPop): { voidFunc = wr_LeftShiftAssign; goto binaryTableOpAndPop; }
+			CASE(AssignAndPop):
 			{
 				voidFunc = wr_assign;
 
@@ -784,19 +949,26 @@ binaryTableOpAndPop:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
 				voidFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				continue;
+				
+				CONTINUE;
 			}
 
-			case O_StackSwap:
+			CASE(StackSwap):
 			{
-				WRValue v = *(stackTop - 1);
-				unsigned char offset = *pc++;
-				*(stackTop - 1) = *(stackTop - offset);
-				*(stackTop - offset) = v;
-				continue;
+				tempValue = stackTop - 1;
+				uint32_t t = tempValue->p2;
+				const void* p = tempValue->p;
+				
+				tempValue->p2 = (stackTop - *pc)->p2;
+				tempValue->p = (stackTop - *pc)->p;
+
+				(stackTop - *pc)->p = p;
+				(stackTop - *pc++)->p2 = t;
+
+				CONTINUE;
 			}
 
-			case O_CallFunctionByHash:
+			CASE(CallFunctionByHash):
 			{
 				int32_t hash = (((int32_t)*pc) << 24)
 							   | (((int32_t)*(pc+1)) << 16)
@@ -814,7 +986,8 @@ binaryTableOpAndPop:
 					}
 					else
 					{
-						stackTop->init();
+						stackTop->p = 0;
+						stackTop->p2 = 0;
 						cF->function( w, stackTop - args, args, *stackTop, cF->usr );
 						*(stackTop - args) = *stackTop;
 						stackTop -= args - 1;
@@ -824,12 +997,14 @@ binaryTableOpAndPop:
 				{
 					w->err = WR_WARN_c_function_not_found;
 					stackTop -= args;
-					(stackTop++)->init(); // push a fake return value
+					(stackTop)->p = 0;
+					(stackTop++)->p2 = 0; // push a fake return value
 				}
-				continue;
+				
+				CONTINUE;
 			}
 
-			case O_CallFunctionByHashAndPop:
+			CASE(CallFunctionByHashAndPop):
 			{
 				// don't care about return value
 				int32_t hash = (((int32_t)*pc) << 24)
@@ -857,10 +1032,11 @@ binaryTableOpAndPop:
 					w->err = WR_WARN_c_function_not_found;
 					stackTop -= args;
 				}
-				continue;
+				
+				CONTINUE;
 			}
 
-			case O_CallFunctionByIndex:
+			CASE(CallFunctionByIndex):
 			{
 				F = context->localFunctions + *pc;
 				pc += 4;
@@ -877,7 +1053,8 @@ callFunction:
 					{
 						for( char a=args; a < F->arguments; ++a )
 						{
-							(stackTop++)->init();
+							stackTop->p = 0;
+							(stackTop++)->p2 = 0;
 						}
 					}
 				}
@@ -886,7 +1063,8 @@ callFunction:
 				// up for the locals in the function
 				for( int i=0; i<F->frameSpaceNeeded; ++i )
 				{
-					(stackTop++)->init();
+					stackTop->p = 0;
+					(stackTop++)->p2 = 0;
 				}
 
 				// temp value contains return vector
@@ -894,6 +1072,7 @@ callFunction:
 				tempValue->type = WR_INT;
 				
 #ifndef PARTIAL_BYTECODE_LOADS
+				
 				tempValue->p = pc; // simple for big-blob case
 				pc = F->offset;
 #else
@@ -912,30 +1091,85 @@ callFunction:
 					top = pc + (size - 6);
 					context->bottom = pc;
 				}
+				
 #endif
-
+				
 				stackTop->type = WR_INT;
 				(stackTop++)->p = frameBase; // very top is the old framebase
 
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - F->frameBaseAdjustment;
 
-				continue;
+				CONTINUE;
 			}
 
-			case O_Stop:
+			CASE(CallLibFunction):
+			{
+				WR_LIB_CALLBACK callback = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
+																			  | (((int32_t)*(pc+1)) << 16)
+																			  | (((int32_t)*(pc+2)) << 8)
+																			  | ((int32_t)*(pc+3)) );
+				args = *(pc+4); // which have already been pushed
+				pc += 5;
+
+				if ( callback )
+				{
+					callback( stackTop, args );
+					if ( args )
+					{
+						*(stackTop - args) = *stackTop;
+						stackTop -= args - 1;
+					}
+					else
+					{
+						++stackTop;
+					}
+				}
+				else
+				{
+					w->err = WR_WARN_lib_function_not_found;
+					stackTop -= args;
+					stackTop->p = 0;
+					(stackTop++)->p2 = 0; // fake return val
+				}
+				
+				CONTINUE;
+			}
+			
+			CASE(CallLibFunctionAndPop):
+			{
+				WR_LIB_CALLBACK callback = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
+																			  | (((int32_t)*(pc+1)) << 16)
+																			  | (((int32_t)*(pc+2)) << 8)
+																			  | ((int32_t)*(pc+3)) );
+				args = *(pc+4); // which have already been pushed
+				pc += 5;
+
+				if ( callback )
+				{
+					callback( stackTop, args );
+				}
+				else
+				{
+					w->err = WR_WARN_lib_function_not_found;
+				}
+				stackTop -= args;
+				CONTINUE;
+			}
+
+			CASE(Stop):
 			{
 				// stack will be zero at this point, stop execution
 				w->returnValue = stackTop--;
-				context->stopLocation = (pc - 1) - context->bottom;
+				context->stopLocation = (int32_t)((pc - 1) - context->bottom);
 				return WR_ERR_None;
 			}
 
-			case O_Return:
+			CASE(Return):
 			{
 #ifndef PARTIAL_BYTECODE_LOADS
 				// copy the return value
-				pc = (unsigned char*)((stackTop - 3)->p); // grab new PC in case function clobbers it
+				pc = (unsigned char*)((stackTop - 3)->p); // grab return PC
 #else
 				int returnOffset = (stackTop - 3)->i;
 				if ( returnOffset >= absoluteBottom )
@@ -954,8 +1188,7 @@ callFunction:
 #endif
 				if ( (--stackTop)->type == WR_REF )
 				{
-					frameBase->type = stackTop->r->type;
-					frameBase->p = stackTop->r->p;
+					*frameBase = *stackTop->r;
 				}
 				else
 				{
@@ -965,75 +1198,76 @@ callFunction:
 				tempValue = (WRValue*)(stackTop - 1)->p;
 				stackTop = frameBase + 1;
 				frameBase = tempValue;
-				continue;
+				CONTINUE;
 			}
 			
-			case O_PopOne:
+			CASE(PopOne):
 			{
 				--stackTop;
-				continue;
+				CONTINUE;
 			}
 
-			case O_CoerceToInt:
+			CASE(CoerceToInt):
 			{
-				break;
-			}
-			
-			case O_CoerceToFloat:
-			{
-				break;
+				tempValue = stackTop - 1;
+				wr_toInt[ tempValue->type ]( tempValue );
+				CONTINUE;
 			}
 
-			case O_RelativeJump:
+			CASE(CoerceToFloat):
 			{
-				int16_t offset = *pc;
-				offset = (offset<<8) | *(pc+1);
-				pc += offset;
-				continue;
+				tempValue = stackTop - 1;
+				wr_toFloat[ tempValue->type ]( tempValue );
+				CONTINUE;
 			}
 
-			case O_RelativeJump8:
+			CASE(RelativeJump):
+			{
+				pc += (int16_t)(((int16_t)*pc)<<8) + *(pc+1);
+				CONTINUE;
+			}
+
+			CASE(RelativeJump8):
 			{
 				pc += (int8_t)*pc;
-				continue;
+				CONTINUE;
 			}
 
-			case O_BZ:
+			CASE(BZ):
 			{
 				tempValue = --stackTop;
-				pc += wr_ZeroCheck[tempValue->type](tempValue) ? (((int16_t)*pc)<< 8) | *(pc+1) : 2;
-				continue;
+				pc += wr_ZeroCheck[tempValue->type](tempValue) ? (((int16_t)*pc)<< 8) + *(pc+1) : 2;
+				CONTINUE;
 			}
 			
-			case O_BZ8:
+			CASE(BZ8):
 			{
 				tempValue = --stackTop;
 				pc += wr_ZeroCheck[tempValue->type](tempValue) ? (int8_t)*pc : 2;
-				continue;
+				CONTINUE;
 			}
 
-			case O_BNZ:
+			CASE(BNZ):
 			{
 				tempValue = --stackTop;
-				pc += wr_ZeroCheck[tempValue->type](tempValue) ? 2 : (((int16_t)*pc)<< 8) | *(pc+1);
-				continue;
+				pc += wr_ZeroCheck[tempValue->type](tempValue) ? 2 : (((int16_t)*pc)<< 8) + *(pc+1);
+				CONTINUE;
 			}
 			
-			case O_BNZ8:
+			CASE(BNZ8):
 			{
 				tempValue = --stackTop;
 				pc += wr_ZeroCheck[tempValue->type](tempValue) ? 2 : (int8_t)*pc;
-				continue;
+				CONTINUE;
 			}
 
-
-			case O_LogicalAnd: { returnFunc = wr_LogicalAND; goto returnFuncNormal; }
-			case O_LogicalOr: { returnFunc = wr_LogicalOR; goto returnFuncNormal; }
-			case O_CompareLE: { returnFunc = wr_CompareGT; goto returnFuncInverted; }
-			case O_CompareGE: { returnFunc = wr_CompareLT; goto returnFuncInverted; }
-			case O_CompareGT: { returnFunc = wr_CompareGT; goto returnFuncNormal; }
-			case O_CompareLT: { returnFunc = wr_CompareLT; goto returnFuncNormal; }
-			case O_CompareEQ:
+			CASE(LogicalAnd): { returnFunc = wr_LogicalAND; goto returnFuncNormal; }
+			CASE(LogicalOr): { returnFunc = wr_LogicalOR; goto returnFuncNormal; }
+			CASE(CompareLE): { returnFunc = wr_CompareGT; goto returnFuncInverted; }
+			CASE(CompareGE): { returnFunc = wr_CompareLT; goto returnFuncInverted; }
+			CASE(CompareGT): { returnFunc = wr_CompareGT; goto returnFuncNormal; }
+			CASE(CompareLT): { returnFunc = wr_CompareLT; goto returnFuncNormal; }
+			CASE(CompareEQ):
 			{
 				returnFunc = wr_CompareEQ;
 returnFuncNormal:
@@ -1041,10 +1275,10 @@ returnFuncNormal:
 				tempValue2 = stackTop - 1;
 				tempValue2->i = (int)returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
 				tempValue2->type = WR_INT;
-				continue;
+				CONTINUE;
 			}
 			
-			case O_CompareNE:
+			CASE(CompareNE):
 			{
 				returnFunc = wr_CompareEQ;
 returnFuncInverted:
@@ -1052,106 +1286,154 @@ returnFuncInverted:
 				tempValue2 = stackTop - 1;
 				tempValue2->i = (int)!returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
 				tempValue2->type = WR_INT;
-				continue;
+				CONTINUE;
 			}
 
-			case O_CompareBLE: { returnFunc = wr_CompareGT; goto returnFuncBInverted; }
-			case O_CompareBGE: { returnFunc = wr_CompareLT; goto returnFuncBInverted; }
-			case O_CompareBGT: { returnFunc = wr_CompareGT; goto returnFuncBNormal; }
-			case O_CompareBLT: { returnFunc = wr_CompareLT; goto returnFuncBNormal; }
-			case O_CompareBEQ:
+			CASE(CompareBLE): { returnFunc = wr_CompareGT; goto returnFuncBInverted; }
+			CASE(CompareBGE): { returnFunc = wr_CompareLT; goto returnFuncBInverted; }
+			CASE(CompareBGT): { returnFunc = wr_CompareGT; goto returnFuncBNormal; }
+			CASE(CompareBLT): { returnFunc = wr_CompareLT; goto returnFuncBNormal; }
+			CASE(CompareBEQ):
 			{
 				returnFunc = wr_CompareEQ;
 returnFuncBNormal:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
-				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? 2 : (((int16_t)*pc)<< 8) | *(pc+1);
-				continue;
+				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? 2 : (((int16_t)*pc)<< 8) + *(pc+1);
+				CONTINUE;
 			}
 
-			case O_CompareBNE:
+			CASE(CompareBNE):
 			{
 				returnFunc = wr_CompareEQ;
 returnFuncBInverted:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
-				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? (((int16_t)*pc)<< 8) | *(pc+1) : 2;
-				continue;
+				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? (((int16_t)*pc)<< 8) + *(pc+1) : 2;
+				CONTINUE;
 			}
 
-			case O_CompareBLE8: { returnFunc = wr_CompareGT; goto returnFuncBInverted8; }
-			case O_CompareBGE8: { returnFunc = wr_CompareLT; goto returnFuncBInverted8; }
-			case O_CompareBGT8: { returnFunc = wr_CompareGT; goto returnFuncBNormal8; }
-			case O_CompareBLT8: { returnFunc = wr_CompareLT; goto returnFuncBNormal8; }
-			case O_CompareBEQ8:
+			CASE(CompareBLE8): { returnFunc = wr_CompareGT; goto returnFuncBInverted8; }
+			CASE(CompareBGE8): { returnFunc = wr_CompareLT; goto returnFuncBInverted8; }
+			CASE(CompareBGT8): { returnFunc = wr_CompareGT; goto returnFuncBNormal8; }
+			CASE(CompareBLT8): { returnFunc = wr_CompareLT; goto returnFuncBNormal8; }
+			CASE(CompareBEQ8):
 			{
 				returnFunc = wr_CompareEQ;
 returnFuncBNormal8:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
 				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? 2 : *pc;
-				continue;
+				CONTINUE;
 			}
 
-			case O_CompareBNE8:
+			CASE(CompareBNE8):
 			{
 				returnFunc = wr_CompareEQ;
 returnFuncBInverted8:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
 				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? *pc : 2;
-				continue;
+				CONTINUE;
 			}
 
-			case O_PostIncrement:
+			CASE(PostIncrement):
 			{
 				tempValue = stackTop - 1;
 				wr_postinc[ tempValue->type ]( tempValue, tempValue );
-				continue;
+				CONTINUE;
 			}
 
-			case O_PostDecrement:
+			CASE(PostDecrement):
 			{
 				tempValue = stackTop - 1;
 				wr_postdec[ tempValue->type ]( tempValue, tempValue );
-				continue;
+				CONTINUE;
 			}
 			
-			case O_PreIncrement:
+			CASE(PreIncrement):
 			{
 				tempValue = stackTop - 1;
 				wr_preinc[ tempValue->type ]( tempValue );
-				continue;
+				CONTINUE;
 			}
 			
-			case O_PreDecrement:
+			CASE(PreDecrement):
 			{
 				tempValue = stackTop - 1;
 				wr_predec[ tempValue->type ]( tempValue );
-				continue;
+				CONTINUE;
 			}
 
-			case O_LogicalNot:
+			CASE(LogicalNot):
 			{
 				tempValue = stackTop - 1;
 				tempValue->i = wr_LogicalNot[ tempValue->type ]( tempValue );
 				tempValue->type = WR_INT;
-				continue;
+				CONTINUE;
 			}
 
-			case O_Negate:
+			CASE(Negate):
 			{
 				tempValue = stackTop - 1;
 				wr_negate[ tempValue->type ]( tempValue );
-				continue;
+				CONTINUE;
+			}
+			
+			CASE(LiteralInt8ToGlobal):
+			{
+				tempValue = context->globalSpace + *pc++;
+				tempValue->type = WR_INT;
+				tempValue->i = (int32_t)(int8_t)*pc++;
+				CONTINUE;
+			}
+			
+			CASE(LiteralInt32ToLocal):
+			{
+				tempValue = frameBase + *pc++;
+				tempValue->type = WR_INT;
+				goto load32ToTemp;
+			}
+			
+			CASE(LiteralInt8ToLocal):
+			{
+				tempValue = frameBase + *pc++;
+				tempValue->type = WR_INT;
+				tempValue->i = (int32_t)(int8_t)*pc++;
+				CONTINUE;
+			}
+			
+			CASE(LiteralFloatToGlobal):
+			{
+				tempValue = context->globalSpace + *pc++;
+				tempValue->type = WR_FLOAT;
+				goto load32ToTemp;
+			}
+			
+			CASE(LiteralFloatToLocal):
+			{
+				tempValue = frameBase + *pc++;
+				tempValue->type = WR_FLOAT;
+				goto load32ToTemp;
 			}
 
-			default:
+			CASE(LiteralInt32ToGlobal):
 			{
-				return w->err = WR_ERR_unknown_opcode;
+				tempValue = context->globalSpace + *pc++;
+				tempValue->type = WR_INT;
+load32ToTemp:
+				tempValue->i = (((int32_t)*pc) << 24)
+							   | (((int32_t)*(pc+1)) << 16)
+							   | (((int32_t)*(pc+2)) << 8)
+							   | ((int32_t)*(pc+3));
+				pc += 4;
+				CONTINUE;
 			}
+			
+#ifndef JUMPTABLE_INTERPRETER
 		}
 	}
+#endif
 }
 
 //------------------------------------------------------------------------------

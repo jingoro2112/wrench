@@ -34,16 +34,47 @@ SOFTWARE.
 */
 
 
-void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
-bool doReturnFuncBlank( WRValue* to, WRValue* from ) { return false; }
-void doTargetFuncBlank( WRValue* to, WRValue* from, WRValue* target ) {}
-void doVoidIndexFunc( WRRunContext* c, WRValue* index, WRValue* value ) {}
-bool doSingleBlank( WRValue* value ) { return false; }
-void doSingleVoidBlank( WRValue* value ) {}
-
+static void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
+static bool doReturnFuncBlank( WRValue* to, WRValue* from ) { return false; }
+static void doTargetFuncBlank( WRValue* to, WRValue* from, WRValue* target ) {}
+static void doVoidIndexFunc( WRRunContext* c, WRValue* index, WRValue* value ) {}
+static bool doSingleBlank( WRValue* value ) { return false; }
+static void doSingleVoidBlank( WRValue* value ) {}
 
 //------------------------------------------------------------------------------
-void arrayToValue( const WRValue* array, WRValue* value )
+int wr_arrayValueAsInt( const WRValue* array )
+{
+	unsigned int index = array->arrayElement >> 8;
+	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
+
+	switch( array->r->va->m_type&0x3 )
+	{
+		case SV_VALUE: { return ((WRValue *)array->r->va->m_data)[s].asInt(); }
+		case SV_CHAR: { return ((unsigned char *)array->r->va->m_data)[s]; }
+		case SV_INT: { return ((int *)array->r->va->m_data)[s]; }
+		case SV_FLOAT: { return (int)((float *)array->r->va->m_data)[s]; }
+		default: return 0;
+	}
+}
+
+//------------------------------------------------------------------------------
+float wr_arrayValueAsFloat( const WRValue* array )
+{
+	unsigned int index = array->arrayElement >> 8;
+	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
+
+	switch( array->r->va->m_type&0x3 )
+	{
+		case SV_VALUE: { return ((WRValue *)array->r->va->m_data)[s].asFloat(); }
+		case SV_CHAR: { return ((unsigned char *)array->r->va->m_data)[s]; }
+		case SV_INT: { return (float)((int *)array->r->va->m_data)[s]; }
+		case SV_FLOAT: { return ((float *)array->r->va->m_data)[s]; }
+		default: return 0;
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_arrayToValue( const WRValue* array, WRValue* value )
 {
 	unsigned int index = array->arrayElement >> 8;
 	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
@@ -80,7 +111,7 @@ void arrayToValue( const WRValue* array, WRValue* value )
 }
 
 //------------------------------------------------------------------------------
-void intValueToArray( const WRValue* array, int32_t I )
+void wr_intValueToArray( const WRValue* array, int32_t I )
 {
 	unsigned int index = array->arrayElement >> 8;
 	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
@@ -102,7 +133,7 @@ void intValueToArray( const WRValue* array, int32_t I )
 }
 
 //------------------------------------------------------------------------------
-void floatValueToArray( const WRValue* array, float F )
+void wr_floatValueToArray( const WRValue* array, float F )
 {
 	unsigned int index = array->arrayElement >> 8;
 	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
@@ -124,221 +155,197 @@ void floatValueToArray( const WRValue* array, float F )
 }
 
 //==============================================================================
-void doAssign_R_R( WRValue* to, WRValue* from )
+static void doAssign_R_R( WRValue* to, WRValue* from )
 {
 	wr_assign[to->type*6+from->r->type](to, from->r);
 }
 
-void doAssign_R_Y( WRValue* to, WRValue* from )
+static void doAssign_Y_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
+	wr_assign[WR_REFARRAY*6+element.type](to, &element);
+}
+
+static void doAssign_R_Y( WRValue* to, WRValue* from )
+{
+	WRValue element;
+	wr_arrayToValue( from, &element );
 	wr_assign[to->type*6+element.type](to, &element);
 }
 
-void doAssign_X_R( WRValue* to, WRValue* from )
-{
-	*to = *from->r;
-}
-
-void doAssign_Y_R( WRValue* to, WRValue* from )
+static void doAssign_Y_R( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_assign[element.type*6+from->r->type](&element, from->r);
 }
 
-void doAssign_X_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	arrayToValue( from, &element );
-	*to = element;
-}
-
-void doAssign_R_X( WRValue* to, WRValue* from )
-{
-	*to->r = *from;
-}
-
-void doAssign_Y_F( WRValue* to, WRValue* from )
-{
-	floatValueToArray( to, from->f );
-}
-
-void doAssign_Y_I( WRValue* to, WRValue* from )
-{
-	intValueToArray( to, from->i );
-}
-
-void doAssign_X_X( WRValue* to, WRValue* from )
-{
-	*to = *from;
-}
+static void doAssign_R_X( WRValue* to, WRValue* from ) { *to->r = *from; }
+static void doAssign_X_R( WRValue* to, WRValue* from ) { *to = *from->r; }
+static void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
+static void doAssign_Y_F( WRValue* to, WRValue* from ) { wr_floatValueToArray( to, from->f ); }
+static void doAssign_Y_I( WRValue* to, WRValue* from ) { wr_intValueToArray( to, from->i ); }
 
 WRVoidFunc wr_assign[36] = 
 {
 	doAssign_X_X,    doAssign_X_R,     doAssign_X_X,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,
 	doAssign_R_X,    doAssign_R_R,     doAssign_R_X,  doVoidFuncBlank,  doVoidFuncBlank,     doAssign_R_Y,
 	doAssign_X_X,    doAssign_X_R,     doAssign_X_X,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,
-	doVoidFuncBlank, doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,
-	doVoidFuncBlank, doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,
-	doAssign_Y_I,    doAssign_Y_R,     doAssign_Y_F,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,
+ doVoidFuncBlank, doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,
+ doVoidFuncBlank, doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,
+	doAssign_Y_I,    doAssign_Y_R,     doAssign_Y_F,  doVoidFuncBlank,  doVoidFuncBlank,     doAssign_Y_Y,
 };
 //==============================================================================
 
 
-
-
 //------------------------------------------------------------------------------
-void doSubtractAssign_R_Y( WRValue* to, WRValue* from ) 
+static void doSubtractAssign_R_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_SubtractAssign[to->r->type*6+element.type](to->r, &element);
 	*from = *to->r;
 }
 
-void doSubtractAssign_Y_I( WRValue* to, WRValue* from )
+static void doSubtractAssign_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_SubtractAssign[element.type*6+WR_INT]( &element, from );
 
-	intValueToArray( to, element.i );
+	wr_intValueToArray( to, element.i );
 	*from = element;
 }
 
-void doSubtractAssign_Y_F( WRValue* to, WRValue* from )
+static void doSubtractAssign_Y_F( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_SubtractAssign[element.type*6+WR_FLOAT]( &element, from );
 
-	floatValueToArray( to, element.f );
+	wr_floatValueToArray( to, element.f );
 	*from = element;
 }
 
-void doSubtractAssign_Y_Y( WRValue* to, WRValue* from ) 
+static void doSubtractAssign_Y_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 
 	wr_SubtractAssign[WR_REFARRAY*6+element.type]( to, &element );
-	arrayToValue( to, from );
+	wr_arrayToValue( to, from );
 }
 
-void doSubtractAssign_I_Y( WRValue* to, WRValue* from )
+static void doSubtractAssign_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_SubtractAssign[WR_INT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doSubtractAssign_F_Y( WRValue* to, WRValue* from )
+static void doSubtractAssign_F_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_SubtractAssign[WR_FLOAT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doSubtractAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-void doSubtractAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[WR_REFARRAY*6+temp.type]( to, &temp ); arrayToValue( to, from ); }
-void doSubtractAssign_R_I( WRValue* to, WRValue* from ) { wr_SubtractAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-void doSubtractAssign_R_F( WRValue* to, WRValue* from ) { wr_SubtractAssign[to->r->type*6+WR_FLOAT](to->r, from); *from = *to->r; }
-void doSubtractAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-void doSubtractAssign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[WR_FLOAT*6+from->r->type](to, from->r); *from = *to; }
+static void doSubtractAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
+static void doSubtractAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
+static void doSubtractAssign_R_I( WRValue* to, WRValue* from ) { wr_SubtractAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
+static void doSubtractAssign_R_F( WRValue* to, WRValue* from ) { wr_SubtractAssign[to->r->type*6+WR_FLOAT](to->r, from); *from = *to->r; }
+static void doSubtractAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
+static void doSubtractAssign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[WR_FLOAT*6+from->r->type](to, from->r); *from = *to; }
 
-void doSubtractAssign_F_F( WRValue* to, WRValue* from ) { to->f -= from->f; }
-void doSubtractAssign_I_I( WRValue* to, WRValue* from ) { to->i -= from->i; }
-void doSubtractAssign_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; to->f = (float)to->i - from->f; }
-void doSubtractAssign_F_I( WRValue* to, WRValue* from ) { from->type = WR_FLOAT; to->f -= (float)from->i; }
+static void doSubtractAssign_F_F( WRValue* to, WRValue* from ) { to->f -= from->f; }
+static void doSubtractAssign_I_I( WRValue* to, WRValue* from ) { to->i -= from->i; }
+static void doSubtractAssign_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; to->f = (float)to->i - from->f; }
+static void doSubtractAssign_F_I( WRValue* to, WRValue* from ) { from->type = WR_FLOAT; to->f -= (float)from->i; }
 
 WRVoidFunc wr_SubtractAssign[36] = 
 {
 	doSubtractAssign_I_I,  doSubtractAssign_I_R,  doSubtractAssign_I_F,  doVoidFuncBlank, doVoidFuncBlank, doSubtractAssign_I_Y,
 	doSubtractAssign_R_I,  doSubtractAssign_R_R,  doSubtractAssign_R_F,  doVoidFuncBlank, doVoidFuncBlank, doSubtractAssign_R_Y,
 	doSubtractAssign_F_I,  doSubtractAssign_F_R,  doSubtractAssign_F_F,  doVoidFuncBlank, doVoidFuncBlank, doSubtractAssign_F_Y,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
+	     doVoidFuncBlank,       doVoidFuncBlank,       doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank,      doVoidFuncBlank,
+	     doVoidFuncBlank,       doVoidFuncBlank,       doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank,      doVoidFuncBlank,
 	doSubtractAssign_Y_I,  doSubtractAssign_Y_R,  doSubtractAssign_Y_F,  doVoidFuncBlank, doVoidFuncBlank, doSubtractAssign_Y_Y,
 };
 //==============================================================================
 
 
-
-
-
 //------------------------------------------------------------------------------
-void doAddAssign_R_Y( WRValue* to, WRValue* from ) 
+static void doAddAssign_R_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_AddAssign[to->r->type*6+element.type](to->r, &element);
 	*from = *to->r;
 }
 
-void doAddAssign_Y_I( WRValue* to, WRValue* from )
+static void doAddAssign_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_AddAssign[element.type*6+WR_INT]( &element, from );
 
-	intValueToArray( to, element.i );
+	wr_intValueToArray( to, element.i );
 	*from = element;
 }
 
-void doAddAssign_Y_F( WRValue* to, WRValue* from )
+static void doAddAssign_Y_F( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_AddAssign[element.type*6+WR_FLOAT]( &element, from );
 
-	floatValueToArray( to, element.f );
+	wr_floatValueToArray( to, element.f );
 	*from = element;
 }
 
-void doAddAssign_Y_Y( WRValue* to, WRValue* from ) 
+static void doAddAssign_Y_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 
 	wr_AddAssign[WR_REFARRAY*6+element.type]( to, &element );
-	arrayToValue( to, from );
+	wr_arrayToValue( to, from );
 }
 
-void doAddAssign_I_Y( WRValue* to, WRValue* from )
+static void doAddAssign_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_AddAssign[WR_INT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doAddAssign_F_Y( WRValue* to, WRValue* from )
+static void doAddAssign_F_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_AddAssign[WR_FLOAT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doAddAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-void doAddAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[WR_REFARRAY*6+temp.type]( to, &temp ); arrayToValue( to, from ); }
-void doAddAssign_R_I( WRValue* to, WRValue* from ) { wr_AddAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-void doAddAssign_R_F( WRValue* to, WRValue* from ) { wr_AddAssign[to->r->type*6+WR_FLOAT](to->r, from); *from = *to->r; }
-void doAddAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-void doAddAssign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[WR_FLOAT*6+from->r->type](to, from->r); *from = *to; }
+static void doAddAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
+static void doAddAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
+static void doAddAssign_R_I( WRValue* to, WRValue* from ) { wr_AddAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
+static void doAddAssign_R_F( WRValue* to, WRValue* from ) { wr_AddAssign[to->r->type*6+WR_FLOAT](to->r, from); *from = *to->r; }
+static void doAddAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
+static void doAddAssign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[WR_FLOAT*6+from->r->type](to, from->r); *from = *to; }
 
-void doAddAssign_F_F( WRValue* to, WRValue* from ) { to->f += from->f; }
-void doAddAssign_I_I( WRValue* to, WRValue* from ) { to->i += from->i; }
-void doAddAssign_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; to->f = (float)to->i + from->f; }
-void doAddAssign_F_I( WRValue* to, WRValue* from ) { from->type = WR_FLOAT; to->f += (float)from->i; }
+static void doAddAssign_F_F( WRValue* to, WRValue* from ) { to->f += from->f; }
+static void doAddAssign_I_I( WRValue* to, WRValue* from ) { to->i += from->i; }
+static void doAddAssign_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; to->f = (float)to->i + from->f; }
+static void doAddAssign_F_I( WRValue* to, WRValue* from ) { from->type = WR_FLOAT; to->f += (float)from->i; }
 
 WRVoidFunc wr_AddAssign[36] = 
 {
@@ -352,79 +359,73 @@ WRVoidFunc wr_AddAssign[36] =
 //==============================================================================
 
 
-
-
-
-
-
-
 //------------------------------------------------------------------------------
-void doMultiplyAssign_R_Y( WRValue* to, WRValue* from ) 
+static void doMultiplyAssign_R_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_MultiplyAssign[to->r->type*6+element.type](to->r, &element);
 	*from = *to->r;
 }
 
-void doMultiplyAssign_Y_I( WRValue* to, WRValue* from )
+static void doMultiplyAssign_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_MultiplyAssign[element.type*6+WR_INT]( &element, from );
 
-	intValueToArray( to, element.i );
+	wr_intValueToArray( to, element.i );
 	*from = element;
 }
 
-void doMultiplyAssign_Y_F( WRValue* to, WRValue* from )
+static void doMultiplyAssign_Y_F( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_MultiplyAssign[element.type*6+WR_FLOAT]( &element, from );
 
-	floatValueToArray( to, element.f );
+	wr_floatValueToArray( to, element.f );
 	*from = element;
 }
 
-void doMultiplyAssign_Y_Y( WRValue* to, WRValue* from ) 
+static void doMultiplyAssign_Y_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 
 	wr_MultiplyAssign[WR_REFARRAY*6+element.type]( to, &element );
-	arrayToValue( to, from );
+	wr_arrayToValue( to, from );
 }
 
-void doMultiplyAssign_I_Y( WRValue* to, WRValue* from )
+static void doMultiplyAssign_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_MultiplyAssign[WR_INT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doMultiplyAssign_F_Y( WRValue* to, WRValue* from )
+static void doMultiplyAssign_F_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_MultiplyAssign[WR_FLOAT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doMultiplyAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-void doMultiplyAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[WR_REFARRAY*6+temp.type]( to, &temp ); arrayToValue( to, from ); }
-void doMultiplyAssign_R_I( WRValue* to, WRValue* from ) { wr_MultiplyAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-void doMultiplyAssign_R_F( WRValue* to, WRValue* from ) { wr_MultiplyAssign[to->r->type*6+WR_FLOAT](to->r, from); *from = *to->r; }
-void doMultiplyAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-void doMultiplyAssign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[WR_FLOAT*6+from->r->type](to, from->r); *from = *to; }
+static void doMultiplyAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
+static void doMultiplyAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
+static void doMultiplyAssign_R_I( WRValue* to, WRValue* from ) { wr_MultiplyAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
+static void doMultiplyAssign_R_F( WRValue* to, WRValue* from ) { wr_MultiplyAssign[to->r->type*6+WR_FLOAT](to->r, from); *from = *to->r; }
+static void doMultiplyAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
+static void doMultiplyAssign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[WR_FLOAT*6+from->r->type](to, from->r); *from = *to; }
 
-void doMultiplyAssign_F_F( WRValue* to, WRValue* from ) { to->f *= from->f; }
-void doMultiplyAssign_I_I( WRValue* to, WRValue* from ) { to->i *= from->i; }
-void doMultiplyAssign_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; to->f = (float)to->i * from->f; }
-void doMultiplyAssign_F_I( WRValue* to, WRValue* from ) { from->type = WR_FLOAT; to->f *= (float)from->i; }
+static void doMultiplyAssign_F_F( WRValue* to, WRValue* from ) { to->f *= from->f; }
+static void doMultiplyAssign_I_I( WRValue* to, WRValue* from ) { to->i *= from->i; }
+static void doMultiplyAssign_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; to->f = (float)to->i * from->f; }
+static void doMultiplyAssign_F_I( WRValue* to, WRValue* from ) { from->type = WR_FLOAT; to->f *= (float)from->i; }
 
 WRVoidFunc wr_MultiplyAssign[36] = 
 {
@@ -438,78 +439,73 @@ WRVoidFunc wr_MultiplyAssign[36] =
 //==============================================================================
 
 
-
-
-
-
-
 //------------------------------------------------------------------------------
-void doDivideAssign_R_Y( WRValue* to, WRValue* from ) 
+static void doDivideAssign_R_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_DivideAssign[to->r->type*6+element.type](to->r, &element);
 	*from = *to->r;
 }
 
-void doDivideAssign_Y_I( WRValue* to, WRValue* from )
+static void doDivideAssign_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_DivideAssign[element.type*6+WR_INT]( &element, from );
 
-	intValueToArray( to, element.i );
+	wr_intValueToArray( to, element.i );
 	*from = element;
 }
 
-void doDivideAssign_Y_F( WRValue* to, WRValue* from )
+static void doDivideAssign_Y_F( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_DivideAssign[element.type*6+WR_FLOAT]( &element, from );
 
-	floatValueToArray( to, element.f );
+	wr_floatValueToArray( to, element.f );
 	*from = element;
 }
 
-void doDivideAssign_Y_Y( WRValue* to, WRValue* from ) 
+static void doDivideAssign_Y_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 
 	wr_DivideAssign[WR_REFARRAY*6+element.type]( to, &element );
-	arrayToValue( to, from );
+	wr_arrayToValue( to, from );
 }
 
-void doDivideAssign_I_Y( WRValue* to, WRValue* from )
+static void doDivideAssign_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_DivideAssign[WR_INT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doDivideAssign_F_Y( WRValue* to, WRValue* from )
+static void doDivideAssign_F_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_DivideAssign[WR_FLOAT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doDivideAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-void doDivideAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[WR_REFARRAY*6+temp.type]( to, &temp ); arrayToValue( to, from ); }
-void doDivideAssign_R_I( WRValue* to, WRValue* from ) { wr_DivideAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-void doDivideAssign_R_F( WRValue* to, WRValue* from ) { wr_DivideAssign[to->r->type*6+WR_FLOAT](to->r, from); *from = *to->r; }
-void doDivideAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-void doDivideAssign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[WR_FLOAT*6+from->r->type](to, from->r); *from = *to; }
+static void doDivideAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
+static void doDivideAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
+static void doDivideAssign_R_I( WRValue* to, WRValue* from ) { wr_DivideAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
+static void doDivideAssign_R_F( WRValue* to, WRValue* from ) { wr_DivideAssign[to->r->type*6+WR_FLOAT](to->r, from); *from = *to->r; }
+static void doDivideAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
+static void doDivideAssign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[WR_FLOAT*6+from->r->type](to, from->r); *from = *to; }
 
-void doDivideAssign_F_F( WRValue* to, WRValue* from ) { to->f /= from->f; }
-void doDivideAssign_I_I( WRValue* to, WRValue* from ) { to->i /= from->i; }
-void doDivideAssign_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; to->f = (float)to->i / from->f; }
-void doDivideAssign_F_I( WRValue* to, WRValue* from ) { from->type = WR_FLOAT; to->f /= (float)from->i; }
+static void doDivideAssign_F_F( WRValue* to, WRValue* from ) { to->f /= from->f; }
+static void doDivideAssign_I_I( WRValue* to, WRValue* from ) { to->i /= from->i; }
+static void doDivideAssign_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; to->f = (float)to->i / from->f; }
+static void doDivideAssign_F_I( WRValue* to, WRValue* from ) { from->type = WR_FLOAT; to->f /= (float)from->i; }
 
 WRVoidFunc wr_DivideAssign[36] = 
 {
@@ -523,62 +519,49 @@ WRVoidFunc wr_DivideAssign[36] =
 //==============================================================================
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 //------------------------------------------------------------------------------
-void doModAssign_R_Y( WRValue* to, WRValue* from ) 
+static void doModAssign_R_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_ModAssign[to->r->type*6+element.type](to->r, &element);
 	*from = *to->r;
 }
 
-void doModAssign_Y_I( WRValue* to, WRValue* from )
+static void doModAssign_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_ModAssign[element.type*6+WR_INT]( &element, from );
 
-	intValueToArray( to, element.i );
+	wr_intValueToArray( to, element.i );
 	*from = element;
 }
 
-void doModAssign_Y_Y( WRValue* to, WRValue* from ) 
+static void doModAssign_Y_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 
 	wr_ModAssign[WR_REFARRAY*6+element.type]( to, &element );
-	arrayToValue( to, from );
+	wr_arrayToValue( to, from );
 }
 
-void doModAssign_I_Y( WRValue* to, WRValue* from )
+static void doModAssign_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_ModAssign[WR_INT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doModAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ModAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-void doModAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ModAssign[WR_REFARRAY*6+temp.type]( to, &temp ); arrayToValue( to, from ); }
-void doModAssign_R_I( WRValue* to, WRValue* from ) { wr_ModAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-void doModAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ModAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
+static void doModAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ModAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
+static void doModAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ModAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
+static void doModAssign_R_I( WRValue* to, WRValue* from ) { wr_ModAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
+static void doModAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ModAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
 
-void doModAssign_I_I( WRValue* to, WRValue* from ) { to->i %= from->i; }
+static void doModAssign_I_I( WRValue* to, WRValue* from ) { to->i %= from->i; }
 
 WRVoidFunc wr_ModAssign[36] = 
 {
@@ -592,50 +575,49 @@ WRVoidFunc wr_ModAssign[36] =
 //==============================================================================
 
 
-
 //------------------------------------------------------------------------------
-void doORAssign_R_Y( WRValue* to, WRValue* from ) 
+static void doORAssign_R_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_ORAssign[to->r->type*6+element.type](to->r, &element);
 	*from = *to->r;
 }
 
-void doORAssign_Y_I( WRValue* to, WRValue* from )
+static void doORAssign_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_ORAssign[element.type*6+WR_INT]( &element, from );
 
-	intValueToArray( to, element.i );
+	wr_intValueToArray( to, element.i );
 	*from = element;
 }
 
-void doORAssign_Y_Y( WRValue* to, WRValue* from ) 
+static void doORAssign_Y_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 
 	wr_ORAssign[WR_REFARRAY*6+element.type]( to, &element );
-	arrayToValue( to, from );
+	wr_arrayToValue( to, from );
 }
 
-void doORAssign_I_Y( WRValue* to, WRValue* from )
+static void doORAssign_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_ORAssign[WR_INT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doORAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ORAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-void doORAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ORAssign[WR_REFARRAY*6+temp.type]( to, &temp ); arrayToValue( to, from ); }
-void doORAssign_R_I( WRValue* to, WRValue* from ) { wr_ORAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-void doORAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ORAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
+static void doORAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ORAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
+static void doORAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ORAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
+static void doORAssign_R_I( WRValue* to, WRValue* from ) { wr_ORAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
+static void doORAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ORAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
 
-void doORAssign_I_I( WRValue* to, WRValue* from ) { to->i |= from->i; }
+static void doORAssign_I_I( WRValue* to, WRValue* from ) { to->i |= from->i; }
 
 WRVoidFunc wr_ORAssign[36] = 
 {
@@ -649,53 +631,49 @@ WRVoidFunc wr_ORAssign[36] =
 //==============================================================================
 
 
-
-
-
-
 //------------------------------------------------------------------------------
-void doANDAssign_R_Y( WRValue* to, WRValue* from ) 
+static void doANDAssign_R_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_ANDAssign[to->r->type*6+element.type](to->r, &element);
 	*from = *to->r;
 }
 
-void doANDAssign_Y_I( WRValue* to, WRValue* from )
+static void doANDAssign_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_ANDAssign[element.type*6+WR_INT]( &element, from );
 
-	intValueToArray( to, element.i );
+	wr_intValueToArray( to, element.i );
 	*from = element;
 }
 
-void doANDAssign_Y_Y( WRValue* to, WRValue* from ) 
+static void doANDAssign_Y_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 
 	wr_ANDAssign[WR_REFARRAY*6+element.type]( to, &element );
-	arrayToValue( to, from );
+	wr_arrayToValue( to, from );
 }
 
-void doANDAssign_I_Y( WRValue* to, WRValue* from )
+static void doANDAssign_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_ANDAssign[WR_INT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doANDAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ANDAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-void doANDAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ANDAssign[WR_REFARRAY*6+temp.type]( to, &temp ); arrayToValue( to, from ); }
-void doANDAssign_R_I( WRValue* to, WRValue* from ) { wr_ANDAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-void doANDAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ANDAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
+static void doANDAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ANDAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
+static void doANDAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ANDAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
+static void doANDAssign_R_I( WRValue* to, WRValue* from ) { wr_ANDAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
+static void doANDAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ANDAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
 
-void doANDAssign_I_I( WRValue* to, WRValue* from ) { to->i &= from->i; }
+static void doANDAssign_I_I( WRValue* to, WRValue* from ) { to->i &= from->i; }
 
 WRVoidFunc wr_ANDAssign[36] = 
 {
@@ -709,53 +687,49 @@ WRVoidFunc wr_ANDAssign[36] =
 //==============================================================================
 
 
-
-
-
-
 //------------------------------------------------------------------------------
-void doXORAssign_R_Y( WRValue* to, WRValue* from ) 
+static void doXORAssign_R_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_XORAssign[to->r->type*6+element.type](to->r, &element);
 	*from = *to->r;
 }
 
-void doXORAssign_Y_I( WRValue* to, WRValue* from )
+static void doXORAssign_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_XORAssign[element.type*6+WR_INT]( &element, from );
 
-	intValueToArray( to, element.i );
+	wr_intValueToArray( to, element.i );
 	*from = element;
 }
 
-void doXORAssign_Y_Y( WRValue* to, WRValue* from ) 
+static void doXORAssign_Y_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 
 	wr_XORAssign[WR_REFARRAY*6+element.type]( to, &element );
-	arrayToValue( to, from );
+	wr_arrayToValue( to, from );
 }
 
-void doXORAssign_I_Y( WRValue* to, WRValue* from )
+static void doXORAssign_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_XORAssign[WR_INT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doXORAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_XORAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-void doXORAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_XORAssign[WR_REFARRAY*6+temp.type]( to, &temp ); arrayToValue( to, from ); }
-void doXORAssign_R_I( WRValue* to, WRValue* from ) { wr_XORAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-void doXORAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_XORAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
+static void doXORAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_XORAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
+static void doXORAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_XORAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
+static void doXORAssign_R_I( WRValue* to, WRValue* from ) { wr_XORAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
+static void doXORAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_XORAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
 
-void doXORAssign_I_I( WRValue* to, WRValue* from ) { to->i ^= from->i; }
+static void doXORAssign_I_I( WRValue* to, WRValue* from ) { to->i ^= from->i; }
 
 WRVoidFunc wr_XORAssign[36] = 
 {
@@ -769,51 +743,49 @@ WRVoidFunc wr_XORAssign[36] =
 //==============================================================================
 
 
-
-
 //------------------------------------------------------------------------------
-void doRightShiftAssign_R_Y( WRValue* to, WRValue* from ) 
+static void doRightShiftAssign_R_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_RightShiftAssign[to->r->type*6+element.type](to->r, &element);
 	*from = *to->r;
 }
 
-void doRightShiftAssign_Y_I( WRValue* to, WRValue* from )
+static void doRightShiftAssign_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_RightShiftAssign[element.type*6+WR_INT]( &element, from );
 
-	intValueToArray( to, element.i );
+	wr_intValueToArray( to, element.i );
 	*from = element;
 }
 
-void doRightShiftAssign_Y_Y( WRValue* to, WRValue* from ) 
+static void doRightShiftAssign_Y_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 
 	wr_RightShiftAssign[WR_REFARRAY*6+element.type]( to, &element );
-	arrayToValue( to, from );
+	wr_arrayToValue( to, from );
 }
 
-void doRightShiftAssign_I_Y( WRValue* to, WRValue* from )
+static void doRightShiftAssign_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_RightShiftAssign[WR_INT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doRightShiftAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_RightShiftAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-void doRightShiftAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_RightShiftAssign[WR_REFARRAY*6+temp.type]( to, &temp ); arrayToValue( to, from ); }
-void doRightShiftAssign_R_I( WRValue* to, WRValue* from ) { wr_RightShiftAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-void doRightShiftAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_RightShiftAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
+static void doRightShiftAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_RightShiftAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
+static void doRightShiftAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_RightShiftAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
+static void doRightShiftAssign_R_I( WRValue* to, WRValue* from ) { wr_RightShiftAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
+static void doRightShiftAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_RightShiftAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
 
-void doRightShiftAssign_I_I( WRValue* to, WRValue* from ) { to->i >>= from->i; }
+static void doRightShiftAssign_I_I( WRValue* to, WRValue* from ) { to->i >>= from->i; }
 
 WRVoidFunc wr_RightShiftAssign[36] = 
 {
@@ -827,52 +799,49 @@ WRVoidFunc wr_RightShiftAssign[36] =
 //==============================================================================
 
 
-
-
-
 //------------------------------------------------------------------------------
-void doLeftShiftAssign_R_Y( WRValue* to, WRValue* from ) 
+static void doLeftShiftAssign_R_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_LeftShiftAssign[to->r->type*6+element.type](to->r, &element);
 	*from = *to->r;
 }
 
-void doLeftShiftAssign_Y_I( WRValue* to, WRValue* from )
+static void doLeftShiftAssign_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 
 	wr_LeftShiftAssign[element.type*6+WR_INT]( &element, from );
 
-	intValueToArray( to, element.i );
+	wr_intValueToArray( to, element.i );
 	*from = element;
 }
 
-void doLeftShiftAssign_Y_Y( WRValue* to, WRValue* from ) 
+static void doLeftShiftAssign_Y_Y( WRValue* to, WRValue* from ) 
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 
 	wr_LeftShiftAssign[WR_REFARRAY*6+element.type]( to, &element );
-	arrayToValue( to, from );
+	wr_arrayToValue( to, from );
 }
 
-void doLeftShiftAssign_I_Y( WRValue* to, WRValue* from )
+static void doLeftShiftAssign_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_LeftShiftAssign[WR_INT*6+element.type](to, &element);
 	*from = *to;
 }
 
-void doLeftShiftAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_LeftShiftAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-void doLeftShiftAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_LeftShiftAssign[WR_REFARRAY*6+temp.type]( to, &temp ); arrayToValue( to, from ); }
-void doLeftShiftAssign_R_I( WRValue* to, WRValue* from ) { wr_LeftShiftAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-void doLeftShiftAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_LeftShiftAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
+static void doLeftShiftAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_LeftShiftAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
+static void doLeftShiftAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_LeftShiftAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
+static void doLeftShiftAssign_R_I( WRValue* to, WRValue* from ) { wr_LeftShiftAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
+static void doLeftShiftAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_LeftShiftAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
 
-void doLeftShiftAssign_I_I( WRValue* to, WRValue* from ) { to->i <<= from->i; }
+static void doLeftShiftAssign_I_I( WRValue* to, WRValue* from ) { to->i <<= from->i; }
 
 WRVoidFunc wr_LeftShiftAssign[36] = 
 {
@@ -886,73 +855,68 @@ WRVoidFunc wr_LeftShiftAssign[36] =
 //==============================================================================
 
 
-
-
-
-
-
 //------------------------------------------------------------------------------
-void doBinaryAddition_Y_R( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryAddition_Y_R( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryAddition[element.type*6+from->type](&element, from, target);
 }
 
-void doBinaryAddition_R_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryAddition_R_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryAddition[to->r->type*6+element.type]( to->r, &element, target);
 }
 
-void doBinaryAddition_Y_I( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryAddition_Y_I( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryAddition[element.type*6+WR_INT](&element, from, target);
 }
 
-void doBinaryAddition_Y_F( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryAddition_Y_F( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryAddition[element.type*6+WR_FLOAT](&element, from, target);
 }
 
-void doBinaryAddition_Y_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryAddition_Y_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	wr_binaryAddition[element1.type*6+element2.type](&element1, &element2, target);
 }
 
-void doBinaryAddition_I_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryAddition_I_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryAddition[WR_INT*6+element.type](to, &element, target);
 }
 
-void doBinaryAddition_F_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryAddition_F_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryAddition[WR_FLOAT*6+element.type](to, &element, target);
 }
 
-void doBinaryAddition_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[WR_INT*6+from->r->type](to, from->r, target); }
-void doBinaryAddition_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[to->r->type*6+WR_FLOAT](to->r, from, target); }
-void doBinaryAddition_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[to->r->type*6+from->r->type](to->r, from->r, target); }
-void doBinaryAddition_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[to->r->type*6+WR_INT](to->r, from, target); }
-void doBinaryAddition_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[WR_FLOAT*6+from->r->type](to, from->r, target); }
+static void doBinaryAddition_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[WR_INT*6+from->r->type](to, from->r, target); }
+static void doBinaryAddition_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[to->r->type*6+WR_FLOAT](to->r, from, target); }
+static void doBinaryAddition_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[to->r->type*6+from->r->type](to->r, from->r, target); }
+static void doBinaryAddition_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[to->r->type*6+WR_INT](to->r, from, target); }
+static void doBinaryAddition_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[WR_FLOAT*6+from->r->type](to, from->r, target); }
 
-void doBinaryAddition_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i + from->i; }
-void doBinaryAddition_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i + (int)from->f; }
-void doBinaryAddition_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f + (float)from->i; }
-void doBinaryAddition_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f + from->f; }
+static void doBinaryAddition_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i + from->i; }
+static void doBinaryAddition_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = (float)to->i + from->f; }
+static void doBinaryAddition_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f + (float)from->i; }
+static void doBinaryAddition_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f + from->f; }
 
 WRTargetFunc wr_binaryAddition[36] = 
 {
@@ -964,83 +928,71 @@ WRTargetFunc wr_binaryAddition[36] =
 	doBinaryAddition_Y_I,  doBinaryAddition_Y_R,  doBinaryAddition_Y_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryAddition_Y_Y,
 };
 
-WRTargetFunc wr_binaryAddition2[36] = 
-{
-	doBinaryAddition_I_I,  doBinaryAddition_I_R,  doBinaryAddition_I_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryAddition_I_Y,
-	doBinaryAddition_R_I,  doBinaryAddition_R_R,  doBinaryAddition_R_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryAddition_R_Y,
-	doBinaryAddition_F_I,  doBinaryAddition_F_R,  doBinaryAddition_F_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryAddition_F_Y,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doBinaryAddition_Y_I,  doBinaryAddition_Y_R,  doBinaryAddition_Y_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryAddition_Y_Y,
-};
 //==============================================================================
 
 
-
-
-
 //------------------------------------------------------------------------------
-void doBinaryMultiply_Y_R( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryMultiply_Y_R( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryMultiply[element.type*6+from->type](&element, from, target);
 }
 
-void doBinaryMultiply_R_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryMultiply_R_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryMultiply[to->r->type*6+element.type]( to->r, &element, target);
 }
 
-void doBinaryMultiply_Y_I( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryMultiply_Y_I( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryMultiply[element.type*6+WR_INT](&element, from, target);
 }
 
-void doBinaryMultiply_Y_F( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryMultiply_Y_F( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryMultiply[element.type*6+WR_FLOAT](&element, from, target);
 }
 
-void doBinaryMultiply_Y_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryMultiply_Y_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	wr_binaryMultiply[element1.type*6+element2.type](&element1, &element2, target);
 }
 
-void doBinaryMultiply_I_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryMultiply_I_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryMultiply[WR_INT*6+element.type](to, &element, target);
 }
 
-void doBinaryMultiply_F_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryMultiply_F_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryMultiply[WR_FLOAT*6+element.type](to, &element, target);
 }
 
-void doBinaryMultiply_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[WR_INT*6+from->r->type](to, from->r, target); }
-void doBinaryMultiply_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[to->r->type*6+WR_FLOAT](to->r, from, target); }
-void doBinaryMultiply_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[to->r->type*6+from->r->type](to->r, from->r, target); }
-void doBinaryMultiply_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[to->r->type*6+WR_INT](to->r, from, target); }
-void doBinaryMultiply_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[WR_FLOAT*6+from->r->type](to, from->r, target); }
+static void doBinaryMultiply_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[WR_INT*6+from->r->type](to, from->r, target); }
+static void doBinaryMultiply_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[to->r->type*6+WR_FLOAT](to->r, from, target); }
+static void doBinaryMultiply_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[to->r->type*6+from->r->type](to->r, from->r, target); }
+static void doBinaryMultiply_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[to->r->type*6+WR_INT](to->r, from, target); }
+static void doBinaryMultiply_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[WR_FLOAT*6+from->r->type](to, from->r, target); }
 
-void doBinaryMultiply_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i * from->i; }
-void doBinaryMultiply_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i * (int)from->f; }
-void doBinaryMultiply_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f * (float)from->i; }
-void doBinaryMultiply_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f * from->f; }
+static void doBinaryMultiply_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i * from->i; }
+static void doBinaryMultiply_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = (float)to->i * from->f; }
+static void doBinaryMultiply_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f * (float)from->i; }
+static void doBinaryMultiply_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f * from->f; }
 
 WRTargetFunc wr_binaryMultiply[36] = 
 {
@@ -1055,72 +1007,68 @@ WRTargetFunc wr_binaryMultiply[36] =
 //==============================================================================
 
 
-
-
-
-
 //------------------------------------------------------------------------------
-void doBinarySubtract_Y_R( WRValue* to, WRValue* from, WRValue* target )
+static void doBinarySubtract_Y_R( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binarySubtract[element.type*6+from->type](&element, from, target);
 }
 
-void doBinarySubtract_R_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinarySubtract_R_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binarySubtract[to->r->type*6+element.type]( to->r, &element, target);
 }
 
-void doBinarySubtract_Y_I( WRValue* to, WRValue* from, WRValue* target )
+static void doBinarySubtract_Y_I( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binarySubtract[element.type*6+WR_INT](&element, from, target);
 }
 
-void doBinarySubtract_Y_F( WRValue* to, WRValue* from, WRValue* target )
+static void doBinarySubtract_Y_F( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binarySubtract[element.type*6+WR_FLOAT](&element, from, target);
 }
 
-void doBinarySubtract_Y_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinarySubtract_Y_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	wr_binarySubtract[element1.type*6+element2.type](&element1, &element2, target);
 }
 
-void doBinarySubtract_I_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinarySubtract_I_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binarySubtract[WR_INT*6+element.type](to, &element, target);
 }
 
-void doBinarySubtract_F_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinarySubtract_F_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binarySubtract[WR_FLOAT*6+element.type](to, &element, target);
 }
 
-void doBinarySubtract_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[WR_INT*6+from->r->type](to, from->r, target); }
-void doBinarySubtract_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[to->r->type*6+WR_FLOAT](to->r, from, target); }
-void doBinarySubtract_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[to->r->type*6+from->r->type](to->r, from->r, target); }
-void doBinarySubtract_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[to->r->type*6+WR_INT](to->r, from, target); }
-void doBinarySubtract_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[WR_FLOAT*6+from->r->type](to, from->r, target); }
+static void doBinarySubtract_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[WR_INT*6+from->r->type](to, from->r, target); }
+static void doBinarySubtract_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[to->r->type*6+WR_FLOAT](to->r, from, target); }
+static void doBinarySubtract_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[to->r->type*6+from->r->type](to->r, from->r, target); }
+static void doBinarySubtract_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[to->r->type*6+WR_INT](to->r, from, target); }
+static void doBinarySubtract_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[WR_FLOAT*6+from->r->type](to, from->r, target); }
 
-void doBinarySubtract_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i - from->i; }
-void doBinarySubtract_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i - (int)from->f; }
-void doBinarySubtract_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f - (float)from->i; }
-void doBinarySubtract_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f - from->f; }
+static void doBinarySubtract_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i - from->i; }
+static void doBinarySubtract_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = (float)to->i - from->f; }
+static void doBinarySubtract_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f - (float)from->i; }
+static void doBinarySubtract_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f - from->f; }
 
 WRTargetFunc wr_binarySubtract[36] = 
 {
@@ -1135,134 +1083,125 @@ WRTargetFunc wr_binarySubtract[36] =
 //==============================================================================
 
 
-
-
-
-
 //------------------------------------------------------------------------------
-void doBinaryDivide_Y_R( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryDivide_Y_R( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryDivide[element.type*6+from->type](&element, from, target);
 }
 
-void doBinaryDivide_R_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryDivide_R_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryDivide[to->r->type*6+element.type]( to->r, &element, target);
 }
 
-void doBinaryDivide_Y_I( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryDivide_Y_I( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryDivide[element.type*6+WR_INT](&element, from, target);
 }
 
-void doBinaryDivide_Y_F( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryDivide_Y_F( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryDivide[element.type*6+WR_FLOAT](&element, from, target);
 }
 
-void doBinaryDivide_Y_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryDivide_Y_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	wr_binaryDivide[element1.type*6+element2.type](&element1, &element2, target);
 }
 
-void doBinaryDivide_I_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryDivide_I_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryDivide[WR_INT*6+element.type](to, &element, target);
 }
 
-void doBinaryDivide_F_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryDivide_F_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryDivide[WR_FLOAT*6+element.type](to, &element, target);
 }
 
-void doBinaryDivide_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[WR_INT*6+from->r->type](to, from->r, target); }
-void doBinaryDivide_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[to->r->type*6+WR_FLOAT](to->r, from, target); }
-void doBinaryDivide_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[to->r->type*6+from->r->type](to->r, from->r, target); }
-void doBinaryDivide_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[to->r->type*6+WR_INT](to->r, from, target); }
-void doBinaryDivide_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[WR_FLOAT*6+from->r->type](to, from->r, target); }
+static void doBinaryDivide_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[WR_INT*6+from->r->type](to, from->r, target); }
+static void doBinaryDivide_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[to->r->type*6+WR_FLOAT](to->r, from, target); }
+static void doBinaryDivide_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[to->r->type*6+from->r->type](to->r, from->r, target); }
+static void doBinaryDivide_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[to->r->type*6+WR_INT](to->r, from, target); }
+static void doBinaryDivide_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[WR_FLOAT*6+from->r->type](to, from->r, target); }
 
-void doBinaryDivide_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i / from->i; }
-void doBinaryDivide_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i / (int)from->f; }
-void doBinaryDivide_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f / (float)from->i; }
-void doBinaryDivide_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f / from->f; }
+static void doBinaryDivide_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i / from->i; }
+static void doBinaryDivide_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = (float)to->i / from->f; }
+static void doBinaryDivide_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f / (float)from->i; }
+static void doBinaryDivide_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f / from->f; }
 
 WRTargetFunc wr_binaryDivide[36] = 
 {
 	doBinaryDivide_I_I,  doBinaryDivide_I_R,  doBinaryDivide_I_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryDivide_I_Y,
 	doBinaryDivide_R_I,  doBinaryDivide_R_R,  doBinaryDivide_R_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryDivide_R_Y,
 	doBinaryDivide_F_I,  doBinaryDivide_F_R,  doBinaryDivide_F_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryDivide_F_Y,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
+  	 doTargetFuncBlank,   doTargetFuncBlank,   doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,   doTargetFuncBlank,
+	 doTargetFuncBlank,   doTargetFuncBlank,   doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,   doTargetFuncBlank,
 	doBinaryDivide_Y_I,  doBinaryDivide_Y_R,  doBinaryDivide_Y_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryDivide_Y_Y,
 };
 
 //==============================================================================
 
 
-
-
-
-
-
 //------------------------------------------------------------------------------
-void doBinaryMod_Y_R( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryMod_Y_R( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryMod[element.type*6+from->type](&element, from, target);
 }
 
-void doBinaryMod_R_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryMod_R_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryMod[to->r->type*6+element.type]( to->r, &element, target);
 }
 
-void doBinaryMod_Y_I( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryMod_Y_I( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryMod[element.type*6+WR_INT](&element, from, target);
 }
 
-void doBinaryMod_Y_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryMod_Y_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	wr_binaryMod[element1.type*6+element2.type](&element1, &element2, target);
 }
 
-void doBinaryMod_I_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryMod_I_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryMod[WR_INT*6+element.type](to, &element, target);
 }
 
-void doBinaryMod_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMod[WR_INT*6+from->r->type](to, from->r, target); }
-void doBinaryMod_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMod[to->r->type*6+from->r->type](to->r, from->r, target); }
-void doBinaryMod_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMod[to->r->type*6+WR_INT](to->r, from, target); }
+static void doBinaryMod_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMod[WR_INT*6+from->r->type](to, from->r, target); }
+static void doBinaryMod_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMod[to->r->type*6+from->r->type](to->r, from->r, target); }
+static void doBinaryMod_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMod[to->r->type*6+WR_INT](to->r, from, target); }
 
-void doBinaryMod_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i % from->i; }
+static void doBinaryMod_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i % from->i; }
 
 WRTargetFunc wr_binaryMod[36] = 
 {
@@ -1277,58 +1216,49 @@ WRTargetFunc wr_binaryMod[36] =
 //==============================================================================
 
 
-
-
-
-
-
-
-
-
-
 //------------------------------------------------------------------------------
-void doBinaryLeftShift_Y_R( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryLeftShift_Y_R( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryLeftShift[element.type*6+from->type](&element, from, target);
 }
 
-void doBinaryLeftShift_R_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryLeftShift_R_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryLeftShift[to->r->type*6+element.type]( to->r, &element, target);
 }
 
-void doBinaryLeftShift_Y_I( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryLeftShift_Y_I( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryLeftShift[element.type*6+WR_INT](&element, from, target);
 }
 
-void doBinaryLeftShift_Y_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryLeftShift_Y_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	wr_binaryLeftShift[element1.type*6+element2.type](&element1, &element2, target);
 }
 
-void doBinaryLeftShift_I_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryLeftShift_I_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryLeftShift[WR_INT*6+element.type](to, &element, target);
 }
 
-void doBinaryLeftShift_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryLeftShift[WR_INT*6+from->r->type](to, from->r, target); }
-void doBinaryLeftShift_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryLeftShift[to->r->type*6+from->r->type](to->r, from->r, target); }
-void doBinaryLeftShift_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryLeftShift[to->r->type*6+WR_INT](to->r, from, target); }
+static void doBinaryLeftShift_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryLeftShift[WR_INT*6+from->r->type](to, from->r, target); }
+static void doBinaryLeftShift_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryLeftShift[to->r->type*6+from->r->type](to->r, from->r, target); }
+static void doBinaryLeftShift_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryLeftShift[to->r->type*6+WR_INT](to->r, from, target); }
 
-void doBinaryLeftShift_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i << from->i; }
+static void doBinaryLeftShift_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i << from->i; }
 
 WRTargetFunc wr_binaryLeftShift[36] = 
 {
@@ -1343,51 +1273,49 @@ WRTargetFunc wr_binaryLeftShift[36] =
 //==============================================================================
 
 
-
-
 //------------------------------------------------------------------------------
-void doBinaryRightShift_Y_R( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryRightShift_Y_R( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryRightShift[element.type*6+from->type](&element, from, target);
 }
 
-void doBinaryRightShift_R_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryRightShift_R_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryRightShift[to->r->type*6+element.type]( to->r, &element, target);
 }
 
-void doBinaryRightShift_Y_I( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryRightShift_Y_I( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryRightShift[element.type*6+WR_INT](&element, from, target);
 }
 
-void doBinaryRightShift_Y_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryRightShift_Y_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	wr_binaryRightShift[element1.type*6+element2.type](&element1, &element2, target);
 }
 
-void doBinaryRightShift_I_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryRightShift_I_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryRightShift[WR_INT*6+element.type](to, &element, target);
 }
 
-void doBinaryRightShift_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryRightShift[WR_INT*6+from->r->type](to, from->r, target); }
-void doBinaryRightShift_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryRightShift[to->r->type*6+from->r->type](to->r, from->r, target); }
-void doBinaryRightShift_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryRightShift[to->r->type*6+WR_INT](to->r, from, target); }
+static void doBinaryRightShift_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryRightShift[WR_INT*6+from->r->type](to, from->r, target); }
+static void doBinaryRightShift_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryRightShift[to->r->type*6+from->r->type](to->r, from->r, target); }
+static void doBinaryRightShift_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryRightShift[to->r->type*6+WR_INT](to->r, from, target); }
 
-void doBinaryRightShift_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i >> from->i; }
+static void doBinaryRightShift_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i >> from->i; }
 
 WRTargetFunc wr_binaryRightShift[36] = 
 {
@@ -1402,50 +1330,49 @@ WRTargetFunc wr_binaryRightShift[36] =
 //==============================================================================
 
 
-
 //------------------------------------------------------------------------------
-void doBinaryOR_Y_R( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryOR_Y_R( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryOR[element.type*6+from->type](&element, from, target);
 }
 
-void doBinaryOR_R_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryOR_R_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryOR[to->r->type*6+element.type]( to->r, &element, target);
 }
 
-void doBinaryOR_Y_I( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryOR_Y_I( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryOR[element.type*6+WR_INT](&element, from, target);
 }
 
-void doBinaryOR_Y_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryOR_Y_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	wr_binaryOR[element1.type*6+element2.type](&element1, &element2, target);
 }
 
-void doBinaryOR_I_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryOR_I_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryOR[WR_INT*6+element.type](to, &element, target);
 }
 
-void doBinaryOR_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryOR[WR_INT*6+from->r->type](to, from->r, target); }
-void doBinaryOR_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryOR[to->r->type*6+from->r->type](to->r, from->r, target); }
-void doBinaryOR_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryOR[to->r->type*6+WR_INT](to->r, from, target); }
+static void doBinaryOR_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryOR[WR_INT*6+from->r->type](to, from->r, target); }
+static void doBinaryOR_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryOR[to->r->type*6+from->r->type](to->r, from->r, target); }
+static void doBinaryOR_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryOR[to->r->type*6+WR_INT](to->r, from, target); }
 
-void doBinaryOR_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i | from->i; }
+static void doBinaryOR_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i | from->i; }
 
 WRTargetFunc wr_binaryOR[36] = 
 {
@@ -1460,51 +1387,49 @@ WRTargetFunc wr_binaryOR[36] =
 //==============================================================================
 
 
-
-
 //------------------------------------------------------------------------------
-void doBinaryAND_Y_R( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryAND_Y_R( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryAND[element.type*6+from->type](&element, from, target);
 }
 
-void doBinaryAND_R_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryAND_R_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryAND[to->r->type*6+element.type]( to->r, &element, target);
 }
 
-void doBinaryAND_Y_I( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryAND_Y_I( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryAND[element.type*6+WR_INT](&element, from, target);
 }
 
-void doBinaryAND_Y_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryAND_Y_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	wr_binaryAND[element1.type*6+element2.type](&element1, &element2, target);
 }
 
-void doBinaryAND_I_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryAND_I_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryAND[WR_INT*6+element.type](to, &element, target);
 }
 
-void doBinaryAND_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAND[WR_INT*6+from->r->type](to, from->r, target); }
-void doBinaryAND_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAND[to->r->type*6+from->r->type](to->r, from->r, target); }
-void doBinaryAND_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAND[to->r->type*6+WR_INT](to->r, from, target); }
+static void doBinaryAND_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAND[WR_INT*6+from->r->type](to, from->r, target); }
+static void doBinaryAND_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAND[to->r->type*6+from->r->type](to->r, from->r, target); }
+static void doBinaryAND_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAND[to->r->type*6+WR_INT](to->r, from, target); }
 
-void doBinaryAND_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i & from->i; }
+static void doBinaryAND_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i & from->i; }
 
 WRTargetFunc wr_binaryAND[36] = 
 {
@@ -1519,52 +1444,49 @@ WRTargetFunc wr_binaryAND[36] =
 //==============================================================================
 
 
-
-
-
 //------------------------------------------------------------------------------
-void doBinaryXOR_Y_R( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryXOR_Y_R( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryXOR[element.type*6+from->type](&element, from, target);
 }
 
-void doBinaryXOR_R_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryXOR_R_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryXOR[to->r->type*6+element.type]( to->r, &element, target);
 }
 
-void doBinaryXOR_Y_I( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryXOR_Y_I( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	wr_binaryXOR[element.type*6+WR_INT](&element, from, target);
 }
 
-void doBinaryXOR_Y_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryXOR_Y_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	wr_binaryXOR[element1.type*6+element2.type](&element1, &element2, target);
 }
 
-void doBinaryXOR_I_Y( WRValue* to, WRValue* from, WRValue* target )
+static void doBinaryXOR_I_Y( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	wr_binaryXOR[WR_INT*6+element.type](to, &element, target);
 }
 
-void doBinaryXOR_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryXOR[WR_INT*6+from->r->type](to, from->r, target); }
-void doBinaryXOR_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryXOR[to->r->type*6+from->r->type](to->r, from->r, target); }
-void doBinaryXOR_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryXOR[to->r->type*6+WR_INT](to->r, from, target); }
+static void doBinaryXOR_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryXOR[WR_INT*6+from->r->type](to, from->r, target); }
+static void doBinaryXOR_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryXOR[to->r->type*6+from->r->type](to->r, from->r, target); }
+static void doBinaryXOR_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryXOR[to->r->type*6+WR_INT](to->r, from, target); }
 
-void doBinaryXOR_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i ^ from->i; }
+static void doBinaryXOR_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i ^ from->i; }
 
 WRTargetFunc wr_binaryXOR[36] = 
 {
@@ -1579,69 +1501,67 @@ WRTargetFunc wr_binaryXOR[36] =
 //==============================================================================
 
 
-
-
 //------------------------------------------------------------------------------
-bool doCompareEQ_Y_Y( WRValue* to, WRValue* from )
+static bool doCompareEQ_Y_Y( WRValue* to, WRValue* from )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	return wr_CompareEQ[element1.type*6+element2.type](&element1, &element2);
 }
 
-bool doCompareEQ_R_Y( WRValue* to, WRValue* from )
+static bool doCompareEQ_R_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_CompareEQ[to->type*6+element.type](to, &element);
 }
 
-bool doCompareEQ_Y_R( WRValue* to, WRValue* from )
+static bool doCompareEQ_Y_R( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_CompareEQ[element.type*6+from->type](&element, from);
 }
 
-bool doCompareEQ_Y_I( WRValue* to, WRValue* from )
+static bool doCompareEQ_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_CompareEQ[element.type*6+WR_INT](&element, from);
 }
 
-bool doCompareEQ_Y_F( WRValue* to, WRValue* from )
+static bool doCompareEQ_Y_F( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_CompareEQ[element.type*6+WR_FLOAT](&element, from);
 }
 
-bool doCompareEQ_I_Y( WRValue* to, WRValue* from )
+static bool doCompareEQ_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_CompareEQ[WR_INT*6+element.type](to, &element);
 }
-bool doCompareEQ_F_Y( WRValue* to, WRValue* from )
+static bool doCompareEQ_F_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_CompareEQ[WR_FLOAT*6+element.type](to, &element);
 }
 
-bool doCompareEQ_R_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[to->r->type*6+from->r->type](to->r, from->r); }
-bool doCompareEQ_R_I( WRValue* to, WRValue* from ) { return wr_CompareEQ[to->r->type*6+WR_INT](to->r, from); }
-bool doCompareEQ_R_F( WRValue* to, WRValue* from ) { return wr_CompareEQ[to->r->type*6+WR_FLOAT](to->r, from); }
-bool doCompareEQ_I_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[WR_INT*6+from->r->type](to, from->r); }
-bool doCompareEQ_F_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[WR_FLOAT*6+from->r->type](to, from->r); }
+static bool doCompareEQ_R_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[to->r->type*6+from->r->type](to->r, from->r); }
+static bool doCompareEQ_R_I( WRValue* to, WRValue* from ) { return wr_CompareEQ[to->r->type*6+WR_INT](to->r, from); }
+static bool doCompareEQ_R_F( WRValue* to, WRValue* from ) { return wr_CompareEQ[to->r->type*6+WR_FLOAT](to->r, from); }
+static bool doCompareEQ_I_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[WR_INT*6+from->r->type](to, from->r); }
+static bool doCompareEQ_F_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[WR_FLOAT*6+from->r->type](to, from->r); }
 
-bool doCompareEQ_I_I( WRValue* to, WRValue* from ) { return to->i == from->i; }
-bool doCompareEQ_I_F( WRValue* to, WRValue* from ) { return (float)to->i == from->f; }
-bool doCompareEQ_F_I( WRValue* to, WRValue* from ) { return to->f == (float)from->i; }
-bool doCompareEQ_F_F( WRValue* to, WRValue* from ) { return to->f == from->f; }
+static bool doCompareEQ_I_I( WRValue* to, WRValue* from ) { return to->i == from->i; }
+static bool doCompareEQ_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; return to->f == from->f; }
+static bool doCompareEQ_F_I( WRValue* to, WRValue* from ) { return to->f == (float)from->i; }
+static bool doCompareEQ_F_F( WRValue* to, WRValue* from ) { return to->f == from->f; }
 
 WRReturnFunc wr_CompareEQ[36] = 
 {
@@ -1655,70 +1575,67 @@ WRReturnFunc wr_CompareEQ[36] =
 //==============================================================================
 
 
-
-
-
 //------------------------------------------------------------------------------
-bool doCompareGT_Y_Y( WRValue* to, WRValue* from )
+static bool doCompareGT_Y_Y( WRValue* to, WRValue* from )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	return wr_CompareGT[element1.type*6+element2.type](&element1, &element2);
 }
 
-bool doCompareGT_R_Y( WRValue* to, WRValue* from )
+static bool doCompareGT_R_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_CompareGT[to->type*6+element.type](to, &element);
 }
 
-bool doCompareGT_Y_R( WRValue* to, WRValue* from )
+static bool doCompareGT_Y_R( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_CompareGT[element.type*6+from->type](&element, from);
 }
 
-bool doCompareGT_Y_I( WRValue* to, WRValue* from )
+static bool doCompareGT_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_CompareGT[element.type*6+WR_INT](&element, from);
 }
 
-bool doCompareGT_Y_F( WRValue* to, WRValue* from )
+static bool doCompareGT_Y_F( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_CompareGT[element.type*6+WR_FLOAT](&element, from);
 }
 
-bool doCompareGT_I_Y( WRValue* to, WRValue* from )
+static bool doCompareGT_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_CompareGT[WR_INT*6+element.type](to, &element);
 }
-bool doCompareGT_F_Y( WRValue* to, WRValue* from )
+static bool doCompareGT_F_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_CompareGT[WR_FLOAT*6+element.type](to, &element);
 }
 
-bool doCompareGT_R_R( WRValue* to, WRValue* from ) { return wr_CompareGT[to->r->type*6+from->r->type](to->r, from->r); }
-bool doCompareGT_R_I( WRValue* to, WRValue* from ) { return wr_CompareGT[to->r->type*6+WR_INT](to->r, from); }
-bool doCompareGT_R_F( WRValue* to, WRValue* from ) { return wr_CompareGT[to->r->type*6+WR_FLOAT](to->r, from); }
-bool doCompareGT_I_R( WRValue* to, WRValue* from ) { return wr_CompareGT[WR_INT*6+from->r->type](to, from->r); }
-bool doCompareGT_F_R( WRValue* to, WRValue* from ) { return wr_CompareGT[WR_FLOAT*6+from->r->type](to, from->r); }
+static bool doCompareGT_R_R( WRValue* to, WRValue* from ) { return wr_CompareGT[to->r->type*6+from->r->type](to->r, from->r); }
+static bool doCompareGT_R_I( WRValue* to, WRValue* from ) { return wr_CompareGT[to->r->type*6+WR_INT](to->r, from); }
+static bool doCompareGT_R_F( WRValue* to, WRValue* from ) { return wr_CompareGT[to->r->type*6+WR_FLOAT](to->r, from); }
+static bool doCompareGT_I_R( WRValue* to, WRValue* from ) { return wr_CompareGT[WR_INT*6+from->r->type](to, from->r); }
+static bool doCompareGT_F_R( WRValue* to, WRValue* from ) { return wr_CompareGT[WR_FLOAT*6+from->r->type](to, from->r); }
 
-bool doCompareGT_I_I( WRValue* to, WRValue* from ) { return to->i > from->i; }
-bool doCompareGT_I_F( WRValue* to, WRValue* from ) { return (float)to->i > from->f; }
-bool doCompareGT_F_I( WRValue* to, WRValue* from ) { return to->f > (float)from->i; }
-bool doCompareGT_F_F( WRValue* to, WRValue* from ) { return to->f > from->f; }
+static bool doCompareGT_I_I( WRValue* to, WRValue* from ) { return to->i > from->i; }
+static bool doCompareGT_I_F( WRValue* to, WRValue* from ) { return (float)to->i > from->f; }
+static bool doCompareGT_F_I( WRValue* to, WRValue* from ) { return to->f > (float)from->i; }
+static bool doCompareGT_F_F( WRValue* to, WRValue* from ) { return to->f > from->f; }
 
 WRReturnFunc wr_CompareGT[36] = 
 {
@@ -1732,68 +1649,67 @@ WRReturnFunc wr_CompareGT[36] =
 //==============================================================================
 
 
-
 //------------------------------------------------------------------------------
-bool doCompareLT_Y_Y( WRValue* to, WRValue* from )
+static bool doCompareLT_Y_Y( WRValue* to, WRValue* from )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	return wr_CompareLT[element1.type*6+element2.type](&element1, &element2);
 }
 
-bool doCompareLT_R_Y( WRValue* to, WRValue* from )
+static bool doCompareLT_R_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_CompareLT[to->type*6+element.type](to, &element);
 }
 
-bool doCompareLT_Y_R( WRValue* to, WRValue* from )
+static bool doCompareLT_Y_R( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_CompareLT[element.type*6+from->type](&element, from);
 }
 
-bool doCompareLT_Y_I( WRValue* to, WRValue* from )
+static bool doCompareLT_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_CompareLT[element.type*6+WR_INT](&element, from);
 }
 
-bool doCompareLT_Y_F( WRValue* to, WRValue* from )
+static bool doCompareLT_Y_F( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_CompareLT[element.type*6+WR_FLOAT](&element, from);
 }
 
-bool doCompareLT_I_Y( WRValue* to, WRValue* from )
+static bool doCompareLT_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_CompareLT[WR_INT*6+element.type](to, &element);
 }
-bool doCompareLT_F_Y( WRValue* to, WRValue* from )
+static bool doCompareLT_F_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_CompareLT[WR_FLOAT*6+element.type](to, &element);
 }
 
-bool doCompareLT_R_R( WRValue* to, WRValue* from ) { return wr_CompareLT[to->r->type*6+from->r->type](to->r, from->r); }
-bool doCompareLT_R_I( WRValue* to, WRValue* from ) { return wr_CompareLT[to->r->type*6+WR_INT](to->r, from); }
-bool doCompareLT_R_F( WRValue* to, WRValue* from ) { return wr_CompareLT[to->r->type*6+WR_FLOAT](to->r, from); }
-bool doCompareLT_I_R( WRValue* to, WRValue* from ) { return wr_CompareLT[WR_INT*6+from->r->type](to, from->r); }
-bool doCompareLT_F_R( WRValue* to, WRValue* from ) { return wr_CompareLT[WR_FLOAT*6+from->r->type](to, from->r); }
+static bool doCompareLT_R_R( WRValue* to, WRValue* from ) { return wr_CompareLT[to->r->type*6+from->r->type](to->r, from->r); }
+static bool doCompareLT_R_I( WRValue* to, WRValue* from ) { return wr_CompareLT[to->r->type*6+WR_INT](to->r, from); }
+static bool doCompareLT_R_F( WRValue* to, WRValue* from ) { return wr_CompareLT[to->r->type*6+WR_FLOAT](to->r, from); }
+static bool doCompareLT_I_R( WRValue* to, WRValue* from ) { return wr_CompareLT[WR_INT*6+from->r->type](to, from->r); }
+static bool doCompareLT_F_R( WRValue* to, WRValue* from ) { return wr_CompareLT[WR_FLOAT*6+from->r->type](to, from->r); }
 
-bool doCompareLT_I_I( WRValue* to, WRValue* from ) { return to->i < from->i; }
-bool doCompareLT_I_F( WRValue* to, WRValue* from ) { return (float)to->i < from->f; }
-bool doCompareLT_F_I( WRValue* to, WRValue* from ) { return to->f < (float)from->i; }
-bool doCompareLT_F_F( WRValue* to, WRValue* from ) { return to->f < from->f; }
+static bool doCompareLT_I_I( WRValue* to, WRValue* from ) { return to->i < from->i; }
+static bool doCompareLT_I_F( WRValue* to, WRValue* from ) { return (float)to->i < from->f; }
+static bool doCompareLT_F_I( WRValue* to, WRValue* from ) { return to->f < (float)from->i; }
+static bool doCompareLT_F_F( WRValue* to, WRValue* from ) { return to->f < from->f; }
 
 WRReturnFunc wr_CompareLT[36] = 
 {
@@ -1807,68 +1723,67 @@ WRReturnFunc wr_CompareLT[36] =
 //==============================================================================
 
 
-
 //------------------------------------------------------------------------------
-bool doLogicalAND_Y_Y( WRValue* to, WRValue* from )
+static bool doLogicalAND_Y_Y( WRValue* to, WRValue* from )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	return wr_LogicalAND[element1.type*6+element2.type](&element1, &element2);
 }
 
-bool doLogicalAND_R_Y( WRValue* to, WRValue* from )
+static bool doLogicalAND_R_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_LogicalAND[to->type*6+element.type](to, &element);
 }
 
-bool doLogicalAND_Y_R( WRValue* to, WRValue* from )
+static bool doLogicalAND_Y_R( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_LogicalAND[element.type*6+from->type](&element, from);
 }
 
-bool doLogicalAND_Y_I( WRValue* to, WRValue* from )
+static bool doLogicalAND_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_LogicalAND[element.type*6+WR_INT](&element, from);
 }
 
-bool doLogicalAND_Y_F( WRValue* to, WRValue* from )
+static bool doLogicalAND_Y_F( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_LogicalAND[element.type*6+WR_FLOAT](&element, from);
 }
 
-bool doLogicalAND_I_Y( WRValue* to, WRValue* from )
+static bool doLogicalAND_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_LogicalAND[WR_INT*6+element.type](to, &element);
 }
-bool doLogicalAND_F_Y( WRValue* to, WRValue* from )
+static bool doLogicalAND_F_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_LogicalAND[WR_FLOAT*6+element.type](to, &element);
 }
 
-bool doLogicalAND_R_R( WRValue* to, WRValue* from ) { return wr_LogicalAND[to->r->type*6+from->r->type](to->r, from->r); }
-bool doLogicalAND_R_I( WRValue* to, WRValue* from ) { return wr_LogicalAND[to->r->type*6+WR_INT](to->r, from); }
-bool doLogicalAND_R_F( WRValue* to, WRValue* from ) { return wr_LogicalAND[to->r->type*6+WR_FLOAT](to->r, from); }
-bool doLogicalAND_I_R( WRValue* to, WRValue* from ) { return wr_LogicalAND[WR_INT*6+from->r->type](to, from->r); }
-bool doLogicalAND_F_R( WRValue* to, WRValue* from ) { return wr_LogicalAND[WR_FLOAT*6+from->r->type](to, from->r); }
+static bool doLogicalAND_R_R( WRValue* to, WRValue* from ) { return wr_LogicalAND[to->r->type*6+from->r->type](to->r, from->r); }
+static bool doLogicalAND_R_I( WRValue* to, WRValue* from ) { return wr_LogicalAND[to->r->type*6+WR_INT](to->r, from); }
+static bool doLogicalAND_R_F( WRValue* to, WRValue* from ) { return wr_LogicalAND[to->r->type*6+WR_FLOAT](to->r, from); }
+static bool doLogicalAND_I_R( WRValue* to, WRValue* from ) { return wr_LogicalAND[WR_INT*6+from->r->type](to, from->r); }
+static bool doLogicalAND_F_R( WRValue* to, WRValue* from ) { return wr_LogicalAND[WR_FLOAT*6+from->r->type](to, from->r); }
 
-bool doLogicalAND_I_I( WRValue* to, WRValue* from ) { return to->i && from->i; }
-bool doLogicalAND_I_F( WRValue* to, WRValue* from ) { return (float)to->i && from->f; }
-bool doLogicalAND_F_I( WRValue* to, WRValue* from ) { return to->f && (float)from->i; }
-bool doLogicalAND_F_F( WRValue* to, WRValue* from ) { return to->f && from->f; }
+static bool doLogicalAND_I_I( WRValue* to, WRValue* from ) { return to->i && from->i; }
+static bool doLogicalAND_I_F( WRValue* to, WRValue* from ) { return (float)to->i && from->f; }
+static bool doLogicalAND_F_I( WRValue* to, WRValue* from ) { return to->f && (float)from->i; }
+static bool doLogicalAND_F_F( WRValue* to, WRValue* from ) { return to->f && from->f; }
 
 WRReturnFunc wr_LogicalAND[36] = 
 {
@@ -1882,68 +1797,67 @@ WRReturnFunc wr_LogicalAND[36] =
 //==============================================================================
 
 
-
 //------------------------------------------------------------------------------
-bool doLogicalOR_Y_Y( WRValue* to, WRValue* from )
+static bool doLogicalOR_Y_Y( WRValue* to, WRValue* from )
 {
 	WRValue element1;
-	arrayToValue( to, &element1 );
+	wr_arrayToValue( to, &element1 );
 	WRValue element2;
-	arrayToValue( from, &element2 );
+	wr_arrayToValue( from, &element2 );
 	return wr_LogicalOR[element1.type*6+element2.type](&element1, &element2);
 }
 
-bool doLogicalOR_R_Y( WRValue* to, WRValue* from )
+static bool doLogicalOR_R_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_LogicalOR[to->type*6+element.type](to, &element);
 }
 
-bool doLogicalOR_Y_R( WRValue* to, WRValue* from )
+static bool doLogicalOR_Y_R( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_LogicalOR[element.type*6+from->type](&element, from);
 }
 
-bool doLogicalOR_Y_I( WRValue* to, WRValue* from )
+static bool doLogicalOR_Y_I( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_LogicalOR[element.type*6+WR_INT](&element, from);
 }
 
-bool doLogicalOR_Y_F( WRValue* to, WRValue* from )
+static bool doLogicalOR_Y_F( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( to, &element );
+	wr_arrayToValue( to, &element );
 	return wr_LogicalOR[element.type*6+WR_FLOAT](&element, from);
 }
 
-bool doLogicalOR_I_Y( WRValue* to, WRValue* from )
+static bool doLogicalOR_I_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_LogicalOR[WR_INT*6+element.type](to, &element);
 }
-bool doLogicalOR_F_Y( WRValue* to, WRValue* from )
+static bool doLogicalOR_F_Y( WRValue* to, WRValue* from )
 {
 	WRValue element;
-	arrayToValue( from, &element );
+	wr_arrayToValue( from, &element );
 	return wr_LogicalOR[WR_FLOAT*6+element.type](to, &element);
 }
 
-bool doLogicalOR_R_R( WRValue* to, WRValue* from ) { return wr_LogicalOR[to->r->type*6+from->r->type](to->r, from->r); }
-bool doLogicalOR_R_I( WRValue* to, WRValue* from ) { return wr_LogicalOR[to->r->type*6+WR_INT](to->r, from); }
-bool doLogicalOR_R_F( WRValue* to, WRValue* from ) { return wr_LogicalOR[to->r->type*6+WR_FLOAT](to->r, from); }
-bool doLogicalOR_I_R( WRValue* to, WRValue* from ) { return wr_LogicalOR[WR_INT*6+from->r->type](to, from->r); }
-bool doLogicalOR_F_R( WRValue* to, WRValue* from ) { return wr_LogicalOR[WR_FLOAT*6+from->r->type](to, from->r); }
+static bool doLogicalOR_R_R( WRValue* to, WRValue* from ) { return wr_LogicalOR[to->r->type*6+from->r->type](to->r, from->r); }
+static bool doLogicalOR_R_I( WRValue* to, WRValue* from ) { return wr_LogicalOR[to->r->type*6+WR_INT](to->r, from); }
+static bool doLogicalOR_R_F( WRValue* to, WRValue* from ) { return wr_LogicalOR[to->r->type*6+WR_FLOAT](to->r, from); }
+static bool doLogicalOR_I_R( WRValue* to, WRValue* from ) { return wr_LogicalOR[WR_INT*6+from->r->type](to, from->r); }
+static bool doLogicalOR_F_R( WRValue* to, WRValue* from ) { return wr_LogicalOR[WR_FLOAT*6+from->r->type](to, from->r); }
 
-bool doLogicalOR_I_I( WRValue* to, WRValue* from ) { return to->i || from->i; }
-bool doLogicalOR_I_F( WRValue* to, WRValue* from ) { return (float)to->i || from->f; }
-bool doLogicalOR_F_I( WRValue* to, WRValue* from ) { return to->f || (float)from->i; }
-bool doLogicalOR_F_F( WRValue* to, WRValue* from ) { return to->f || from->f; }
+static bool doLogicalOR_I_I( WRValue* to, WRValue* from ) { return to->i || from->i; }
+static bool doLogicalOR_I_F( WRValue* to, WRValue* from ) { return (float)to->i || from->f; }
+static bool doLogicalOR_F_I( WRValue* to, WRValue* from ) { return to->f || (float)from->i; }
+static bool doLogicalOR_F_F( WRValue* to, WRValue* from ) { return to->f || from->f; }
 
 WRReturnFunc wr_LogicalOR[36] = 
 {
@@ -1957,9 +1871,8 @@ WRReturnFunc wr_LogicalOR[36] =
 //==============================================================================
 
 
-
 //------------------------------------------------------------------------------
-void doIndex_I_X( WRRunContext* c, WRValue* index, WRValue* value )
+static void doIndex_I_X( WRRunContext* c, WRValue* index, WRValue* value )
 {
 	// indexing with an int, but what we are indexing is NOT an array,
 	// make it one and return a ref
@@ -1970,7 +1883,7 @@ void doIndex_I_X( WRRunContext* c, WRValue* index, WRValue* value )
 	value->type = WR_REF;
 
 }
-void doIndex_I_R( WRRunContext* c, WRValue* index, WRValue* value ) 
+static void doIndex_I_R( WRRunContext* c, WRValue* index, WRValue* value ) 
 {
 	// indexing with an int into a ref, is it an array?
 	if ( value->r->type != WR_ARRAY )
@@ -2001,7 +1914,7 @@ void doIndex_I_R( WRRunContext* c, WRValue* index, WRValue* value )
 	}
 }
 
-void doIndex_I_A( WRRunContext* c, WRValue* index, WRValue* value )
+static void doIndex_I_A( WRRunContext* c, WRValue* index, WRValue* value )
 {
 	if ( (value->va->m_type&0x3) == SV_VALUE )
 	{
@@ -2010,12 +1923,12 @@ void doIndex_I_A( WRRunContext* c, WRValue* index, WRValue* value )
 	}
 }
 
-void doIndex_R_I( WRRunContext* c, WRValue* index, WRValue* value )
+static void doIndex_R_I( WRRunContext* c, WRValue* index, WRValue* value )
 {
 	wr_index[index->r->type*6+WR_INT](c, index->r, value);
 }
 
-void doIndex_R_R( WRRunContext* c, WRValue* index, WRValue* value )
+static void doIndex_R_R( WRRunContext* c, WRValue* index, WRValue* value )
 {
 	if ( value->r->type != WR_USR )
 	{
@@ -2030,18 +1943,18 @@ void doIndex_R_R( WRRunContext* c, WRValue* index, WRValue* value )
 		wr_index[index->r->type*6+WR_REF](c, index->r, value);
 	}
 }
-void doIndex_R_F( WRRunContext* c, WRValue* index, WRValue* value )
+static void doIndex_R_F( WRRunContext* c, WRValue* index, WRValue* value )
 {
 	wr_index[index->r->type*6+WR_FLOAT](c, index->r, value);
 }
-void doIndex_R_A( WRRunContext* c, WRValue* index, WRValue* value )
+static void doIndex_R_A( WRRunContext* c, WRValue* index, WRValue* value )
 {
 	wr_index[index->r->type*6+WR_ARRAY](c, index->r, value);
 }
 WRStateFunc wr_index[36] = 
 {
-	doIndex_I_X,     doIndex_I_R,     doIndex_I_X, doVoidIndexFunc,     doIndex_I_A,     doIndex_I_R,
-	doIndex_R_I,     doIndex_R_R,     doIndex_R_F, doVoidIndexFunc,     doIndex_R_A, doVoidIndexFunc,
+	    doIndex_I_X,     doIndex_I_R,     doIndex_I_X, doVoidIndexFunc,     doIndex_I_A,     doIndex_I_R,
+	    doIndex_R_I,     doIndex_R_R,     doIndex_R_F, doVoidIndexFunc,     doIndex_R_A, doVoidIndexFunc,
 	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
 	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
 	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
@@ -2049,8 +1962,8 @@ WRStateFunc wr_index[36] =
 };
 
 //------------------------------------------------------------------------------
-void doPreInc_I( WRValue* value ) { ++value->i; }
-void doPreInc_Y( WRValue* value )
+static void doPreInc_I( WRValue* value ) { ++value->i; }
+static void doPreInc_Y( WRValue* value )
 {
 	unsigned int index = value->arrayElement >> 8;
 	int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
@@ -2071,12 +1984,12 @@ void doPreInc_Y( WRValue* value )
 	}
 }
 
-void doPreInc_R( WRValue* value )
+static void doPreInc_R( WRValue* value )
 {
 	wr_preinc[ value->r->type ]( value->r );
 	*value = *value->r;
 }
-void doPreInc_F( WRValue* value )
+static void doPreInc_F( WRValue* value )
 {
 	++value->f;
 }
@@ -2087,8 +2000,8 @@ WRUnaryFunc wr_preinc[6] =
 };
 
 //------------------------------------------------------------------------------
-void doPreDec_I( WRValue* value ) { --value->i; }
-void doPreDec_Y( WRValue* value )
+static void doPreDec_I( WRValue* value ) { --value->i; }
+static void doPreDec_Y( WRValue* value )
 {
 	unsigned int index = value->arrayElement >> 8;
 	int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
@@ -2108,21 +2021,45 @@ void doPreDec_Y( WRValue* value )
 		case SV_FLOAT: { value->f = --((float *)value->r->va->m_data)[s]; value->type = WR_FLOAT; return; }
 	}
 }
-void doPreDec_R( WRValue* value )
+static void doPreDec_R( WRValue* value )
 {
 	wr_predec[ value->r->type ]( value->r );
 	*value = *value->r;
 }
 
-void doPreDec_F( WRValue* value ) { --value->f; }
+static void doPreDec_F( WRValue* value ) { --value->f; }
 WRUnaryFunc wr_predec[6] = 
 {
 	doPreDec_I,  doPreDec_R,  doPreDec_F,  doSingleVoidBlank,  doSingleVoidBlank,  doPreDec_Y
 };
 
+
 //------------------------------------------------------------------------------
-void doPostInc_I( WRValue* value, WRValue* stack ) { *stack = *value; ++value->i; }
-void doPostInc_Y( WRValue* value, WRValue* stack )
+static void doToInt_R( WRValue* value ) { wr_toInt[ value->r->type ]( value->r ); }
+static void doToInt_F( WRValue* value ) { value->type = WR_INT; value->i = (int32_t)value->f; }
+WRUnaryFunc wr_toInt[6] = 
+{
+	doSingleVoidBlank, doToInt_R,  doToInt_F,  doSingleVoidBlank,  doSingleVoidBlank,  doSingleVoidBlank
+};
+
+static void doToFloat_R( WRValue* value ) { wr_toInt[ value->r->type ]( value->r ); }
+static void doToFloat_I( WRValue* value ) { value->type = WR_FLOAT; value->f = (float)value->i; }
+WRUnaryFunc wr_toFloat[6] = 
+{
+	doToFloat_I, doToFloat_R,  doSingleVoidBlank,  doSingleVoidBlank,  doSingleVoidBlank,  doSingleVoidBlank
+};
+
+static void bitwiseNOT_R( WRValue* value ) { wr_toInt[ value->r->type ]( value->r ); }
+static void bitwiseNOT_I( WRValue* value ) { value->i = ~value->i; }
+WRUnaryFunc wr_bitwiseNOT[6] = 
+{
+	bitwiseNOT_I, bitwiseNOT_R,  doSingleVoidBlank,  doSingleVoidBlank,  doSingleVoidBlank,  doSingleVoidBlank
+};
+
+
+//------------------------------------------------------------------------------
+static void doPostInc_I( WRValue* value, WRValue* stack ) { *stack = *value; ++value->i; }
+static void doPostInc_Y( WRValue* value, WRValue* stack )
 {
 	unsigned int index = value->arrayElement >> 8;
 	int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
@@ -2162,20 +2099,17 @@ void doPostInc_Y( WRValue* value, WRValue* stack )
 	}
 }
 
-void doPostInc_R( WRValue* value, WRValue* stack )
-{
-	wr_postinc[ value->r->type ]( value->r, stack );
-}
+static void doPostInc_R( WRValue* value, WRValue* stack ) { wr_postinc[ value->r->type ]( value->r, stack ); }
+static void doPostInc_F( WRValue* value, WRValue* stack ) { *stack = *value; ++value->f; }
 
-void doPostInc_F( WRValue* value, WRValue* stack ) { *stack = *value; ++value->f; }
 WRVoidFunc wr_postinc[6] = 
 {
 	doPostInc_I,  doPostInc_R,  doPostInc_F,  doVoidFuncBlank,  doVoidFuncBlank, doPostInc_Y
 };
 
 //------------------------------------------------------------------------------
-void doPostDec_I( WRValue* value, WRValue* stack ) { *stack = *value; --value->i; }
-void doPostDec_Y( WRValue* value, WRValue* stack )
+static void doPostDec_I( WRValue* value, WRValue* stack ) { *stack = *value; --value->i; }
+static void doPostDec_Y( WRValue* value, WRValue* stack )
 {
 	unsigned int index = value->arrayElement >> 8;
 	int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
@@ -2215,32 +2149,24 @@ void doPostDec_Y( WRValue* value, WRValue* stack )
 	}
 }
 
-void doPostDec_R( WRValue* value, WRValue* stack )
-{
-	wr_postdec[ value->r->type ]( value->r, stack );
-}
+static void doPostDec_R( WRValue* value, WRValue* stack ) { wr_postdec[ value->r->type ]( value->r, stack ); }
+static void doPostDec_F( WRValue* value, WRValue* stack ) { *stack = *value; --value->f; }
 
-void doPostDec_F( WRValue* value, WRValue* stack ) { *stack = *value; --value->f; }
 WRVoidFunc wr_postdec[6] = 
 {
 	doPostDec_I, doPostDec_R, doPostDec_F, doVoidFuncBlank, doVoidFuncBlank, doPostDec_Y
 };
 
 //------------------------------------------------------------------------------
-void doUserHash_X( WRValue* value, WRValue* target, int32_t hash ) { }
-void doUserHash_R( WRValue* value, WRValue* target, int32_t hash )
+static void doUserHash_X( WRValue* value, WRValue* target, int32_t hash ) { }
+static void doUserHash_R( WRValue* value, WRValue* target, int32_t hash ) { wr_UserHash[ value->r->type ]( value->r, target, hash ); }
+static void doUserHash_U( WRValue* value, WRValue* target, int32_t hash )
 {
-	wr_UserHash[ value->r->type ]( value->r, target, hash );
-}
-void doUserHash_U( WRValue* value, WRValue* target, int32_t hash )
-{
+	target->type = WR_REF;
 	if ( !(target->r = value->u->get(hash)) )
 	{
-		target->init();
-	}
-	else// if ( target->r->type == WR_ARRAY )
-	{
-		target->type = WR_REF;
+		target->p = 0;
+		target->p2 = 0;
 	}
 }
 WRUserHashFunc wr_UserHash[6] = 
@@ -2249,19 +2175,16 @@ WRUserHashFunc wr_UserHash[6] =
 };
 
 //------------------------------------------------------------------------------
-bool doZeroCheck_I( WRValue* value ) { return value->i == 0; }
-bool doZeroCheck_R( WRValue* value )
-{
-	return wr_ZeroCheck[ value->r->type ]( value->r );
-}
-bool doZeroCheck_Y( WRValue* value )
+static bool doZeroCheck_I( WRValue* value ) { return value->i == 0; }
+static bool doZeroCheck_F( WRValue* value ) { return value->f == 0; }
+static bool doZeroCheck_R( WRValue* value ) { return wr_ZeroCheck[ value->r->type ]( value->r ); }
+static bool doZeroCheck_Y( WRValue* value )
 {
 	WRValue element;
-	arrayToValue( value, &element );
+	wr_arrayToValue( value, &element );
 	return wr_ZeroCheck[ element.type ]( &element );
 }
 
-bool doZeroCheck_F( WRValue* value ) { return value->f == 0; }
 WRValueCheckFunc wr_ZeroCheck[6] = 
 {
 	doZeroCheck_I,  doZeroCheck_R,  doZeroCheck_F,  doSingleBlank, doSingleBlank, doZeroCheck_Y
@@ -2269,26 +2192,23 @@ WRValueCheckFunc wr_ZeroCheck[6] =
 
 
 //------------------------------------------------------------------------------
-bool doLogicalNot_I( WRValue* value ) { return value->i == 0; }
-bool doLogicalNot_R( WRValue* value )
-{
-	return wr_LogicalNot[ value->r->type ]( value->r );
-}
-bool doLogicalNot_Y( WRValue* value )
+static bool doLogicalNot_I( WRValue* value ) { return value->i == 0; }
+static bool doLogicalNot_F( WRValue* value ) { return value->f == 0; }
+static bool doLogicalNot_R( WRValue* value ) { return wr_LogicalNot[ value->r->type ]( value->r ); }
+static bool doLogicalNot_Y( WRValue* value )
 {
 	WRValue element;
-	arrayToValue( value, &element );
+	wr_arrayToValue( value, &element );
 	return wr_LogicalNot[ element.type ]( &element );
 }
-bool doLogicalNot_F( WRValue* value ) { return value->f == 0; }
 WRReturnSingleFunc wr_LogicalNot[6] = 
 {
 	doLogicalNot_I,  doLogicalNot_R,  doLogicalNot_F,  doSingleBlank, doSingleBlank, doLogicalNot_Y
 };
 
 //------------------------------------------------------------------------------
-void doNegate_I( WRValue* value ) { value->i = -value->i; }
-void doNegate_Y( WRValue* value )
+static void doNegate_I( WRValue* value ) { value->i = -value->i; }
+static void doNegate_Y( WRValue* value )
 {
 	unsigned int index = value->arrayElement >> 8;
 	int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
@@ -2336,26 +2256,26 @@ void doNegate_Y( WRValue* value )
 		}
 	}
 }
-void doNegate_R( WRValue* value )
+static void doNegate_R( WRValue* value )
 {
 	wr_negate[ value->r->type ]( value->r );
 	*value = *value->r;
 }
 
-void doNegate_F( WRValue* value ) { value->f = -value->f; }
+static void doNegate_F( WRValue* value ) { value->f = -value->f; }
 WRUnaryFunc wr_negate[6] = 
 {
 	doNegate_I,  doNegate_R,  doNegate_F,  doSingleVoidBlank,  doSingleVoidBlank, doNegate_Y
 };
 
 //------------------------------------------------------------------------------
-void doBitwiseNot_I( WRValue* value ) { value->i = -value->i; }
-void doBitwiseNot_R( WRValue* value )
+static void doBitwiseNot_I( WRValue* value ) { value->i = ~value->i; }
+static void doBitwiseNot_R( WRValue* value )
 {
-	wr_BitwiseNot[ value->r->type ]( value->r );
+	wr_bitwiseNot[ value->r->type ]( value->r );
 	*value = *value->r;
 }
-void doBitwiseNot_Y( WRValue* value )
+static void doBitwiseNot_Y( WRValue* value )
 {
 	unsigned int index = value->arrayElement >> 8;
 	int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
@@ -2367,12 +2287,7 @@ void doBitwiseNot_Y( WRValue* value )
 			WRValue* val = (WRValue *)value->r->va->m_data + s;
 			if ( val->type == WR_INT )
 			{
-				val->i = -val->i;
-				*value = *val;
-			}
-			else if ( val->type == WR_FLOAT )
-			{
-				val->f = -val->f;
+				val->i = ~val->i;
 				*value = *val;
 			}
 			break;
@@ -2381,16 +2296,14 @@ void doBitwiseNot_Y( WRValue* value )
 		case SV_CHAR:
 		{
 			value->type = WR_INT;
-			char c = ((((char*)value->r->va->m_data)[s]) = ~(((char*)value->r->va->m_data)[s]));
-			value->i = c;
+			value->i = (((((char*)value->r->va->m_data)[s]) = ~(((char*)value->r->va->m_data)[s])));
 			break;
 		}
 
 		case SV_INT:
 		{
 			value->type = WR_INT;
-			int i = ((((int*)value->r->va->m_data)[s]) = ~(((int*)value->r->va->m_data)[s]));
-			value->i = i;
+			value->i = (((((int*)value->r->va->m_data)[s]) = ~(((int*)value->r->va->m_data)[s])));
 			break;
 		}
 
@@ -2401,8 +2314,7 @@ void doBitwiseNot_Y( WRValue* value )
 	}
 }
 
-void doBitwiseNot_F( WRValue* value ) { value->f = -value->f; }
-WRUnaryFunc wr_BitwiseNot[6] = 
+WRUnaryFunc wr_bitwiseNot[6] = 
 {
-	doBitwiseNot_I,  doBitwiseNot_R,  doBitwiseNot_F,  doSingleVoidBlank,  doSingleVoidBlank,doBitwiseNot_Y
+	doBitwiseNot_I,  doBitwiseNot_R, doSingleVoidBlank,  doSingleVoidBlank,  doSingleVoidBlank, doBitwiseNot_Y
 };

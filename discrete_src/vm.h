@@ -32,12 +32,18 @@ public:
 	//------------------------------------------------------------------------------
 	void registerValue( const char* key, WRValue* value )
 	{
-		UDNode* node = new UDNode;
-		node->val = value;
-		node->next = m_nodeOnlyHead;
-		m_nodeOnlyHead = node;
+		int32_t hash = wr_hashStr(key);
+		
+		UDNode* node = m_index.getItem( hash );
+		if ( !node )
+		{
+			node = new UDNode;
+			node->next = m_nodeOnlyHead;
+			m_nodeOnlyHead = node;
+			m_index.set( wr_hashStr(key), node );
+		}
 
-		m_index.set( wr_hashStr(key), node );
+		node->val = value;
 	}
 	
 	//------------------------------------------------------------------------------
@@ -150,6 +156,7 @@ struct WRState
 	WRHashTable<WRRunContext*> contexts;
 
 	WRHashTable<WRCFunctionCallback> c_functionRegistry;
+	WRHashTable<WR_LIB_CALLBACK> c_libFunctionRegistry;
 
 	WRError err;
 
@@ -236,9 +243,9 @@ public:
 	}
 };
 
-void arrayToValue( const WRValue* array, WRValue* value );
-void intValueToArray( const WRValue* array, int32_t I );
-void floatValueToArray( const WRValue* array, float F );
+void wr_arrayToValue( const WRValue* array, WRValue* value );
+void wr_intValueToArray( const WRValue* array, int32_t I );
+void wr_floatValueToArray( const WRValue* array, float F );
 
 typedef void (*WRVoidFunc)( WRValue* to, WRValue* from );
 extern WRVoidFunc wr_assign[36];
@@ -253,6 +260,8 @@ extern WRVoidFunc wr_ANDAssign[36];
 extern WRVoidFunc wr_XORAssign[36];
 extern WRVoidFunc wr_RightShiftAssign[36];
 extern WRVoidFunc wr_LeftShiftAssign[36];
+extern WRVoidFunc wr_postinc[6];
+extern WRVoidFunc wr_postdec[6];
 
 
 typedef void (*WRTargetFunc)( WRValue* to, WRValue* from, WRValue* target );
@@ -282,12 +291,12 @@ extern WRReturnFunc wr_LogicalAND[36];
 extern WRReturnFunc wr_LogicalOR[36];
 
 typedef void (*WRUnaryFunc)( WRValue* value );
-extern WRUnaryFunc wr_BitwiseNot[6];
 extern WRUnaryFunc wr_negate[6];
 extern WRUnaryFunc wr_preinc[6];
 extern WRUnaryFunc wr_predec[6];
-extern WRVoidFunc wr_postinc[6];
-extern WRVoidFunc wr_postdec[6];
+extern WRUnaryFunc wr_toInt[6];
+extern WRUnaryFunc wr_toFloat[6];
+extern WRUnaryFunc wr_bitwiseNot[6];
 
 typedef bool (*WRReturnSingleFunc)( WRValue* value );
 extern WRReturnSingleFunc wr_LogicalNot[6];

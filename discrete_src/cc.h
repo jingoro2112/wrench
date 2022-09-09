@@ -65,7 +65,7 @@ const WROperation c_operations[] =
 	{ "--",   3, O_PreDecrement,        true,  WR_OPER_PRE },
 	{ "--",   2, O_PostDecrement,       true,  WR_OPER_POST },
 
-	{ ".",    2, O_IndexHash,           true,  WR_OPER_BINARY },
+	{ ".",    2, O_HASH_PLACEHOLDER,    true,  WR_OPER_BINARY },
 
 	{ "!",    3, O_LogicalNot,         false,  WR_OPER_PRE },
 	{ "~",    3, O_BitwiseNOT,         false,  WR_OPER_PRE },
@@ -164,6 +164,7 @@ struct WRExpressionContext
 	bool spaceBefore;
 	bool spaceAfter;
 	bool global;
+	WRstr prefix;
 	WRstr token;
 	WRValue value;
 	const WROperation* operation;
@@ -312,7 +313,7 @@ public:
 private:
 	
 	bool isReserved( const char* token );
-	bool isValidLabel( WRstr& token, bool& isGlobal );
+	bool isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix );
 	bool getToken( WRExpressionContext& ex, const char* expect =0 );
 	char* pack16( int16_t i, char* buf )
 	{

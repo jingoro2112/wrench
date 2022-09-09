@@ -1,8 +1,27 @@
 /*~
+777
+33
+222
+1
+1
+2
+3
+4
+5
+6
+7
+8
+9
+A
+B
+C
+100
+100
 95
 100
 100
 200
+205
 205
 85
 80
@@ -31,14 +50,52 @@
 //------------------------------------------------------------------------------
 function userCheck( data )
 {
+	log( data.subUser.data2 );
+	data.subUser.data2 = 28;
+	log( 1 + data.subUser.data2++ + 10 - 2 * 3 ); // 33
+
+	log( data.subUser.data3[1] );
+
+	log( data.value );
+	if ( data.value == 1 ) log("1");
+	if ( data.value != 1 ) log("1 FAIL");
+	if ( data.value != 2 ) log("2");
+	if ( data.value > 0 ) log("3");
+	if ( data.value > 1 ) log("3 FAIL");
+	if ( data.value < 2 ) log("4");
+	if ( data.value < 1 ) log("4 FAIL");
+	if ( data.value >= 1 ) log("5");
+	if ( data.value >= 2 ) log("5 FAIL");
+	if ( data.value <= 1 ) log("6");
+	if ( data.value <= 0 ) log("6 FAIL");
+
+	if ( 1 ==data.value ) log("7");
+	if ( 1 != data.value ) log("7 FAIL");
+	if ( 2 != data.value ) log("8");
+	if ( 0 < data.value ) log("9");
+	if ( 1 < data.value ) log("9 FAIL");
+	if ( 2 > data.value ) log("A");
+	if ( 1 > data.value ) log("A FAIL");
+	if ( 1 <= data.value ) log("B");
+	if ( 2 <= data.value ) log("B FAIL");
+	if ( 1 >= data.value ) log("C");
+	if ( 0 >= data.value ) log("C FAIL");
+
+	
 	data.ac[9] = 100;
 	data.ac[8] = 90;
+
+	log( data.ac[8] = data.ac[9] ); // 100
+	log( data.ac[8] ); // 100
+	data.ac[8] = 90;
+
 	a = 5;
 	log( data.ac[8] += 5 ); // 95
 	log( data.ac[8] += a ); // 100
 	log( data.ac[8] ); // 100
 	log( data.ac[9] += data.ac[8] ); // 200
 	log( a += data.ac[9]); // 205
+	log( a ); // 205
 
 	data.ac[9] = 100;
 	data.ac[8] = 90;

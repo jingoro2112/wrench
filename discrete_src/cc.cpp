@@ -24,7 +24,8 @@ SOFTWARE.
 #ifndef WRENCH_WITHOUT_COMPILER
 #include <assert.h>
 
-#define WR_COMPILER_LITERAL_STRING 0x10
+// fake type for compiling only
+#define WR_COMPILER_LITERAL_STRING 0x10 
 
 //------------------------------------------------------------------------------
 const char* c_reserved[] =
@@ -38,11 +39,10 @@ const char* c_reserved[] =
 	"false",
 	"float",
 	"for",
-	"foreach",
 	"if",
 	"int",
 	"return",
-	"switch",
+//	"switch",
 	"true",
 	"unit",
 	"function",
@@ -84,14 +84,15 @@ const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str )
 #endif
 
 //------------------------------------------------------------------------------
-bool WRCompilationContext::isValidLabel( WRstr& token, bool& isGlobal )
+bool WRCompilationContext::isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix )
 {
+	prefix.clear();
+
 	if ( !token.size() || (!isalpha(token[0]) && token[0] != '_' && token[0] != ':') ) // non-zero size and start with alpha or '_' ?
 	{
 		return false;
 	}
 
-	unsigned int checkFrom = 1;
 	isGlobal = false;
 
 	if ( token[0] == ':' )
@@ -99,7 +100,6 @@ bool WRCompilationContext::isValidLabel( WRstr& token, bool& isGlobal )
 		if ( (token.size() > 2) && (token[1] == ':') )
 		{
 			isGlobal = true;
-			checkFrom = 2;
 		}
 		else
 		{
@@ -115,8 +115,35 @@ bool WRCompilationContext::isValidLabel( WRstr& token, bool& isGlobal )
 		}
 	}
 
-	for( unsigned int i=checkFrom; i<token.size(); i++ ) // entire token alphanumeric or '_'?
+	for( unsigned int i=0; i<token.size(); i++ ) // entire token alphanumeric or '_'?
 	{
+		if ( token[i] == ':' )
+		{
+			if ( token[++i] != ':' )
+			{
+				m_err = WR_ERR_unexpected_token;
+				return false;
+			}
+
+			if ( i != 1 )
+			{
+				for( unsigned int p=0; p<i - 1; ++p )
+				{
+					prefix += token[p];
+				}
+
+				for( unsigned int t=2; t<token.size(); ++t)
+				{
+					token[t-2] = token[t+prefix.size()];
+				}
+				token.shave( prefix.size() + 2 );
+				i -= (prefix.size() + 1);
+			}
+			
+			isGlobal = true;
+			continue;
+		}
+		
 		if ( !isalnum(token[i]) && token[i] != '_' )
 		{
 			return false;
@@ -279,7 +306,11 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 		{
 			if ( m_pos < m_sourceLen )
 			{
-				if ( m_source[m_pos] == '-' )
+				if ( isdigit(m_source[m_pos]) || m_source[m_pos] == '.' )
+				{
+					goto parseAsNumber;
+				}
+				else if ( m_source[m_pos] == '-' )
 				{
 					token += '-';
 					++m_pos;
@@ -405,6 +436,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 				return false;
 			}
 
+parseAsNumber:
 			if ( !(token[0] == '.' && !isdigit(m_source[m_pos]) ) )
 			{
 				if ( m_source[m_pos] == 'x' ) // interpret as hex
@@ -505,11 +537,28 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 	unsigned int o = bytecode.opcodes.size();
 	if ( o )
 	{
+		// some keyhole optimizations
+
 		--o;
 		unsigned int a = bytecode.all.size() - 1;
 
-		// incorporate a keyhole optimizer
-		if ( opcode == O_BZ )
+		if ( opcode == O_Index )
+		{
+			if ( bytecode.opcodes[o] == O_LiteralInt32 ) // indexing with a literal? we have an app for that
+			{
+				bytecode.all[a-5] = O_IndexLiteral32;
+				bytecode.opcodes[o] = O_IndexLiteral32;
+				return;
+				
+			}
+			else if ( bytecode.opcodes[o] == O_LiteralInt8 )
+			{
+				bytecode.all[a-1] = O_IndexLiteral8;
+				bytecode.opcodes[o] = O_IndexLiteral8;
+				return;
+			}
+		}
+		else if ( opcode == O_BZ )
 		{
 			if ( bytecode.opcodes[o] == O_CompareEQ ) // assign+pop is very common
 			{
@@ -550,24 +599,225 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 		}
 		else if ( opcode == O_PopOne )
 		{
-			if ( bytecode.opcodes[o] == O_Assign ) // assign+pop is very common
+			if ( bytecode.opcodes[o] == O_CallLibFunction )
 			{
-				if ( o > 1 )
+				bytecode.all[a-5] = O_CallLibFunctionAndPop;
+				bytecode.opcodes[o] = O_CallLibFunctionAndPop;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_Assign ) // assign+pop is very common
+			{
+				if ( o > 0 )
 				{
 					// save three opcodes if its just an assignment to
 					// a variable that is not going to be used.. this is super common
 					if ( bytecode.opcodes[ o - 1 ] == O_LoadFromGlobal )
 					{
-						bytecode.all[ a - 2 ] = O_AssignToGlobalAndPop;
-						bytecode.all.shave(1);
-						bytecode.opcodes.shave(1);
+						if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt8 )
+						{
+							// Lit8     a - 4
+							// [val]    a - 3
+							// LoadGlob a - 2
+							// [index]  a - 1
+							// Assign   a
+
+							bytecode.all[ a - 4 ] = O_LiteralInt8ToGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
+
+							// Lit8     a - 4
+							// [index]  a - 3
+							// [val]    a - 2
+							// [index]  a - 1 X
+							// Assign   a     X
+
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt32 )
+						{
+							// Lit8     a - 7
+							// [val]    a - 6
+							// [val]    a - 5
+							// [val]    a - 4
+							// [val]    a - 3
+							// LoadGlob a - 2
+							// [index]  a - 1
+							// Assign   a
+
+							bytecode.all[ a - 7 ] = O_LiteralInt32ToGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
+							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
+							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
+							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
+
+							// Lit8     a - 4
+							// [index]  a - 3
+							// [val]    a - 2
+							// [index]  a - 1 X
+							// Assign   a     X
+
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
+						{
+							// Lit8     a - 7
+							// [Fval]    a - 6
+							// [Fval]    a - 5
+							// [Fval]    a - 4
+							// [Fval]    a - 3
+							// LoadGlob a - 2
+							// [index]  a - 1
+							// Assign   a
+
+							bytecode.all[ a - 7 ] = O_LiteralFloatToGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
+							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
+							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
+							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
+
+							// Lit8     a - 4
+							// [index]  a - 3
+							// [val]    a - 2
+							// [index]  a - 1 X
+							// Assign   a     X
+
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralZero )
+						{
+							// LitZ     a - 3
+							// LoadGlob a - 2
+							// [index]  a - 1
+							// Assign   a
+
+							bytecode.all[ a - 3 ] = O_LiteralInt8ToGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all[ a - 1 ] = 0;
+
+							// Lit8     a - 3
+							// [index]  a - 2
+							// [0]    a - 1
+							// Assign   a     X
+
+							bytecode.all.shave(1);
+							bytecode.opcodes.shave(1);
+						}
+						else
+						{
+							bytecode.all[ a - 2 ] = O_AssignToGlobalAndPop;
+							bytecode.all.shave(1);
+							bytecode.opcodes.shave(1);
+						}
+
 						return;
 					}
 					else if ( bytecode.opcodes[ o - 1 ] == O_LoadFromLocal )
 					{
-						bytecode.all[ a - 2 ] = O_AssignToLocalAndPop;
-						bytecode.all.shave(1);
-						bytecode.opcodes.shave(1);
+						if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt8 )
+						{
+							// Lit8     a - 4
+							// [val]    a - 3
+							// LoadGlob a - 2
+							// [index]  a - 1
+							// Assign   a
+
+							bytecode.all[ a - 4 ] = O_LiteralInt8ToLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
+
+							// Lit8     a - 4
+							// [index]  a - 3
+							// [val]    a - 2
+							// [index]  a - 1 X
+							// Assign   a     X
+
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt32 )
+						{
+							// Lit8     a - 7
+							// [val]    a - 6
+							// [val]    a - 5
+							// [val]    a - 4
+							// [val]    a - 3
+							// LoadGlob a - 2
+							// [index]  a - 1
+							// Assign   a
+
+							bytecode.all[ a - 7 ] = O_LiteralInt32ToLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
+							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
+							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
+							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
+
+							// Lit8     a - 4
+							// [index]  a - 3
+							// [val]    a - 2
+							// [index]  a - 1 X
+							// Assign   a     X
+
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
+						{
+							// Lit8     a - 7
+							// [Fval]    a - 6
+							// [Fval]    a - 5
+							// [Fval]    a - 4
+							// [Fval]    a - 3
+							// LoadGlob a - 2
+							// [index]  a - 1
+							// Assign   a
+
+							bytecode.all[ a - 7 ] = O_LiteralFloatToLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
+							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
+							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
+							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
+
+							// Lit8     a - 4
+							// [index]  a - 3
+							// [val]    a - 2
+							// [index]  a - 1 X
+							// Assign   a     X
+
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralZero )
+						{
+							// LitZ     a - 3
+							// LoadGlob a - 2
+							// [index]  a - 1
+							// Assign   a
+
+							bytecode.all[ a - 3 ] = O_LiteralInt8ToLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all[ a - 1 ] = 0;
+
+							// Lit8     a - 3
+							// [index]  a - 2
+							// [0]    a - 1
+							// Assign   a     X
+
+							bytecode.all.shave(1);
+							bytecode.opcodes.shave(1);
+						}
+						else
+						{
+							bytecode.all[ a - 2 ] = O_AssignToLocalAndPop;
+							bytecode.all.shave(1);
+							bytecode.opcodes.shave(1);
+						}
 						return;
 					}
 				}
@@ -715,7 +965,6 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 						break;
 
 					default:
-						D_OPCODE(printf("opcode was [%s]\n", c_opcodeName[o]));
 						m_err = WR_ERR_compiler_panic;
 						return;
 				}
@@ -751,8 +1000,109 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 //------------------------------------------------------------------------------
 void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& addMe )
 {
-	resolveRelativeJumps( addMe );
+	if ( addMe.all.size() == 1 && addMe.opcodes[0] == O_HASH_PLACEHOLDER )
+	{
+		if ( bytecode.opcodes.size() > 1
+			 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
+			 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_LoadFromLocal )
+		{
+			// O_literalint32
+			// 0
+			// 1
+			// 2
+			// 3
+			// O_loadlocal
+			// index
+
+			int o = bytecode.all.size() - 7;
+
+			bytecode.all[o] = O_LocalIndexHash;
+			bytecode.all[o + 5] = bytecode.all[o + 4];
+			bytecode.all[o + 4] = bytecode.all[o + 3];
+			bytecode.all[o + 3] = bytecode.all[o + 2];
+			bytecode.all[o + 2] = bytecode.all[o + 1];
+			bytecode.all[o + 1] = bytecode.all[o + 6];
+
+			bytecode.opcodes.shave(2);
+			bytecode.all.shave(1);
+
+			// O_LocalIndexHash
+			// index
+			// 0
+			// 1
+			// 2
+			// 3
+		}
+		else if (bytecode.opcodes.size() > 1
+				 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
+				 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_LoadFromGlobal )
+		{
+			// O_literalint32
+			// 0
+			// 1
+			// 2
+			// 3
+			// O_LoadGlobal
+			// index
+
+			int o = bytecode.all.size() - 7;
+
+			bytecode.all[o] = O_GlobalIndexHash;
+			bytecode.all[o + 5] = bytecode.all[o + 4];
+			bytecode.all[o + 4] = bytecode.all[o + 3];
+			bytecode.all[o + 3] = bytecode.all[o + 2];
+			bytecode.all[o + 2] = bytecode.all[o + 1];
+			bytecode.all[o + 1] = bytecode.all[o + 6];
+
+			bytecode.opcodes.shave(2);
+			bytecode.all.shave(1);
+
+			// O_GlobalIndexHash
+			// index
+			// 0
+			// 1
+			// 2
+			// 3
+		}
+		else if (bytecode.opcodes.size() > 1
+				 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
+				 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_StackSwap )
+		{
+			// it arrived from a stack swap
+
+			// O_literalint32
+			// 0
+			// 1
+			// 2
+			// 3
+			// O_StackSwap
+			// index
+
+			int o = bytecode.all.size() - 7;
+
+			bytecode.all[o] = O_StackIndexHash;
+
+			bytecode.opcodes.shave(2);
+			bytecode.all.shave(2);
+
+
+			// O_StackIndexHash
+			// 0
+			// 1
+			// 2
+			// 3
+		}
+		else
+		{
+			m_err = WR_ERR_compiler_panic;
+		}
+
+		return;
+	}
+
 	
+	resolveRelativeJumps( addMe );
+
 	// add the namespace, making sure to offset it into the new block properly
 	for( unsigned int n=0; n<addMe.localSpace.count(); ++n )
 	{
@@ -939,7 +1289,7 @@ void WRCompilationContext::loadExpressionContext( WRExpression& expression, int 
 {
 	if ( operation > 0
 		 && expression.context[operation].operation
-		 && expression.context[operation].operation->opcode == O_IndexHash
+		 && expression.context[operation].operation->opcode == O_HASH_PLACEHOLDER
 		 && depth > operation )
 	{
 		char buf[4];
@@ -1091,17 +1441,11 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 			break;
 		}
 
-		// this is a really cool optimization but -=, += etc
-		// breaks it in some cases :/ --TODO really want this
-		// to work, come back to it
-
-/*
-
-		
 		case WR_OPER_BINARY_COMMUTE:
 		{
-			// this operation allows the arguments to be pushed
-			// in any order :)
+			// for operations like + and * the operands can be in any
+			// order, so don't go to any great lengths to shift the stack
+			// around for them
 
 			if( o == 0 )
 			{
@@ -1159,7 +1503,6 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 				expression.swapWithTop( expression.context[first].stackPosition );
 			}
 
-
 			appendBytecode( expression.bytecode, expression.context[o].bytecode ); // apply operator
 
 			expression.context.remove( o - 1, 2 ); // knock off operator and arg
@@ -1167,23 +1510,6 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 
 			break;
 		}
-
-
-
-
-*/		
-		case WR_OPER_BINARY_COMMUTE:
-
-
-
-
-
-
-
-
-
-
-		
 
 		case WR_OPER_BINARY:
 		{
@@ -1217,7 +1543,6 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 					loadExpressionContext( expression, second, o );
 
 					expression.swapWithTop( 1 );
-
 				}
 			}
 			else if ( expression.context[first].stackPosition == -1 )
@@ -1244,7 +1569,7 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 				// next level down then swap first up
 
 				expression.swapWithTop( 1 );
-
+				
 				expression.swapWithTop( expression.context[first].stackPosition );
 			}
 			else
@@ -1254,9 +1579,9 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 				// required
 
 				expression.swapWithTop( expression.context[second].stackPosition );
-
+				
 				expression.swapWithTop( 1 );
-
+				
 				expression.swapWithTop( expression.context[first].stackPosition );
 			}
 
@@ -1371,12 +1696,14 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				
 				--depth;
 				WRstr functionName = expression.context[depth].token;
+				WRstr prefix = expression.context[depth].prefix;
+				
 				expression.context[depth].reset();
 
 				expression.context[depth].type = EXTYPE_BYTECODE_RESULT;
 
 				char argsPushed = 0;
-
+				
 				WRstr& token2 = expression.context[depth].token;
 				WRValue& value2 = expression.context[depth].value;
 
@@ -1416,9 +1743,24 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					}
 				}
 
-				// push the number of args
-				addFunctionToHashSpace( expression.context[depth].bytecode, functionName );
-				pushData( expression.context[depth].bytecode, &argsPushed, 1 );
+				if ( prefix.size() )
+				{
+					prefix += "::";
+					prefix += functionName;
+
+					char buf[4];
+					pack32( wr_hashStr(prefix), buf );
+
+					pushOpcode( expression.context[depth].bytecode, O_CallLibFunction );
+					pushData( expression.context[depth].bytecode, buf, 4 );
+					pushData( expression.context[depth].bytecode, &argsPushed, 1 );
+				}
+				else
+				{
+					// push the number of args
+					addFunctionToHashSpace( expression.context[depth].bytecode, functionName );
+					pushData( expression.context[depth].bytecode, &argsPushed, 1 );
+				}
 			}
 			else if ( !getToken(expression.context[depth]) )
 			{
@@ -1504,10 +1846,12 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 		}
 
 		bool isGlobal;
-		if ( isValidLabel(token, isGlobal) )
+		WRstr prefix;
+		if ( isValidLabel(token, isGlobal, prefix) )
 		{
 			expression.context[depth].type = EXTYPE_LABEL;
 			expression.context[depth].global = isGlobal;
+			expression.context[depth].prefix = prefix;
 			++depth;
 
 			continue;
@@ -1534,10 +1878,11 @@ bool WRCompilationContext::parseUnit()
 
 	WRExpressionContext ex;
 	WRstr& token = ex.token;
+	WRstr prefix;
 	
 	// get the function name
 	if ( !getToken(ex)
-		 || !isValidLabel(token, isGlobal)
+		 || !isValidLabel(token, isGlobal, prefix)
 		 || isGlobal )
 	{
 		m_err = WR_ERR_bad_label;
@@ -1566,7 +1911,7 @@ bool WRCompilationContext::parseUnit()
 			break;
 		}
 
-		if ( !isValidLabel(token, isGlobal) || isGlobal )
+		if ( !isValidLabel(token, isGlobal, prefix) || isGlobal )
 		{
 			m_err = WR_ERR_bad_label;
 			return false;
@@ -2333,95 +2678,101 @@ int wr_compile( const char* source, const int size, unsigned char** out, int* ou
 #ifdef DEBUG_OPCODE_NAMES
 const char* c_opcodeName[] = 
 {
-	"O_RegisterFunction",
-	"O_FunctionListSize",
-	"O_LiteralZero",
-	"O_LiteralInt8",
-	"O_LiteralInt32",
-	"O_LiteralFloat",
-	"O_LiteralString",
-	"O_LoadLabel",
-	"O_CallFunctionByHash",
-	"O_CallFunctionByHashAndPop",
-	"O_CallFunctionByIndex",
-	"O_Index",
-	"O_IndexHash",
-	"O_Assign",
-	"O_AssignAndPop",
-	"O_StackSwap",
-	"O_ReserveFrame",
-	"O_ReserveGlobalFrame",
-	"O_LoadFromLocal",
-	"O_LoadFromGlobal",
-	"O_PopOne",
-	"O_Return",
-	"O_Stop",
-	"O_BinaryAddition",
-	"O_BinarySubtraction",
-	"O_BinaryMultiplication",
-	"O_BinaryDivision",
-	"O_BinaryRightShift",
-	"O_BinaryLeftShift",
-	"O_BinaryMod",
-	"O_BinaryAnd",
-	"O_BinaryOr",
-	"O_BinaryXOR",
-	"O_BitwiseNOT",
-	"O_CoerceToInt",
-	"O_CoerceToString",
-	"O_CoerceToFloat",
-	"O_RelativeJump",
-	"O_RelativeJump8",
-	"O_BZ",
-	"O_BZ8",
-	"O_BNZ",
-	"O_BNZ8",
-	"O_CompareEQ",
-	"O_CompareNE",
-	"O_CompareGE",
-	"O_CompareLE",
-	"O_CompareGT",
-	"O_CompareLT",
-	"O_CompareBEQ",
-	"O_CompareBNE",
-	"O_CompareBGE",
-	"O_CompareBLE",
-	"O_CompareBGT",
-	"O_CompareBLT",
-	"O_CompareBEQ8",
-	"O_CompareBNE8",
-	"O_CompareBGE8",
-	"O_CompareBLE8",
-	"O_CompareBGT8",
-	"O_CompareBLT8",
-	"O_PostIncrement",
-	"O_PostDecrement",
-	"O_PreIncrement",
-	"O_PreDecrement",
-	"O_Negate",
-	"O_SubtractAssign",
-	"O_AddAssign",
-	"O_ModAssign",
-	"O_MultiplyAssign",
-	"O_DivideAssign",
-	"O_ORAssign",
-	"O_ANDAssign",
-	"O_XORAssign",
-	"O_RightShiftAssign",
-	"O_LeftShiftAssign",
-	"O_SubtractAssignAndPop",
-	"O_AddAssignAndPop",
-	"O_ModAssignAndPop",
-	"O_MultiplyAssignAndPop",
-	"O_DivideAssignAndPop",
-	"O_ORAssignAndPop",
-	"O_ANDAssignAndPop",
-	"O_XORAssignAndPop",
-	"O_RightShiftAssignAndPop",
-	"O_LeftShiftAssignAndPop",
-	"O_LogicalAnd",
-	"O_LogicalOr",
-	"O_LogicalNot",
+	"RegisterFunction",
+	"FunctionListSize",
+	"LiteralZero",
+	"LiteralInt8",
+	"LiteralInt32",
+	"LiteralFloat",
+	"LiteralString",
+	"CallFunctionByHash",
+	"CallFunctionByHashAndPop",
+	"CallFunctionByIndex",
+	"CallLibFunction",
+	"CallLibFunctionAndPop",
+	"Index",
+	"IndexLiteral8",
+	"IndexLiteral32",
+	"StackIndexHash",
+	"GlobalIndexHash",
+	"LocalIndexHash",
+	"Assign",
+	"AssignAndPop",
+	"AssignToGlobalAndPop",
+	"AssignToLocalAndPop",
+	"StackSwap",
+	"ReserveFrame",
+	"ReserveGlobalFrame",
+	"LoadFromLocal",
+	"LoadFromGlobal",
+	"PopOne",
+	"Return",
+	"Stop",
+	"BinaryAddition",
+	"BinarySubtraction",
+	"BinaryMultiplication",
+	"BinaryDivision",
+	"BinaryRightShift",
+	"BinaryLeftShift",
+	"BinaryMod",
+	"BinaryAnd",
+	"BinaryOr",
+	"BinaryXOR",
+	"BitwiseNOT",
+	"CoerceToInt",
+	"CoerceToFloat",
+	"RelativeJump",
+	"RelativeJump8",
+	"BZ",
+	"BZ8",
+	"BNZ",
+	"BNZ8",
+	"CompareEQ",
+	"CompareNE",
+	"CompareGE",
+	"CompareLE",
+	"CompareGT",
+	"CompareLT",
+	"CompareBEQ",
+	"CompareBNE",
+	"CompareBGE",
+	"CompareBLE",
+	"CompareBGT",
+	"CompareBLT",
+	"CompareBEQ8",
+	"CompareBNE8",
+	"CompareBGE8",
+	"CompareBLE8",
+	"CompareBGT8",
+	"CompareBLT8",
+	"PostIncrement",
+	"PostDecrement",
+	"PreIncrement",
+	"PreDecrement",
+	"Negate",
+	"SubtractAssign",
+	"AddAssign",
+	"ModAssign",
+	"MultiplyAssign",
+	"DivideAssign",
+	"ORAssign",
+	"ANDAssign",
+	"XORAssign",
+	"RightShiftAssign",
+	"LeftShiftAssign",
+	"SubtractAssignAndPop",
+	"AddAssignAndPop",
+	"ModAssignAndPop",
+	"MultiplyAssignAndPop",
+	"DivideAssignAndPop",
+	"ORAssignAndPop",
+	"ANDAssignAndPop",
+	"XORAssignAndPop",
+	"RightShiftAssignAndPop",
+	"LeftShiftAssignAndPop",
+	"LogicalAnd",
+	"LogicalOr",
+	"LogicalNot",
 };
 #endif
 

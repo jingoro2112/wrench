@@ -50,7 +50,7 @@ public:
 	WRstr( const WRstr& str) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; set(str, str.size()); } 
 	WRstr( const WRstr* str ) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; if ( str ) { set(*str, str->size()); } } 
 	WRstr( const char* s, const unsigned int len ) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; set(s, len); }
-	WRstr( const char* s ) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; set(s, strlen(s)); }
+	WRstr( const char* s ) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; set(s, (unsigned int)strlen(s)); }
 	WRstr( const char c) { m_len = 1; m_str = m_smallbuf; m_smallbuf[0] = c; m_smallbuf[1] = 0; m_buflen = c_sizeofBaseString; }
 	
 	~WRstr() { if ( m_str != m_smallbuf ) delete[] m_str; }
@@ -144,12 +144,12 @@ public:
 	}
 	
 	WRstr& operator += ( const WRstr& str ) { return append(str.m_str, str.m_len); }
-	WRstr& operator += ( const char* s ) { return append(s, strlen(s)); }
+	WRstr& operator += ( const char* s ) { return append(s, (unsigned int)strlen(s)); }
 	WRstr& operator += ( const char c ) { return append(c); }
 
 	WRstr& operator = ( const WRstr& str ) { if ( &str != this ) set(str, str.size()); return *this; }
 	WRstr& operator = ( const WRstr* str ) { if ( !str ) { clear(); } else if ( this != this ) { set(*str, str->size()); } return *this; }
-	WRstr& operator = ( const char* c ) { set(c, strlen(c)); return *this; }
+	WRstr& operator = ( const char* c ) { set(c, (unsigned int)strlen(c)); return *this; }
 	WRstr& operator = ( const char c ) { set(&c, 1); return *this; }
 
 	friend bool operator == ( const WRstr& s1, const WRstr& s2 ) { return s1.m_len == s2.m_len && (strncmp(s1.m_str, s2.m_str, s1.m_len) == 0); }
@@ -161,7 +161,7 @@ public:
 
 	friend WRstr operator + ( const WRstr& str, const char* s) { WRstr T(str); T += s; return T; }
 	friend WRstr operator + ( const WRstr& str, const char c) { WRstr T(str); T += c; return T; }
-	friend WRstr operator + ( const char* s, const WRstr& str ) { WRstr T(s, strlen(s)); T += str; return T; }
+	friend WRstr operator + ( const char* s, const WRstr& str ) { WRstr T(s, (unsigned int)strlen(s)); T += str; return T; }
 	friend WRstr operator + ( const char c, const WRstr& str ) { WRstr T(c); T += str; return T; }
 	friend WRstr operator + ( const WRstr& str1, const WRstr& str2 ) { WRstr T(str1); T += str2; return T; }
 

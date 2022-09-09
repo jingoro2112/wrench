@@ -1,3 +1,25 @@
+/*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
 #include <stdio.h>
 
 #define STR_FILE_OPERATIONS
@@ -5,6 +27,7 @@
 #include "discrete_src/str.h"
 
 int runTests( int number =0 );
+void setup();
 
 //------------------------------------------------------------------------------
 void blobToHeader( WRstr const& blob, WRstr const& variableName, WRstr& header )
@@ -60,7 +83,7 @@ int usage()
 		   "usage: wrench <command> [options]\n"
 			"where command is:\n"
 			"\n"
-			"cb [infile] [out as bytecode]  compile infile and output as raw bytecode\n"
+			"c [infile] [out as bytecode]   compile infile and output as raw bytecode\n"
 			"\n"
 			"ch [infile] [out file] [name]  compile infile and output as a header file\n"
 			"                               of name \"out file\"\n"
@@ -74,8 +97,8 @@ int usage()
 			"release [fromdir] [todir]      collect the discrete source files together\n"
 			"                               and output [todir]/wrench.[cpp/h]\n"
 			"\n"
-			"xb [binary file to execute]    execute the file as if its bytecode\n"
-			"xs [source file to execute]    compile and execute execute the file\n"
+			"rb [binary file to execute]    execute the file as if its bytecode\n"
+			"r  [source file to execute]    compile and execute execute the file\n"
 			"                               as if its source code\n"
 			"\n",
 			WRENCH_VERSION
@@ -96,15 +119,6 @@ static void log( WRState* s, const WRValue* argv, const int argn, WRValue& retVa
 }
 
 //------------------------------------------------------------------------------
-static void rnd( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
-{
-	if ( argn )
-	{
-		wr_makeInt( &retVal, wr_rand(argv[0].i) );
-	}
-}
-
-//------------------------------------------------------------------------------
 int main( int argn, char* argv[] )
 {
 	if ( argn <= 1 )
@@ -116,12 +130,14 @@ int main( int argn, char* argv[] )
 
 	if ( command == "t" )
 	{
+//		setup();
+
 		runTests( (argn >= 3) ? atoi(argv[2]) : 0 );
 	}
-	else if ( (command == "xb" || command == "xs") && argn == 3 )
+	else if ( (command == "rb" || command == "r") && argn == 3 )
 	{
 		WRstr bytes;
-		if ( command == "xb" )
+		if ( command == "rb" )
 		{
 			if ( !bytes.fileToBuffer(argv[2]) )
 			{
@@ -154,6 +170,7 @@ int main( int argn, char* argv[] )
 		}
 
 		WRState* w = wr_newState();
+		wr_loadAllLibs(w);
 		wr_registerFunction( w, "log", log );
 
 		wr_run( w, (const unsigned char *)bytes.c_str(), bytes.size() );
@@ -162,7 +179,7 @@ int main( int argn, char* argv[] )
 			printf( "err: %d\n", (int)wr_getLastError(w) );
 		}
 	}
-	else if ( command == "cb" || command == "ch" )
+	else if ( command == "c" || command == "ch" )
 	{
 		unsigned char* out;
 		int outLen;
@@ -182,7 +199,7 @@ int main( int argn, char* argv[] )
 		}
 
 		WRstr outname( argv[3] );
-		if ( command == "cb" && argn == 4)
+		if ( command == "c" && argn == 4)
 		{
 			code.set( (char *)out, outLen );
 		}
@@ -258,7 +275,7 @@ static void emit( WRState* s, const WRValue* argv, const int argn, WRValue& retV
 unsigned int cliTestLoader( const int offset, const unsigned char** block, void* usr )
 {
 	*block = (unsigned char *)usr + offset;
-	return 16; // return only 16 bytes at a time to be nasty
+	return 20; // return only 20 bytes at a time to be nasty
 }
 
 //------------------------------------------------------------------------------
@@ -268,19 +285,31 @@ int runTests( int number )
 	WRstr codeName;
 
 	WRValue userData;
+	WRValue subUserData;
+	WRValue data2;
 	WRValue userval;
 	unsigned char userChar[10];
 	int usrInt[10];
 	float usrFloat[10];
 	wr_makeUserData( &userData );
 
+
 	wr_addUserCharArray( &userData, "ac", userChar, 10 );
 	wr_addUserIntArray( &userData, "ai", usrInt, 10 );
 	wr_addUserFloatArray( &userData, "af", usrFloat, 10 );
 
-	wr_makeInt( &userval, 0 );
-	wr_addUserValue( &userData, "val", &userval );
+	wr_makeInt( &userval, 1 );
 
+	wr_addUserValue( &userData, "value", &userval );
+
+	wr_makeInt( &data2, 777 );
+	wr_makeUserData( &subUserData );
+	wr_addUserValue( &subUserData, "data2", &data2 );
+	wr_addUserCharArray( &subUserData, "data3", userChar, 10 );
+	userChar[1] = 222;
+
+
+	wr_addUserValue( &userData, "subUser", &subUserData );
 
 /*
 	user.ac[10]
@@ -294,7 +323,8 @@ int runTests( int number )
 	int err = 0;
 
 	WRState* w = wr_newState();
-	wr_registerFunction(w, "rand", rnd);
+
+	wr_loadAllLibs( w );
 
 	while( fgets(buf, 255, tfile) && (err==0) )
 	{
@@ -333,10 +363,10 @@ int runTests( int number )
 				wr_registerFunction( w, "log", emit, &logger );
 
 
-#ifdef SINGLE_COMPLETE_BYTECODE_LOAD
-				int context = wr_run( w, out, outLen );
-#else
+#ifdef PARTIAL_BYTECODE_LOADS
 				int context = wr_run( w, cliTestLoader, out );
+#else
+				int context = wr_run( w, out, outLen );
 #endif
 
 				if ( !wr_getLastError(w) )
@@ -387,3 +417,56 @@ int runTests( int number )
 }
 
 
+
+
+
+// COMPLETE EXAMPLE MUST WORK
+
+
+
+//#include <Arduino.h>
+#include "wrench.h"
+
+void log2( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	char buf[512];
+	for( int i=0; i<argn; ++i )
+	{
+		printf( "%s", wr_valueToString(argv[i], buf) );
+		printf( "%s", argv[i].asString(buf) );
+	}
+}
+
+const char* wrenchCode = 
+
+						"log( \"Hello World!\\n\" ); "
+						"for( i=0; i<10; i++ )       "
+						"{                           "
+						"    log( i );               "
+						"}                           ";
+
+
+void setup()
+{
+//	Serial.begin( 115200 );
+//	delay( 2000 ); // wait for link to come up for sample
+
+	WRState* w = wr_newState(); // create the state
+
+	wr_registerFunction( w, "log", log ); // bind a function
+
+	unsigned char* outBytes; // compiled code is alloc'ed
+	int outLen;
+
+	int err = wr_compile( wrenchCode, (int)strlen(wrenchCode), &outBytes, &outLen );                     
+	if ( err == 0 )
+	{
+		wr_run( w, outBytes, outLen ); // load and run the code!
+		delete[] outBytes; // clean up 
+	}
+
+	wr_destroyState( w );
+}
+
+void loop()
+{}
