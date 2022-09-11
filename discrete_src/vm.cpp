@@ -113,7 +113,7 @@ WRState* wr_newState( int stackSize )
 }
 
 //------------------------------------------------------------------------------
-WRRunContext::WRRunContext( WRState* state ) : w(state)
+WRContext::WRContext( WRState* state ) : w(state)
 {
 	localFunctions = 0;
 	globalSpace = 0;
@@ -124,7 +124,7 @@ WRRunContext::WRRunContext( WRState* state ) : w(state)
 }
 
 //------------------------------------------------------------------------------
-WRRunContext::~WRRunContext()
+WRContext::~WRContext()
 {
 	delete[] globalSpace;
 	delete[] localFunctions;
@@ -140,8 +140,6 @@ WRRunContext::~WRRunContext()
 //------------------------------------------------------------------------------
 WRState::WRState( int EntriesInStack )
 {
-	contextIdGenerator = 0;
-	
 	err = WR_ERR_None;
 
 	stackSize = EntriesInStack;
@@ -163,7 +161,7 @@ WRState::~WRState()
 {
 	while( contextList )
 	{
-		WRRunContext* next = contextList->next;
+		WRContext* next = contextList->next;
 		delete contextList;
 		contextList = next;
 	}
@@ -176,7 +174,7 @@ WRState::~WRState()
 }
 
 //------------------------------------------------------------------------------
-WRStaticValueArray* WRRunContext::getSVA( int size, WRStaticValueArrayType type )
+WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type )
 {
 	// gc before every alloc may seem a bit much but we want to be miserly
 	if ( svAllocated )
@@ -248,7 +246,7 @@ WRStaticValueArray* WRRunContext::getSVA( int size, WRStaticValueArrayType type 
 }
 
 //------------------------------------------------------------------------------
-void WRRunContext::gcArray( WRStaticValueArray* sva )
+void WRContext::gcArray( WRStaticValueArray* sva )
 {
 	sva->m_size |= 0x40000000;
 
@@ -287,33 +285,23 @@ WRError wr_getLastError( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-int wr_runEx( WRState* w )
+WRContext* wr_runEx( WRState* w )
 {
-	int context_id = ++w->contextIdGenerator;
-	if ( context_id == 0 ) // catch wraparound
-	{
-		++context_id;
-	}
-	
-	WRRunContext* C = new WRRunContext( w );
+	WRContext* C = new WRContext( w );
 	C->next = w->contextList;
 	w->contextList = C;
 	
-	w->contexts.set( context_id, C );
-
-	if ( wr_callFunction(w, context_id, (int32_t)0) )
+	if ( wr_callFunction(w, C, (int32_t)0) )
 	{
-		w->contextIdGenerator--;
-		delete C;
-		w->contexts.remove( context_id );
-		return -1;
+		wr_destroyContext( w, C );
+		return 0;
 	}
 
-	return context_id;
+	return C;
 }
 
 //------------------------------------------------------------------------------
-int wr_run( WRState* w, const unsigned char* block, const int size )
+WRContext* wr_run( WRState* w, const unsigned char* block, const int size )
 {
 	w->loader = wr_loadSingleBlock;
 	w->usr = (void*)block;
@@ -321,7 +309,7 @@ int wr_run( WRState* w, const unsigned char* block, const int size )
 }
 
 //------------------------------------------------------------------------------
-int wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr )
+WRContext* wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr )
 {
 	w->loader = loader;
 	w->usr = usr;
@@ -329,20 +317,12 @@ int wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr )
 }
 
 //------------------------------------------------------------------------------
-void wr_destroyContext( WRState* w, const int contextId )
+void wr_destroyContext( WRState* w, WRContext* context )
 {
-	WRRunContext* context;
-	if ( !contextId || !(context = w->contexts.getItem(contextId)) )
-	{
-		return;
-	}
-
-	w->contexts.remove( contextId );
-
-	WRRunContext* prev = 0;
+	WRContext* prev = 0;
 
 	// unlink it
-	for( WRRunContext* c = w->contextList; c; c = c->next )
+	for( WRContext* c = w->contextList; c; c = c->next )
 	{
 		if ( c == context )
 		{
@@ -446,13 +426,6 @@ char* WRValue::asString( char* string ) const
 }
 
 
-//------------------------------------------------------------------------------
-int wr_callFunction( WRState* w, const int contextId, const char* functionName, const WRValue* argv, const int argn )
-{
-	return wr_callFunction( w, contextId, wr_hashStr(functionName), argv, argn );
-}
-
-
 #ifdef D_OPCODE
 #define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)*pc, c_opcodeName[*pc]);
 #else
@@ -469,7 +442,51 @@ int wr_callFunction( WRState* w, const int contextId, const char* functionName, 
 
 
 //------------------------------------------------------------------------------
-int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const WRValue* argv, const int argn )
+int wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv, const int argn )
+{
+	return wr_callFunction( w, context, wr_hashStr(functionName), argv, argn );
+}
+
+//------------------------------------------------------------------------------
+int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
+{
+	WRFunction* function = 0;
+	if ( hash )
+	{
+		// if a function name is provided it is meant to be called
+		// directly. Set that up with a return vector of "stop"
+		if ( context->stopLocation == 0 )
+		{
+			return w->err = WR_ERR_run_must_be_called_by_itself_first;
+		}
+
+		function = context->localFunctionRegistry.getItem( hash );
+
+		if ( !function )
+		{
+			return w->err = WR_ERR_wrench_function_not_found;
+		}
+	}
+
+	return wr_callFunction( w, context, function, argv, argn );
+}
+
+
+//------------------------------------------------------------------------------
+WRFunction* wr_functionToIndex( WRContext* context, const int32_t hash )
+{
+	return context->localFunctionRegistry.getItem( hash );
+}
+
+//------------------------------------------------------------------------------
+WRFunction* wr_functionToIndex( WRContext* context, const char* functionName )
+{
+	return wr_functionToIndex( context, wr_hashStr(functionName) );
+}
+
+//------------------------------------------------------------------------------
+int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const WRValue* argv, const int argn )
+//int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
 {
 #ifdef JUMPTABLE_INTERPRETER
 	const void* opcodeJumptable[] =
@@ -578,30 +595,24 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 	};
 #endif
 
-	const unsigned char* pc;
-	WRValue* tempValue;
-	WRValue* tempValue2;
+	register const unsigned char* pc;
+	register WRValue* tempValue;
+	register WRValue* tempValue2;
 	WRValue* frameBase = 0;
-	WRFunctionRegistry* F;
-	unsigned char args;
 	WRValue* stackTop = w->stack;
 
 	w->err = WR_ERR_None;
 	
-	WRRunContext* context = w->contexts.getItem( contextId );
-	if ( !context )
-	{
-		return w->err = WR_ERR_context_not_found;
-	}
-	
 	union
 	{
+		// these are never used at the same time so don't waste ram
+		unsigned char args;
 		WRVoidFunc* voidFunc;
 		WRReturnFunc* returnFunc;
 		WRTargetFunc* targetFunc;
 	};
 
-#ifndef PARTIAL_BYTECODE_LOADS
+#ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 	if ( !(pc = context->bottom) )
 	{
 		w->loader( 0, &pc, w->usr );
@@ -615,23 +626,9 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 	pc = 0;
 	int absoluteBottom = 0; // pointer to where in the codebase out bottom actually points to
 #endif
-		
-	if ( hash )
+
+	if ( function )
 	{
-		// if a function name is provided it is meant to be called
-		// directly. Set that up with a return vector of "stop"
-		if ( context->stopLocation == 0 )
-		{
-			return w->err = WR_ERR_execute_must_be_called_by_itself_first;
-		}
-
-		F = context->localFunctionRegistry.getItem( hash );
-
-		if ( !F )
-		{
-			return w->err = WR_ERR_wrench_function_not_found;
-		}
-		
 		args = 0;
 		if ( argv && argn )
 		{
@@ -640,8 +637,8 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 				*stackTop++ = argv[args];
 			}
 		}
-
-#ifndef PARTIAL_BYTECODE_LOADS
+		
+#ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 		pc = context->bottom + context->stopLocation;
 #else
 		unsigned int size = loader( absoluteBottom = context->stopLocation, &pc, usr );
@@ -659,17 +656,7 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 
 	for(;;)
 	{
-		#ifndef WRENCH_IGNORE_BYTECODE_WARNINGS
-		/* // yeah... well... 
-		if ( w->err )
-		{
-			// then do something I guess
-			w->err = WR_ERR_None;
-		}
-		*/
-        #endif
-
-        #ifdef PARTIAL_BYTECODE_LOADS
+        #ifdef WRENCH_PARTIAL_BYTECODE_LOADS
 		if ( pc >= top )
 		{
 			unsigned int size = loader( absoluteBottom += (pc - context->bottom), &pc, usr );
@@ -688,7 +675,7 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 				context->localFunctions[ index ].frameSpaceNeeded = (stackTop - 3)->i;
 				context->localFunctions[ index ].hash = (stackTop - 2)->i;
 				
-#ifndef PARTIAL_BYTECODE_LOADS
+#ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				context->localFunctions[index].offset = (stackTop - 1)->i + context->bottom; // absolute
 #else
 				context->localFunctions[index].offsetI = (stackTop - 1)->i; // relative
@@ -708,7 +695,7 @@ int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const 
 			{
 				delete context->localFunctions;
 				context->localFunctionRegistry.clear();
-				context->localFunctions = new WRFunctionRegistry[ *pc++ ];
+				context->localFunctions = new WRFunction[ *pc++ ];
 				CONTINUE;
 			}
 
@@ -750,20 +737,21 @@ load32ToStackTop:
 				pc += 2;
 				stackTop->type = WR_ARRAY;
 				stackTop->va = context->getSVA( len, SV_CHAR );
-				
+
+#ifndef WRENCH_PARTIAL_BYTECODE_LOADS
+				memcpy( (unsigned char *)stackTop->va->m_data, pc, len );
+				pc += len;
+#else
 				for( int c=0; c<len; ++c )
 				{
-					((unsigned char *)stackTop->va->m_data)[c] = *pc++;
-
-#ifdef PARTIAL_BYTECODE_LOADS
 					if ( pc >= top )
 					{
 						unsigned int size = loader( absoluteBottom += (pc - context->bottom), &pc, usr );
 						top = pc + (size - 6);
 						context->bottom = pc;
 					}
-#endif
 				}
+#endif
 				++stackTop;
 				CONTINUE;
 			}
@@ -956,14 +944,15 @@ binaryTableOpAndPop:
 			CASE(StackSwap):
 			{
 				tempValue = stackTop - 1;
+				tempValue2 = stackTop - *pc++;
 				uint32_t t = tempValue->p2;
 				const void* p = tempValue->p;
 				
-				tempValue->p2 = (stackTop - *pc)->p2;
-				tempValue->p = (stackTop - *pc)->p;
+				tempValue->p2 = tempValue2->p2;
+				tempValue->p = tempValue2->p;
 
-				(stackTop - *pc)->p = p;
-				(stackTop - *pc++)->p2 = t;
+				tempValue2->p = p;
+				tempValue2->p2 = t;
 
 				CONTINUE;
 			}
@@ -1038,20 +1027,20 @@ binaryTableOpAndPop:
 
 			CASE(CallFunctionByIndex):
 			{
-				F = context->localFunctions + *pc;
+				function = context->localFunctions + *pc;
 				pc += 4;
 				args = *pc++;
 callFunction:				
 				// rectify arg count
-				if ( args != F->arguments )
+				if ( args != function->arguments )
 				{
-					if ( args > F->arguments )
+					if ( args > function->arguments )
 					{
-						stackTop -= args - F->arguments; // poof
+						stackTop -= args - function->arguments; // poof
 					}
 					else
 					{
-						for( char a=args; a < F->arguments; ++a )
+						for( char a=args; a < function->arguments; ++a )
 						{
 							stackTop->p = 0;
 							(stackTop++)->p2 = 0;
@@ -1061,7 +1050,7 @@ callFunction:
 
 				// the arguments are at framepace 0, add more to make
 				// up for the locals in the function
-				for( int i=0; i<F->frameSpaceNeeded; ++i )
+				for( int i=0; i<function->frameSpaceNeeded; ++i )
 				{
 					stackTop->p = 0;
 					(stackTop++)->p2 = 0;
@@ -1071,23 +1060,23 @@ callFunction:
 				tempValue = stackTop++; // return vector
 				tempValue->type = WR_INT;
 				
-#ifndef PARTIAL_BYTECODE_LOADS
+#ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				
 				tempValue->p = pc; // simple for big-blob case
-				pc = F->offset;
+				pc = function->offset;
 #else
 				// relative position in the code to return to
 				tempValue->i = absoluteBottom + (pc - context->bottom);
 
-				if ( F->offsetI >= absoluteBottom )
+				if ( function->offsetI >= absoluteBottom )
 				{
 					// easy, function is within this loaded block
-					pc = context->bottom + (F->offsetI - absoluteBottom);
+					pc = context->bottom + (function->offsetI - absoluteBottom);
 				}
 				else
 				{
 					// less easy, have to load the new block
-					unsigned int size = loader( absoluteBottom = F->offsetI, &pc, usr );
+					unsigned int size = loader( absoluteBottom = function->offsetI, &pc, usr );
 					top = pc + (size - 6);
 					context->bottom = pc;
 				}
@@ -1098,7 +1087,7 @@ callFunction:
 				(stackTop++)->p = frameBase; // very top is the old framebase
 
 				// set the new frame base to the base arguments the function is expecting
-				frameBase = stackTop - F->frameBaseAdjustment;
+				frameBase = stackTop - function->frameBaseAdjustment;
 
 				CONTINUE;
 			}
@@ -1167,7 +1156,7 @@ callFunction:
 
 			CASE(Return):
 			{
-#ifndef PARTIAL_BYTECODE_LOADS
+#ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				// copy the return value
 				pc = (unsigned char*)((stackTop - 3)->p); // grab return PC
 #else

@@ -196,7 +196,7 @@ const char* wr_asciiDump( const void* d, unsigned int len, WRstr* str =0 );
 #endif // WRENCH_WITHOUT_COMPILER
 
 //------------------------------------------------------------------------------
-const int32_t c_primeTable[] =
+const uint16_t c_primeTable[] =
 {
 //	2,
 	5,
@@ -211,18 +211,13 @@ const int32_t c_primeTable[] =
 	769,
 	1543,
 	3079,
-#ifndef UNLIMITED_HASH_SIZE
-	0
-#else
+	6151,
 
-	// what are you doing here? This is a tiny embedded scripting
-	// language.. if you have RAM to burn then use something mature
-	// like lua
-
-	6151,  
-	12289, // use wren
+	12289,
 	24593,
-	49157, // use python
+	49157,
+};
+/*
 	98317,
 	196613, // use java
 	393241,
@@ -238,8 +233,8 @@ const int32_t c_primeTable[] =
 	402653189,
 	805306457, 
 	1610612741, // use HAL-9000
-#endif
 };
+*/
 
 //------------------------------------------------------------------------------
 template <class T> class WRHashTable
@@ -247,11 +242,11 @@ template <class T> class WRHashTable
 public:
 	WRHashTable( int sizeHint =0 )
 	{
-		for( int i=0; c_primeTable[i]; ++i )
+		for( uint16_t i=0; c_primeTable[i]; ++i )
 		{
 			if ( sizeHint < c_primeTable[i] )
 			{
-				m_mod = c_primeTable[i];
+				m_mod = (int)c_primeTable[i];
 				m_list = new Node[m_mod];
 				break;
 			}
@@ -263,7 +258,7 @@ public:
 	void clear()
 	{
 		delete[] m_list;
-		m_mod = c_primeTable[0];
+		m_mod = (int)c_primeTable[0];
 		m_list = new Node[m_mod];
 	}
 

@@ -1,0 +1,13 @@
+9/11/22 1.2.0 -------------------------------------------------------------------
+- removed need for context ID and just track the object directly
+- added function to call a pre-indexed function
+
+9/8/22 1.1.0 -------------------------------------------------------------------
+- added jumptable interpreter
+- added some "super" opcodes for more compressed bytecode:
+   O_LiteralInt8ToGlobal
+   O_LiteralInt32ToLocal
+   O_LiteralInt8ToLocal
+   O_LiteralFloatToGlobal
+   O_LiteralFloatToLocal
+   O_LiteralInt32ToGlobal

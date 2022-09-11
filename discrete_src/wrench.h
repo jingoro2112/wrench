@@ -53,7 +53,7 @@ NOTE: Error/Warnings are not checked when this flag is on (SPEED!), so best to
 test with it off and only turn it on once you're sure everything is
 working properly and it's time to turn on the afterburners.
 */
-#define JUMPTABLE_INTERPRETER
+#define WRENCH_JUMPTABLE_INTERPRETER
 /***********************************************************************/
 
 /************************************************************************
@@ -75,7 +75,7 @@ size of the mapped block. (see WR_LOAD_BLOCK_FUNC)
 ******** RETURN AT LEAST 20 BYTES or "bad things" happen ******
 
 */
-//#define PARTIAL_BYTECODE_LOADS
+//#define WRENCH_PARTIAL_BYTECODE_LOADS
 /***********************************************************************/
 
 /************************************************************************
@@ -87,7 +87,7 @@ like crazy a modest size should be more than enough.
 
 On most systems this will consume 8 bytes per stack entry
 */
-#define DEFAULT_STACK_SIZE 100
+#define WRENCH_DEFAULT_STACK_SIZE 100
 /***********************************************************************/
 
 /************************************************************************
@@ -99,18 +99,6 @@ this off once the app is fully debugged and tested.
 /***********************************************************************/
 
 /************************************************************************
-There are a few hash tables here, and they are simple single-level
-affairs. in order to do this they grow-on-collide
-to the next sensible prime number. there is a limit built in at around
-a 4000 entry table. if you have access to that kind of RAM then use
-lua or some other mature full-featured scripting engine
-if you REALLY want to use wrench then.. yay I guess.. uncomment this
-and there will be no [practical] upper bound
-*/
-//#define UNLIMITED_HASH_SIZE
-/***********************************************************************/
-
-/************************************************************************
 .asString() uses sprintf from stdio. If you don't want to
 include or use that library then undefine this and that method will no
 longer function
@@ -118,18 +106,20 @@ longer function
 #define SPRINTF_OPERATIONS
 /***********************************************************************/
 
-#define WRENCH_VERSION 110
+#define WRENCH_VERSION 120
 
 #include <stdint.h>
 struct WRState;
 struct WRValue;
+struct WRContext;
+struct WRFunction;
 
 /***************************************************************/
 /**************************************************************/
 //                       State Management
 
 // create/destroy a WRState object that can run multiple contexts/threads
-WRState* wr_newState( int stackSize =DEFAULT_STACK_SIZE );
+WRState* wr_newState( int stackSize =WRENCH_DEFAULT_STACK_SIZE );
 void wr_destroyState( WRState* w );
 
 
@@ -139,11 +129,11 @@ void wr_destroyState( WRState* w );
 //                        Running Code
 
 //     function the interpreter calls to get a block of bytecode
-// if PARTIAL_BYTECODE_LOADS is defined, it expects at least 20 bytes
+// if WRENCH_PARTIAL_BYTECODE_LOADS is defined, it expects at least 20 bytes
 // of code returned per call and will re-call it any time code is
 // needed from outside the returned region.
 //
-// if PARTIAL_BYTECODE_LOADS is NOT defined (default) this will be
+// if WRENCH_PARTIAL_BYTECODE_LOADS is NOT defined (default) this will be
 // called exactly one time and expects the entire code block to be
 // returned; it will not be checked again.
 //
@@ -151,7 +141,7 @@ void wr_destroyState( WRState* w );
 // internal buffer so it must remain valid for the life of the execution
 //
 // offset: where in the bytecode stream wrench wants to load (will be zero
-//         for non - PARTIAL_BYTECODE_LOADS)
+//         for non - WRENCH_PARTIAL_BYTECODE_LOADS)
 // block:  pointer to pointer where the block is mapped, this can be
 //         read-only and must remain valid for the life of the script!
 // usr:    opaque user-supplied pointer passed to each load call (optional)
@@ -163,17 +153,16 @@ typedef unsigned int (*WR_LOAD_BLOCK_FUNC)( int offset, const unsigned char** bl
 int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg =0 );
 
 // run a block of code, either as a single block or with a loader that
-// will be called back. PLEASE SEE NOTES ABOVE REGARDING: PARTIAL_BYTECODE_LOADS
+// will be called back. PLEASE SEE NOTES ABOVE REGARDING: WRENCH_PARTIAL_BYTECODE_LOADS
 
 // w:          state
 // block/size: location of bytecode
 // loader/usr: callback for loader and a void* pointer that will be
 //             passed to the loader opaquely (optional)
-// RETURNS:    a contextId which must be passed to callFunction when
-//             multiple scripts are loaded into a single state
+// RETURNS:    a WRContext pointer be passed to callFunction
 //             'global' values are NOT SHARED between contexts
-int wr_run( WRState* w, const unsigned char* block, const int size );
-int wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr =0 );
+WRContext* wr_run( WRState* w, const unsigned char* block, const int size );
+WRContext* wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr =0 );
 
 
 // after wr_run, this allows any function contained to be
@@ -185,14 +174,31 @@ int wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr =0 );
 // argn:         how many arguments argv contains (optional, but if
 //               zero then argv will be ignored)
 // RETURNS:      zero for no error or WRError code
-int wr_callFunction( WRState* w, const int contextId, const char* functionName, const WRValue* argv =0, const int argn =0 );
-int wr_callFunction( WRState* w, const int contextId, const int32_t hash, const WRValue* argv =0, const int argn =0 );
+int wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv =0, const int argn =0 );
+
+// exactly the same as the above but the hash is supplied directly to
+// save compute time, us wr_hashStr(...) to obtain the hash of the
+// functionName
+int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv =0, const int argn =0 );
+
+// the function must be a function pointed to in the supplied
+// context and is not globally unique, fetch it with
+// wr_getFunction(...)
+// This method is exposed so functions can be called without any of the
+// internal overhead required.
+int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const WRValue* argv, const int argn );
+
+// hash is obtained by calling wr_hashStr(...) if you want to
+// precompute/cache it
+WRFunction* wr_getFunction( WRContext* context, const int32_t hash );
+WRFunction* wr_getFunction( WRContext* context, const char* functionName );
+
 
 // use this to destroy a context you no longer need and free up all the
 // memory it was using, all contexts are freed when wr_destroyState()
 // is called, so calling this is not necessary, but reccomended so the
 // memory can be re-used
-void wr_destroyContext( WRState* w, const int contextId );
+void wr_destroyContext( WRState* w, WRContext* context );
 
 
 /***************************************************************/
@@ -343,7 +349,7 @@ enum WRError
 	WR_ERR_expected_while,
 	WR_ERR_compiler_panic,
 
-	WR_ERR_execute_must_be_called_by_itself_first,
+	WR_ERR_run_must_be_called_by_itself_first,
 	WR_ERR_hash_table_size_exceeded,
 	WR_ERR_wrench_function_not_found,
 	WR_ERR_array_must_be_indexed,
@@ -467,12 +473,12 @@ struct WRValue
 	};
 };
 
-#ifdef JUMPTABLE_INTERPRETER
+#ifdef WRENCH_JUMPTABLE_INTERPRETER
  #ifndef __GNUC__
-  #undef JUMPTABLE_INTERPRETER
+  #undef WRENCH_JUMPTABLE_INTERPRETER
  #else
-  #ifdef PARTIAL_BYTECODE_LOADS
-   #error JUMPTABLE_INTERPRETER and PARTIAL_BYTECODE_LOADS are incompatible!
+  #ifdef WRENCH_PARTIAL_BYTECODE_LOADS
+   #error WRENCH_JUMPTABLE_INTERPRETER and WRENCH_PARTIAL_BYTECODE_LOADS are incompatible!
   #endif
  #endif
 #endif

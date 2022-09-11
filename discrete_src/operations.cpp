@@ -37,7 +37,7 @@ SOFTWARE.
 static void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
 static bool doReturnFuncBlank( WRValue* to, WRValue* from ) { return false; }
 static void doTargetFuncBlank( WRValue* to, WRValue* from, WRValue* target ) {}
-static void doVoidIndexFunc( WRRunContext* c, WRValue* index, WRValue* value ) {}
+static void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value ) {}
 static bool doSingleBlank( WRValue* value ) { return false; }
 static void doSingleVoidBlank( WRValue* value ) {}
 
@@ -1872,7 +1872,7 @@ WRReturnFunc wr_LogicalOR[36] =
 
 
 //------------------------------------------------------------------------------
-static void doIndex_I_X( WRRunContext* c, WRValue* index, WRValue* value )
+static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value )
 {
 	// indexing with an int, but what we are indexing is NOT an array,
 	// make it one and return a ref
@@ -1883,7 +1883,7 @@ static void doIndex_I_X( WRRunContext* c, WRValue* index, WRValue* value )
 	value->type = WR_REF;
 
 }
-static void doIndex_I_R( WRRunContext* c, WRValue* index, WRValue* value ) 
+static void doIndex_I_R( WRContext* c, WRValue* index, WRValue* value ) 
 {
 	// indexing with an int into a ref, is it an array?
 	if ( value->r->type != WR_ARRAY )
@@ -1914,7 +1914,7 @@ static void doIndex_I_R( WRRunContext* c, WRValue* index, WRValue* value )
 	}
 }
 
-static void doIndex_I_A( WRRunContext* c, WRValue* index, WRValue* value )
+static void doIndex_I_A( WRContext* c, WRValue* index, WRValue* value )
 {
 	if ( (value->va->m_type&0x3) == SV_VALUE )
 	{
@@ -1923,12 +1923,12 @@ static void doIndex_I_A( WRRunContext* c, WRValue* index, WRValue* value )
 	}
 }
 
-static void doIndex_R_I( WRRunContext* c, WRValue* index, WRValue* value )
+static void doIndex_R_I( WRContext* c, WRValue* index, WRValue* value )
 {
 	wr_index[index->r->type*6+WR_INT](c, index->r, value);
 }
 
-static void doIndex_R_R( WRRunContext* c, WRValue* index, WRValue* value )
+static void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value )
 {
 	if ( value->r->type != WR_USR )
 	{
@@ -1943,11 +1943,11 @@ static void doIndex_R_R( WRRunContext* c, WRValue* index, WRValue* value )
 		wr_index[index->r->type*6+WR_REF](c, index->r, value);
 	}
 }
-static void doIndex_R_F( WRRunContext* c, WRValue* index, WRValue* value )
+static void doIndex_R_F( WRContext* c, WRValue* index, WRValue* value )
 {
 	wr_index[index->r->type*6+WR_FLOAT](c, index->r, value);
 }
-static void doIndex_R_A( WRRunContext* c, WRValue* index, WRValue* value )
+static void doIndex_R_A( WRContext* c, WRValue* index, WRValue* value )
 {
 	wr_index[index->r->type*6+WR_ARRAY](c, index->r, value);
 }

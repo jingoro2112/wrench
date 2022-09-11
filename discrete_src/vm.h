@@ -93,7 +93,7 @@ private:
 };
 
 //------------------------------------------------------------------------------
-struct WRFunctionRegistry
+struct WRFunction
 {
 	union
 	{
@@ -127,10 +127,10 @@ enum WRStaticValueArrayType
 };
 
 //------------------------------------------------------------------------------
-struct WRRunContext
+struct WRContext
 {
-	WRFunctionRegistry* localFunctions;
-	WRHashTable<WRFunctionRegistry*> localFunctionRegistry;
+	WRFunction* localFunctions;
+	WRHashTable<WRFunction*> localFunctionRegistry;
 	WRValue* globalSpace;
 	int globals;
 
@@ -143,18 +143,15 @@ struct WRRunContext
 
 	WRState* w;
 	
-	WRRunContext* next;
+	WRContext* next;
 	
-	WRRunContext( WRState* state );
-	~WRRunContext();
+	WRContext( WRState* state );
+	~WRContext();
 };
 
 //------------------------------------------------------------------------------
 struct WRState
 {
-	int contextIdGenerator;
-	WRHashTable<WRRunContext*> contexts;
-
 	WRHashTable<WRCFunctionCallback> c_functionRegistry;
 	WRHashTable<WR_LIB_CALLBACK> c_libFunctionRegistry;
 
@@ -168,9 +165,9 @@ struct WRState
 	void* usr;
 	
 	WRValue* returnValue;
-	WRRunContext* contextList;
+	WRContext* contextList;
 
-	WRState( int EntriesInStack =DEFAULT_STACK_SIZE );
+	WRState( int EntriesInStack =WRENCH_DEFAULT_STACK_SIZE );
 	~WRState();
 };
 
@@ -280,7 +277,7 @@ extern WRTargetFunc wr_binaryAND[36];
 extern WRTargetFunc wr_binaryOR[36];
 extern WRTargetFunc wr_binaryXOR[36];
 
-typedef void (*WRStateFunc)( WRRunContext* c, WRValue* to, WRValue* from );
+typedef void (*WRStateFunc)( WRContext* c, WRValue* to, WRValue* from );
 extern WRStateFunc wr_index[36];
 
 typedef bool (*WRReturnFunc)( WRValue* to, WRValue* from );

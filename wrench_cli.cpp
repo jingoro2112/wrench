@@ -364,9 +364,9 @@ int runTests( int number )
 
 
 #ifdef PARTIAL_BYTECODE_LOADS
-				int context = wr_run( w, cliTestLoader, out );
+				WRContext* context = wr_run( w, cliTestLoader, out );
 #else
-				int context = wr_run( w, out, outLen );
+				WRContext* context = wr_run( w, out, outLen );
 #endif
 
 				if ( !wr_getLastError(w) )
