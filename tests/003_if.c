@@ -18,6 +18,7 @@ yay2
 yay3
 ~*/
 
+
 if ( 9 < 10 ) log("a");
 if ( 11 < 10 ) log("a fail");
 if ( 9 > 10 ) log("b fail");
@@ -33,7 +34,6 @@ if ( 10 != 10 ) log("f faile");
 
 
 a = 10;
-
 
 
 if ( a == 10 )
@@ -92,11 +92,11 @@ if ( a == 10 && b == 20 && ((8 + 3 + c++ - --d) == 10) )
 if ( a == 10 && b == 20 && ((8 + 3 + c++ - --d) == 1) )
 {
 	if ( b = 5 )
+		
 		if ( c = 5 )
 		{
 			if ( b + c == 10 )
 				log( "made it" );
-			
 			log( "here too" );
 		}
 		else

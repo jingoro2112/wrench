@@ -1,12 +1,12 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <LocalDebuggerCommandArguments>t 8</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>r perf\exp\exp.w</LocalDebuggerCommandArguments>
     <LocalDebuggerWorkingDirectory>..\</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <LocalDebuggerCommandArguments>t</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>r perf\exp\exp.w</LocalDebuggerCommandArguments>
     <LocalDebuggerWorkingDirectory>..\</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>

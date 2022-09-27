@@ -199,7 +199,7 @@ const char* wr_asciiDump( const void* d, unsigned int len, WRstr* str =0 );
 //------------------------------------------------------------------------------
 const uint16_t c_primeTable[] =
 {
-//	2,
+	2,
 	5,
 	11,
 	17,
@@ -213,7 +213,6 @@ const uint16_t c_primeTable[] =
 	1543,
 	3079,
 	6151,
-
 	12289,
 	24593,
 	49157,
@@ -461,16 +460,16 @@ private:
 //------------------------------------------------------------------------------
 struct WRFunction
 {
+	
+	char arguments;
+	char frameSpaceNeeded;
+	char frameBaseAdjustment;
+	uint32_t hash;
 	union
 	{
 		const unsigned char* offset;
 		int offsetI;
 	};
-	
-	uint32_t hash;
-	char arguments;
-	char frameSpaceNeeded;
-	char frameBaseAdjustment;
 };
 
 //------------------------------------------------------------------------------
@@ -504,11 +503,14 @@ struct WRContext
 	int32_t stopLocation;
 
 	WRStaticValueArray* svAllocated;
-	WRStaticValueArray* getSVA( int size, WRStaticValueArrayType type = SV_VALUE );
+	WRStaticValueArray* getSVA( int size, WRStaticValueArrayType type, WRValue* stackTop );
 	void gcArray( WRStaticValueArray* sva );
 
 	WRState* w;
-	
+
+	WR_LOAD_BLOCK_FUNC loader;
+	void* usr;
+
 	WRContext* next;
 	
 	WRContext( WRState* state );
@@ -525,12 +527,7 @@ struct WRState
 
 	WRValue* stack;
 	int stackSize;
-	WRValue* stackTop;
-	
-	WR_LOAD_BLOCK_FUNC loader;
-	void* usr;
-	
-	WRValue* returnValue;
+
 	WRContext* contextList;
 
 	WRState( int EntriesInStack =WRENCH_DEFAULT_STACK_SIZE );
@@ -606,69 +603,74 @@ public:
 	}
 };
 
+#define GET_LIB_RETURN_VALUE_LOCATION( s, a ) ((s) - 1)
+#define INIT_AS_ARRAY    (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
+#define INIT_AS_USR      (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
+#define INIT_AS_REFARRAY (((uint32_t)WR_EX) | ((uint32_t)WR_EX_REFARRAY<<24))
+#define INIT_AS_REF      WR_REF
+#define INIT_AS_INT      WR_INT
+#define INIT_AS_FLOAT    WR_FLOAT
+
+#define ARRAY_ELEMENT_FROM_P2(P) (((P)&0x00FFFF00) >> 8)
+#define ARRAY_ELEMENT_TO_P2(P,E) { (P)->padL = (E); (P)->padH  = ((E)>>8); }
+
 void wr_arrayToValue( const WRValue* array, WRValue* value );
 void wr_intValueToArray( const WRValue* array, int32_t I );
 void wr_floatValueToArray( const WRValue* array, float F );
 
 typedef void (*WRVoidFunc)( WRValue* to, WRValue* from );
-extern WRVoidFunc wr_assign[36];
+extern WRVoidFunc wr_assign[16];
 
-extern WRVoidFunc wr_SubtractAssign[36];
-extern WRVoidFunc wr_AddAssign[36];
-extern WRVoidFunc wr_ModAssign[36];
-extern WRVoidFunc wr_MultiplyAssign[36];
-extern WRVoidFunc wr_DivideAssign[36];
-extern WRVoidFunc wr_ORAssign[36];
-extern WRVoidFunc wr_ANDAssign[36];
-extern WRVoidFunc wr_XORAssign[36];
-extern WRVoidFunc wr_RightShiftAssign[36];
-extern WRVoidFunc wr_LeftShiftAssign[36];
-extern WRVoidFunc wr_postinc[6];
-extern WRVoidFunc wr_postdec[6];
-
+extern WRVoidFunc wr_SubtractAssign[16];
+extern WRVoidFunc wr_AddAssign[16];
+extern WRVoidFunc wr_ModAssign[16];
+extern WRVoidFunc wr_MultiplyAssign[16];
+extern WRVoidFunc wr_DivideAssign[16];
+extern WRVoidFunc wr_ORAssign[16];
+extern WRVoidFunc wr_ANDAssign[16];
+extern WRVoidFunc wr_XORAssign[16];
+extern WRVoidFunc wr_RightShiftAssign[16];
+extern WRVoidFunc wr_LeftShiftAssign[16];
+extern WRVoidFunc wr_postinc[4];
+extern WRVoidFunc wr_postdec[4];
 
 typedef void (*WRTargetFunc)( WRValue* to, WRValue* from, WRValue* target );
-extern WRTargetFunc wr_binaryAddition[36];
-
-extern WRTargetFunc wr_binaryAddition2[36];
-
-
-extern WRTargetFunc wr_binaryMultiply[36];
-extern WRTargetFunc wr_binarySubtract[36];
-extern WRTargetFunc wr_binaryDivide[36];
-extern WRTargetFunc wr_binaryLeftShift[36];
-extern WRTargetFunc wr_binaryRightShift[36];
-extern WRTargetFunc wr_binaryMod[36];
-extern WRTargetFunc wr_binaryAND[36];
-extern WRTargetFunc wr_binaryOR[36];
-extern WRTargetFunc wr_binaryXOR[36];
+extern WRTargetFunc wr_AdditionBinary[16];
+extern WRTargetFunc wr_MultiplyBinary[16];
+extern WRTargetFunc wr_SubtractBinary[16];
+extern WRTargetFunc wr_DivideBinary[16];
+extern WRTargetFunc wr_LeftShiftBinary[16];
+extern WRTargetFunc wr_RightShiftBinary[16];
+extern WRTargetFunc wr_ModBinary[16];
+extern WRTargetFunc wr_ANDBinary[16];
+extern WRTargetFunc wr_ORBinary[16];
+extern WRTargetFunc wr_XORBinary[16];
 
 typedef void (*WRStateFunc)( WRContext* c, WRValue* to, WRValue* from );
-extern WRStateFunc wr_index[36];
+extern WRStateFunc wr_index[16];
 
 typedef bool (*WRReturnFunc)( WRValue* to, WRValue* from );
-extern WRReturnFunc wr_CompareEQ[36];
-extern WRReturnFunc wr_CompareGT[36];
-extern WRReturnFunc wr_CompareLT[36];
-extern WRReturnFunc wr_LogicalAND[36];
-extern WRReturnFunc wr_LogicalOR[36];
+extern WRReturnFunc wr_CompareEQ[16];
+extern WRReturnFunc wr_CompareGT[16];
+extern WRReturnFunc wr_CompareLT[16];
+extern WRReturnFunc wr_LogicalAND[16];
+extern WRReturnFunc wr_LogicalOR[16];
 
 typedef void (*WRUnaryFunc)( WRValue* value );
-extern WRUnaryFunc wr_negate[6];
-extern WRUnaryFunc wr_preinc[6];
-extern WRUnaryFunc wr_predec[6];
-extern WRUnaryFunc wr_toInt[6];
-extern WRUnaryFunc wr_toFloat[6];
-extern WRUnaryFunc wr_bitwiseNot[6];
+extern WRUnaryFunc wr_negate[4];
+extern WRUnaryFunc wr_preinc[4];
+extern WRUnaryFunc wr_predec[4];
+extern WRUnaryFunc wr_toInt[4];
+extern WRUnaryFunc wr_toFloat[4];
+extern WRUnaryFunc wr_bitwiseNot[4];
 
 typedef bool (*WRReturnSingleFunc)( WRValue* value );
-extern WRReturnSingleFunc wr_LogicalNot[6];
 
 typedef bool (*WRValueCheckFunc)( WRValue* value );
-extern WRValueCheckFunc wr_ZeroCheck[6];
+extern WRReturnSingleFunc wr_LogicalNot[4];
 
 typedef void (*WRUserHashFunc)( WRValue* value, WRValue* target, int32_t hash );
-extern WRUserHashFunc wr_UserHash[6];
+extern WRUserHashFunc wr_UserHash[4];
 
 
 #endif
@@ -703,30 +705,24 @@ enum WROpcode
 	O_RegisterFunction = 0,
 	O_FunctionListSize,
 	
-	O_LiteralZero,
-	O_LiteralInt8,
 	O_LiteralInt32,
+	O_LiteralZero,
 	O_LiteralFloat,
 	O_LiteralString,
 
 	O_CallFunctionByHash,
-	O_CallFunctionByHashAndPop,
 	O_CallFunctionByIndex,
 	O_CallLibFunction,
-	O_CallLibFunctionAndPop,
 
 	O_Index,
-	O_IndexLiteral8,
-	O_IndexLiteral32,
 	O_StackIndexHash,
 	O_GlobalIndexHash,
 	O_LocalIndexHash,
 	
 	O_Assign,
-	O_AssignAndPop,
-	O_AssignToGlobalAndPop,
-	O_AssignToLocalAndPop,
+
 	O_StackSwap,
+	O_SwapTwoToTop,
 
 	O_ReserveFrame,
 	O_ReserveGlobalFrame,
@@ -734,9 +730,9 @@ enum WROpcode
 	O_LoadFromLocal,
 	O_LoadFromGlobal,
 
-	O_PopOne, // pop exactly one value from stack
-	O_Return, // end of a unit
-	O_Stop, // end of a program
+	O_PopOne,
+	O_Return,
+	O_Stop,
 
 	O_BinaryAddition,
 	O_BinarySubtraction,
@@ -748,18 +744,15 @@ enum WROpcode
 	O_BinaryAnd,
 	O_BinaryOr,
 	O_BinaryXOR,
+
 	O_BitwiseNOT,
 
 	O_CoerceToInt,
 	O_CoerceToFloat,
 
 	O_RelativeJump,
-	O_RelativeJump8,
 	
 	O_BZ,
-	O_BZ8,
-	O_BNZ,
-	O_BNZ8,
 
 	O_CompareEQ, 
 	O_CompareNE, 
@@ -767,6 +760,102 @@ enum WROpcode
 	O_CompareLE,
 	O_CompareGT,
 	O_CompareLT,
+
+	O_GSCompareEQ, 
+	O_LSCompareEQ, 
+	O_GSCompareNE, 
+	O_LSCompareNE, 
+	O_GSCompareGE,
+	O_LSCompareGE,
+	O_GSCompareLE,
+	O_LSCompareLE,
+	O_GSCompareGT,
+	O_LSCompareGT,
+	O_GSCompareLT,
+	O_LSCompareLT,
+
+	O_GSCompareEQBZ, 
+	O_LSCompareEQBZ, 
+	O_GSCompareNEBZ, 
+	O_LSCompareNEBZ, 
+	O_GSCompareGEBZ,
+	O_LSCompareGEBZ,
+	O_GSCompareLEBZ,
+	O_LSCompareLEBZ,
+	O_GSCompareGTBZ,
+	O_LSCompareGTBZ,
+	O_GSCompareLTBZ,
+	O_LSCompareLTBZ,
+
+	O_GSCompareEQBZ8,
+	O_LSCompareEQBZ8,
+	O_GSCompareNEBZ8,
+	O_LSCompareNEBZ8,
+	O_GSCompareGEBZ8,
+	O_LSCompareGEBZ8,
+	O_GSCompareLEBZ8,
+	O_LSCompareLEBZ8,
+	O_GSCompareGTBZ8,
+	O_LSCompareGTBZ8,
+	O_GSCompareLTBZ8,
+	O_LSCompareLTBZ8,
+
+	O_PostIncrement,
+	O_PostDecrement,
+	O_PreIncrement,
+	O_PreDecrement,
+
+	O_PreIncrementAndPop,
+	O_PreDecrementAndPop,
+	O_IncGlobal,
+	O_DecGlobal,
+	O_IncLocal,
+	O_DecLocal,
+
+	O_Negate,
+
+	O_SubtractAssign,
+	O_AddAssign,
+	O_ModAssign,
+	O_MultiplyAssign,
+	O_DivideAssign,
+	O_ORAssign,
+	O_ANDAssign,
+	O_XORAssign,
+	O_RightShiftAssign,
+	O_LeftShiftAssign,
+
+	O_LogicalAnd,
+	O_LogicalOr,
+	O_LogicalNot,
+
+	O_RelativeJump8,
+	
+	O_LiteralInt8,
+	O_LiteralInt16,
+
+	O_CallFunctionByHashAndPop,
+	O_CallLibFunctionAndPop,
+
+	O_IndexLiteral8,
+	O_IndexLiteral16,
+	O_IndexLiteral32,
+
+	O_AssignAndPop,
+	O_AssignToGlobalAndPop,
+	O_AssignToLocalAndPop,
+
+	O_BinaryAdditionAndStoreGlobal,
+	O_BinarySubtractionAndStoreGlobal,
+	O_BinaryMultiplicationAndStoreGlobal,
+	O_BinaryDivisionAndStoreGlobal,
+
+	O_BinaryAdditionAndStoreLocal,
+	O_BinarySubtractionAndStoreLocal,
+	O_BinaryMultiplicationAndStoreLocal,
+	O_BinaryDivisionAndStoreLocal,
+
+	O_BZ8,
 
 	O_CompareBEQ,
 	O_CompareBNE,
@@ -782,23 +871,6 @@ enum WROpcode
 	O_CompareBGT8,
 	O_CompareBLT8,
 
-	O_PostIncrement, // a++
-	O_PostDecrement, // a--
-	O_PreIncrement, // ++a
-	O_PreDecrement, // ++a
-	O_Negate, // -a
-
-	O_SubtractAssign,
-	O_AddAssign,
-	O_ModAssign,
-	O_MultiplyAssign,
-	O_DivideAssign,
-	O_ORAssign,
-	O_ANDAssign,
-	O_XORAssign,
-	O_RightShiftAssign,
-	O_LeftShiftAssign,
-
 	O_SubtractAssignAndPop,
 	O_AddAssignAndPop,
 	O_ModAssignAndPop,
@@ -810,20 +882,40 @@ enum WROpcode
 	O_RightShiftAssignAndPop,
 	O_LeftShiftAssignAndPop,
 
-	O_LogicalAnd, // &&
-	O_LogicalOr, // ||
-	O_LogicalNot, // !
-
+	O_BLA,
+	O_BLA8,
+	O_BLO,
+	O_BLO8,
+	
 	O_LiteralInt8ToGlobal,
+	O_LiteralInt16ToGlobal,
 	O_LiteralInt32ToLocal,
 	O_LiteralInt8ToLocal,
+	O_LiteralInt16ToLocal,
 	O_LiteralFloatToGlobal,
 	O_LiteralFloatToLocal,
 	O_LiteralInt32ToGlobal,
 	
-	O_LAST,
+	O_GGBinaryMultiplication,
+	O_GLBinaryMultiplication,
+	O_LLBinaryMultiplication,
+	
+	O_GGBinaryAddition,
+	O_GLBinaryAddition,
+	O_LLBinaryAddition,
+
+	O_GGBinarySubtraction,
+	O_GLBinarySubtraction,
+	O_LGBinarySubtraction,
+	O_LLBinarySubtraction,
+
+	O_GGBinaryDivision,
+	O_GLBinaryDivision,
+	O_LGBinaryDivision,
+	O_LLBinaryDivision,
 	
 	O_HASH_PLACEHOLDER,
+	O_LAST,
 };
 
 //#define DEBUG_OPCODE_NAMES
@@ -948,8 +1040,6 @@ public:
 
 	inline WRstr& truncate( const unsigned int newLen ); // reduce size to 'newlen'
 	WRstr& shave( const unsigned int e ) { return (e > m_len) ? clear() : truncate(m_len - e); } // remove 'x' trailing characters
-	
-	// memmove from sourcePosition to end of string down to the start of the string
 	
 	inline bool isMatch( const char* buf ) const;
 
@@ -1244,6 +1334,81 @@ SOFTWARE.
 #ifndef WRENCH_WITHOUT_COMPILER
 /*------------------------------------------------------------------------------*/
 
+//-----------------------------------------------------------------------------
+class WROpcodeStream
+{
+public:
+	WROpcodeStream() { m_buf = 0; clear(); }
+	~WROpcodeStream() { clear(); }
+	WROpcodeStream& clear()
+	{
+		m_len = 0;
+		delete[] m_buf;
+		m_buf = 0;
+		m_bufLen = 0;
+		return *this;
+	}
+	
+	unsigned int size() const { return m_len; }
+
+	WROpcodeStream (const WROpcodeStream &other ) { m_buf = 0; *this = other; }
+	WROpcodeStream& operator = ( const WROpcodeStream& str )
+	{
+		clear();
+		if ( str.m_len )
+		{
+			*this += str;
+		}
+		return *this;
+	}
+
+	WROpcodeStream& operator += ( const WROpcodeStream& stream ) { return append(stream.m_buf, stream.m_len); }
+	WROpcodeStream& operator += ( const unsigned char data ) { return append(&data, 1); }
+	WROpcodeStream& append( const unsigned char* data, const int size )
+	{
+		if ( (size + m_len) >= m_bufLen )
+		{
+			unsigned char* buf = m_buf;
+			m_bufLen = size + m_len + 16;
+			m_buf = new unsigned char[ m_bufLen ];
+			if ( m_len )
+			{
+				memcpy( m_buf, buf, m_len );
+				delete[] buf;
+			}
+		}
+
+		memcpy( m_buf + m_len, data, size );
+		m_len += size;
+		return *this;
+
+	}
+		
+	unsigned char* p_str( int offset =0 ) { return m_buf + offset; }
+	operator const unsigned char*() const { return m_buf; }
+	unsigned char& operator[]( const int l ) { return *p_str(l); }
+
+	WROpcodeStream& shave( const unsigned int e )
+	{
+		m_len -= e;
+		return *this;
+	}
+
+	unsigned int release( unsigned char** toBuf )
+	{
+		unsigned int retLen = m_len;
+		*toBuf = m_buf;
+		m_buf = 0;
+		clear();
+		return retLen;
+	}
+	
+private:
+	unsigned char *m_buf;
+	unsigned int m_len;
+	unsigned int m_bufLen;
+};
+
 //------------------------------------------------------------------------------
 enum WROperationType
 {
@@ -1261,6 +1426,7 @@ struct WROperation
 	WROpcode opcode;
 	bool leftToRight;
 	WROperationType type;
+	WROpcode alt;
 };
 
 //------------------------------------------------------------------------------
@@ -1268,60 +1434,60 @@ struct WROperation
 // https://en.cppreference.com/w/cpp/language/operator_precedence
 const WROperation c_operations[] =
 {
-//       precedence                      L2R      type
+//       precedence                      L2R      type             alt
 
-	{ "==",  10, O_CompareEQ,           true,  WR_OPER_BINARY_COMMUTE },
-	{ "!=",  10, O_CompareNE,           true,  WR_OPER_BINARY },
-	{ ">=",   9, O_CompareGE,           true,  WR_OPER_BINARY },
-	{ "<=",   9, O_CompareLE,           true,  WR_OPER_BINARY },
-	{ ">",    9, O_CompareGT,           true,  WR_OPER_BINARY },
-	{ "<",    9, O_CompareLT,           true,  WR_OPER_BINARY },
-	{ "&&",  14, O_LogicalAnd,          true,  WR_OPER_BINARY_COMMUTE },
-	{ "||",  15, O_LogicalOr,           true,  WR_OPER_BINARY_COMMUTE },
+	{ "==",  10, O_CompareEQ,           true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "!=",  10, O_CompareNE,           true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ ">=",   9, O_CompareGE,           true,  WR_OPER_BINARY, O_CompareLE },
+	{ "<=",   9, O_CompareLE,           true,  WR_OPER_BINARY, O_CompareGE },
+	{ ">",    9, O_CompareGT,           true,  WR_OPER_BINARY, O_CompareLT },
+	{ "<",    9, O_CompareLT,           true,  WR_OPER_BINARY, O_CompareGT },
+	{ "&&",  14, O_LogicalAnd,          true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "||",  15, O_LogicalOr,           true,  WR_OPER_BINARY_COMMUTE, O_LAST },
 
-	{ "++",   3, O_PreIncrement,        true,  WR_OPER_PRE },
-	{ "++",   2, O_PostIncrement,       true,  WR_OPER_POST },
+	{ "++",   3, O_PreIncrement,        true,  WR_OPER_PRE, O_LAST },
+	{ "++",   2, O_PostIncrement,       true,  WR_OPER_POST, O_LAST },
 
-	{ "--",   3, O_PreDecrement,        true,  WR_OPER_PRE },
-	{ "--",   2, O_PostDecrement,       true,  WR_OPER_POST },
+	{ "--",   3, O_PreDecrement,        true,  WR_OPER_PRE, O_LAST },
+	{ "--",   2, O_PostDecrement,       true,  WR_OPER_POST, O_LAST },
 
-	{ ".",    2, O_HASH_PLACEHOLDER,    true,  WR_OPER_BINARY },
+	{ ".",    2, O_HASH_PLACEHOLDER,    true,  WR_OPER_BINARY, O_LAST },
 
-	{ "!",    3, O_LogicalNot,         false,  WR_OPER_PRE },
-	{ "~",    3, O_BitwiseNOT,         false,  WR_OPER_PRE },
-	{ "-",    3, O_Negate,             false,  WR_OPER_PRE },
+	{ "!",    3, O_LogicalNot,         false,  WR_OPER_PRE, O_LAST },
+	{ "~",    3, O_BitwiseNOT,         false,  WR_OPER_PRE, O_LAST },
+	{ "-",    3, O_Negate,             false,  WR_OPER_PRE, O_LAST },
 
-	{ "+",    6, O_BinaryAddition,      true,  WR_OPER_BINARY_COMMUTE },
-	{ "-",    6, O_BinarySubtraction,   true,  WR_OPER_BINARY },
-	{ "*",    5, O_BinaryMultiplication,true,  WR_OPER_BINARY_COMMUTE },
-	{ "/",    5, O_BinaryDivision,      true,  WR_OPER_BINARY },
-	{ "%",    6, O_BinaryMod,           true,  WR_OPER_BINARY },
+	{ "+",    6, O_BinaryAddition,      true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "-",    6, O_BinarySubtraction,   true,  WR_OPER_BINARY, O_LAST },
+	{ "*",    5, O_BinaryMultiplication,true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "/",    5, O_BinaryDivision,      true,  WR_OPER_BINARY, O_LAST },
+	{ "%",    6, O_BinaryMod,           true,  WR_OPER_BINARY, O_LAST },
 
-	{ "|",   13, O_BinaryOr,            true,  WR_OPER_BINARY_COMMUTE },
-	{ "&",   11, O_BinaryAnd,           true,  WR_OPER_BINARY_COMMUTE },
-	{ "^",   11, O_BinaryXOR,           true,  WR_OPER_BINARY_COMMUTE },
+	{ "|",   13, O_BinaryOr,            true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "&",   11, O_BinaryAnd,           true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "^",   11, O_BinaryXOR,           true,  WR_OPER_BINARY_COMMUTE, O_LAST },
 
-	{ ">>",   7, O_BinaryRightShift,    true,  WR_OPER_BINARY },
-	{ "<<",   7, O_BinaryLeftShift,     true,  WR_OPER_BINARY },
+	{ ">>",   7, O_BinaryRightShift,    true,  WR_OPER_BINARY, O_LAST },
+	{ "<<",   7, O_BinaryLeftShift,     true,  WR_OPER_BINARY, O_LAST },
 
-	{ "+=",  16, O_AddAssign,           true,  WR_OPER_BINARY },
-	{ "-=",  16, O_SubtractAssign,      true,  WR_OPER_BINARY },
-	{ "%=",  16, O_ModAssign,           true,  WR_OPER_BINARY },
-	{ "*=",  16, O_MultiplyAssign,      true,  WR_OPER_BINARY },
-	{ "/=",  16, O_DivideAssign,        true,  WR_OPER_BINARY },
-	{ "|=",  16, O_ORAssign,            true,  WR_OPER_BINARY },
-	{ "&=",  16, O_ANDAssign,           true,  WR_OPER_BINARY },
-	{ "^=",  16, O_XORAssign,           true,  WR_OPER_BINARY },
-	{ ">>=", 16, O_RightShiftAssign,   false,  WR_OPER_BINARY },
-	{ "<<=", 16, O_LeftShiftAssign,    false,  WR_OPER_BINARY },
+	{ "+=",  16, O_AddAssign,           true,  WR_OPER_BINARY, O_LAST },
+	{ "-=",  16, O_SubtractAssign,      true,  WR_OPER_BINARY, O_LAST },
+	{ "%=",  16, O_ModAssign,           true,  WR_OPER_BINARY, O_LAST },
+	{ "*=",  16, O_MultiplyAssign,      true,  WR_OPER_BINARY, O_LAST },
+	{ "/=",  16, O_DivideAssign,        true,  WR_OPER_BINARY, O_LAST },
+	{ "|=",  16, O_ORAssign,            true,  WR_OPER_BINARY, O_LAST },
+	{ "&=",  16, O_ANDAssign,           true,  WR_OPER_BINARY, O_LAST },
+	{ "^=",  16, O_XORAssign,           true,  WR_OPER_BINARY, O_LAST },
+	{ ">>=", 16, O_RightShiftAssign,   false,  WR_OPER_BINARY, O_LAST },
+	{ "<<=", 16, O_LeftShiftAssign,    false,  WR_OPER_BINARY, O_LAST },
 
-	{ "=",   16, O_Assign,             false,  WR_OPER_BINARY },
+	{ "=",   16, O_Assign,             false,  WR_OPER_BINARY, O_LAST },
 
-	{ "@i",   3, O_CoerceToInt,         true,  WR_OPER_PRE },
-	{ "@f",   3, O_CoerceToFloat,       true,  WR_OPER_PRE },
-	{ "@[]",  2, O_Index,               true,  WR_OPER_POST },
+	{ "@i",   3, O_CoerceToInt,         true,  WR_OPER_PRE, O_LAST },
+	{ "@f",   3, O_CoerceToFloat,       true,  WR_OPER_PRE, O_LAST },
+	{ "@[]",  2, O_Index,               true,  WR_OPER_POST, O_LAST },
 
-	{ 0, 0, O_LAST, false, WR_OPER_PRE },
+	{ 0, 0, O_LAST, false, WR_OPER_PRE, O_LAST },
 };
 const int c_highestPrecedence = 17; // one higher than the highest entry above, things that happen absolutely LAST
 
@@ -1364,8 +1530,9 @@ struct BytecodeJumpOffset
 //------------------------------------------------------------------------------
 struct WRBytecode
 {
-	WRstr all;
-	WRstr opcodes;
+	WROpcodeStream all;
+	WROpcodeStream opcodes;
+
 	WRarray<WRNamespaceLookup> localSpace;
 	WRarray<WRNamespaceLookup> functionSpace;
 
@@ -1487,7 +1654,7 @@ struct WRExpression
 	}
 
 	//------------------------------------------------------------------------------
-	void swapWithTop( int stackPosition );
+	void swapWithTop( int stackPosition, bool addOpcodes =true );
 	
 	WRExpression() { reset(); }
 	WRExpression( WRarray<WRNamespaceLookup>& localSpace )
@@ -1535,13 +1702,16 @@ private:
 	bool isReserved( const char* token );
 	bool isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix );
 	bool getToken( WRExpressionContext& ex, const char* expect =0 );
-	char* pack16( int16_t i, char* buf )
+	static bool IsLiteralLoadOpcode( unsigned char opcode );
+	static bool CheckCompareReplace( WROpcode LS, WROpcode GS, WROpcode ILS, WROpcode IGS, WRBytecode& bytecode, unsigned int a, unsigned int o );
+	
+	unsigned char* pack16( int16_t i, unsigned char* buf )
 	{
 		*buf = (i>>8) & 0xFF;
 		*(buf + 1) = i & 0xFF;
 		return buf;
 	}
-	char* pack32( int32_t l, char* buf )
+	unsigned char* pack32( int32_t l, unsigned char* buf )
 	{
 		*buf = (l>>24) & 0xFF;
 		*(buf + 1) = (l>>16) & 0xFF;
@@ -1552,7 +1722,8 @@ private:
 
 	friend struct WRExpression;
 	static void pushOpcode( WRBytecode& bytecode, WROpcode opcode );
-	static void pushData( WRBytecode& bytecode, const char* data, const int len ) { bytecode.all.append( data, len ); }
+	static void pushData( WRBytecode& bytecode, const unsigned char* data, const int len ) { bytecode.all.append( data, len ); }
+	static void pushData( WRBytecode& bytecode, const char* data, const int len ) { bytecode.all.append( (unsigned char*)data, len ); }
 
 	int getBytecodePosition( WRBytecode& bytecode ) { return bytecode.all.size(); }
 	
@@ -1591,6 +1762,7 @@ private:
 
 	WRError m_err;
 	bool m_EOF;
+	bool m_LastParsedLabel;
 
 	int m_unitTop;
 	WRarray<WRUnitContext> m_units;
@@ -1677,7 +1849,7 @@ const char* c_reserved[] =
 	"if",
 	"int",
 	"return",
-//	"switch",
+	"switch",
 	"true",
 	"unit",
 	"function",
@@ -1716,6 +1888,13 @@ const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str )
 
 	return str;
 }
+void streamDump( WROpcodeStream const& stream )
+{
+	WRstr str;
+	wr_asciiDump( stream, stream.size(), str );
+	printf( "\n%s\n", str.c_str() );
+}
+
 #endif
 
 //------------------------------------------------------------------------------
@@ -1793,7 +1972,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 {
 	WRValue& value = ex.value;
 	WRstr& token = ex.token;
-
+	
 	if ( m_loadedToken.size() || (m_loadedValue.type != WR_REF) )
 	{
 		token = m_loadedToken;
@@ -1801,7 +1980,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 	}
 	else
 	{
-		value.type = WR_REF;
+		value.p2 = INIT_AS_REF;
 
 		ex.spaceBefore = (m_pos < m_sourceLen) && isspace(m_source[m_pos]);
 	
@@ -1817,131 +1996,11 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 
 		token = m_source[m_pos - 1];
 
-		if ( token[0] == '=' )
-		{
-			if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-			{
-				token += '=';
-				++m_pos;
-			}
-		}
-		else if ( token[0] == '!' )
-		{
-			if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-			{
-				token += '=';
-				++m_pos;
-			}
-		}
-		else if ( token[0] == '*' )
-		{
-			if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-			{
-				token += '=';
-				++m_pos;
-			}
-		}
-		else if ( token[0] == '%' )
-		{
-			if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-			{
-				token += '=';
-				++m_pos;
-			}
-		}
-		else if ( token[0] == '<' )
-		{
-			if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-			{
-				token += '=';
-				++m_pos;
-			}
-			else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '<' )
-			{
-				token += '<';
-				++m_pos;
-
-				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-			}
-		}
-		else if ( token[0] == '>' )
-		{
-			if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-			{
-				token += '=';
-				++m_pos;
-			}
-			else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '>' )
-			{
-				token += '>';
-				++m_pos;
-
-				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-			}
-		}
-		else if ( token[0] == '&' )
-		{
-			if ( (m_pos < m_sourceLen) && m_source[m_pos] == '&' )
-			{
-				token += '&';
-				++m_pos;
-			}
-			else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-			{
-				token += '=';
-				++m_pos;
-			}
-		}
-		else if ( token[0] == '^' )
-		{
-			if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-			{
-				token += '=';
-				++m_pos;
-			}
-		}
-		else if ( token[0] == '|' )
-		{
-			if ( (m_pos < m_sourceLen) && m_source[m_pos] == '|' )
-			{
-				token += '|';
-				++m_pos;
-			}
-			else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-			{
-				token += '=';
-				++m_pos;
-			}
-		}
-		else if ( token[0] == '+' )
+		if ( token[0] == '-' )
 		{
 			if ( m_pos < m_sourceLen )
 			{
-				if ( m_source[m_pos] == '+' )
-				{
-					token += '+';
-					++m_pos;
-				}
-				else if ( m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-			}
-		}
-		else if ( token[0] == '-' )
-		{
-			if ( m_pos < m_sourceLen )
-			{
-				if ( isdigit(m_source[m_pos]) || m_source[m_pos] == '.' )
+				if ( (isdigit(m_source[m_pos]) && !m_LastParsedLabel) || m_source[m_pos] == '.' )
 				{
 					goto parseAsNumber;
 				}
@@ -1957,33 +2016,136 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 				}
 			}
 		}
-		else if ( token[0] == '\"' )
+		else
 		{
-			token.clear();
-			
-			do
+			m_LastParsedLabel = false;
+		
+			if ( token[0] == '=' )
 			{
-				if (m_pos >= m_sourceLen)
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
 				{
-					m_err = WR_ERR_unterminated_string_literal;
-					m_EOF = true;
-					return false;
-				}
-
-				char c = m_source[m_pos];
-				if (c == '\"') // terminating character
-				{
+					token += '=';
 					++m_pos;
-					break;
 				}
-				else if (c == '\n')
+			}
+			else if ( token[0] == '!' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
 				{
-					m_err = WR_ERR_newline_in_string_literal;
-					return false;
+					token += '=';
+					++m_pos;
 				}
-				else if (c == '\\')
+			}
+			else if ( token[0] == '*' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
 				{
-					c = m_source[++m_pos];
+					token += '=';
+					++m_pos;
+				}
+			}
+			else if ( token[0] == '%' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+			}
+			else if ( token[0] == '<' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+				else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '<' )
+				{
+					token += '<';
+					++m_pos;
+
+					if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+					{
+						token += '=';
+						++m_pos;
+					}
+				}
+			}
+			else if ( token[0] == '>' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+				else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '>' )
+				{
+					token += '>';
+					++m_pos;
+
+					if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+					{
+						token += '=';
+						++m_pos;
+					}
+				}
+			}
+			else if ( token[0] == '&' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '&' )
+				{
+					token += '&';
+					++m_pos;
+				}
+				else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+			}
+			else if ( token[0] == '^' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+			}
+			else if ( token[0] == '|' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '|' )
+				{
+					token += '|';
+					++m_pos;
+				}
+				else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+			}
+			else if ( token[0] == '+' )
+			{
+				if ( m_pos < m_sourceLen )
+				{
+					if ( m_source[m_pos] == '+' )
+					{
+						token += '+';
+						++m_pos;
+					}
+					else if ( m_source[m_pos] == '=' )
+					{
+						token += '=';
+						++m_pos;
+					}
+				}
+			}
+			else if ( token[0] == '\"' )
+			{
+				token.clear();
+
+				do
+				{
 					if (m_pos >= m_sourceLen)
 					{
 						m_err = WR_ERR_unterminated_string_literal;
@@ -1991,92 +2153,116 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 						return false;
 					}
 
-					if (c == '\\') // escaped slash
+					char c = m_source[m_pos];
+					if (c == '\"') // terminating character
 					{
-						token += '\\';
+						++m_pos;
+						break;
 					}
-					else if (c == '0')
+					else if (c == '\n')
 					{
-						token += atoi(m_source + m_pos);
-						for (; (m_pos < m_sourceLen) && isdigit(m_source[m_pos]); ++m_pos);
+						m_err = WR_ERR_newline_in_string_literal;
+						return false;
 					}
-					else if (c == '\"')
+					else if (c == '\\')
 					{
-						token += '\"';
-					}
-					else if (c == 'n')
-					{
-						token += '\n';
-					}
-					else if (c == 'r')
-					{
-						token += '\r';
-					}
-					else if (c == 't')
-					{
-						token += '\t';
+						c = m_source[++m_pos];
+						if (m_pos >= m_sourceLen)
+						{
+							m_err = WR_ERR_unterminated_string_literal;
+							m_EOF = true;
+							return false;
+						}
+
+						if (c == '\\') // escaped slash
+						{
+							token += '\\';
+						}
+						else if (c == '0')
+						{
+							token += atoi(m_source + m_pos);
+							for (; (m_pos < m_sourceLen) && isdigit(m_source[m_pos]); ++m_pos);
+						}
+						else if (c == '\"')
+						{
+							token += '\"';
+						}
+						else if (c == 'n')
+						{
+							token += '\n';
+						}
+						else if (c == 'r')
+						{
+							token += '\r';
+						}
+						else if (c == 't')
+						{
+							token += '\t';
+						}
+						else
+						{
+							m_err = WR_ERR_bad_string_escape_sequence;
+							return false;
+						}
 					}
 					else
 					{
-						m_err = WR_ERR_bad_string_escape_sequence;
-						return false;
+						token += c;
 					}
-				}
-				else
-				{
-					token += c;
-				}
 
-			} while( ++m_pos < m_sourceLen );
+				} while( ++m_pos < m_sourceLen );
 
-			value.type = (WRValueType)WR_COMPILER_LITERAL_STRING;
-			value.p = &token;
-		}
-		else if ( token[0] == '/' ) // might be a comment
-		{
-			if ( m_pos < m_sourceLen )
-			{	
-				if ( !isspace(m_source[m_pos]) )
-				{
-					if ( m_source[m_pos] == '/' )
-					{
-						for( ; m_pos<m_sourceLen && m_source[m_pos] != '\n'; ++m_pos ); // clear to end EOL
-						
-						return getToken( ex, expect );
-					}
-					else if ( m_source[m_pos] == '*' )
-					{
-						for( ; (m_pos+1)<m_sourceLen
-							 && !(m_source[m_pos] == '*' && m_source[m_pos+1] == '/');
-							 ++m_pos ); // find end of comment
-						
-						m_pos += 2;
-
-						return getToken( ex, expect );
-
-					}
-					else if ( m_source[m_pos] == '=' )
-					{
-						token += '=';
-						++m_pos;
-					}
-				}					
-				//else // bare '/' 
+				value.p2 = 0;
+				value.type = (WRValueType)WR_COMPILER_LITERAL_STRING;
+				value.p = &token;
 			}
-		}
-		else if ( isdigit(token[0]) || token[0] == '.' )
-		{
-			if ( m_pos >= m_sourceLen )
+			else if ( token[0] == '/' ) // might be a comment
 			{
-				return false;
+				if ( m_pos < m_sourceLen )
+				{	
+					if ( !isspace(m_source[m_pos]) )
+					{
+						if ( m_source[m_pos] == '/' )
+						{
+							for( ; m_pos<m_sourceLen && m_source[m_pos] != '\n'; ++m_pos ); // clear to end EOL
+
+							return getToken( ex, expect );
+						}
+						else if ( m_source[m_pos] == '*' )
+						{
+							for( ; (m_pos+1)<m_sourceLen
+								 && !(m_source[m_pos] == '*' && m_source[m_pos+1] == '/');
+								 ++m_pos ); // find end of comment
+
+							m_pos += 2;
+
+							return getToken( ex, expect );
+
+						}
+						else if ( m_source[m_pos] == '=' )
+						{
+							token += '=';
+							++m_pos;
+						}
+					}					
+					//else // bare '/' 
+				}
 			}
+			else if ( isdigit(token[0])
+					  || (token[0] == '.' && isdigit(m_source[m_pos])) )
+			{
+				if ( m_pos >= m_sourceLen )
+				{
+					return false;
+				}
 
 parseAsNumber:
-			if ( !(token[0] == '.' && !isdigit(m_source[m_pos]) ) )
-			{
-				if ( m_source[m_pos] == 'x' ) // interpret as hex
+
+				m_LastParsedLabel = true;
+
+				if ( token[0] == '0' && m_source[m_pos] == 'x' ) // interpret as hex
 				{
-					token += 'x';
+					token.clear();
 					m_pos++;
 
 					for(;;)
@@ -2095,8 +2281,32 @@ parseAsNumber:
 						token += m_source[m_pos++];
 					}
 
-					value.type = WR_INT;
-					value.i = strtol( token.c_str(2), 0, 16 );
+					value.p2 = INIT_AS_INT;
+					value.i = strtol( token, 0, 16 );
+				}
+				else if (token[0] == '0' && m_source[m_pos] == 'b' )
+				{
+					token.clear();
+					m_pos++;
+
+					for(;;)
+					{
+						if ( m_pos >= m_sourceLen )
+						{
+							m_err = WR_ERR_unexpected_EOF;
+							return false;
+						}
+
+						if ( !isxdigit(m_source[m_pos]) )
+						{
+							break;
+						}
+
+						token += m_source[m_pos++];
+					}
+
+					value.p2 = INIT_AS_INT;
+					value.i = strtol( token, 0, 2 );
 				}
 				else
 				{
@@ -2128,27 +2338,29 @@ parseAsNumber:
 
 					if ( decimal )
 					{
-						value.type = WR_FLOAT;
+						value.p2 = INIT_AS_FLOAT;
 						value.f = (float)atof( token );
 					}
 					else
 					{
-						value.type = WR_INT;
+						value.p2 = INIT_AS_INT;
 						value.i = strtol( token, 0, 10 );
 					}
 				}
 			}
-		}
-		else if ( isalpha(token[0]) || token[0] == '_' || token[0] == ':' ) // must be a label
-		{
-			for( ; m_pos < m_sourceLen ; ++m_pos )
+			else if ( isalpha(token[0]) || token[0] == '_' || token[0] == ':' ) // must be a label
 			{
-				if ( !isalnum(m_source[m_pos]) && m_source[m_pos] != '_' && m_source[m_pos] != ':' )
-				{
-					break;
-				}
+				m_LastParsedLabel = true;
 
-				token += m_source[m_pos];
+				for( ; m_pos < m_sourceLen ; ++m_pos )
+				{
+					if ( !isalnum(m_source[m_pos]) && m_source[m_pos] != '_' && m_source[m_pos] != ':' )
+					{
+						break;
+					}
+
+					token += m_source[m_pos];
+				}
 			}
 		}
 
@@ -2156,7 +2368,7 @@ parseAsNumber:
 	}
 
 	m_loadedToken.clear();
-	m_loadedValue.type = WR_REF;
+	m_loadedValue.p2 = INIT_AS_REF;
 
 	if ( expect && (token != expect) )
 	{
@@ -2164,6 +2376,239 @@ parseAsNumber:
 	}
 	
 	return true;
+}
+
+//------------------------------------------------------------------------------
+bool WRCompilationContext::IsLiteralLoadOpcode( unsigned char opcode )
+{
+	return opcode == O_LiteralInt32
+			|| opcode == O_LiteralZero
+			|| opcode == O_LiteralFloat
+			|| opcode == O_LiteralInt8
+			|| opcode == O_LiteralInt16;
+}
+
+//------------------------------------------------------------------------------
+bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpcode ILS, WROpcode IGS, WRBytecode& bytecode, unsigned int a, unsigned int o )
+{
+	if ( IsLiteralLoadOpcode(bytecode.opcodes[o-1]) )
+	{
+		if ( bytecode.opcodes[o] == O_LoadFromGlobal )
+		{
+			// LoadFromGlobal   a - 1
+			// [index]          a
+
+			bytecode.all[ a - 1 ] = GS;
+			bytecode.opcodes[o] = GS;
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LoadFromLocal )
+		{
+			// LoadFromGlobal   a - 1
+			// [index]          a
+
+			bytecode.all[ a - 1 ] = LS;
+			bytecode.opcodes[o] = LS;
+			return true;
+		}
+	}
+	else if ( IsLiteralLoadOpcode(bytecode.opcodes[o]) )
+	{
+		if ( (bytecode.opcodes[o] == O_LiteralInt32 || bytecode.opcodes[o] == O_LiteralFloat)
+			 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			// LoadFromGlobal  a - 6
+			// [index]         a - 5
+			// LiteralInt32l   a - 4
+			// [i0]            a - 3
+			// [i1]            a - 2
+			// [i2]            a - 1
+			// [i3]            a
+
+			bytecode.all[ a - 6 ] = bytecode.all[ a ]; // store i3
+			bytecode.all[ a ] = bytecode.all[ a - 5 ]; // move index
+
+			bytecode.all[ a - 5 ] = bytecode.all[ a - 3 ];
+			bytecode.all[ a - 4 ] = bytecode.all[ a - 2 ];
+			bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
+			bytecode.all[ a - 2 ] = bytecode.all[ a - 6 ];
+			bytecode.all[ a - 6 ] = bytecode.opcodes[o];
+			bytecode.all[ a - 1 ] = IGS;
+
+			// LiteralInt32l   a - 6
+			// [i0]            a - 5
+			// [i1]            a - 4
+			// [i2]            a - 3
+			// [i3]            a - 2
+			//  GS     a - 1
+			// [index]         a
+
+			bytecode.opcodes[o] = IGS; // reverse the logic
+
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralZero
+				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			// LoadFromGlobal  a - 2
+			// [index]         a - 1
+			// LiteralZero     a 
+
+			bytecode.all[ a - 2 ] = O_LiteralZero;
+			bytecode.all[ a ] = bytecode.all[ a - 1];
+			bytecode.all[ a - 1 ] = IGS;
+			bytecode.opcodes[o] = IGS; // reverse the logic
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralZero
+				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			// LoadFromGlobal  a - 2
+			// [index]         a - 1
+			// LiteralZero     a 
+
+			bytecode.all[ a - 2 ] = O_LiteralZero;
+			bytecode.all[ a ] = bytecode.all[ a - 1];
+			bytecode.all[ a - 1 ] = IGS;
+			bytecode.opcodes[o] = IGS; // reverse the logic
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralInt8
+				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			// LoadFromGlobal  a - 3
+			// [index]         a - 2
+			// LiteralInt8     a - 1
+			// [value]
+
+			bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
+			bytecode.all[ a - 2 ] = bytecode.all[ a ];
+			bytecode.all[ a ] = bytecode.all[ a - 1 ];
+			bytecode.all[ a - 1 ] = IGS;
+			bytecode.all[ a - 3 ] = O_LiteralInt8;
+
+			bytecode.opcodes[o] = IGS; // reverse the logic
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralInt16
+				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			// LoadFromGlobal  a - 4
+			// [index]         a - 3
+			// LiteralInt8     a - 2
+			// [value0]        a - 1
+			// [value1]        a 
+
+			bytecode.all[ a - 2 ] = bytecode.all[ a ];
+
+			bytecode.all[ a - 4 ] = bytecode.all[ a - 3 ];
+			bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
+			bytecode.all[ a ] = bytecode.all[ a - 4 ];
+			bytecode.all[ a - 1 ] = IGS;
+			bytecode.all[ a - 4 ] = O_LiteralInt16;
+
+			bytecode.opcodes[o] = IGS; // reverse the logic
+			return true;
+		}
+		if ( (bytecode.opcodes[o] == O_LiteralInt32 || bytecode.opcodes[o] == O_LiteralFloat)
+			 && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			// LoadFromGlobal  a - 6
+			// [index]         a - 5
+			// LiteralInt32l   a - 4
+			// [i0]            a - 3
+			// [i1]            a - 2
+			// [i2]            a - 1
+			// [i3]            a
+
+			bytecode.all[ a - 6 ] = bytecode.all[ a ]; // store i3
+			bytecode.all[ a ] = bytecode.all[ a - 5 ]; // move index
+
+			bytecode.all[ a - 5 ] = bytecode.all[ a - 3 ];
+			bytecode.all[ a - 4 ] = bytecode.all[ a - 2 ];
+			bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
+			bytecode.all[ a - 2 ] = bytecode.all[ a - 6 ];
+			bytecode.all[ a - 6 ] = bytecode.opcodes[o];
+			bytecode.all[ a - 1 ] = ILS;
+
+			// LiteralInt32l   a - 6
+			// [i0]            a - 5
+			// [i1]            a - 4
+			// [i2]            a - 3
+			// [i3]            a - 2
+			//GS     a - 1
+			// [index]         a
+
+			bytecode.opcodes[o] = ILS; // reverse the logic
+
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralZero
+				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			// LoadFromGlobal  a - 2
+			// [index]         a - 1
+			// LiteralZero     a 
+
+			bytecode.all[ a - 2 ] = O_LiteralZero;
+			bytecode.all[ a ] = bytecode.all[ a - 1];
+			bytecode.all[ a - 1 ] = ILS;
+			bytecode.opcodes[o] = ILS; // reverse the logic
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralZero
+				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			// LoadFromGlobal  a - 2
+			// [index]         a - 1
+			// LiteralZero     a 
+
+			bytecode.all[ a - 2 ] = O_LiteralZero;
+			bytecode.all[ a ] = bytecode.all[ a - 1];
+			bytecode.all[ a - 1 ] = ILS;
+			bytecode.opcodes[o] = ILS; // reverse the logic
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralInt8
+				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			// LoadFromGlobal  a - 3
+			// [index]         a - 2
+			// LiteralInt8     a - 1
+			// [value]
+
+			bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
+			bytecode.all[ a - 2 ] = bytecode.all[ a ];
+			bytecode.all[ a ] = bytecode.all[ a - 1 ];
+			bytecode.all[ a - 1 ] = ILS;
+			bytecode.all[ a - 3 ] = O_LiteralInt8;
+
+			bytecode.opcodes[o] = ILS; // reverse the logic
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralInt16
+				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			// LoadFromGlobal  a - 4
+			// [index]         a - 3
+			// LiteralInt8     a - 2
+			// [value0]        a - 1
+			// [value1]        a 
+
+			bytecode.all[ a - 2 ] = bytecode.all[ a ];
+
+			bytecode.all[ a - 4 ] = bytecode.all[ a - 3 ];
+			bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
+			bytecode.all[ a ] = bytecode.all[ a - 4 ];
+			bytecode.all[ a - 1 ] = ILS;
+			bytecode.all[ a - 4 ] = O_LiteralInt16;
+
+			bytecode.opcodes[o] = ILS; // reverse the logic
+			return true;
+		}
+	}
+
+	return false;
 }
 
 //------------------------------------------------------------------------------
@@ -2176,15 +2621,317 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 
 		--o;
 		unsigned int a = bytecode.all.size() - 1;
+		
+		if ( (opcode == O_CompareEQ && (o>0))
+			 && CheckCompareReplace(O_LSCompareEQ, O_GSCompareEQ, O_LSCompareEQ, O_GSCompareEQ, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( (opcode == O_CompareNE && (o>0))
+				  && CheckCompareReplace(O_LSCompareNE, O_GSCompareNE, O_LSCompareNE, O_GSCompareNE, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( (opcode == O_CompareGE && (o>0))
+			 && CheckCompareReplace(O_LSCompareGE, O_GSCompareGE, O_LSCompareLT, O_GSCompareLT, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( (opcode == O_CompareLE && (o>0))
+				  && CheckCompareReplace(O_LSCompareLE, O_GSCompareLE, O_LSCompareGT, O_GSCompareGT, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( (opcode == O_CompareGT && (o>0))
+				  && CheckCompareReplace(O_LSCompareGT, O_GSCompareGT, O_LSCompareLE, O_GSCompareLE, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( (opcode == O_CompareLT && (o>0))
+				  && CheckCompareReplace(O_LSCompareLT, O_GSCompareLT, O_LSCompareGE, O_GSCompareGE, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( opcode == O_BinaryMultiplication && (a>2) )
+		{
+			
+			if ( bytecode.opcodes[o] == O_LoadFromGlobal
+				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				// LoadFromGlobal   a - 3
+				// [index]          a - 2
+				// LoadFromGlobal   a - 1
+				// [index]          a
 
-		if ( opcode == O_Index )
+				bytecode.all[ a - 3 ] = O_GGBinaryMultiplication;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				// LoadFromLocal    a - 3
+				// [Lindex]         a - 2
+				// LoadFromGlobal   a - 1
+				// [Gindex]         a
+
+				bytecode.all[ a - 3 ] = O_GLBinaryMultiplication;
+				bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
+				bytecode.all[ a - 2 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromGlobal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				// LoadFromLocal    a - 3
+				// [Gindex]         a - 2
+				// LoadFromGlobal   a - 1
+				// [Lindex]         a
+
+				bytecode.all[ a - 3 ] = O_GLBinaryMultiplication;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				// LoadFromLocal    a - 3
+				// [Lindex]         a - 2
+				// LoadFromGlobal   a - 1
+				// [Lindex]         a
+
+				bytecode.all[ a - 3 ] = O_LLBinaryMultiplication;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else
+			{
+				bytecode.all += opcode;
+				bytecode.opcodes += opcode;
+			}
+			
+			return;
+		}
+		else if ( opcode == O_BinaryAddition && (a>2) )
+		{
+			if ( bytecode.opcodes[o] == O_LoadFromGlobal
+				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				// LoadFromGlobal   a - 3
+				// [index]          a - 2
+				// LoadFromGlobal   a - 1
+				// [index]          a
+
+				bytecode.all[ a - 3 ] = O_GGBinaryAddition;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				// LoadFromLocal    a - 3
+				// [Lindex]         a - 2
+				// LoadFromGlobal   a - 1
+				// [Gindex]         a
+
+				bytecode.all[ a - 3 ] = O_GLBinaryAddition;
+				bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
+				bytecode.all[ a - 2 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromGlobal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				// LoadFromLocal    a - 3
+				// [Gindex]         a - 2
+				// LoadFromGlobal   a - 1
+				// [Lindex]         a
+
+				bytecode.all[ a - 3 ] = O_GLBinaryAddition;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				// LoadFromLocal    a - 3
+				// [Lindex]         a - 2
+				// LoadFromGlobal   a - 1
+				// [Lindex]         a
+
+				bytecode.all[ a - 3 ] = O_LLBinaryAddition;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else
+			{
+				bytecode.all += opcode;
+				bytecode.opcodes += opcode;
+			}
+
+			return;
+		}
+		else if ( opcode == O_BinarySubtraction && (a>2) )
+		{
+			if ( bytecode.opcodes[o] == O_LoadFromGlobal
+				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				// LoadFromGlobal   a - 3
+				// [index]          a - 2
+				// LoadFromGlobal   a - 1
+				// [index]          a
+
+				bytecode.all[ a - 3 ] = O_GGBinarySubtraction;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				// LoadFromLocal    a - 3
+				// [Lindex]         a - 2
+				// LoadFromGlobal   a - 1
+				// [Gindex]         a
+
+				bytecode.all[ a - 3 ] = O_LGBinarySubtraction;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromGlobal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				// LoadFromLocal    a - 3
+				// [Gindex]         a - 2
+				// LoadFromGlobal   a - 1
+				// [Lindex]         a
+
+				bytecode.all[ a - 3 ] = O_GLBinarySubtraction;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				// LoadFromLocal    a - 3
+				// [Lindex]         a - 2
+				// LoadFromGlobal   a - 1
+				// [Lindex]         a
+
+				bytecode.all[ a - 3 ] = O_LLBinarySubtraction;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else
+			{
+				bytecode.all += opcode;
+				bytecode.opcodes += opcode;
+			}
+
+			return;
+		}
+		else if ( opcode == O_BinaryDivision && (a>2) )
+		{
+			if ( bytecode.opcodes[o] == O_LoadFromGlobal
+				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				// LoadFromGlobal   a - 3
+				// [index]          a - 2
+				// LoadFromGlobal   a - 1
+				// [index]          a
+
+				bytecode.all[ a - 3 ] = O_GGBinaryDivision;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				// LoadFromLocal    a - 3
+				// [Lindex]         a - 2
+				// LoadFromGlobal   a - 1
+				// [Gindex]         a
+
+				bytecode.all[ a - 3 ] = O_LGBinaryDivision;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromGlobal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				// LoadFromLocal    a - 3
+				// [Gindex]         a - 2
+				// LoadFromGlobal   a - 1
+				// [Lindex]         a
+
+				bytecode.all[ a - 3 ] = O_GLBinaryDivision;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				// LoadFromLocal    a - 3
+				// [Lindex]         a - 2
+				// LoadFromGlobal   a - 1
+				// [Lindex]         a
+
+				bytecode.all[ a - 3 ] = O_LLBinaryDivision;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+			}
+			else
+			{
+				bytecode.all += opcode;
+				bytecode.opcodes += opcode;
+			}
+
+			return;
+		}
+		else if ( opcode == O_Index )
 		{
 			if ( bytecode.opcodes[o] == O_LiteralInt32 ) // indexing with a literal? we have an app for that
 			{
-				bytecode.all[a-5] = O_IndexLiteral32;
+				bytecode.all[a-4] = O_IndexLiteral32;
 				bytecode.opcodes[o] = O_IndexLiteral32;
 				return;
-				
+			}
+			else if ( bytecode.opcodes[o] == O_LiteralInt16 )
+			{
+				bytecode.all[a-2] = O_IndexLiteral16;
+				bytecode.opcodes[o] = O_IndexLiteral16;
+				return;
 			}
 			else if ( bytecode.opcodes[o] == O_LiteralInt8 )
 			{
@@ -2195,7 +2942,79 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 		}
 		else if ( opcode == O_BZ )
 		{
-			if ( bytecode.opcodes[o] == O_CompareEQ ) // assign+pop is very common
+			if ( bytecode.opcodes[o] == O_GSCompareEQ )
+			{
+				bytecode.opcodes[o] = O_GSCompareEQBZ;
+				bytecode.all[ a - 1 ] = O_GSCompareEQBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LSCompareEQ )
+			{
+				bytecode.opcodes[o] = O_LSCompareEQBZ;
+				bytecode.all[ a - 1 ] = O_LSCompareEQBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GSCompareNE )
+			{
+				bytecode.opcodes[o] = O_GSCompareNEBZ;
+				bytecode.all[ a - 1 ] = O_GSCompareNEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LSCompareNE )
+			{
+				bytecode.opcodes[o] = O_LSCompareNEBZ;
+				bytecode.all[ a - 1 ] = O_LSCompareNEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GSCompareGE )
+			{
+				bytecode.opcodes[o] = O_GSCompareGEBZ;
+				bytecode.all[ a - 1 ] = O_GSCompareGEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LSCompareGE )
+			{
+				bytecode.opcodes[o] = O_LSCompareGEBZ;
+				bytecode.all[ a - 1 ] = O_LSCompareGEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GSCompareLE )
+			{
+				bytecode.opcodes[o] = O_GSCompareLEBZ;
+				bytecode.all[ a - 1 ] = O_GSCompareLEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LSCompareLE )
+			{
+				bytecode.opcodes[o] = O_LSCompareLEBZ;
+				bytecode.all[ a - 1 ] = O_LSCompareLEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GSCompareGT )
+			{
+				bytecode.opcodes[o] = O_GSCompareGTBZ;
+				bytecode.all[ a - 1 ] = O_GSCompareGTBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LSCompareGT )
+			{
+				bytecode.opcodes[o] = O_LSCompareGTBZ;
+				bytecode.all[ a - 1 ] = O_LSCompareGTBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GSCompareLT )
+			{
+				bytecode.opcodes[o] = O_GSCompareLTBZ;
+				bytecode.all[ a - 1 ] = O_GSCompareLTBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LSCompareLT )
+			{
+				bytecode.opcodes[o] = O_LSCompareLTBZ;
+				bytecode.all[ a - 1 ] = O_LSCompareLTBZ;
+				return;
+			}			
+			else if ( bytecode.opcodes[o] == O_CompareEQ ) // assign+pop is very common
 			{
 				bytecode.all[a] = O_CompareBEQ;
 				bytecode.opcodes[o] = O_CompareBEQ;
@@ -2231,10 +3050,83 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				bytecode.opcodes[o] = O_CompareBNE;
 				return;
 			}
+			else if ( bytecode.opcodes[o] == O_LogicalOr ) // assign+pop is very common
+			{
+				bytecode.all[a] = O_BLO;
+				bytecode.opcodes[o] = O_BLO;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LogicalAnd ) // assign+pop is very common
+			{
+				bytecode.all[a] = O_BLA;
+				bytecode.opcodes[o] = O_BLA;
+				return;
+			}
 		}
 		else if ( opcode == O_PopOne )
 		{
-			if ( bytecode.opcodes[o] == O_CallLibFunction )
+			if ( bytecode.opcodes[o] == O_PreIncrement || bytecode.opcodes[o] == O_PostIncrement )
+			{	
+				if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+				{
+					// an inc and run..
+
+					// LoadGlob a - 2
+					// [index]  a - 1
+					// PreInc   a
+
+					bytecode.all[ a - 2 ] = O_IncGlobal;
+										
+					bytecode.all.shave(1);
+					bytecode.opcodes.shave(1);
+				}
+				else if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromLocal )
+				{
+					// LoadGlob a - 2
+					// [index]  a - 1
+					// PreInc   a
+
+					bytecode.all[ a - 2 ] = O_IncLocal;
+
+					bytecode.all.shave(1);
+					bytecode.opcodes.shave(1);
+				}
+				else
+				{
+					bytecode.all[a] = O_PreIncrementAndPop;
+					bytecode.opcodes[o] = O_PreIncrementAndPop;
+				}
+
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_PreDecrement || bytecode.opcodes[o] == O_PostDecrement )
+			{	
+				if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+				{
+					bytecode.all[ a - 2 ] = O_DecGlobal;
+					bytecode.all.shave(1);
+					bytecode.opcodes.shave(1);
+				}
+				else if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromLocal )
+				{
+					// LoadGlob a - 2
+					// [index]  a - 1
+					// PreInc   a
+
+					bytecode.all[ a - 2 ] = O_DecLocal;
+
+					bytecode.all.shave(1);
+					bytecode.opcodes.shave(1);
+				}
+				else
+				{
+					bytecode.all[a] = O_PreDecrementAndPop;
+					bytecode.opcodes[o] = O_PreDecrementAndPop;
+				}
+				
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CallLibFunction )
 			{
 				bytecode.all[a-5] = O_CallLibFunctionAndPop;
 				bytecode.opcodes[o] = O_CallLibFunctionAndPop;
@@ -2246,7 +3138,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				{
 					// save three opcodes if its just an assignment to
 					// a variable that is not going to be used.. this is super common
-					if ( bytecode.opcodes[ o - 1 ] == O_LoadFromGlobal )
+					if ( bytecode.opcodes[o-1] == O_LoadFromGlobal )
 					{
 						if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt8 )
 						{
@@ -2262,6 +3154,30 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 
 							// Lit8     a - 4
 							// [index]  a - 3
+							// [val]    a - 2
+							// [index]  a - 1 X
+							// Assign   a     X
+
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt16 )
+						{
+							// Lit16    a - 5
+							// [val]    a - 4
+							// [val]    a - 3
+							// LoadGLob a - 2
+							// [index]  a - 1
+							// Assign   a
+
+							bytecode.all[ a - 5 ] = O_LiteralInt16ToGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
+							bytecode.all[ a - 4 ] = bytecode.all[ a - 1 ];
+
+							// Lit8     a - 5
+							// [index]  a - 4
+							// [val]    a - 3
 							// [val]    a - 2
 							// [index]  a - 1 X
 							// Assign   a     X
@@ -2323,7 +3239,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all.shave(2);
 							bytecode.opcodes.shave(2);
 						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralZero )
+						else if ( (o > 1) && bytecode.opcodes[o-2] == O_LiteralZero )
 						{
 							// LitZ     a - 3
 							// LoadGlob a - 2
@@ -2340,7 +3256,35 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							// Assign   a     X
 
 							bytecode.all.shave(1);
-							bytecode.opcodes.shave(1);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryDivision )
+						{
+							bytecode.all[ a - 3 ] = O_BinaryDivisionAndStoreGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryAddition )
+						{
+							bytecode.all[ a - 3 ] = O_BinaryAdditionAndStoreGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryMultiplication )
+						{
+							bytecode.all[ a - 3 ] = O_BinaryMultiplicationAndStoreGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinarySubtraction )
+						{
+							bytecode.all[ a - 3 ] = O_BinarySubtractionAndStoreGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
 						}
 						else
 						{
@@ -2357,7 +3301,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 						{
 							// Lit8     a - 4
 							// [val]    a - 3
-							// LoadGlob a - 2
+							// LoadLoc  a - 2
 							// [index]  a - 1
 							// Assign   a
 
@@ -2367,6 +3311,30 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 
 							// Lit8     a - 4
 							// [index]  a - 3
+							// [val]    a - 2
+							// [index]  a - 1 X
+							// Assign   a     X
+
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt16 )
+						{
+							// Lit16    a - 5
+							// [val]    a - 4
+							// [val]    a - 3
+							// LoadLoc  a - 2
+							// [index]  a - 1
+							// Assign   a
+
+							bytecode.all[ a - 5 ] = O_LiteralInt16ToLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
+							bytecode.all[ a - 4 ] = bytecode.all[ a - 1 ];
+
+							// Lit8     a - 5
+							// [index]  a - 4
+							// [val]    a - 3
 							// [val]    a - 2
 							// [index]  a - 1 X
 							// Assign   a     X
@@ -2446,6 +3414,34 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 
 							bytecode.all.shave(1);
 							bytecode.opcodes.shave(1);
+						}
+						else if ( bytecode.opcodes[o - 2] == O_BinaryDivision )
+						{
+							bytecode.all[a - 3] = O_BinaryDivisionAndStoreLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( bytecode.opcodes[o - 2] == O_BinaryAddition )
+						{
+							bytecode.all[a - 3] = O_BinaryAdditionAndStoreLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( bytecode.opcodes[o - 2] == O_BinaryMultiplication )
+						{
+							bytecode.all[a - 3] = O_BinaryMultiplicationAndStoreLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
+						}
+						else if ( bytecode.opcodes[o - 2] == O_BinarySubtraction )
+						{
+							bytecode.all[a - 3] = O_BinarySubtractionAndStoreLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.shave(2);
 						}
 						else
 						{
@@ -2529,7 +3525,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			}
 		}
 	}
-	
+
 	bytecode.all += opcode;
 	bytecode.opcodes += opcode;
 }
@@ -2554,8 +3550,32 @@ void WRCompilationContext::setRelativeJumpTarget( WRBytecode& bytecode, int rela
 void WRCompilationContext::addRelativeJumpSource( WRBytecode& bytecode, WROpcode opcode, int relativeJumpTarget )
 {
 	pushOpcode( bytecode, opcode );
-	bytecode.jumpOffsetTargets[relativeJumpTarget].references.append() = bytecode.all.size();
-	pushData( bytecode, "0xE1E2", 2 );
+
+	int offset = bytecode.all.size();
+	switch( bytecode.opcodes[bytecode.opcodes.size() - 1] )
+	{
+		case O_GSCompareEQBZ:
+		case O_LSCompareEQBZ:
+		case O_GSCompareNEBZ:
+		case O_LSCompareNEBZ:
+		case O_GSCompareGEBZ:
+		case O_LSCompareGEBZ:
+		case O_GSCompareLEBZ:
+		case O_LSCompareLEBZ:
+		case O_GSCompareGTBZ:
+		case O_LSCompareGTBZ:
+		case O_GSCompareLTBZ:
+		case O_LSCompareLTBZ:
+		{
+			--offset;
+			break;
+		}
+
+		default: break;
+	}
+	
+	bytecode.jumpOffsetTargets[relativeJumpTarget].references.append() = offset;
+	pushData( bytecode, "\t\t", 2 );
 }
 
 //------------------------------------------------------------------------------
@@ -2566,19 +3586,52 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 		for( unsigned int t=0; t<bytecode.jumpOffsetTargets[j].references.count(); ++t )
 		{
 			int16_t diff = bytecode.jumpOffsetTargets[j].offset - bytecode.jumpOffsetTargets[j].references[t];
-			
+
 			int offset = bytecode.jumpOffsetTargets[j].references[t];
-			WROpcode o = (WROpcode) * (bytecode.all.c_str(offset - 1));
+			WROpcode o = (WROpcode) * (bytecode.all.p_str(offset - 1));
 
-			char* i1 = bytecode.all.p_str(offset);
+			switch( o )
+			{
+				case O_GSCompareEQBZ8:
+				case O_LSCompareEQBZ8:
+				case O_GSCompareNEBZ8:
+				case O_LSCompareNEBZ8:
+				case O_GSCompareGEBZ8:
+				case O_LSCompareGEBZ8:
+				case O_GSCompareLEBZ8:
+				case O_LSCompareLEBZ8:
+				case O_GSCompareGTBZ8:
+				case O_LSCompareGTBZ8:
+				case O_GSCompareLTBZ8:
+				case O_LSCompareLTBZ8:
+				case O_GSCompareEQBZ:
+				case O_LSCompareEQBZ:
+				case O_GSCompareNEBZ:
+				case O_LSCompareNEBZ:
+				case O_GSCompareGEBZ:
+				case O_LSCompareGEBZ:
+				case O_GSCompareLEBZ:
+				case O_LSCompareLEBZ:
+				case O_GSCompareGTBZ:
+				case O_LSCompareGTBZ:
+				case O_GSCompareLTBZ:
+				case O_LSCompareLTBZ:
+				{
+					--diff; // these instructions are offset
+					break;
+				}
 
+				default:
+					break;
+			}
+
+			
 			if ( (diff < 128) && (diff > -129) )
 			{
 				switch( o )
 				{
 					case O_RelativeJump: *bytecode.all.p_str(offset - 1) = O_RelativeJump8; break;
 					case O_BZ: *bytecode.all.p_str(offset - 1) = O_BZ8; break;
-					case O_BNZ: *bytecode.all.p_str(offset - 1) = O_BNZ8; break;
 
 					case O_CompareBEQ: *bytecode.all.p_str(offset - 1) = O_CompareBEQ8; break;
 					case O_CompareBNE: *bytecode.all.p_str(offset - 1) = O_CompareBNE8; break;
@@ -2586,11 +3639,28 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 					case O_CompareBLE: *bytecode.all.p_str(offset - 1) = O_CompareBLE8; break;
 					case O_CompareBGT: *bytecode.all.p_str(offset - 1) = O_CompareBGT8; break;
 					case O_CompareBLT: *bytecode.all.p_str(offset - 1) = O_CompareBLT8; break;
+									   
+					case O_GSCompareEQBZ: *bytecode.all.p_str(offset - 1) = O_GSCompareEQBZ8; ++offset; break;
+					case O_LSCompareEQBZ: *bytecode.all.p_str(offset - 1) = O_LSCompareEQBZ8; ++offset; break;
+					case O_GSCompareNEBZ: *bytecode.all.p_str(offset - 1) = O_GSCompareNEBZ8; ++offset; break;
+					case O_LSCompareNEBZ: *bytecode.all.p_str(offset - 1) = O_LSCompareNEBZ8; ++offset; break;
+					case O_GSCompareGEBZ: *bytecode.all.p_str(offset - 1) = O_GSCompareGEBZ8; ++offset; break;
+					case O_LSCompareGEBZ: *bytecode.all.p_str(offset - 1) = O_LSCompareGEBZ8; ++offset; break;
+					case O_GSCompareLEBZ: *bytecode.all.p_str(offset - 1) = O_GSCompareLEBZ8; ++offset; break;
+					case O_LSCompareLEBZ: *bytecode.all.p_str(offset - 1) = O_LSCompareLEBZ8; ++offset; break;
+					case O_GSCompareGTBZ: *bytecode.all.p_str(offset - 1) = O_GSCompareGTBZ8; ++offset; break;
+					case O_LSCompareGTBZ: *bytecode.all.p_str(offset - 1) = O_LSCompareGTBZ8; ++offset; break;
+					case O_GSCompareLTBZ: *bytecode.all.p_str(offset - 1) = O_GSCompareLTBZ8; ++offset; break;
+					case O_LSCompareLTBZ: *bytecode.all.p_str(offset - 1) = O_LSCompareLTBZ8; ++offset; break;
+
+					case O_BLA: *bytecode.all.p_str(offset - 1) = O_BLA8; break;
+					case O_BLO: *bytecode.all.p_str(offset - 1) = O_BLO8; break;
 						
 					// no work to be done, already visited
 					case O_RelativeJump8:
 					case O_BZ8:
-					case O_BNZ8:
+					case O_BLA8:
+					case O_BLO8:
 					case O_CompareBLE8:
 					case O_CompareBGE8:
 					case O_CompareBGT8:
@@ -2598,13 +3668,28 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 					case O_CompareBEQ8:
 					case O_CompareBNE8:
 						break;
+						
+					case O_GSCompareEQBZ8:
+					case O_LSCompareEQBZ8:
+					case O_GSCompareNEBZ8:
+					case O_LSCompareNEBZ8:
+					case O_GSCompareGEBZ8:
+					case O_LSCompareGEBZ8:
+					case O_GSCompareLEBZ8:
+					case O_LSCompareLEBZ8:
+					case O_GSCompareGTBZ8:
+					case O_LSCompareGTBZ8:
+					case O_GSCompareLTBZ8:
+					case O_LSCompareLTBZ8:
+						++offset;
+						break;
 
 					default:
 						m_err = WR_ERR_compiler_panic;
 						return;
 				}
 
-				*i1 = (int8_t)diff;
+				*bytecode.all.p_str(offset) = (int8_t)diff;
 			}
 			else
 			{
@@ -2614,19 +3699,61 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 					// that were previously optimized
 					case O_RelativeJump8: *bytecode.all.p_str(offset - 1) = O_RelativeJump; break;
 					case O_BZ8: *bytecode.all.p_str(offset - 1) = O_BZ; break;
-					case O_BNZ8: *bytecode.all.p_str(offset - 1) = O_BNZ; break;
 					case O_CompareBEQ8: *bytecode.all.p_str(offset - 1) = O_CompareBEQ; break;
 					case O_CompareBNE8: *bytecode.all.p_str(offset - 1) = O_CompareBNE; break;
 					case O_CompareBGE8: *bytecode.all.p_str(offset - 1) = O_CompareBGE; break;
 					case O_CompareBLE8: *bytecode.all.p_str(offset - 1) = O_CompareBLE; break;
 					case O_CompareBGT8: *bytecode.all.p_str(offset - 1) = O_CompareBGT; break;
 					case O_CompareBLT8: *bytecode.all.p_str(offset - 1) = O_CompareBLT; break;
+					case O_GSCompareEQBZ8: *bytecode.all.p_str(offset - 1) = O_GSCompareEQBZ; ++offset; break;
+					case O_LSCompareEQBZ8: *bytecode.all.p_str(offset - 1) = O_LSCompareEQBZ; ++offset; break;
+					case O_GSCompareNEBZ8: *bytecode.all.p_str(offset - 1) = O_GSCompareNEBZ; ++offset; break;
+					case O_LSCompareNEBZ8: *bytecode.all.p_str(offset - 1) = O_LSCompareNEBZ; ++offset; break;
+					case O_GSCompareGEBZ8: *bytecode.all.p_str(offset - 1) = O_GSCompareGEBZ; ++offset; break;
+					case O_LSCompareGEBZ8: *bytecode.all.p_str(offset - 1) = O_LSCompareGEBZ; ++offset; break;
+					case O_GSCompareLEBZ8: *bytecode.all.p_str(offset - 1) = O_GSCompareLEBZ; ++offset; break;
+					case O_LSCompareLEBZ8: *bytecode.all.p_str(offset - 1) = O_LSCompareLEBZ; ++offset; break;
+					case O_GSCompareGTBZ8: *bytecode.all.p_str(offset - 1) = O_GSCompareGTBZ; ++offset; break;
+					case O_LSCompareGTBZ8: *bytecode.all.p_str(offset - 1) = O_LSCompareGTBZ; ++offset; break;
+					case O_GSCompareLTBZ8: *bytecode.all.p_str(offset - 1) = O_GSCompareLTBZ; ++offset; break;
+					case O_LSCompareLTBZ8: *bytecode.all.p_str(offset - 1) = O_LSCompareLTBZ; ++offset; break;
+					case O_BLA8: *bytecode.all.p_str(offset - 1) = O_BLA; break;
+					case O_BLO8: *bytecode.all.p_str(offset - 1) = O_BLO; break;
 									   
-					default:
+					 // no work to be done, already visited
+					case O_RelativeJump:
+					case O_BZ:
+					case O_BLA:
+					case O_BLO:
+					case O_CompareBLE:
+					case O_CompareBGE:
+					case O_CompareBGT:
+					case O_CompareBLT:
+					case O_CompareBEQ:
+					case O_CompareBNE:
 						break;
+
+					case O_GSCompareEQBZ:
+					case O_LSCompareEQBZ:
+					case O_GSCompareNEBZ:
+					case O_LSCompareNEBZ:
+					case O_GSCompareGEBZ:
+					case O_LSCompareGEBZ:
+					case O_GSCompareLEBZ:
+					case O_LSCompareLEBZ:
+					case O_GSCompareGTBZ:
+					case O_LSCompareGTBZ:
+					case O_GSCompareLTBZ:
+					case O_LSCompareLTBZ:
+						++offset;
+						break;
+
+					default:
+						m_err = WR_ERR_compiler_panic;
+						return;
 				}
 				
-				pack16( diff, bytecode.all.p_str(bytecode.jumpOffsetTargets[j].references[t]) );
+				pack16( diff, bytecode.all.p_str(offset) );
 			}
 		}
 	}
@@ -2635,107 +3762,112 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 //------------------------------------------------------------------------------
 void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& addMe )
 {
-	if ( addMe.all.size() == 1 && addMe.opcodes[0] == O_HASH_PLACEHOLDER )
+	if ( addMe.all.size() == 1 )
 	{
-		if ( bytecode.opcodes.size() > 1
-			 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
-			 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_LoadFromLocal )
+		if ( addMe.opcodes[0] == O_HASH_PLACEHOLDER )
 		{
-			// O_literalint32
-			// 0
-			// 1
-			// 2
-			// 3
-			// O_loadlocal
-			// index
-
-			int o = bytecode.all.size() - 7;
-
-			bytecode.all[o] = O_LocalIndexHash;
-			bytecode.all[o + 5] = bytecode.all[o + 4];
-			bytecode.all[o + 4] = bytecode.all[o + 3];
-			bytecode.all[o + 3] = bytecode.all[o + 2];
-			bytecode.all[o + 2] = bytecode.all[o + 1];
-			bytecode.all[o + 1] = bytecode.all[o + 6];
-
-			bytecode.opcodes.shave(2);
-			bytecode.all.shave(1);
-
-			// O_LocalIndexHash
-			// index
-			// 0
-			// 1
-			// 2
-			// 3
-		}
-		else if (bytecode.opcodes.size() > 1
+			if ( bytecode.opcodes.size() > 1
 				 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
-				 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_LoadFromGlobal )
-		{
-			// O_literalint32
-			// 0
-			// 1
-			// 2
-			// 3
-			// O_LoadGlobal
-			// index
+				 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_LoadFromLocal )
+			{
+				// O_literalint32
+				// 0
+				// 1
+				// 2
+				// 3
+				// O_loadlocal
+				// index
 
-			int o = bytecode.all.size() - 7;
+				int o = bytecode.all.size() - 7;
 
-			bytecode.all[o] = O_GlobalIndexHash;
-			bytecode.all[o + 5] = bytecode.all[o + 4];
-			bytecode.all[o + 4] = bytecode.all[o + 3];
-			bytecode.all[o + 3] = bytecode.all[o + 2];
-			bytecode.all[o + 2] = bytecode.all[o + 1];
-			bytecode.all[o + 1] = bytecode.all[o + 6];
+				bytecode.all[o] = O_LocalIndexHash;
+				bytecode.all[o + 5] = bytecode.all[o + 4];
+				bytecode.all[o + 4] = bytecode.all[o + 3];
+				bytecode.all[o + 3] = bytecode.all[o + 2];
+				bytecode.all[o + 2] = bytecode.all[o + 1];
+				bytecode.all[o + 1] = bytecode.all[o + 6];
 
-			bytecode.opcodes.shave(2);
-			bytecode.all.shave(1);
+				bytecode.opcodes.shave(2);
+				bytecode.all.shave(1);
 
-			// O_GlobalIndexHash
-			// index
-			// 0
-			// 1
-			// 2
-			// 3
+				// O_LocalIndexHash
+				// index
+				// 0
+				// 1
+				// 2
+				// 3
+			}
+			else if (bytecode.opcodes.size() > 1
+					 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
+					 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_LoadFromGlobal )
+			{
+				// O_literalint32
+				// 0
+				// 1
+				// 2
+				// 3
+				// O_LoadGlobal
+				// index
+
+				int o = bytecode.all.size() - 7;
+
+				bytecode.all[o] = O_GlobalIndexHash;
+				bytecode.all[o + 5] = bytecode.all[o + 4];
+				bytecode.all[o + 4] = bytecode.all[o + 3];
+				bytecode.all[o + 3] = bytecode.all[o + 2];
+				bytecode.all[o + 2] = bytecode.all[o + 1];
+				bytecode.all[o + 1] = bytecode.all[o + 6];
+
+				bytecode.opcodes.shave(2);
+				bytecode.all.shave(1);
+
+				// O_GlobalIndexHash
+				// index
+				// 0
+				// 1
+				// 2
+				// 3
+			}
+			else if (bytecode.opcodes.size() > 1
+					 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
+					 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_StackSwap )
+			{
+				// it arrived from a stack swap
+
+				// O_literalint32
+				// 0
+				// 1
+				// 2
+				// 3
+				// O_StackSwap
+				// index
+
+				int o = bytecode.all.size() - 7;
+
+				bytecode.all[o] = O_StackIndexHash;
+
+				bytecode.opcodes.shave(2);
+				bytecode.all.shave(2);
+
+
+				// O_StackIndexHash
+				// 0
+				// 1
+				// 2
+				// 3
+			}
+			else
+			{
+				m_err = WR_ERR_compiler_panic;
+			}
+
+			return;
 		}
-		else if (bytecode.opcodes.size() > 1
-				 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
-				 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_StackSwap )
-		{
-			// it arrived from a stack swap
 
-			// O_literalint32
-			// 0
-			// 1
-			// 2
-			// 3
-			// O_StackSwap
-			// index
-
-			int o = bytecode.all.size() - 7;
-
-			bytecode.all[o] = O_StackIndexHash;
-
-			bytecode.opcodes.shave(2);
-			bytecode.all.shave(2);
-
-
-			// O_StackIndexHash
-			// 0
-			// 1
-			// 2
-			// 3
-		}
-		else
-		{
-			m_err = WR_ERR_compiler_panic;
-		}
-
+		pushOpcode( bytecode, (WROpcode)addMe.opcodes[0] );
 		return;
 	}
 
-	
 	resolveRelativeJumps( addMe );
 
 	// add the namespace, making sure to offset it into the new block properly
@@ -2793,20 +3925,28 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRValue& value )
 		if ( (value.i <= 127) && (value.i >= -128) )
 		{
 			pushOpcode( bytecode, O_LiteralInt8 );
-			char be = (char)value.i;
+			unsigned char be = (char)value.i;
+			pushData( bytecode, &be, 1 );
+		}
+		else if ( (value.i <= 32767) && (value.i >= -32768) )
+		{
+			pushOpcode( bytecode, O_LiteralInt16 );
+			unsigned char be = (char)(value.i>>8);
+			pushData( bytecode, &be, 1 );
+			be = (char)value.i;
 			pushData( bytecode, &be, 1 );
 		}
 		else
 		{
 			pushOpcode( bytecode, O_LiteralInt32 );
-			char data[4];
+			unsigned char data[4];
 			pushData( bytecode, pack32(value.i, data), 4 );
 		}
 	}
 	else if ( value.type == WR_COMPILER_LITERAL_STRING )
 	{
 		pushOpcode( bytecode, O_LiteralString );
-		char data[2];
+		unsigned char data[2];
 		int16_t be = ((WRstr*)value.p)->size();
 		pushData( bytecode, pack16(be, data), 2 );
 		for( unsigned int i=0; i<((WRstr*)value.p)->size(); ++i )
@@ -2817,7 +3957,7 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRValue& value )
 	else
 	{
 		pushOpcode( bytecode, O_LiteralFloat );
-		char data[4];
+		unsigned char data[4];
 		int32_t be = value.i;
 		pushData( bytecode, pack32(be, data), 4 );
 	}
@@ -2852,7 +3992,7 @@ void WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token
 			if (m_units[0].bytecode.localSpace[j].hash == hash)
 			{
 				pushOpcode(bytecode, O_LoadFromGlobal);
-				char c = j;
+				unsigned char c = j;
 				pushData(bytecode, &c, 1);
 				return;
 			}
@@ -2864,7 +4004,7 @@ void WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token
 	if ( !addOnly )
 	{
 		pushOpcode( bytecode, O_LoadFromLocal );
-		char c = i;
+		unsigned char c = i;
 		pushData( bytecode, &c, 1 );
 	}
 }
@@ -2873,14 +4013,16 @@ void WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token
 void WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token )
 {
 	uint32_t hash;
+	WRstr t2;
 	if ( token[0] == ':' && token[1] == ':' )
 	{
-		hash = wr_hash( token.c_str(2), token.size() - 2 );
+		t2 = token;
 	}
 	else
 	{
-		hash = wr_hash( token.c_str(), token.size() );
+		t2.format( "::%s", token.c_str() );
 	}
+	hash = wr_hash( t2, t2.size() );
 
 	unsigned int i=0;
 
@@ -2895,7 +4037,7 @@ void WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& toke
 	m_units[0].bytecode.localSpace[i].hash = hash;
 
 	pushOpcode( bytecode, O_LoadFromGlobal );
-	char c = i;
+	unsigned char c = i;
 	pushData( bytecode, &c, 1 );
 }
 
@@ -2916,7 +4058,7 @@ void WRCompilationContext::addFunctionToHashSpace( WRBytecode& result, WRstr& to
 	result.functionSpace[i].references.append() = getBytecodePosition( result );
 	result.functionSpace[i].hash = hash;
 	pushData( result, "\t\t\t\t\t", 5 ); // TBD opcode plus index, OR hash if index was not found
-	result.invalidateOpcodeCache();
+	result.opcodes += O_CallFunctionByHash;
 }
 
 //------------------------------------------------------------------------------
@@ -2927,7 +4069,7 @@ void WRCompilationContext::loadExpressionContext( WRExpression& expression, int 
 		 && expression.context[operation].operation->opcode == O_HASH_PLACEHOLDER
 		 && depth > operation )
 	{
-		char buf[4];
+		unsigned char buf[4];
 		pack32( wr_hash( expression.context[depth].token,
 						 expression.context[depth].token.size()),
 				buf );
@@ -2981,7 +4123,7 @@ void WRCompilationContext::loadExpressionContext( WRExpression& expression, int 
 }
 
 //------------------------------------------------------------------------------
-void WRExpression::swapWithTop( int stackPosition )
+void WRExpression::swapWithTop( int stackPosition, bool addOpcodes )
 {
 	if ( stackPosition == 0 )
 	{
@@ -3005,9 +4147,12 @@ void WRExpression::swapWithTop( int stackPosition )
 
 	assert( (currentTop != (unsigned int)-1) && (swapWith != (unsigned int)-1) );
 
-	char pos = stackPosition + 1;
-	WRCompilationContext::pushOpcode( bytecode, O_StackSwap );
-	WRCompilationContext::pushData( bytecode, &pos, 1 );
+	if ( addOpcodes )
+	{
+		unsigned char pos = stackPosition + 1;
+		WRCompilationContext::pushOpcode( bytecode, O_StackSwap );
+		WRCompilationContext::pushData( bytecode, &pos, 1 );
+	}
 	context[currentTop].stackPosition = stackPosition;
 	context[swapWith].stackPosition = 0;
 }
@@ -3034,6 +4179,10 @@ void WRCompilationContext::resolveExpression( WRExpression& expression )
 			}
 
 			resolveExpressionEx( expression, o, p );
+			if (m_err)
+			{
+				return;
+			}
 			o = (unsigned int)-1;
 		}
 
@@ -3048,6 +4197,10 @@ void WRCompilationContext::resolveExpression( WRExpression& expression )
 			}
 
 			resolveExpressionEx( expression, o, p );
+			if (m_err)
+			{
+				return;
+			}
 			o = expression.context.count();
 		}
 	}
@@ -3130,12 +4283,17 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 			else
 			{
 				// first and second are both loaded but neither
-				// is in the correct position, three swaps
-				// required
+				// is in the correct position
 
-				expression.swapWithTop( expression.context[second].stackPosition );
-				expression.swapWithTop( 1 );
-				expression.swapWithTop( expression.context[first].stackPosition );
+				WRCompilationContext::pushOpcode( expression.bytecode, O_SwapTwoToTop );
+				unsigned char pos = expression.context[first].stackPosition + 1;
+				WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
+				pos = expression.context[second].stackPosition + 1;
+				WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
+
+				expression.swapWithTop( expression.context[second].stackPosition, false );
+				expression.swapWithTop( 1, false );
+				expression.swapWithTop( expression.context[first].stackPosition, false );
 			}
 
 			appendBytecode( expression.bytecode, expression.context[o].bytecode ); // apply operator
@@ -3156,6 +4314,7 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 
 			int second = o + 1; // push first
 			int first = o - 1;  // push second
+			bool useAlt = false;
 			// so
 			// 1 - first
 			// [oper]
@@ -3177,7 +4336,14 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 
 					loadExpressionContext( expression, second, o );
 
-					expression.swapWithTop( 1 );
+					if ( expression.context[o].operation->alt == O_LAST )
+					{
+						expression.swapWithTop( 1 );
+					}
+					else // otherwise top shuffle is NOT required because we have an equal-but-opposite operation
+					{
+						useAlt = true;
+					}
 				}
 			}
 			else if ( expression.context[first].stackPosition == -1 )
@@ -3203,24 +4369,38 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 				// second is on top of the stack, swap with
 				// next level down then swap first up
 
-				expression.swapWithTop( 1 );
-				
-				expression.swapWithTop( expression.context[first].stackPosition );
+				WRCompilationContext::pushOpcode( expression.bytecode, O_SwapTwoToTop );
+				unsigned char pos = expression.context[first].stackPosition + 1;
+				WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
+				pos = 2;
+				WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
+
+				expression.swapWithTop( 1, false );
+				expression.swapWithTop( expression.context[first].stackPosition, false );
 			}
 			else
 			{
-				// first and second are both loaded but neither
-				// is in the correct position, three swaps
-				// required
+				// first and second are both loaded but neither is in the correct position
 
-				expression.swapWithTop( expression.context[second].stackPosition );
-				
-				expression.swapWithTop( 1 );
-				
-				expression.swapWithTop( expression.context[first].stackPosition );
+				WRCompilationContext::pushOpcode( expression.bytecode, O_SwapTwoToTop );
+				unsigned char pos = expression.context[first].stackPosition + 1;
+				WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
+				pos = expression.context[second].stackPosition + 1;
+				WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
+
+				expression.swapWithTop( expression.context[second].stackPosition, false );
+				expression.swapWithTop( 1, false );
+				expression.swapWithTop( expression.context[first].stackPosition, false );
 			}
 
-			appendBytecode( expression.bytecode, expression.context[o].bytecode ); // apply operator
+			if ( useAlt )
+			{
+				pushOpcode( expression.bytecode, expression.context[o].operation->alt );
+			}
+			else
+			{
+				appendBytecode( expression.bytecode, expression.context[o].bytecode ); // apply operator
+			}
 
 			expression.context.remove( o - 1, 2 ); // knock off operator and arg
 			expression.pushToStack(o - 1);
@@ -3247,7 +4427,7 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 
 			appendBytecode( expression.bytecode, expression.context[o].bytecode );
 			expression.context.remove( o, 1 ); // knock off operator
-			expression.pushToStack(o - 1);
+			expression.pushToStack( o - 1 );
 
 			break;
 		}
@@ -3302,6 +4482,15 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 		if ( value.type != WR_REF )
 		{
+			if ( (depth > 0) 
+				 && ((expression.context[depth - 1].type == EXTYPE_LABEL) 
+					 || (expression.context[depth - 1].type == EXTYPE_LITERAL)) )
+			{
+				// two labels/literals cannot follow each other
+				m_err = WR_ERR_bad_expression;
+				return 0;
+			}
+
 			// it's a literal
 			expression.context[depth].type = EXTYPE_LITERAL;
 			
@@ -3328,7 +4517,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			if ( (depth > 0) && expression.context[depth - 1].type == EXTYPE_LABEL )
 			{
 				// always only a call
-				
+
 				--depth;
 				WRstr functionName = expression.context[depth].token;
 				WRstr prefix = expression.context[depth].prefix;
@@ -3337,7 +4526,10 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 				expression.context[depth].type = EXTYPE_BYTECODE_RESULT;
 
-				char argsPushed = 0;
+				pushOpcode( expression.context[depth].bytecode, O_LiteralZero ); // reserve return value
+
+
+				unsigned char argsPushed = 0;
 				
 				WRstr& token2 = expression.context[depth].token;
 				WRValue& value2 = expression.context[depth].value;
@@ -3383,7 +4575,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					prefix += "::";
 					prefix += functionName;
 
-					char buf[4];
+					unsigned char buf[4];
 					pack32( wr_hashStr(prefix), buf );
 
 					pushOpcode( expression.context[depth].bytecode, O_CallLibFunction );
@@ -3484,6 +4676,15 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 		WRstr prefix;
 		if ( isValidLabel(token, isGlobal, prefix) )
 		{
+			if ( (depth > 0) 
+				&& ((expression.context[depth - 1].type == EXTYPE_LABEL) 
+					|| (expression.context[depth - 1].type == EXTYPE_LITERAL)) )
+			{
+				// two labels/literals cannot follow each other
+				m_err = WR_ERR_bad_expression;
+				return 0;
+			}
+
 			expression.context[depth].type = EXTYPE_LABEL;
 			expression.context[depth].global = isGlobal;
 			expression.context[depth].prefix = prefix;
@@ -3710,8 +4911,9 @@ bool WRCompilationContext::parseDoWhile( bool& returnCalled, WROpcode opcodeToRe
 
 	appendBytecode( m_units[m_unitTop].bytecode, nex.bytecode );
 
-	addRelativeJumpSource( m_units[m_unitTop].bytecode, O_BNZ, jumpToTop );
-
+	addRelativeJumpSource( m_units[m_unitTop].bytecode, O_BZ, *m_breakTargets.tail() );
+	addRelativeJumpSource( m_units[m_unitTop].bytecode, O_RelativeJump, jumpToTop );
+	
 	setRelativeJumpTarget( m_units[m_unitTop].bytecode, *m_breakTargets.tail() );
 
 	m_continueTargets.pop();
@@ -4106,7 +5308,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 //------------------------------------------------------------------------------
 void WRCompilationContext::link( unsigned char** out, int* outLen )
 {
-	WRstr code;
+	WROpcodeStream code;
 
 	if ( m_units.count() > 1 )
 	{
@@ -4114,19 +5316,17 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 		code += (char)m_units.count() - 1;
 	}
 
-	char data[4];
+	unsigned char data[4];
 
 	// register the function signatures
 	for( unsigned int u=1; u<m_units.count(); ++u )
 	{
-		code += O_LiteralInt8; // index
-		code += (char)(u - 1);
-
-		code += O_LiteralInt8; // args
-		code += (char)m_units[u].arguments;
-
-		code += O_LiteralInt8; // local frame size
-		code += (char)m_units[u].bytecode.localSpace.count();
+		data[3] = u - 1; // index
+		data[2] = m_units[u].arguments; // args
+		data[1] = m_units[u].bytecode.localSpace.count(); // local frame size
+		data[0] = 0;
+		code += O_LiteralInt32;
+		code.append( data, 4 ); // placeholder, it doesn't matter
 
 		code += O_LiteralInt32; // hash
 		code.append( pack32(m_units[u].hash, data), 4 );
@@ -4149,6 +5349,9 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 	// append all the unit code
 	for( unsigned int u=0; u<m_units.count(); ++u )
 	{
+#ifdef _DUMP
+		streamDump( m_units[u].bytecode.all );
+#endif
 		if ( u > 0 ) // for the non-zero unit fill location into the jump table
 		{
 			int32_t offset = code.size();
@@ -4197,7 +5400,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 	if ( !m_err )
 	{
 		*outLen = code.size();
-		code.release( (char **)out );
+		code.release( out );
 	}
 }
 
@@ -4223,7 +5426,7 @@ WRError WRCompilationContext::compile( const char* source,
 	
 	bool returnCalled;
 
-	m_loadedValue.type = WR_REF;
+	m_loadedValue.p2 = INIT_AS_REF;
 
 	do
 	{
@@ -4289,7 +5492,7 @@ WRError WRCompilationContext::compile( const char* source,
 		pushOpcode( m_units[0].bytecode, O_LiteralZero );
 		pushOpcode( m_units[0].bytecode, O_Stop );
 	}
-
+	
 	link( out, outLen );
 
 	return m_err;
@@ -4313,107 +5516,184 @@ int wr_compile( const char* source, const int size, unsigned char** out, int* ou
 #ifdef DEBUG_OPCODE_NAMES
 const char* c_opcodeName[] = 
 {
-	"RegisterFunction",
-	"FunctionListSize",
-	"LiteralZero",
-	"LiteralInt8",
-	"LiteralInt32",
-	"LiteralFloat",
-	"LiteralString",
-	"CallFunctionByHash",
-	"CallFunctionByHashAndPop",
-	"CallFunctionByIndex",
-	"CallLibFunction",
-	"CallLibFunctionAndPop",
-	"Index",
-	"IndexLiteral8",
-	"IndexLiteral32",
-	"StackIndexHash",
-	"GlobalIndexHash",
-	"LocalIndexHash",
-	"Assign",
-	"AssignAndPop",
-	"AssignToGlobalAndPop",
-	"AssignToLocalAndPop",
-	"StackSwap",
-	"ReserveFrame",
-	"ReserveGlobalFrame",
-	"LoadFromLocal",
-	"LoadFromGlobal",
-	"PopOne",
-	"Return",
-	"Stop",
-	"BinaryAddition",
-	"BinarySubtraction",
-	"BinaryMultiplication",
-	"BinaryDivision",
-	"BinaryRightShift",
-	"BinaryLeftShift",
-	"BinaryMod",
-	"BinaryAnd",
-	"BinaryOr",
-	"BinaryXOR",
-	"BitwiseNOT",
-	"CoerceToInt",
-	"CoerceToFloat",
-	"RelativeJump",
-	"RelativeJump8",
-	"BZ",
-	"BZ8",
-	"BNZ",
-	"BNZ8",
-	"CompareEQ",
-	"CompareNE",
-	"CompareGE",
-	"CompareLE",
-	"CompareGT",
-	"CompareLT",
-	"CompareBEQ",
-	"CompareBNE",
-	"CompareBGE",
-	"CompareBLE",
-	"CompareBGT",
-	"CompareBLT",
-	"CompareBEQ8",
-	"CompareBNE8",
-	"CompareBGE8",
-	"CompareBLE8",
-	"CompareBGT8",
-	"CompareBLT8",
-	"PostIncrement",
-	"PostDecrement",
-	"PreIncrement",
-	"PreDecrement",
-	"Negate",
-	"SubtractAssign",
-	"AddAssign",
-	"ModAssign",
-	"MultiplyAssign",
-	"DivideAssign",
-	"ORAssign",
-	"ANDAssign",
-	"XORAssign",
-	"RightShiftAssign",
-	"LeftShiftAssign",
-	"SubtractAssignAndPop",
-	"AddAssignAndPop",
-	"ModAssignAndPop",
-	"MultiplyAssignAndPop",
-	"DivideAssignAndPop",
-	"ORAssignAndPop",
-	"ANDAssignAndPop",
-	"XORAssignAndPop",
-	"RightShiftAssignAndPop",
-	"LeftShiftAssignAndPop",
-	"LogicalAnd",
-	"LogicalOr",
-	"LogicalNot",
+	"O_RegisterFunction",
+	"O_FunctionListSize",
+	"O_LiteralInt32",
+	"O_LiteralZero",
+	"O_LiteralFloat",
+	"O_LiteralString",
+	"O_CallFunctionByHash",
+	"O_CallFunctionByIndex",
+	"O_CallLibFunction",
+	"O_Index",
+	"O_StackIndexHash",
+	"O_GlobalIndexHash",
+	"O_LocalIndexHash",
+	"O_Assign",
+	"O_StackSwap",
+	"O_SwapTwoToTop",
+	"O_ReserveFrame",
+	"O_ReserveGlobalFrame",
+	"O_LoadFromLocal",
+	"O_LoadFromGlobal",
+	"O_PopOne",
+	"O_Return",
+	"O_Stop",
+	"O_BinaryAddition",
+	"O_BinarySubtraction",
+	"O_BinaryMultiplication",
+	"O_BinaryDivision",
+	"O_BinaryRightShift",
+	"O_BinaryLeftShift",
+	"O_BinaryMod",
+	"O_BinaryAnd",
+	"O_BinaryOr",
+	"O_BinaryXOR",
+	"O_BitwiseNOT",
+	"O_CoerceToInt",
+	"O_CoerceToFloat",
+	"O_RelativeJump",
+	"O_BZ",
+	"O_CompareEQ", 
+	"O_CompareNE", 
+	"O_CompareGE",
+	"O_CompareLE",
+	"O_CompareGT",
+	"O_CompareLT",
+	"O_GSCompareEQ", 
+	"O_LSCompareEQ", 
+	"O_GSCompareNE", 
+	"O_LSCompareNE", 
+	"O_GSCompareGE",
+	"O_LSCompareGE",
+	"O_GSCompareLE",
+	"O_LSCompareLE",
+	"O_GSCompareGT",
+	"O_LSCompareGT",
+	"O_GSCompareLT",
+	"O_LSCompareLT",
+	"O_GSCompareEQBZ", 
+	"O_LSCompareEQBZ", 
+	"O_GSCompareNEBZ", 
+	"O_LSCompareNEBZ", 
+	"O_GSCompareGEBZ",
+	"O_LSCompareGEBZ",
+	"O_GSCompareLEBZ",
+	"O_LSCompareLEBZ",
+	"O_GSCompareGTBZ",
+	"O_LSCompareGTBZ",
+	"O_GSCompareLTBZ",
+	"O_LSCompareLTBZ",
+	"O_GSCompareEQBZ8",
+	"O_LSCompareEQBZ8",
+	"O_GSCompareNEBZ8",
+	"O_LSCompareNEBZ8",
+	"O_GSCompareGEBZ8",
+	"O_LSCompareGEBZ8",
+	"O_GSCompareLEBZ8",
+	"O_LSCompareLEBZ8",
+	"O_GSCompareGTBZ8",
+	"O_LSCompareGTBZ8",
+	"O_GSCompareLTBZ8",
+	"O_LSCompareLTBZ8",
+	"O_PostIncrement",
+	"O_PostDecrement",
+	"O_PreIncrement",
+	"O_PreDecrement",
+	"O_PreIncrementAndPop",
+	"O_PreDecrementAndPop",
+	"O_IncGlobal",
+	"O_DecGlobal",
+	"O_IncLocal",
+	"O_DecLocal",
+	"O_Negate",
+	"O_SubtractAssign",
+	"O_AddAssign",
+	"O_ModAssign",
+	"O_MultiplyAssign",
+	"O_DivideAssign",
+	"O_ORAssign",
+	"O_ANDAssign",
+	"O_XORAssign",
+	"O_RightShiftAssign",
+	"O_LeftShiftAssign",
+	"O_LogicalAnd",
+	"O_LogicalOr",
+	"O_LogicalNot",
+	"O_RelativeJump8",
+	"O_LiteralInt8",
+	"O_LiteralInt16",
+	"O_CallFunctionByHashAndPop",
+	"O_CallLibFunctionAndPop",
+	"O_IndexLiteral8",
+	"O_IndexLiteral16",
+	"O_IndexLiteral32",
+	"O_AssignAndPop",
+	"O_AssignToGlobalAndPop",
+	"O_AssignToLocalAndPop",
+	"O_BinaryAdditionAndStoreGlobal",
+	"O_BinarySubtractionAndStoreGlobal",
+	"O_BinaryMultiplicationAndStoreGlobal",
+	"O_BinaryDivisionAndStoreGlobal",
+	"O_BinaryAdditionAndStoreLocal",
+	"O_BinarySubtractionAndStoreLocal",
+	"O_BinaryMultiplicationAndStoreLocal",
+	"O_BinaryDivisionAndStoreLocal",
+	"O_BZ8",
+	"O_CompareBEQ",
+	"O_CompareBNE",
+	"O_CompareBGE",
+	"O_CompareBLE",
+	"O_CompareBGT",
+	"O_CompareBLT",
+	"O_CompareBEQ8",
+	"O_CompareBNE8",
+	"O_CompareBGE8",
+	"O_CompareBLE8",
+	"O_CompareBGT8",
+	"O_CompareBLT8",
+	"O_SubtractAssignAndPop",
+	"O_AddAssignAndPop",
+	"O_ModAssignAndPop",
+	"O_MultiplyAssignAndPop",
+	"O_DivideAssignAndPop",
+	"O_ORAssignAndPop",
+	"O_ANDAssignAndPop",
+	"O_XORAssignAndPop",
+	"O_RightShiftAssignAndPop",
+	"O_LeftShiftAssignAndPop",
+	"O_BLA",
+	"O_BLA8",
+	"O_BLO",
+	"O_BLO8",
+	"O_LiteralInt8ToGlobal",
+	"O_LiteralInt16ToGlobal",
+	"O_LiteralInt32ToLocal",
+	"O_LiteralInt8ToLocal",
+	"O_LiteralInt16ToLocal",
+	"O_LiteralFloatToGlobal",
+	"O_LiteralFloatToLocal",
+	"O_LiteralInt32ToGlobal",
+	"O_GGBinaryMultiplication",
+	"O_GLBinaryMultiplication",
+	"O_LLBinaryMultiplication",
+	"O_GGBinaryAddition",
+	"O_GLBinaryAddition",
+	"O_LLBinaryAddition",
+	"O_GGBinarySubtraction",
+	"O_GLBinarySubtraction",
+	"O_LGBinarySubtraction",
+	"O_LLBinarySubtraction",
+	"O_GGBinaryDivision",
+	"O_GLBinaryDivision",
+	"O_LGBinaryDivision",
+	"O_LLBinaryDivision",
 };
 #endif
 
 #else // WRENCH_WITHOUT_COMPILER
 
-int wr_compile( const char* source, const int size, unsigned char** out, int* outLen )
+int wr_compile( const char* source", const int size", unsigned char** out", int* outLen", char* errMsg )
 {
 	return WR_ERR_compiler_not_loaded;
 }
@@ -4443,95 +5723,7 @@ SOFTWARE.
 
 #include "wrench.h"
 
-//------------------------------------------------------------------------------
-WRValue* WRValue::asValueArray( int* len )
-{
-	if ( type != WR_ARRAY )
-	{
-		return 0;
-	}
-
-	if ( (va->m_type&0x3) != SV_VALUE )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-
-	return (WRValue*)va->m_data;
-}
-
-//------------------------------------------------------------------------------
-unsigned char* WRValue::asCharArray( int* len )
-{
-	if ( type != WR_ARRAY )
-	{
-		return 0;
-	}
-
-	if ( (va->m_type&0x3) != SV_CHAR )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-
-	return (unsigned char*)va->m_data;
-}
-
-//------------------------------------------------------------------------------
-int* WRValue::asIntArray( int* len )
-{
-	if ( type != WR_ARRAY )
-	{
-		return 0;
-	}
-
-	if ( (va->m_type&0x3) != SV_INT )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-	
-	return (int*)va->m_data;
-}
-
-//------------------------------------------------------------------------------
-float* WRValue::asFloatArray( int* len )
-{
-	if ( type != WR_ARRAY )
-	{
-		return 0;
-	}
-
-	if ( (va->m_type&0x3) != SV_FLOAT )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-
-	return (float*)va->m_data;
-}
-
-//------------------------------------------------------------------------------
-WRState* wr_newState( int stackSize )
-{
-	return new WRState( stackSize );
-}
+#include <memory.h>
 
 //------------------------------------------------------------------------------
 WRContext::WRContext( WRState* state ) : w(state)
@@ -4549,6 +5741,9 @@ WRContext::~WRContext()
 {
 	delete[] globalSpace;
 	delete[] localFunctions;
+
+	loader = 0;
+	usr = 0;
 
 	while( svAllocated )
 	{
@@ -4569,11 +5764,7 @@ WRState::WRState( int EntriesInStack )
 	{
 		stack[i].init();
 	}
-	stackTop = stack;
 
-	loader = 0;
-	usr = 0;
-	returnValue = 0;
 	contextList = 0;
 }
 
@@ -4595,16 +5786,16 @@ WRState::~WRState()
 }
 
 //------------------------------------------------------------------------------
-WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type )
+WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type, WRValue* stackTop )
 {
 	// gc before every alloc may seem a bit much but we want to be miserly
 	if ( svAllocated )
 	{
 		// mark stack
-		for( WRValue* s=w->stack; s<w->stackTop; ++s)
+		for( WRValue* s=w->stack; s<stackTop; ++s)
 		{
 			// an array in the chain?
-			if ( s->type == WR_ARRAY && !(s->va->m_type & SV_PRE_ALLOCATED) )
+			if ( (s->xtype&0x3) == WR_EX_ARRAY && !(s->va->m_type & SV_PRE_ALLOCATED) )
 			{
 				gcArray( s->va );
 			}
@@ -4613,8 +5804,7 @@ WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type )
 		// mark context's global
 		for( int i=0; i<globals; ++i )
 		{
-			// an array in the chain?
-			if ( globalSpace[i].type == WR_ARRAY && !(globalSpace[i].va->m_type & SV_PRE_ALLOCATED) )
+			if ( globalSpace[i].xtype == WR_EX_ARRAY && !(globalSpace[i].va->m_type & SV_PRE_ALLOCATED) )
 			{
 				gcArray( globalSpace[i].va );
 			}
@@ -4648,21 +5838,21 @@ WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type )
 		}
 	}
 
-	
+//	if ( !size )
+//	{
+//		return 0;
+//	}
+
 	WRStaticValueArray* ret = new WRStaticValueArray( size, type );
 	if ( type == SV_VALUE )
 	{
 		WRValue *array = (WRValue *)ret->m_data;
-		for( int i=0; i<size; ++i )
-		{
-			array[i].p = 0;
-			array[i].p2 = 0;
-		}
+		memset( (void*)array, 0, sizeof(WRValue) * size);
 	}
-
+	
 	ret->m_next = svAllocated;
 	svAllocated = ret;
-
+	
 	return ret;
 }
 
@@ -4678,7 +5868,7 @@ void WRContext::gcArray( WRStaticValueArray* sva )
 		WRValue* top = (WRValue*)sva->m_data + (sva->m_size & ~0x40000000);
 		for( WRValue* i = (WRValue*)sva->m_data; i<top; ++i )
 		{
-			if ( i->type == WR_ARRAY && !(i->va->m_type & SV_PRE_ALLOCATED) )
+			if ( i->xtype == WR_EX_ARRAY && !(i->va->m_type & SV_PRE_ALLOCATED) )
 			{
 				gcArray( i->va );
 			}
@@ -4695,7 +5885,7 @@ void wr_destroyState( WRState* w )
 //------------------------------------------------------------------------------
 unsigned int wr_loadSingleBlock( int offset, const unsigned char** block, void* usr )
 {
-	*block = (unsigned char *)usr;
+	*block = (unsigned char *)usr + offset;
 	return 0xFFFFFFF; // larger than any bytecode possible
 }
 
@@ -4706,9 +5896,8 @@ WRError wr_getLastError( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_runEx( WRState* w )
+WRContext* wr_runEx( WRState* w, WRContext* C )
 {
-	WRContext* C = new WRContext( w );
 	C->next = w->contextList;
 	w->contextList = C;
 	
@@ -4722,19 +5911,21 @@ WRContext* wr_runEx( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_run( WRState* w, const unsigned char* block, const int size )
+WRContext* wr_run( WRState* w, const unsigned char* block )
 {
-	w->loader = wr_loadSingleBlock;
-	w->usr = (void*)block;
-	return wr_runEx( w );
+	WRContext* C = new WRContext( w );
+	C->loader = wr_loadSingleBlock;
+	C->usr = (void*)block;
+	return wr_runEx( w, C );
 }
 
 //------------------------------------------------------------------------------
 WRContext* wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr )
 {
-	w->loader = loader;
-	w->usr = usr;
-	return wr_runEx( w );
+	WRContext* C = new WRContext( w );
+	C->loader = loader;
+	C->usr = usr;
+	return wr_runEx( w, C );
 }
 
 //------------------------------------------------------------------------------
@@ -4786,81 +5977,67 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 	w->c_libFunctionRegistry.set( wr_hashStr(signature), function );
 }
 
-//------------------------------------------------------------------------------
-char* wr_valueToString( WRValue const& value, char* string )
-{
-	return value.asString( string );
-}
-
-
-#ifdef SPRINTF_OPERATIONS
+#ifdef WRENCH_SPRINTF_OPERATIONS
 #include <stdio.h>
 #endif
 //------------------------------------------------------------------------------
 char* WRValue::asString( char* string ) const
 {
-	switch( type )
+	if ( xtype )
 	{
-#ifdef SPRINTF_OPERATIONS
-		case WR_INT: { sprintf( string, "%d", i ); break; }
-		case WR_FLOAT: { sprintf( string, "%g", f ); break; }
-#else
-		case WR_INT: 
-		case WR_FLOAT:
+		switch( xtype )
 		{
-			string[0] = 0;
-			break;
-		}
-#endif
-		case WR_REF: { return r->asString( string ); }
-		case WR_USR:
-		{
-			return string;
-		}
-
-		case WR_ARRAY:
-		{
-			unsigned int s = 0;
-
-			for( ; s<va->m_size; ++s )
+			case WR_EX_USR:
 			{
-				switch( va->m_type & 0x3)
-				{
-					case SV_VALUE: string[s] = ((WRValue *)va->m_data)[s].i; break;
-					case SV_CHAR: string[s] = ((char *)va->m_data)[s]; break;
-					default: break;
-				}
+				return string;
 			}
-			string[s] = 0;
-			break;
+			
+			case WR_EX_ARRAY:
+			{
+				unsigned int s = 0;
+					
+				for( ; s<va->m_size; ++s )
+				{
+					switch( va->m_type & 0x3)
+					{
+						case SV_VALUE: string[s] = ((WRValue *)va->m_data)[s].i; break;
+						case SV_CHAR: string[s] = ((char *)va->m_data)[s]; break;
+						default: break;
+					}
+				}
+				string[s] = 0;
+				break;
+			}
+			
+			case WR_EX_REFARRAY:
+			{
+				WRValue temp;
+				wr_arrayToValue(this, &temp);
+				return temp.asString(string);
+			}
 		}
-
-		case WR_REFARRAY:
+	}
+	else
+	{
+		switch( type )
 		{
-			WRValue temp;
-			wr_arrayToValue(this, &temp);
-			return temp.asString(string);
+#ifdef WRENCH_SPRINTF_OPERATIONS
+			case WR_INT: { sprintf( string, "%d", i ); break; }
+			case WR_FLOAT: { sprintf( string, "%g", f ); break; }
+#else
+			case WR_INT: 
+			case WR_FLOAT:
+			{
+				string[0] = 0;
+				break;
+			}
+#endif
+			case WR_REF: { return r->asString( string ); }
 		}
 	}
 	
 	return string;
 }
-
-
-#ifdef D_OPCODE
-#define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)*pc, c_opcodeName[*pc]);
-#else
-#define PER_INSTRUCTION
-#endif
-
-#ifdef JUMPTABLE_INTERPRETER
-#define CONTINUE { goto *opcodeJumptable[*pc++]; PER_INSTRUCTION; }
-#define CASE(LABEL) LABEL
-#else
-#define CONTINUE continue
-#define CASE(LABEL) case O_##LABEL
-#endif
-
 
 //------------------------------------------------------------------------------
 int wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv, const int argn )
@@ -4892,49 +6069,48 @@ int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const W
 	return wr_callFunction( w, context, function, argv, argn );
 }
 
-
 //------------------------------------------------------------------------------
-WRFunction* wr_functionToIndex( WRContext* context, const int32_t hash )
+WRFunction* wr_getFunction( WRContext* context, const char* functionName )
 {
-	return context->localFunctionRegistry.getItem( hash );
+	return context->localFunctionRegistry.getItem( wr_hashStr(functionName) );
 }
 
-//------------------------------------------------------------------------------
-WRFunction* wr_functionToIndex( WRContext* context, const char* functionName )
-{
-	return wr_functionToIndex( context, wr_hashStr(functionName) );
-}
+#ifdef D_OPCODE
+#define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)*pc, c_opcodeName[*pc]);
+#else
+#define PER_INSTRUCTION
+#endif
+
+#ifdef WRENCH_JUMPTABLE_INTERPRETER
+#define CONTINUE { goto *opcodeJumptable[*pc++]; PER_INSTRUCTION; }
+#define CASE(LABEL) LABEL
+#else
+#define CONTINUE { PER_INSTRUCTION; continue; }
+#define CASE(LABEL) case O_##LABEL
+#endif
 
 //------------------------------------------------------------------------------
 int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const WRValue* argv, const int argn )
-//int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
 {
-#ifdef JUMPTABLE_INTERPRETER
+#ifdef WRENCH_JUMPTABLE_INTERPRETER
 	const void* opcodeJumptable[] =
 	{
 		&&RegisterFunction,
 		&&FunctionListSize,
-		&&LiteralZero,
-		&&LiteralInt8,
 		&&LiteralInt32,
+		&&LiteralZero,
 		&&LiteralFloat,
 		&&LiteralString,
 		&&CallFunctionByHash,
-		&&CallFunctionByHashAndPop,
 		&&CallFunctionByIndex,
 		&&CallLibFunction,
-		&&CallLibFunctionAndPop,
 		&&Index,
-		&&IndexLiteral8,
-		&&IndexLiteral32,
 		&&StackIndexHash,
 		&&GlobalIndexHash,
 		&&LocalIndexHash,
 		&&Assign,
-		&&AssignAndPop,
-		&&AssignToGlobalAndPop,
-		&&AssignToLocalAndPop,
 		&&StackSwap,
+		&&SwapTwoToTop,
 		&&ReserveFrame,
 		&&ReserveGlobalFrame,
 		&&LoadFromLocal,
@@ -4956,17 +6132,93 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&CoerceToInt,
 		&&CoerceToFloat,
 		&&RelativeJump,
-		&&RelativeJump8,
 		&&BZ,
-		&&BZ8,
-		&&BNZ,
-		&&BNZ8,
-		&&CompareEQ,
-		&&CompareNE,
+		&&CompareEQ, 
+		&&CompareNE, 
 		&&CompareGE,
 		&&CompareLE,
 		&&CompareGT,
 		&&CompareLT,
+		&&GSCompareEQ, 
+		&&LSCompareEQ, 
+		&&GSCompareNE, 
+		&&LSCompareNE, 
+		&&GSCompareGE,
+		&&LSCompareGE,
+		&&GSCompareLE,
+		&&LSCompareLE,
+		&&GSCompareGT,
+		&&LSCompareGT,
+		&&GSCompareLT,
+		&&LSCompareLT,
+		&&GSCompareEQBZ, 
+		&&LSCompareEQBZ, 
+		&&GSCompareNEBZ, 
+		&&LSCompareNEBZ, 
+		&&GSCompareGEBZ,
+		&&LSCompareGEBZ,
+		&&GSCompareLEBZ,
+		&&LSCompareLEBZ,
+		&&GSCompareGTBZ,
+		&&LSCompareGTBZ,
+		&&GSCompareLTBZ,
+		&&LSCompareLTBZ,
+		&&GSCompareEQBZ8,
+		&&LSCompareEQBZ8,
+		&&GSCompareNEBZ8,
+		&&LSCompareNEBZ8,
+		&&GSCompareGEBZ8,
+		&&LSCompareGEBZ8,
+		&&GSCompareLEBZ8,
+		&&LSCompareLEBZ8,
+		&&GSCompareGTBZ8,
+		&&LSCompareGTBZ8,
+		&&GSCompareLTBZ8,
+		&&LSCompareLTBZ8,
+		&&PostIncrement,
+		&&PostDecrement,
+		&&PreIncrement,
+		&&PreDecrement,
+		&&PreIncrementAndPop,
+		&&PreDecrementAndPop,
+		&&IncGlobal,
+		&&DecGlobal,
+		&&IncLocal,
+		&&DecLocal,
+		&&Negate,
+		&&SubtractAssign,
+		&&AddAssign,
+		&&ModAssign,
+		&&MultiplyAssign,
+		&&DivideAssign,
+		&&ORAssign,
+		&&ANDAssign,
+		&&XORAssign,
+		&&RightShiftAssign,
+		&&LeftShiftAssign,
+		&&LogicalAnd,
+		&&LogicalOr,
+		&&LogicalNot,
+		&&RelativeJump8,
+		&&LiteralInt8,
+		&&LiteralInt16,
+		&&CallFunctionByHashAndPop,
+		&&CallLibFunctionAndPop,
+		&&IndexLiteral8,
+		&&IndexLiteral16,
+		&&IndexLiteral32,
+		&&AssignAndPop,
+		&&AssignToGlobalAndPop,
+		&&AssignToLocalAndPop,
+		&&BinaryAdditionAndStoreGlobal,
+		&&BinarySubtractionAndStoreGlobal,
+		&&BinaryMultiplicationAndStoreGlobal,
+		&&BinaryDivisionAndStoreGlobal,
+		&&BinaryAdditionAndStoreLocal,
+		&&BinarySubtractionAndStoreLocal,
+		&&BinaryMultiplicationAndStoreLocal,
+		&&BinaryDivisionAndStoreLocal,
+		&&BZ8,
 		&&CompareBEQ,
 		&&CompareBNE,
 		&&CompareBGE,
@@ -4979,21 +6231,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&CompareBLE8,
 		&&CompareBGT8,
 		&&CompareBLT8,
-		&&PostIncrement,
-		&&PostDecrement,
-		&&PreIncrement,
-		&&PreDecrement,
-		&&Negate,
-		&&SubtractAssign,
-		&&AddAssign,
-		&&ModAssign,
-		&&MultiplyAssign,
-		&&DivideAssign,
-		&&ORAssign,
-		&&ANDAssign,
-		&&XORAssign,
-		&&RightShiftAssign,
-		&&LeftShiftAssign,
 		&&SubtractAssignAndPop,
 		&&AddAssignAndPop,
 		&&ModAssignAndPop,
@@ -5004,15 +6241,32 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&XORAssignAndPop,
 		&&RightShiftAssignAndPop,
 		&&LeftShiftAssignAndPop,
-		&&LogicalAnd,
-		&&LogicalOr,
-		&&LogicalNot,
+		&&BLA,
+		&&BLA8,
+		&&BLO,
+		&&BLO8,
 		&&LiteralInt8ToGlobal,
+		&&LiteralInt16ToGlobal,
 		&&LiteralInt32ToLocal,
 		&&LiteralInt8ToLocal,
+		&&LiteralInt16ToLocal,
 		&&LiteralFloatToGlobal,
 		&&LiteralFloatToLocal,
 		&&LiteralInt32ToGlobal,
+		&&GGBinaryMultiplication,
+		&&GLBinaryMultiplication,
+		&&LLBinaryMultiplication,
+		&&GGBinaryAddition,
+		&&GLBinaryAddition,
+		&&LLBinaryAddition,
+		&&GGBinarySubtraction,
+		&&GLBinarySubtraction,
+		&&LGBinarySubtraction,
+		&&LLBinarySubtraction,
+		&&GGBinaryDivision,
+		&&GLBinaryDivision,
+		&&LGBinaryDivision,
+		&&LLBinaryDivision,
 	};
 #endif
 
@@ -5021,6 +6275,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	register WRValue* tempValue2;
 	WRValue* frameBase = 0;
 	WRValue* stackTop = w->stack;
+	WRValue* globalSpace = context->globalSpace;
 
 	w->err = WR_ERR_None;
 	
@@ -5036,27 +6291,28 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 	if ( !(pc = context->bottom) )
 	{
-		w->loader( 0, &pc, w->usr );
+		context->loader( 0, &pc, context->usr );
 		context->bottom = pc;
 	}
 #else
 	// cache these values they are used a lot
-	WR_LOAD_BLOCK_FUNC loader = w->loader;
-	void* usr = w->usr;
+	WR_LOAD_BLOCK_FUNC loader = context->loader;
+	void* usr = context->usr;
 	const unsigned char* top = 0;
 	pc = 0;
 	int absoluteBottom = 0; // pointer to where in the codebase out bottom actually points to
 #endif
 
+	// make room on the bottom for the return value of this script
+
 	if ( function )
 	{
-		args = 0;
-		if ( argv && argn )
+		stackTop->p = 0;
+		(stackTop++)->p2 = INIT_AS_INT;
+
+		for( args = 0; args < argn; ++args )
 		{
-			for( ; args < argn; ++args )
-			{
-				*stackTop++ = argv[args];
-			}
+			*stackTop++ = argv[args];
 		}
 		
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
@@ -5069,7 +6325,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		goto callFunction;
 	}
 
-#ifdef JUMPTABLE_INTERPRETER
+#ifdef WRENCH_JUMPTABLE_INTERPRETER
 
 	CONTINUE;
 	
@@ -5091,24 +6347,27 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 #endif
 			CASE(RegisterFunction):
 			{
-				int index = (stackTop - 5)->i;
-				context->localFunctions[ index ].arguments = (stackTop - 4)->i;
-				context->localFunctions[ index ].frameSpaceNeeded = (stackTop - 3)->i;
+				unsigned int i = (stackTop - 3)->i;
+				unsigned char index = (unsigned char)i;
+
+				context->localFunctions[ index ].arguments = (unsigned char)(i>>8);
+				context->localFunctions[ index ].frameSpaceNeeded = (unsigned char)(i>>16);
 				context->localFunctions[ index ].hash = (stackTop - 2)->i;
-				
+
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
-				context->localFunctions[index].offset = (stackTop - 1)->i + context->bottom; // absolute
+				context->localFunctions[ index ].offset = (stackTop - 1)->i + context->bottom; // absolute
 #else
-				context->localFunctions[index].offsetI = (stackTop - 1)->i; // relative
+				context->localFunctions[ index ].offset = 0; // make sure the offset is clear
+				context->localFunctions[ index ].offsetI = (stackTop - 1)->i; // relative
 #endif
-				
-				context->localFunctions[ index ].frameBaseAdjustment = 2
+
+				context->localFunctions[ index ].frameBaseAdjustment = 1
 																	   + context->localFunctions[ index ].frameSpaceNeeded
 																	   + context->localFunctions[ index ].arguments;
 
 				context->localFunctionRegistry.set( context->localFunctions[ index ].hash,
 													context->localFunctions + index );
-				stackTop -= 5;
+				stackTop -= 3;
 				CONTINUE;
 			}
 
@@ -5120,35 +6379,24 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 				CONTINUE;
 			}
 
-			CASE(LiteralZero):
-			{
-				stackTop->p = 0;
-				(stackTop++)->p2 = 0;
-				CONTINUE;
-			}
-			
-			CASE(LiteralInt8):
-			{
-				stackTop->type = WR_INT;
-				(stackTop++)->i = (int32_t)(int8_t)*pc++;
-				CONTINUE;
-			}
-			
 			CASE(LiteralFloat):
 			{
-				stackTop->type = WR_FLOAT;
-				goto load32ToStackTop;
+				tempValue = stackTop++;
+				tempValue->p2 = INIT_AS_FLOAT;
+				goto load32ToTemp;
 			}
 			
 			CASE(LiteralInt32):
 			{
-				stackTop->type = WR_INT;
-load32ToStackTop:
-				(stackTop++)->i = (((int32_t)*pc) << 24)
-								  | (((int32_t)*(pc+1)) << 16)
-								  | (((int32_t)*(pc+2)) << 8)
-								  | ((int32_t)*(pc+3));
-				pc += 4;
+				tempValue = stackTop++;
+				tempValue->p2 = INIT_AS_INT;
+				goto load32ToTemp;
+			}
+
+			CASE(LiteralZero):
+			{
+				stackTop->p = 0;
+				(stackTop++)->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
 
@@ -5156,8 +6404,8 @@ load32ToStackTop:
 			{
 				int16_t len = (((int16_t)*pc)<<8) | (int16_t)*(pc + 1);
 				pc += 2;
-				stackTop->type = WR_ARRAY;
-				stackTop->va = context->getSVA( len, SV_CHAR );
+				stackTop->p2 = INIT_AS_ARRAY;
+				stackTop->va = context->getSVA( len, SV_CHAR, stackTop );
 
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				memcpy( (unsigned char *)stackTop->va->m_data, pc, len );
@@ -5171,6 +6419,8 @@ load32ToStackTop:
 						top = pc + (size - 6);
 						context->bottom = pc;
 					}
+
+					((unsigned char *)stackTop->va->m_data)[c] = *pc++;
 				}
 #endif
 				++stackTop;
@@ -5180,11 +6430,10 @@ load32ToStackTop:
 			CASE(ReserveFrame):
 			{
 				frameBase = stackTop;
-				for( unsigned char i=0; i<*pc; ++i )
+				for( int i=0; i<*pc; ++i )
 				{
 					(stackTop)->p = 0;
-					(++stackTop)->p2 = 0;
-
+					(++stackTop)->p2 = INIT_AS_INT;
 				}
 				++pc;
 				CONTINUE;
@@ -5192,44 +6441,32 @@ load32ToStackTop:
 
 			CASE(ReserveGlobalFrame):
 			{
-				delete[] context->globalSpace;
+				if ( context->globalSpace )
+				{
+					delete[] context->globalSpace;
+				}
 				context->globals = *pc++;
 				context->globalSpace = new WRValue[ context->globals ];
-				for( unsigned char i=0; i<context->globals; ++i )
+				for( int i=0; i<context->globals; ++i )
 				{
 					context->globalSpace[i].p = 0;
-					context->globalSpace[i].p2 = 0;
+					context->globalSpace[i].p2 = INIT_AS_INT;
 				}
+				globalSpace = context->globalSpace;
 				CONTINUE;
 			}
 
 			CASE(LoadFromLocal):
 			{
-				stackTop->type = WR_REF;
+				stackTop->p2 = INIT_AS_REF;
 				(stackTop++)->p = frameBase + *pc++;
 				CONTINUE;
 			}
 
 			CASE(LoadFromGlobal):
 			{
-				stackTop->type = WR_REF;
-				(stackTop++)->p = context->globalSpace + *pc++;
-				CONTINUE;
-			}
-
-			CASE(AssignToGlobalAndPop):
-			{
-				tempValue = context->globalSpace + *pc++;
-				tempValue2 = --stackTop;
-				wr_assign[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				CONTINUE;
-			}
-
-			CASE(AssignToLocalAndPop):
-			{
-				tempValue = frameBase + *pc++;
-				tempValue2 = --stackTop;
-				wr_assign[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
+				stackTop->p2 = INIT_AS_REF;
+				(stackTop++)->p = globalSpace + *pc++;
 				CONTINUE;
 			}
 
@@ -5237,26 +6474,7 @@ load32ToStackTop:
 			{
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
-				wr_index[tempValue->type*6+tempValue2->type]( context, tempValue, tempValue2 );
-				CONTINUE;
-			}
-
-			CASE(IndexLiteral32):
-			{
-				stackTop->i = (((int32_t)*pc) << 24) |
-					(((int32_t) * (pc + 1)) << 16) |
-					(((int32_t) * (pc + 2)) << 8) |
-					(int32_t) * (pc + 3);
-				pc += 4;
-				goto indexLiteral;
-			}
-
-			CASE(IndexLiteral8):
-			{
-				stackTop->i = *pc++;
-indexLiteral:
-				tempValue = stackTop - 1;
-				wr_index[WR_INT*6+tempValue->type]( context, stackTop, tempValue );
+				wr_index[(tempValue->type<<2)|tempValue2->type]( context, tempValue, tempValue2 );
 				CONTINUE;
 			}
 
@@ -5275,10 +6493,10 @@ indexLiteral:
 
 			CASE(GlobalIndexHash):
 			{
-				tempValue = context->globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
 				goto indexHash;
 			}
-
+			
 			CASE(LocalIndexHash):
 			{
 				tempValue = frameBase + *pc++;
@@ -5292,23 +6510,259 @@ indexHash:
 				pc += 4;
 				CONTINUE;
 			}
+
+			CASE(LogicalAnd): { returnFunc = wr_LogicalAND; goto returnFuncNormal; }
+			CASE(LogicalOr): { returnFunc = wr_LogicalOR; goto returnFuncNormal; }
+			CASE(CompareLE): { returnFunc = wr_CompareGT; goto returnFuncInverted; }
+			CASE(CompareGE): { returnFunc = wr_CompareLT; goto returnFuncInverted; }
+			CASE(CompareGT): { returnFunc = wr_CompareGT; goto returnFuncNormal; }
+			CASE(CompareLT): { returnFunc = wr_CompareLT; goto returnFuncNormal; }
+			CASE(CompareEQ):
+			{
+				returnFunc = wr_CompareEQ;
+returnFuncNormal:
+				tempValue = --stackTop;
+returnFuncPostLoad:
+				tempValue2 = stackTop - 1;
+				tempValue2->i = (int)returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				tempValue2->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+
+			CASE(CompareNE):
+			{
+				returnFunc = wr_CompareEQ;
+returnFuncInverted:
+				tempValue = --stackTop;
+returnFuncInvertedPostLoad:
+				tempValue2 = stackTop - 1;
+				tempValue2->i = (int)!returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				tempValue2->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+
+			CASE(GSCompareEQ):
+			{
+				tempValue = globalSpace + *pc++;
+				returnFunc = wr_CompareEQ;
+				goto returnFuncPostLoad;
+			}
 			
-			CASE(BinaryMultiplication): { targetFunc = wr_binaryMultiply; goto targetFuncOp; }
-			CASE(BinarySubtraction): { targetFunc = wr_binarySubtract; goto targetFuncOp; }
-			CASE(BinaryDivision): { targetFunc = wr_binaryDivide; goto targetFuncOp; }
-			CASE(BinaryRightShift): { targetFunc = wr_binaryRightShift; goto targetFuncOp; }
-			CASE(BinaryLeftShift): { targetFunc = wr_binaryLeftShift; goto targetFuncOp; }
-			CASE(BinaryMod): { targetFunc = wr_binaryMod; goto targetFuncOp; }
-			CASE(BinaryOr): { targetFunc = wr_binaryOR; goto targetFuncOp; }
-			CASE(BinaryXOR): { targetFunc = wr_binaryXOR; goto targetFuncOp; }
-			CASE(BinaryAnd): { targetFunc = wr_binaryAND; goto targetFuncOp; }
+			CASE(LSCompareEQ):
+			{
+				tempValue = frameBase + *pc++;
+				returnFunc = wr_CompareEQ;
+				goto returnFuncPostLoad;
+			}
+			
+			CASE(GSCompareNE):
+			{
+				tempValue = globalSpace + *pc++;
+				returnFunc = wr_CompareEQ;
+				goto returnFuncInvertedPostLoad;
+			}
+			
+			CASE(LSCompareNE):
+			{
+				tempValue = frameBase + *pc++;
+				returnFunc = wr_CompareEQ;
+				goto returnFuncInvertedPostLoad;
+			}
+			
+			CASE(GSCompareGT):
+			{
+				tempValue = globalSpace + *pc++;
+				returnFunc = wr_CompareGT;
+				goto returnFuncPostLoad;
+			}
+			
+			CASE(LSCompareGT):
+			{
+				tempValue = frameBase + *pc++;
+				returnFunc = wr_CompareGT;
+				goto returnFuncPostLoad;
+			}
+			
+			CASE(GSCompareLT):
+			{
+				tempValue = globalSpace + *pc++;
+				returnFunc = wr_CompareLT;
+				goto returnFuncPostLoad;
+			}
+			
+			CASE(LSCompareLT):
+			{
+				tempValue = frameBase + *pc++;
+				returnFunc = wr_CompareLT;
+				goto returnFuncPostLoad;
+			}
+			
+			CASE(GSCompareGE):
+			{
+				tempValue = globalSpace + *pc++;
+				returnFunc = wr_CompareLT;
+				goto returnFuncInvertedPostLoad;
+			}
+			
+			CASE(LSCompareGE):
+			{
+				tempValue = frameBase + *pc++;
+				returnFunc = wr_CompareLT;
+				goto returnFuncInvertedPostLoad;
+			}
+			
+			CASE(GSCompareLE):
+			{
+				tempValue = globalSpace + *pc++;
+				returnFunc = wr_CompareGT;
+				goto returnFuncInvertedPostLoad;
+			}
+			
+			CASE(LSCompareLE):
+			{
+				tempValue = frameBase + *pc++;
+				returnFunc = wr_CompareGT;
+				goto returnFuncInvertedPostLoad;
+			}
+
+			CASE(GSCompareGEBZ): { returnFunc = wr_CompareLT; goto CompareGInverted; }
+			CASE(GSCompareLEBZ): { returnFunc = wr_CompareGT; goto CompareGInverted; }
+			CASE(GSCompareNEBZ):
+			{
+				returnFunc = wr_CompareEQ;
+CompareGInverted:
+				tempValue = globalSpace + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
+				CONTINUE;
+			}
+			
+			CASE(GSCompareEQBZ): { returnFunc = wr_CompareEQ; goto CompareGNormal; }
+			CASE(GSCompareGTBZ): { returnFunc = wr_CompareGT; goto CompareGNormal; }
+			CASE(GSCompareLTBZ):
+			{
+				returnFunc = wr_CompareLT;
+CompareGNormal:
+				tempValue = globalSpace + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
+				CONTINUE;
+			}
+			
+			CASE(LSCompareGEBZ): { returnFunc = wr_CompareLT; goto CompareLInverted; }
+			CASE(LSCompareLEBZ): { returnFunc = wr_CompareGT; goto CompareLInverted; }
+			CASE(LSCompareNEBZ):
+			{
+				returnFunc = wr_CompareEQ;
+CompareLInverted:
+				tempValue = frameBase + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
+				CONTINUE;
+			}
+			
+			CASE(LSCompareEQBZ): { returnFunc = wr_CompareEQ; goto CompareLNormal; }
+			CASE(LSCompareGTBZ): { returnFunc = wr_CompareGT; goto CompareLNormal; }
+			CASE(LSCompareLTBZ):
+			{
+				returnFunc = wr_CompareLT;
+CompareLNormal:
+				tempValue = frameBase + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
+				CONTINUE;
+			}
+			
+			CASE(GSCompareGEBZ8): { returnFunc = wr_CompareLT; goto CompareG8Inverted; }
+			CASE(GSCompareLEBZ8): { returnFunc = wr_CompareGT; goto CompareG8Inverted; }
+			CASE(GSCompareNEBZ8):
+			{
+				returnFunc = wr_CompareEQ;
+CompareG8Inverted:
+				tempValue = globalSpace + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int8_t)*pc : 2;
+				CONTINUE;
+			}
+
+			CASE(GSCompareEQBZ8): { returnFunc = wr_CompareEQ; goto CompareG8Normal; }
+			CASE(GSCompareGTBZ8): { returnFunc = wr_CompareGT; goto CompareG8Normal; }
+			CASE(GSCompareLTBZ8):
+			{
+				returnFunc = wr_CompareLT;
+CompareG8Normal:
+				tempValue = globalSpace + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int8_t)*pc;
+				CONTINUE;
+			}
+
+			CASE(LSCompareGEBZ8): { returnFunc = wr_CompareLT; goto CompareL8Inverted; }
+			CASE(LSCompareLEBZ8): { returnFunc = wr_CompareGT; goto CompareL8Inverted; }
+			CASE(LSCompareNEBZ8):
+			{
+				returnFunc = wr_CompareEQ;
+CompareL8Inverted:
+				tempValue = frameBase + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int8_t)*pc : 2;
+				CONTINUE;
+			}
+
+			CASE(LSCompareEQBZ8): { returnFunc = wr_CompareEQ; goto CompareL8Normal; }
+			CASE(LSCompareGTBZ8): { returnFunc = wr_CompareGT; goto CompareL8Normal; }
+			CASE(LSCompareLTBZ8):
+			{
+				returnFunc = wr_CompareLT;
+CompareL8Normal:
+				tempValue = frameBase + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int8_t)*pc;
+				CONTINUE;
+			}
+			
+			CASE(PostIncrement): { tempValue = stackTop - 1; wr_postinc[ tempValue->type ]( tempValue, tempValue ); CONTINUE; }
+			CASE(PostDecrement): { tempValue = stackTop - 1; wr_postdec[ tempValue->type ]( tempValue, tempValue ); CONTINUE; }
+			CASE(PreIncrement): { tempValue = stackTop - 1; wr_preinc[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(PreDecrement): { tempValue = stackTop - 1; wr_predec[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(PreIncrementAndPop): { tempValue = --stackTop; wr_preinc[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(PreDecrementAndPop): { tempValue = --stackTop; wr_predec[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(IncGlobal): { tempValue = globalSpace + *pc++; wr_preinc[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(DecGlobal): { tempValue = globalSpace + *pc++; wr_predec[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(IncLocal): { tempValue = frameBase + *pc++; wr_preinc[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(DecLocal): { tempValue = frameBase + *pc++; wr_predec[ tempValue->type ]( tempValue ); CONTINUE; }
+
+			CASE(LogicalNot):
+			{
+				tempValue = stackTop - 1;
+				tempValue->i = wr_LogicalNot[ tempValue->type ]( tempValue );
+				tempValue->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+
+			CASE(Negate):
+			{
+				tempValue = stackTop - 1;
+				wr_negate[ tempValue->type ]( tempValue );
+				CONTINUE;
+			}
+
+			CASE(BinaryMultiplication): { targetFunc = wr_MultiplyBinary; goto targetFuncOp; }
+			CASE(BinarySubtraction): { targetFunc = wr_SubtractBinary; goto targetFuncOp; }
+			CASE(BinaryDivision): { targetFunc = wr_DivideBinary; goto targetFuncOp; }
+			CASE(BinaryRightShift): { targetFunc = wr_RightShiftBinary; goto targetFuncOp; }
+			CASE(BinaryLeftShift): { targetFunc = wr_LeftShiftBinary; goto targetFuncOp; }
+			CASE(BinaryMod): { targetFunc = wr_ModBinary; goto targetFuncOp; }
+			CASE(BinaryOr): { targetFunc = wr_ORBinary; goto targetFuncOp; }
+			CASE(BinaryXOR): { targetFunc = wr_XORBinary; goto targetFuncOp; }
+			CASE(BinaryAnd): { targetFunc = wr_ANDBinary; goto targetFuncOp; }
 			CASE(BinaryAddition):
 			{
-				targetFunc = wr_binaryAddition;
+				targetFunc = wr_AdditionBinary;
 targetFuncOp:
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
-				targetFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2, tempValue2 );
+				targetFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, tempValue2 );
 				CONTINUE;
 			}
 
@@ -5318,7 +6772,6 @@ targetFuncOp:
 				wr_bitwiseNot[ tempValue->type ]( tempValue );
 				CONTINUE;
 			}
-
 
 			CASE(SubtractAssign): { voidFunc = wr_SubtractAssign; goto binaryTableOp; }
 			CASE(AddAssign): { voidFunc = wr_AddAssign; goto binaryTableOp; }
@@ -5336,29 +6789,7 @@ targetFuncOp:
 binaryTableOp:
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
-				voidFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				CONTINUE;
-			}
-
-			CASE(SubtractAssignAndPop): { voidFunc = wr_SubtractAssign; goto binaryTableOpAndPop; }
-			CASE(AddAssignAndPop): { voidFunc = wr_AddAssign; goto binaryTableOpAndPop; }
-			CASE(ModAssignAndPop): { voidFunc = wr_ModAssign; goto binaryTableOpAndPop; }
-			CASE(MultiplyAssignAndPop): { voidFunc = wr_MultiplyAssign; goto binaryTableOpAndPop; }
-			CASE(DivideAssignAndPop): { voidFunc = wr_DivideAssign; goto binaryTableOpAndPop; }
-			CASE(ORAssignAndPop): { voidFunc = wr_ORAssign; goto binaryTableOpAndPop; }
-			CASE(ANDAssignAndPop): { voidFunc = wr_ANDAssign; goto binaryTableOpAndPop; }
-			CASE(XORAssignAndPop): { voidFunc = wr_XORAssign; goto binaryTableOpAndPop; }
-			CASE(RightShiftAssignAndPop): { voidFunc = wr_RightShiftAssign; goto binaryTableOpAndPop; }
-			CASE(LeftShiftAssignAndPop): { voidFunc = wr_LeftShiftAssign; goto binaryTableOpAndPop; }
-			CASE(AssignAndPop):
-			{
-				voidFunc = wr_assign;
-
-binaryTableOpAndPop:
-				tempValue = --stackTop;
-				tempValue2 = --stackTop;
-				voidFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				
+				voidFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
 				CONTINUE;
 			}
 
@@ -5368,7 +6799,7 @@ binaryTableOpAndPop:
 				tempValue2 = stackTop - *pc++;
 				uint32_t t = tempValue->p2;
 				const void* p = tempValue->p;
-				
+
 				tempValue->p2 = tempValue2->p2;
 				tempValue->p = tempValue2->p;
 
@@ -5376,73 +6807,69 @@ binaryTableOpAndPop:
 				tempValue2->p2 = t;
 
 				CONTINUE;
+			} 
+
+			CASE(SwapTwoToTop): // accomplish two (or three when optimized) swaps into one instruction
+			{
+				tempValue = stackTop - *pc++;
+
+				uint32_t t = (stackTop - 1)->p2;
+				const void* p = (stackTop - 1)->p;
+
+				(stackTop - 1)->p2 = tempValue->p2;
+				(stackTop - 1)->p = tempValue->p;
+
+				tempValue->p = p;
+				tempValue->p2 = t;
+
+				tempValue = stackTop - *pc++;
+
+				t = (stackTop - 2)->p2;
+				p = (stackTop - 2)->p;
+
+				(stackTop - 2)->p2 = tempValue->p2;
+				(stackTop - 2)->p = tempValue->p;
+
+				tempValue->p = p;
+				tempValue->p2 = t;
+
+				CONTINUE;
 			}
 
 			CASE(CallFunctionByHash):
 			{
-				int32_t hash = (((int32_t)*pc) << 24)
-							   | (((int32_t)*(pc+1)) << 16)
-							   | (((int32_t)*(pc+2)) << 8)
-							   | ((int32_t)*(pc+3));
-				args = *(pc+4); // which have already been pushed
-				pc += 5;
+				WRCFunctionCallback* cF;
 
-				WRCFunctionCallback* cF = w->c_functionRegistry.get( hash );
-				if ( cF )
+				args = *(pc+4); // which have already been pushed
+				if ( (cF = w->c_functionRegistry.get( (((int32_t)*pc) << 24)
+													  | (((int32_t)*(pc+1)) << 16)
+													  | (((int32_t)*(pc+2)) << 8)
+													  | ((int32_t)*(pc+3)))) )
 				{
-					if ( !args )
-					{
-						cF->function( w, 0, 0, *stackTop++, cF->usr );
-					}
-					else
-					{
-						stackTop->p = 0;
-						stackTop->p2 = 0;
-						cF->function( w, stackTop - args, args, *stackTop, cF->usr );
-						*(stackTop - args) = *stackTop;
-						stackTop -= args - 1;
-					}
+					cF->function( w, stackTop - args, args, *(stackTop - (args+1)), cF->usr );
 				}
-				else
-				{
-					w->err = WR_WARN_c_function_not_found;
-					stackTop -= args;
-					(stackTop)->p = 0;
-					(stackTop++)->p2 = 0; // push a fake return value
-				}
-				
+
+				stackTop -= args;
+				pc += 5;
 				CONTINUE;
 			}
 
 			CASE(CallFunctionByHashAndPop):
 			{
 				// don't care about return value
-				int32_t hash = (((int32_t)*pc) << 24)
-							   | (((int32_t)*(pc+1)) << 16)
-							   | (((int32_t)*(pc+2)) << 8)
-							   | ((int32_t)*(pc+3));
-				args = *(pc+4); // which have already been pushed
-				pc += 6; // skip past the pop operation that is next in line (linking can't remove the instruction... yet)
+				WRCFunctionCallback* cF;
 
-				WRCFunctionCallback* cF = w->c_functionRegistry.get( hash );
-				if ( cF )
+				args = *(pc+4); // which have already been pushed
+				if ( (cF = w->c_functionRegistry.get( (((int32_t)*pc) << 24)
+													  | (((int32_t)*(pc+1)) << 16)
+													  | (((int32_t)*(pc+2)) << 8)
+													  | ((int32_t)*(pc+3)))) )
 				{
-					if ( !args )
-					{
-						cF->function( w, 0, 0, *stackTop, cF->usr );
-					}
-					else
-					{
-						cF->function( w, stackTop - args, args, *stackTop, cF->usr );
-						stackTop -= args;
-					}
+					cF->function( w, stackTop - args, args, *(stackTop - (args+1)), cF->usr );
 				}
-				else
-				{
-					w->err = WR_WARN_c_function_not_found;
-					stackTop -= args;
-				}
-				
+
+				stackTop -= args + 1;
+				pc += 6; // skip past the pop operation that is next in line (linking can't remove the instruction... yet)
 				CONTINUE;
 			}
 
@@ -5457,29 +6884,36 @@ callFunction:
 				{
 					if ( args > function->arguments )
 					{
-						stackTop -= args - function->arguments; // poof
+						stackTop -= args - function->arguments; // unexpected arguments are poofed
 					}
 					else
 					{
-						for( char a=args; a < function->arguments; ++a )
+						// un-specified arguments are set to IntZero
+						for( int a=args; a < function->arguments; ++a )
 						{
 							stackTop->p = 0;
-							(stackTop++)->p2 = 0;
+							(stackTop++)->p2 = INIT_AS_INT;
 						}
 					}
 				}
 
-				// the arguments are at framepace 0, add more to make
+				// the arguments are at framepace +0, add more to make
 				// up for the locals in the function
-				for( int i=0; i<function->frameSpaceNeeded; ++i )
+
+				// really wish I could do this.. alas.. if array chaff
+				// is left on the stack, released memory might be
+				// written to :(
+				//stackTop += function->frameSpaceNeeded; // locals are NOT initialized
+
+				for( int l=0; l<function->frameSpaceNeeded; ++l ) // locals are NOT initialized
 				{
-					stackTop->p = 0;
-					(stackTop++)->p2 = 0;
+					(stackTop++)->p2 = INIT_AS_INT;
 				}
 
-				// temp value contains return vector
+
+				// temp value contains return vector/frame base
 				tempValue = stackTop++; // return vector
-				tempValue->type = WR_INT;
+				tempValue->frame = frameBase;
 				
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				
@@ -5501,11 +6935,7 @@ callFunction:
 					top = pc + (size - 6);
 					context->bottom = pc;
 				}
-				
 #endif
-				
-				stackTop->type = WR_INT;
-				(stackTop++)->p = frameBase; // very top is the old framebase
 
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - function->frameBaseAdjustment;
@@ -5513,75 +6943,60 @@ callFunction:
 				CONTINUE;
 			}
 
+			// it kills me that these are identical except for the "+1"
+			// but I have yet to figure out a way around that, "andPop"
+			// is just too good and common an optimization :(
 			CASE(CallLibFunction):
 			{
-				WR_LIB_CALLBACK callback = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
-																			  | (((int32_t)*(pc+1)) << 16)
-																			  | (((int32_t)*(pc+2)) << 8)
-																			  | ((int32_t)*(pc+3)) );
-				args = *(pc+4); // which have already been pushed
-				pc += 5;
+				WR_LIB_CALLBACK lib;
+				stackTop -= (args = *(pc+4)); // which have already been pushed
 
-				if ( callback )
+				if ( (lib = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
+															 | (((int32_t)*(pc+1)) << 16)
+															 | (((int32_t)*(pc+2)) << 8)
+															 | ((int32_t)*(pc+3)) )) )
 				{
-					callback( stackTop, args );
-					if ( args )
-					{
-						*(stackTop - args) = *stackTop;
-						stackTop -= args - 1;
-					}
-					else
-					{
-						++stackTop;
-					}
+					lib( stackTop, args );
 				}
-				else
+
+				pc += 5;
+				CONTINUE;
+			}
+
+			CASE(CallLibFunctionAndPop):
+			{
+				WR_LIB_CALLBACK lib;
+				stackTop -= (args = *(pc+4)); // which have already been pushed
+
+				if ( (lib = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
+															 | (((int32_t)*(pc+1)) << 16)
+															 | (((int32_t)*(pc+2)) << 8)
+															 | ((int32_t)*(pc+3)) )) )
 				{
-					w->err = WR_WARN_lib_function_not_found;
-					stackTop -= args;
-					stackTop->p = 0;
-					(stackTop++)->p2 = 0; // fake return val
+					lib( stackTop, args );
 				}
 				
+				--stackTop;
+				pc += 5;
 				CONTINUE;
 			}
 			
-			CASE(CallLibFunctionAndPop):
-			{
-				WR_LIB_CALLBACK callback = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
-																			  | (((int32_t)*(pc+1)) << 16)
-																			  | (((int32_t)*(pc+2)) << 8)
-																			  | ((int32_t)*(pc+3)) );
-				args = *(pc+4); // which have already been pushed
-				pc += 5;
-
-				if ( callback )
-				{
-					callback( stackTop, args );
-				}
-				else
-				{
-					w->err = WR_WARN_lib_function_not_found;
-				}
-				stackTop -= args;
-				CONTINUE;
-			}
-
 			CASE(Stop):
 			{
-				// stack will be zero at this point, stop execution
-				w->returnValue = stackTop--;
 				context->stopLocation = (int32_t)((pc - 1) - context->bottom);
 				return WR_ERR_None;
 			}
 
 			CASE(Return):
 			{
+				tempValue = stackTop - 2;
+				
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
-				// copy the return value
-				pc = (unsigned char*)((stackTop - 3)->p); // grab return PC
+				
+				pc = (unsigned char*)tempValue->p; // grab return PC
+				
 #else
-				int returnOffset = (stackTop - 3)->i;
+				int returnOffset = (stackTop - 2)->i;
 				if ( returnOffset >= absoluteBottom )
 				{
 					// easy, function is within this loaded block
@@ -5598,16 +7013,15 @@ callFunction:
 #endif
 				if ( (--stackTop)->type == WR_REF )
 				{
-					*frameBase = *stackTop->r;
+					*(frameBase - 1) = *stackTop->r;
 				}
 				else
 				{
-					*frameBase = *stackTop; // copy return value down
+					*(frameBase - 1) = *stackTop;
 				}
 				
-				tempValue = (WRValue*)(stackTop - 1)->p;
-				stackTop = frameBase + 1;
-				frameBase = tempValue;
+				stackTop = frameBase;
+				frameBase = tempValue->frame;
 				CONTINUE;
 			}
 			
@@ -5633,69 +7047,278 @@ callFunction:
 
 			CASE(RelativeJump):
 			{
-				pc += (int16_t)(((int16_t)*pc)<<8) + *(pc+1);
-				CONTINUE;
-			}
-
-			CASE(RelativeJump8):
-			{
-				pc += (int8_t)*pc;
+				pc += (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
 				CONTINUE;
 			}
 
 			CASE(BZ):
 			{
 				tempValue = --stackTop;
-				pc += wr_ZeroCheck[tempValue->type](tempValue) ? (((int16_t)*pc)<< 8) + *(pc+1) : 2;
+				pc += wr_LogicalNot[tempValue->type](tempValue) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
 				CONTINUE;
 			}
 			
+			CASE(SubtractAssignAndPop): { voidFunc = wr_SubtractAssign; goto binaryTableOpAndPop; }
+			CASE(AddAssignAndPop): { voidFunc = wr_AddAssign; goto binaryTableOpAndPop; }
+			CASE(ModAssignAndPop): { voidFunc = wr_ModAssign; goto binaryTableOpAndPop; }
+			CASE(MultiplyAssignAndPop): { voidFunc = wr_MultiplyAssign; goto binaryTableOpAndPop; }
+			CASE(DivideAssignAndPop): { voidFunc = wr_DivideAssign; goto binaryTableOpAndPop; }
+			CASE(ORAssignAndPop): { voidFunc = wr_ORAssign; goto binaryTableOpAndPop; }
+			CASE(ANDAssignAndPop): { voidFunc = wr_ANDAssign; goto binaryTableOpAndPop; }
+			CASE(XORAssignAndPop): { voidFunc = wr_XORAssign; goto binaryTableOpAndPop; }
+			CASE(RightShiftAssignAndPop): { voidFunc = wr_RightShiftAssign; goto binaryTableOpAndPop; }
+			CASE(LeftShiftAssignAndPop): { voidFunc = wr_LeftShiftAssign; goto binaryTableOpAndPop; }
+			CASE(AssignAndPop):
+			{
+				voidFunc = wr_assign;
+				
+binaryTableOpAndPop:
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+				voidFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				
+				CONTINUE;
+			}
+			
+			CASE(BinaryAdditionAndStoreGlobal) : { targetFunc = wr_AdditionBinary; goto targetFuncStoreGlobalOp; }
+			CASE(BinarySubtractionAndStoreGlobal): { targetFunc = wr_SubtractBinary; goto targetFuncStoreGlobalOp; }
+			CASE(BinaryMultiplicationAndStoreGlobal): { targetFunc = wr_MultiplyBinary; goto targetFuncStoreGlobalOp; }
+			CASE(BinaryDivisionAndStoreGlobal):
+			{
+				targetFunc = wr_DivideBinary;
+
+targetFuncStoreGlobalOp:
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+				targetFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, globalSpace + *pc++ );
+				CONTINUE;
+			}
+
+			CASE(BinaryAdditionAndStoreLocal): { targetFunc = wr_AdditionBinary; goto targetFuncStoreLocalOp; }
+			CASE(BinarySubtractionAndStoreLocal): { targetFunc = wr_SubtractBinary; goto targetFuncStoreLocalOp; }
+			CASE(BinaryMultiplicationAndStoreLocal): { targetFunc = wr_MultiplyBinary; goto targetFuncStoreLocalOp; }
+			CASE(BinaryDivisionAndStoreLocal):
+			{
+				targetFunc = wr_DivideBinary;
+
+targetFuncStoreLocalOp:
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+				targetFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, frameBase + *pc++ );
+				CONTINUE;
+			}
+
+			CASE(IndexLiteral32):
+			{
+				stackTop->i = (((int32_t)*pc) << 24) |
+							  (((int32_t)*(pc + 1)) << 16) |
+							  (((int32_t)*(pc + 2)) << 8) |
+							  (int32_t)*(pc + 3);
+				pc += 4;
+				goto indexLiteral;
+			}
+
+			CASE(IndexLiteral16):
+			{
+				stackTop->i = (int32_t)(int16_t)((((int16_t)*(pc)) << 8) | ((int16_t)*(pc+1)));
+				pc += 2;
+				goto indexLiteral;
+			}
+
+			CASE(IndexLiteral8):
+			{
+				stackTop->i = *pc++;
+indexLiteral:
+				tempValue = stackTop - 1;
+				wr_index[(WR_INT*4)|tempValue->type]( context, stackTop, tempValue );
+				CONTINUE;
+			}
+			
+			CASE(AssignToGlobalAndPop):
+			{
+				tempValue = globalSpace + *pc++;
+				tempValue2 = --stackTop;
+				wr_assign[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				CONTINUE;
+			}
+
+			CASE(AssignToLocalAndPop):
+			{
+				tempValue = frameBase + *pc++;
+				tempValue2 = --stackTop;
+				wr_assign[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				CONTINUE;
+			}
+
+			CASE(LiteralInt8):
+			{
+				stackTop->i = (int32_t)(int8_t)*pc++;
+				(stackTop++)->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+
+			CASE(LiteralInt16):
+			{
+				stackTop->i = (int32_t)(int16_t)((((int16_t)*(pc)) << 8) | ((int16_t)*(pc+1)));
+				pc += 2;
+				(stackTop++)->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+			
+			CASE(RelativeJump8):
+			{
+				pc += (int8_t)*pc;
+				CONTINUE;
+			}
+
 			CASE(BZ8):
 			{
 				tempValue = --stackTop;
-				pc += wr_ZeroCheck[tempValue->type](tempValue) ? (int8_t)*pc : 2;
+				pc += wr_LogicalNot[tempValue->type](tempValue) ? (int8_t)*pc : 2;
 				CONTINUE;
 			}
 
-			CASE(BNZ):
+			CASE(BLA):
 			{
 				tempValue = --stackTop;
-				pc += wr_ZeroCheck[tempValue->type](tempValue) ? 2 : (((int16_t)*pc)<< 8) + *(pc+1);
-				CONTINUE;
-			}
-			
-			CASE(BNZ8):
-			{
-				tempValue = --stackTop;
-				pc += wr_ZeroCheck[tempValue->type](tempValue) ? 2 : (int8_t)*pc;
+				tempValue2 = --stackTop;
+				pc += wr_LogicalAND[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
 				CONTINUE;
 			}
 
-			CASE(LogicalAnd): { returnFunc = wr_LogicalAND; goto returnFuncNormal; }
-			CASE(LogicalOr): { returnFunc = wr_LogicalOR; goto returnFuncNormal; }
-			CASE(CompareLE): { returnFunc = wr_CompareGT; goto returnFuncInverted; }
-			CASE(CompareGE): { returnFunc = wr_CompareLT; goto returnFuncInverted; }
-			CASE(CompareGT): { returnFunc = wr_CompareGT; goto returnFuncNormal; }
-			CASE(CompareLT): { returnFunc = wr_CompareLT; goto returnFuncNormal; }
-			CASE(CompareEQ):
+			CASE(BLA8):
 			{
-				returnFunc = wr_CompareEQ;
-returnFuncNormal:
 				tempValue = --stackTop;
-				tempValue2 = stackTop - 1;
-				tempValue2->i = (int)returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				tempValue2->type = WR_INT;
+				tempValue2 = --stackTop;
+				pc += wr_LogicalAND[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int8_t)*pc;
 				CONTINUE;
 			}
-			
-			CASE(CompareNE):
+
+			CASE(BLO):
 			{
-				returnFunc = wr_CompareEQ;
-returnFuncInverted:
 				tempValue = --stackTop;
-				tempValue2 = stackTop - 1;
-				tempValue2->i = (int)!returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				tempValue2->type = WR_INT;
+				tempValue2 = --stackTop;
+				pc += wr_LogicalOR[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
+				CONTINUE;
+			}
+
+			CASE(BLO8):
+			{
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+				pc += wr_LogicalOR[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int8_t)*pc;
+				CONTINUE;
+			}
+
+			CASE(GGBinaryMultiplication):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
+				wr_MultiplyBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GLBinaryMultiplication):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_MultiplyBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(LLBinaryMultiplication):
+			{
+				tempValue2 = frameBase + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_MultiplyBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GGBinaryAddition):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
+				wr_AdditionBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GLBinaryAddition):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_AdditionBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(LLBinaryAddition):
+			{
+				tempValue2 = frameBase + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_AdditionBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GGBinarySubtraction):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
+				wr_SubtractBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GLBinarySubtraction):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_SubtractBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(LGBinarySubtraction):
+			{
+				tempValue2 = frameBase + *pc++;
+				tempValue = globalSpace + *pc++;
+				wr_SubtractBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(LLBinarySubtraction):
+			{
+				tempValue2 = frameBase + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_SubtractBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GGBinaryDivision):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
+				wr_DivideBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GLBinaryDivision):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_DivideBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(LGBinaryDivision):
+			{
+				tempValue2 = frameBase + *pc++;
+				tempValue = globalSpace + *pc++;
+				wr_DivideBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(LLBinaryDivision):
+			{
+				tempValue2 = frameBase + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_DivideBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
 				CONTINUE;
 			}
 
@@ -5709,7 +7332,7 @@ returnFuncInverted:
 returnFuncBNormal:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
-				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? 2 : (((int16_t)*pc)<< 8) + *(pc+1);
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
 				CONTINUE;
 			}
 
@@ -5719,7 +7342,7 @@ returnFuncBNormal:
 returnFuncBInverted:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
-				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? (((int16_t)*pc)<< 8) + *(pc+1) : 2;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
 				CONTINUE;
 			}
 
@@ -5733,7 +7356,7 @@ returnFuncBInverted:
 returnFuncBNormal8:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
-				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? 2 : *pc;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : *pc;
 				CONTINUE;
 			}
 
@@ -5743,94 +7366,69 @@ returnFuncBNormal8:
 returnFuncBInverted8:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
-				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? *pc : 2;
-				CONTINUE;
-			}
-
-			CASE(PostIncrement):
-			{
-				tempValue = stackTop - 1;
-				wr_postinc[ tempValue->type ]( tempValue, tempValue );
-				CONTINUE;
-			}
-
-			CASE(PostDecrement):
-			{
-				tempValue = stackTop - 1;
-				wr_postdec[ tempValue->type ]( tempValue, tempValue );
-				CONTINUE;
-			}
-			
-			CASE(PreIncrement):
-			{
-				tempValue = stackTop - 1;
-				wr_preinc[ tempValue->type ]( tempValue );
-				CONTINUE;
-			}
-			
-			CASE(PreDecrement):
-			{
-				tempValue = stackTop - 1;
-				wr_predec[ tempValue->type ]( tempValue );
-				CONTINUE;
-			}
-
-			CASE(LogicalNot):
-			{
-				tempValue = stackTop - 1;
-				tempValue->i = wr_LogicalNot[ tempValue->type ]( tempValue );
-				tempValue->type = WR_INT;
-				CONTINUE;
-			}
-
-			CASE(Negate):
-			{
-				tempValue = stackTop - 1;
-				wr_negate[ tempValue->type ]( tempValue );
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? *pc : 2;
 				CONTINUE;
 			}
 			
 			CASE(LiteralInt8ToGlobal):
 			{
-				tempValue = context->globalSpace + *pc++;
-				tempValue->type = WR_INT;
+				tempValue = globalSpace + *pc++;
 				tempValue->i = (int32_t)(int8_t)*pc++;
+				tempValue->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
-			
+
+			CASE(LiteralInt16ToGlobal):
+			{
+				tempValue = globalSpace + *pc++;
+				tempValue->i = (int32_t)(int16_t)((((int16_t) * (pc)) << 8) | ((int16_t) * (pc + 1)));
+				tempValue->p2 = INIT_AS_INT;
+				pc += 2;
+				CONTINUE;
+			}
+
 			CASE(LiteralInt32ToLocal):
 			{
 				tempValue = frameBase + *pc++;
-				tempValue->type = WR_INT;
+				tempValue->p2 = INIT_AS_INT;
 				goto load32ToTemp;
 			}
 			
 			CASE(LiteralInt8ToLocal):
 			{
 				tempValue = frameBase + *pc++;
-				tempValue->type = WR_INT;
 				tempValue->i = (int32_t)(int8_t)*pc++;
+				tempValue->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
-			
+
+			CASE(LiteralInt16ToLocal):
+			{
+				tempValue = frameBase + *pc++;
+				tempValue->i = (int32_t)(int16_t)((((int16_t) * (pc)) << 8) | ((int16_t) * (pc + 1)));
+				tempValue->p2 = INIT_AS_INT;
+				pc += 2;
+				CONTINUE;
+			}
+
 			CASE(LiteralFloatToGlobal):
 			{
-				tempValue = context->globalSpace + *pc++;
-				tempValue->type = WR_FLOAT;
+				tempValue = globalSpace + *pc++;
+				tempValue->p2 = INIT_AS_FLOAT;
 				goto load32ToTemp;
 			}
 			
 			CASE(LiteralFloatToLocal):
 			{
 				tempValue = frameBase + *pc++;
-				tempValue->type = WR_FLOAT;
+				tempValue->p2 = INIT_AS_FLOAT;
 				goto load32ToTemp;
 			}
 
 			CASE(LiteralInt32ToGlobal):
 			{
-				tempValue = context->globalSpace + *pc++;
-				tempValue->type = WR_INT;
+				tempValue = globalSpace + *pc++;
+				tempValue->p2 = INIT_AS_INT;
 load32ToTemp:
 				tempValue->i = (((int32_t)*pc) << 24)
 							   | (((int32_t)*(pc+1)) << 16)
@@ -5840,7 +7438,7 @@ load32ToTemp:
 				CONTINUE;
 			}
 			
-#ifndef JUMPTABLE_INTERPRETER
+#ifndef WRENCH_JUMPTABLE_INTERPRETER
 		}
 	}
 #endif
@@ -5849,21 +7447,21 @@ load32ToTemp:
 //------------------------------------------------------------------------------
 void wr_makeInt( WRValue* val, int i )
 {
-	val->type = WR_INT;
+	val->p2 = INIT_AS_INT;
 	val->i = i;
 }
 
 //------------------------------------------------------------------------------
 void wr_makeFloat( WRValue* val, float f )
 {
-	val->type = WR_FLOAT;
+	val->p2 = INIT_AS_FLOAT;
 	val->f = f;
 }
 
 //------------------------------------------------------------------------------
 void wr_makeUserData( WRValue* val, int sizeHint )
 {
-	val->type = WR_USR;
+	val->p2 = INIT_AS_USR;
 	val->u = new WRUserData( sizeHint );
 }
 
@@ -5877,7 +7475,7 @@ void wr_addUserValue( WRValue* userData, const char* key, WRValue* value )
 void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned char* data, const int len )
 {
 	WRValue* val = userData->u->addValue( name );
-	val->type = WR_ARRAY;
+	val->p2 = INIT_AS_ARRAY;
 	val->va = new WRStaticValueArray( len, SV_CHAR, data );
 }
 
@@ -5885,7 +7483,7 @@ void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned ch
 void wr_addUserIntArray( WRValue* userData, const char* name, const int* data, const int len )
 {
 	WRValue* val = userData->u->addValue( name );
-	val->type = WR_ARRAY;
+	val->p2 = INIT_AS_ARRAY;
 	val->va = new WRStaticValueArray( len, SV_INT, data );
 }
 
@@ -5893,18 +7491,18 @@ void wr_addUserIntArray( WRValue* userData, const char* name, const int* data, c
 void wr_addUserFloatArray( WRValue* userData, const char* name, const float* data, const int len )
 {
 	WRValue* val = userData->u->addValue( name );
-	val->type = WR_ARRAY;
+	val->p2 = INIT_AS_ARRAY;
 	val->va = new WRStaticValueArray( len, SV_FLOAT, data );
 }
 
 //------------------------------------------------------------------------------
 void WRValue::free()
 {
-	if ( type == WR_USR )
+	if ( xtype == WR_EX_USR )
 	{
 		delete u;
 	}
-	else if ( type == WR_ARRAY && (va->m_type & SV_PRE_ALLOCATED) )
+	else if ( xtype == WR_EX_ARRAY && (va->m_type & SV_PRE_ALLOCATED) )
 	{
 		delete va;
 	}
@@ -5934,61 +7532,135 @@ SOFTWARE.
 
 #include "wrench.h"
 
-/*
+//------------------------------------------------------------------------------
+WRValue* WRValue::asValueArray( int* len )
 {
-  I_I, I_R, I_F, I_U, I_A, I_Y,
-  R_I, R_R, R_F, R_U, R_A, R_Y,
-  F_I, F_R, F_F, F_U, F_A, F_Y,
-  U_I, U_R, U_F, U_U, U_A, U_Y,
-  A_I, A_R, A_F, A_U, A_A, A_Y,
-  Y_I, Y_R, Y_F, Y_U, Y_A, Y_Y,
-}
-*/
+	if ( type == WR_REF )
+	{
+		return r->asValueArray(len);
+	}
 
+	if ( (xtype != WR_EX_ARRAY) || ((va->m_type&0x3) != SV_VALUE) )
+	{
+		return 0;
+	}
+
+	if ( len )
+	{
+		*len = (int)va->m_size;
+	}
+
+	return (WRValue*)va->m_data;
+}
+
+//------------------------------------------------------------------------------
+unsigned char* WRValue::asCharArray( int* len )
+{
+	if ( type == WR_REF )
+	{
+		return r->asCharArray(len);
+	}
+
+	if ( (xtype != WR_EX_ARRAY) || ((va->m_type&0x3) != SV_CHAR) )
+	{
+		return 0;
+	}
+
+	if ( len )
+	{
+		*len = (int)va->m_size;
+	}
+
+	return (unsigned char*)va->m_data;
+}
+
+//------------------------------------------------------------------------------
+int* WRValue::asIntArray( int* len )
+{
+	if ( type == WR_REF )
+	{
+		return r->asIntArray(len);
+	}
+
+	if ( (xtype != WR_EX_ARRAY) || ((va->m_type&0x3) != SV_INT) )
+	{
+		return 0;
+	}
+
+	if ( len )
+	{
+		*len = (int)va->m_size;
+	}
+
+	return (int*)va->m_data;
+}
+
+//------------------------------------------------------------------------------
+float* WRValue::asFloatArray( int* len )
+{
+	if ( type == WR_REF )
+	{
+		return r->asFloatArray(len);
+	}
+
+	if ( (xtype != WR_EX_ARRAY) || ((va->m_type&0x3) != SV_FLOAT) )
+	{
+		return 0;
+	}
+
+	if ( len )
+	{
+		*len = (int)va->m_size;
+	}
+
+	return (float*)va->m_data;
+}
+
+//------------------------------------------------------------------------------
+int WRValue::arrayValueAsInt() const
+{
+	unsigned int arrayElement = ARRAY_ELEMENT_FROM_P2(p2);
+	int s = arrayElement < r->va->m_size ? arrayElement : r->va->m_size - 1;
+
+	switch( r->va->m_type&0x3 )
+	{
+		case SV_VALUE: { return ((WRValue *)r->va->m_data)[s].asInt(); }
+		case SV_CHAR: { return ((unsigned char *)r->va->m_data)[s]; }
+		case SV_INT: { return ((int *)r->va->m_data)[s]; }
+		case SV_FLOAT: { return (int)((float *)r->va->m_data)[s]; }
+		default: return 0;
+	}
+}
+
+//------------------------------------------------------------------------------
+float WRValue::arrayValueAsFloat() const
+{
+	unsigned int arrayElement = ARRAY_ELEMENT_FROM_P2(p2);
+	int s = arrayElement < r->va->m_size ? arrayElement : r->va->m_size - 1;
+
+	switch( r->va->m_type&0x3 )
+	{
+		case SV_VALUE: { return ((WRValue *)r->va->m_data)[s].asFloat(); }
+		case SV_CHAR: { return ((unsigned char *)r->va->m_data)[s]; }
+		case SV_INT: { return (float)((int *)r->va->m_data)[s]; }
+		case SV_FLOAT: { return ((float *)r->va->m_data)[s]; }
+		default: return 0;
+	}
+}
+
+//------------------------------------------------------------------------------
+WRState* wr_newState( int stackSize )
+{
+	return new WRState( stackSize );
+}
 
 static void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
-static bool doReturnFuncBlank( WRValue* to, WRValue* from ) { return false; }
-static void doTargetFuncBlank( WRValue* to, WRValue* from, WRValue* target ) {}
-static void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value ) {}
-static bool doSingleBlank( WRValue* value ) { return false; }
-static void doSingleVoidBlank( WRValue* value ) {}
-
-//------------------------------------------------------------------------------
-int wr_arrayValueAsInt( const WRValue* array )
-{
-	unsigned int index = array->arrayElement >> 8;
-	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
-
-	switch( array->r->va->m_type&0x3 )
-	{
-		case SV_VALUE: { return ((WRValue *)array->r->va->m_data)[s].asInt(); }
-		case SV_CHAR: { return ((unsigned char *)array->r->va->m_data)[s]; }
-		case SV_INT: { return ((int *)array->r->va->m_data)[s]; }
-		case SV_FLOAT: { return (int)((float *)array->r->va->m_data)[s]; }
-		default: return 0;
-	}
-}
-
-//------------------------------------------------------------------------------
-float wr_arrayValueAsFloat( const WRValue* array )
-{
-	unsigned int index = array->arrayElement >> 8;
-	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
-
-	switch( array->r->va->m_type&0x3 )
-	{
-		case SV_VALUE: { return ((WRValue *)array->r->va->m_data)[s].asFloat(); }
-		case SV_CHAR: { return ((unsigned char *)array->r->va->m_data)[s]; }
-		case SV_INT: { return (float)((int *)array->r->va->m_data)[s]; }
-		case SV_FLOAT: { return ((float *)array->r->va->m_data)[s]; }
-		default: return 0;
-	}
-}
 
 //------------------------------------------------------------------------------
 void wr_arrayToValue( const WRValue* array, WRValue* value )
 {
-	unsigned int index = array->arrayElement >> 8;
+	unsigned int index = ARRAY_ELEMENT_FROM_P2(array->p2);
+	
 	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
 
 	switch( array->r->va->m_type&0x3 )
@@ -6002,21 +7674,21 @@ void wr_arrayToValue( const WRValue* array, WRValue* value )
 		case SV_CHAR:
 		{
 			value->i = ((unsigned char *)array->r->va->m_data)[s];
-			value->type = WR_INT;
+			value->p2 = INIT_AS_INT;
 			return;
 		}
 
 		case SV_INT:
 		{
 			value->i = ((int *)array->r->va->m_data)[s];
-			value->type = WR_INT;
+			value->p2 = INIT_AS_INT;
 			return;
 		}
 
 		case SV_FLOAT:
 		{
 			value->f = ((float *)array->r->va->m_data)[s];
-			value->type = WR_FLOAT;
+			value->p2 = INIT_AS_FLOAT;
 			return;
 		}
 	}
@@ -6025,7 +7697,8 @@ void wr_arrayToValue( const WRValue* array, WRValue* value )
 //------------------------------------------------------------------------------
 void wr_intValueToArray( const WRValue* array, int32_t I )
 {
-	unsigned int index = array->arrayElement >> 8;
+	unsigned int index = ARRAY_ELEMENT_FROM_P2(array->p2);
+
 	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
 
 	switch( array->r->va->m_type&0x3 )
@@ -6034,7 +7707,7 @@ void wr_intValueToArray( const WRValue* array, int32_t I )
 		{
 			WRValue* val = (WRValue *)array->r->va->m_data + s;
 			val->i = I;
-			val->type = WR_INT;
+			val->p2 = INIT_AS_INT;
 			break;
 		}
 
@@ -6047,7 +7720,8 @@ void wr_intValueToArray( const WRValue* array, int32_t I )
 //------------------------------------------------------------------------------
 void wr_floatValueToArray( const WRValue* array, float F )
 {
-	unsigned int index = array->arrayElement >> 8;
+	unsigned int index = ARRAY_ELEMENT_FROM_P2(array->p2);
+
 	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
 
 	switch( array->r->va->m_type&0x3 )
@@ -6056,7 +7730,7 @@ void wr_floatValueToArray( const WRValue* array, float F )
 		{
 			WRValue* val = (WRValue *)array->r->va->m_data + s;
 			val->f = F;
-			val->type = WR_FLOAT;
+			val->p2 = INIT_AS_FLOAT;
 			break;
 		}
 
@@ -6069,1741 +7743,522 @@ void wr_floatValueToArray( const WRValue* array, float F )
 //==============================================================================
 static void doAssign_R_R( WRValue* to, WRValue* from )
 {
-	wr_assign[to->type*6+from->r->type](to, from->r);
+	wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r);
 }
-
-static void doAssign_Y_Y( WRValue* to, WRValue* from )
+static void doAssign_E_E( WRValue* to, WRValue* from )
 {
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_assign[WR_REFARRAY*6+element.type](to, &element);
+	if ( from->xtype == WR_EX_REFARRAY )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_assign[(WR_EX_REFARRAY<<2)+element.type](to, &element);
+	}
 }
-
-static void doAssign_R_Y( WRValue* to, WRValue* from )
+static void doAssign_R_E( WRValue* to, WRValue* from )
 {
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_assign[to->type*6+element.type](to, &element);
+	if ( from->xtype == WR_EX_REFARRAY )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_assign[(to->type<<2)|element.type](to, &element);
+	}
 }
-
-static void doAssign_Y_R( WRValue* to, WRValue* from )
+static void doAssign_E_R( WRValue* to, WRValue* from )
 {
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_assign[element.type*6+from->r->type](&element, from->r);
+	if ( to->xtype == WR_EX_REFARRAY )
+	{
+		WRValue element;
+		wr_arrayToValue( to, &element );
+		wr_assign[(element.type<<2)|from->r->type](&element, from->r);
+	}
 }
-
-static void doAssign_R_X( WRValue* to, WRValue* from ) { *to->r = *from; }
-static void doAssign_X_R( WRValue* to, WRValue* from ) { *to = *from->r; }
-static void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
-static void doAssign_Y_F( WRValue* to, WRValue* from ) { wr_floatValueToArray( to, from->f ); }
-static void doAssign_Y_I( WRValue* to, WRValue* from ) { wr_intValueToArray( to, from->i ); }
-
-WRVoidFunc wr_assign[36] = 
+static void doAssign_R_X( WRValue* to, WRValue* from )
 {
-	doAssign_X_X,    doAssign_X_R,     doAssign_X_X,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,
-	doAssign_R_X,    doAssign_R_R,     doAssign_R_X,  doVoidFuncBlank,  doVoidFuncBlank,     doAssign_R_Y,
-	doAssign_X_X,    doAssign_X_R,     doAssign_X_X,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,
- doVoidFuncBlank, doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,
- doVoidFuncBlank, doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,
-	doAssign_Y_I,    doAssign_Y_R,     doAssign_Y_F,  doVoidFuncBlank,  doVoidFuncBlank,     doAssign_Y_Y,
+	to->r->p = from->p;
+	to->r->p2 = from->p2;
+}
+static void doAssign_X_R( WRValue* to, WRValue* from )
+{
+	to->p = from->r->p;
+	to->p2 = from->r->p2;
+}
+static void doAssign_X_X( WRValue* to, WRValue* from )
+{
+	to->p = from->p;
+	to->p2 = from->p2;
+}
+static void doAssign_E_F( WRValue* to, WRValue* from )
+{
+	if ( to->xtype == WR_EX_REFARRAY )
+	{
+		wr_floatValueToArray( to, from->f );
+	}
+}
+static void doAssign_E_I( WRValue* to, WRValue* from )
+{
+	if ( to->xtype == WR_EX_REFARRAY )
+	{
+		wr_intValueToArray( to, from->i );
+	}
+}
+WRVoidFunc wr_assign[16] = 
+{
+	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doVoidFuncBlank,
+	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doVoidFuncBlank,
+	doAssign_R_X,  doAssign_R_X,  doAssign_R_R,     doAssign_R_E,
+	doAssign_E_I,  doAssign_E_F,  doAssign_E_R,     doAssign_E_E,
 };
 //==============================================================================
+
+
+#define X_ASSIGN( NAME, OPERATION ) \
+static void NAME##Assign_R_E( WRValue* to, WRValue* from ) \
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		NAME##Assign[(to->r->type<<2)|element.type](to->r, &element);\
+		*from = *to->r;\
+	}\
+}\
+static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( to, &element );\
+\
+		NAME##Assign[(element.type<<2)|WR_INT]( &element, from );\
+\
+		wr_intValueToArray( to, element.i );\
+		*from = element;\
+	}\
+}\
+static void NAME##Assign_E_F( WRValue* to, WRValue* from )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( to, &element );\
+\
+		NAME##Assign[(element.type<<2)|WR_FLOAT]( &element, from );\
+\
+		wr_floatValueToArray( to, element.f );\
+		*from = element;\
+	}\
+}\
+static void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		\
+		NAME##Assign[(WR_EX_REFARRAY<<2)|element.type]( to, &element );\
+		wr_arrayToValue( to, from );\
+	}\
+}\
+static void NAME##Assign_I_E( WRValue* to, WRValue* from )\
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		NAME##Assign[(WR_INT<<2)|element.type](to, &element);\
+		*from = *to;\
+	}\
+}\
+static void NAME##Assign_F_E( WRValue* to, WRValue* from )\
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		NAME##Assign[(WR_FLOAT<<2)|element.type](to, &element);\
+		*from = *to;\
+	}\
+}\
+static void NAME##Assign_E_R( WRValue* to, WRValue* from )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue temp = *from->r;\
+		NAME##Assign[(WR_EX_REFARRAY<<2)|temp.type]( to, &temp );\
+		wr_arrayToValue( to, from );\
+	}\
+}\
+static void NAME##Assign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; NAME##Assign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }\
+static void NAME##Assign_R_I( WRValue* to, WRValue* from ) { NAME##Assign[(to->r->type<<2)|WR_INT](to->r, from); *from = *to->r; }\
+static void NAME##Assign_R_F( WRValue* to, WRValue* from ) { NAME##Assign[(to->r->type<<2)|WR_FLOAT](to->r, from); *from = *to->r; }\
+static void NAME##Assign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; NAME##Assign[(WR_INT<<2)+temp.type](to, &temp); *from = *to; }\
+static void NAME##Assign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; NAME##Assign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }\
+static void NAME##Assign_F_F( WRValue* to, WRValue* from ) { to->f OPERATION##= from->f; }\
+static void NAME##Assign_I_I( WRValue* to, WRValue* from ) { to->i OPERATION##= from->i; }\
+static void NAME##Assign_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; to->f = (float)to->i OPERATION from->f; }\
+static void NAME##Assign_F_I( WRValue* to, WRValue* from ) { from->p2 = INIT_AS_FLOAT; to->f OPERATION##= (float)from->i; }\
+WRVoidFunc NAME##Assign[16] = \
+{\
+	NAME##Assign_I_I,  NAME##Assign_I_F,  NAME##Assign_I_R,  NAME##Assign_I_E,\
+	NAME##Assign_F_I,  NAME##Assign_F_F,  NAME##Assign_F_R,  NAME##Assign_F_E,\
+	NAME##Assign_R_I,  NAME##Assign_R_F,  NAME##Assign_R_R,  NAME##Assign_R_E,\
+	NAME##Assign_E_I,  NAME##Assign_E_F,  NAME##Assign_E_R,  NAME##Assign_E_E,\
+};\
+
+X_ASSIGN( wr_Subtract, - );
+X_ASSIGN( wr_Add, + );
+X_ASSIGN( wr_Multiply, * );
+X_ASSIGN( wr_Divide, / );
+
+
+#define X_INT_ASSIGN( NAME, OPERATION ) \
+static void NAME##Assign_E_R( WRValue* to, WRValue* from )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue temp = *from->r;\
+		NAME##Assign[(WR_EX<<2)+temp.type]( to, &temp );\
+		wr_arrayToValue( to, from );\
+	}\
+}\
+static void NAME##Assign_R_E( WRValue* to, WRValue* from ) \
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		NAME##Assign[(to->r->type<<2)|element.type](to->r, &element);\
+		*from = *to->r;\
+	}\
+}\
+static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( to, &element );\
+\
+		NAME##Assign[(element.type<<2)|WR_INT]( &element, from );\
+\
+		wr_intValueToArray( to, element.i );\
+		*from = element;\
+	}\
+}\
+static void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+\
+		NAME##Assign[(WR_EX<<2)+element.type]( to, &element );\
+		wr_arrayToValue( to, from );\
+	}\
+}\
+static void NAME##Assign_I_E( WRValue* to, WRValue* from )\
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		NAME##Assign[(WR_INT<<2)+element.type](to, &element);\
+		*from = *to;\
+	}\
+}\
+static void NAME##Assign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; NAME##Assign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }\
+static void NAME##Assign_R_I( WRValue* to, WRValue* from ) { NAME##Assign[(to->r->type<<2)|WR_INT](to->r, from); *from = *to->r; }\
+static void NAME##Assign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; NAME##Assign[(WR_INT<<2)+temp.type](to, &temp); *from = *to; }\
+static void NAME##Assign_I_I( WRValue* to, WRValue* from ) { to->i OPERATION##= from->i; }\
+WRVoidFunc NAME##Assign[16] = \
+{\
+	NAME##Assign_I_I,   doVoidFuncBlank,   NAME##Assign_I_R,  NAME##Assign_I_E,\
+    doVoidFuncBlank,    doVoidFuncBlank,    doVoidFuncBlank,   doVoidFuncBlank,\
+	NAME##Assign_R_I,   doVoidFuncBlank,   NAME##Assign_R_R,  NAME##Assign_R_E,\
+	NAME##Assign_E_I,   doVoidFuncBlank,   NAME##Assign_E_R,  NAME##Assign_E_E,\
+};\
+
+
+X_INT_ASSIGN( wr_Mod, % );
+X_INT_ASSIGN( wr_OR, | );
+X_INT_ASSIGN( wr_AND, & );
+X_INT_ASSIGN( wr_XOR, ^ );
+X_INT_ASSIGN( wr_RightShift, >> );
+X_INT_ASSIGN( wr_LeftShift, << );
 
 
 //------------------------------------------------------------------------------
-static void doSubtractAssign_R_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_SubtractAssign[to->r->type*6+element.type](to->r, &element);
-	*from = *to->r;
-}
+#define X_BINARY( NAME, OPERATION ) \
+static void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( to, &element );\
+		NAME##Binary[(element.type<<2)|from->type](&element, from, target);\
+	}\
+}\
+static void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		NAME##Binary[(to->r->type<<2)|element.type]( to->r, &element, target);\
+	}\
+}\
+static void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( to, &element );\
+		NAME##Binary[(element.type<<2)|WR_INT](&element, from, target);\
+	}\
+}\
+static void NAME##Binary_E_F( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( to, &element );\
+		NAME##Binary[(element.type<<2)|WR_FLOAT](&element, from, target);\
+	}\
+}\
+static void NAME##Binary_E_E( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY && from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element1;\
+		wr_arrayToValue( to, &element1 );\
+		WRValue element2;\
+		wr_arrayToValue( from, &element2 );\
+		NAME##Binary[(element1.type<<2)|element2.type](&element1, &element2, target);\
+	}\
+}\
+static void NAME##Binary_I_E( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		NAME##Binary[(WR_INT<<2)|element.type](to, &element, target);\
+	}\
+}\
+static void NAME##Binary_F_E( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		NAME##Binary[(WR_FLOAT<<2)|element.type](to, &element, target);\
+	}\
+}\
+static void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_INT<<2)+from->r->type](to, from->r, target); }\
+static void NAME##Binary_R_F( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_FLOAT](to->r, from, target); }\
+static void NAME##Binary_R_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }\
+static void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_INT](to->r, from, target); }\
+static void NAME##Binary_F_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_FLOAT<<2)+from->r->type](to, from->r, target); }\
+static void NAME##Binary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = to->i OPERATION from->i; }\
+static void NAME##Binary_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = (float)to->i OPERATION from->f; }\
+static void NAME##Binary_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = to->f OPERATION (float)from->i; }\
+static void NAME##Binary_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = to->f OPERATION from->f; }\
+WRTargetFunc NAME##Binary[16] = \
+{\
+	NAME##Binary_I_I,  NAME##Binary_I_F,  NAME##Binary_I_R,  NAME##Binary_I_E,\
+	NAME##Binary_F_I,  NAME##Binary_F_F,  NAME##Binary_F_R,  NAME##Binary_F_E,\
+	NAME##Binary_R_I,  NAME##Binary_R_F,  NAME##Binary_R_R,  NAME##Binary_R_E,\
+	NAME##Binary_E_I,  NAME##Binary_E_F,  NAME##Binary_E_R,  NAME##Binary_E_E,\
+};\
 
-static void doSubtractAssign_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_SubtractAssign[element.type*6+WR_INT]( &element, from );
-
-	wr_intValueToArray( to, element.i );
-	*from = element;
-}
-
-static void doSubtractAssign_Y_F( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_SubtractAssign[element.type*6+WR_FLOAT]( &element, from );
-
-	wr_floatValueToArray( to, element.f );
-	*from = element;
-}
-
-static void doSubtractAssign_Y_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-
-	wr_SubtractAssign[WR_REFARRAY*6+element.type]( to, &element );
-	wr_arrayToValue( to, from );
-}
-
-static void doSubtractAssign_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_SubtractAssign[WR_INT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doSubtractAssign_F_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_SubtractAssign[WR_FLOAT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doSubtractAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-static void doSubtractAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
-static void doSubtractAssign_R_I( WRValue* to, WRValue* from ) { wr_SubtractAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-static void doSubtractAssign_R_F( WRValue* to, WRValue* from ) { wr_SubtractAssign[to->r->type*6+WR_FLOAT](to->r, from); *from = *to->r; }
-static void doSubtractAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-static void doSubtractAssign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[WR_FLOAT*6+from->r->type](to, from->r); *from = *to; }
-
-static void doSubtractAssign_F_F( WRValue* to, WRValue* from ) { to->f -= from->f; }
-static void doSubtractAssign_I_I( WRValue* to, WRValue* from ) { to->i -= from->i; }
-static void doSubtractAssign_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; to->f = (float)to->i - from->f; }
-static void doSubtractAssign_F_I( WRValue* to, WRValue* from ) { from->type = WR_FLOAT; to->f -= (float)from->i; }
-
-WRVoidFunc wr_SubtractAssign[36] = 
-{
-	doSubtractAssign_I_I,  doSubtractAssign_I_R,  doSubtractAssign_I_F,  doVoidFuncBlank, doVoidFuncBlank, doSubtractAssign_I_Y,
-	doSubtractAssign_R_I,  doSubtractAssign_R_R,  doSubtractAssign_R_F,  doVoidFuncBlank, doVoidFuncBlank, doSubtractAssign_R_Y,
-	doSubtractAssign_F_I,  doSubtractAssign_F_R,  doSubtractAssign_F_F,  doVoidFuncBlank, doVoidFuncBlank, doSubtractAssign_F_Y,
-	     doVoidFuncBlank,       doVoidFuncBlank,       doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank,      doVoidFuncBlank,
-	     doVoidFuncBlank,       doVoidFuncBlank,       doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank,      doVoidFuncBlank,
-	doSubtractAssign_Y_I,  doSubtractAssign_Y_R,  doSubtractAssign_Y_F,  doVoidFuncBlank, doVoidFuncBlank, doSubtractAssign_Y_Y,
-};
-//==============================================================================
+X_BINARY( wr_Addition, + );
+X_BINARY( wr_Multiply, * );
+X_BINARY( wr_Subtract, - );
+X_BINARY( wr_Divide, / );
 
 
-//------------------------------------------------------------------------------
-static void doAddAssign_R_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_AddAssign[to->r->type*6+element.type](to->r, &element);
-	*from = *to->r;
-}
-
-static void doAddAssign_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_AddAssign[element.type*6+WR_INT]( &element, from );
-
-	wr_intValueToArray( to, element.i );
-	*from = element;
-}
-
-static void doAddAssign_Y_F( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_AddAssign[element.type*6+WR_FLOAT]( &element, from );
-
-	wr_floatValueToArray( to, element.f );
-	*from = element;
-}
-
-static void doAddAssign_Y_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-
-	wr_AddAssign[WR_REFARRAY*6+element.type]( to, &element );
-	wr_arrayToValue( to, from );
-}
-
-static void doAddAssign_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_AddAssign[WR_INT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doAddAssign_F_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_AddAssign[WR_FLOAT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doAddAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-static void doAddAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
-static void doAddAssign_R_I( WRValue* to, WRValue* from ) { wr_AddAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-static void doAddAssign_R_F( WRValue* to, WRValue* from ) { wr_AddAssign[to->r->type*6+WR_FLOAT](to->r, from); *from = *to->r; }
-static void doAddAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-static void doAddAssign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[WR_FLOAT*6+from->r->type](to, from->r); *from = *to; }
-
-static void doAddAssign_F_F( WRValue* to, WRValue* from ) { to->f += from->f; }
-static void doAddAssign_I_I( WRValue* to, WRValue* from ) { to->i += from->i; }
-static void doAddAssign_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; to->f = (float)to->i + from->f; }
-static void doAddAssign_F_I( WRValue* to, WRValue* from ) { from->type = WR_FLOAT; to->f += (float)from->i; }
-
-WRVoidFunc wr_AddAssign[36] = 
-{
-	doAddAssign_I_I,  doAddAssign_I_R,  doAddAssign_I_F,  doVoidFuncBlank, doVoidFuncBlank, doAddAssign_I_Y,
-	doAddAssign_R_I,  doAddAssign_R_R,  doAddAssign_R_F,  doVoidFuncBlank, doVoidFuncBlank, doAddAssign_R_Y,
-	doAddAssign_F_I,  doAddAssign_F_R,  doAddAssign_F_F,  doVoidFuncBlank, doVoidFuncBlank, doAddAssign_F_Y,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doAddAssign_Y_I,  doAddAssign_Y_R,  doAddAssign_Y_F,  doVoidFuncBlank, doVoidFuncBlank, doAddAssign_Y_Y,
-};
-//==============================================================================
-
+static void doTargetFuncBlank( WRValue* to, WRValue* from, WRValue* target ) {}
 
 //------------------------------------------------------------------------------
-static void doMultiplyAssign_R_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_MultiplyAssign[to->r->type*6+element.type](to->r, &element);
-	*from = *to->r;
-}
-
-static void doMultiplyAssign_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_MultiplyAssign[element.type*6+WR_INT]( &element, from );
-
-	wr_intValueToArray( to, element.i );
-	*from = element;
-}
-
-static void doMultiplyAssign_Y_F( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_MultiplyAssign[element.type*6+WR_FLOAT]( &element, from );
-
-	wr_floatValueToArray( to, element.f );
-	*from = element;
-}
-
-static void doMultiplyAssign_Y_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-
-	wr_MultiplyAssign[WR_REFARRAY*6+element.type]( to, &element );
-	wr_arrayToValue( to, from );
-}
-
-static void doMultiplyAssign_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_MultiplyAssign[WR_INT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doMultiplyAssign_F_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_MultiplyAssign[WR_FLOAT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doMultiplyAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-static void doMultiplyAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
-static void doMultiplyAssign_R_I( WRValue* to, WRValue* from ) { wr_MultiplyAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-static void doMultiplyAssign_R_F( WRValue* to, WRValue* from ) { wr_MultiplyAssign[to->r->type*6+WR_FLOAT](to->r, from); *from = *to->r; }
-static void doMultiplyAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-static void doMultiplyAssign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[WR_FLOAT*6+from->r->type](to, from->r); *from = *to; }
-
-static void doMultiplyAssign_F_F( WRValue* to, WRValue* from ) { to->f *= from->f; }
-static void doMultiplyAssign_I_I( WRValue* to, WRValue* from ) { to->i *= from->i; }
-static void doMultiplyAssign_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; to->f = (float)to->i * from->f; }
-static void doMultiplyAssign_F_I( WRValue* to, WRValue* from ) { from->type = WR_FLOAT; to->f *= (float)from->i; }
-
-WRVoidFunc wr_MultiplyAssign[36] = 
-{
-	doMultiplyAssign_I_I,  doMultiplyAssign_I_R,  doMultiplyAssign_I_F,  doVoidFuncBlank, doVoidFuncBlank, doMultiplyAssign_I_Y,
-	doMultiplyAssign_R_I,  doMultiplyAssign_R_R,  doMultiplyAssign_R_F,  doVoidFuncBlank, doVoidFuncBlank, doMultiplyAssign_R_Y,
-	doMultiplyAssign_F_I,  doMultiplyAssign_F_R,  doMultiplyAssign_F_F,  doVoidFuncBlank, doVoidFuncBlank, doMultiplyAssign_F_Y,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doMultiplyAssign_Y_I,  doMultiplyAssign_Y_R,  doMultiplyAssign_Y_F,  doVoidFuncBlank, doVoidFuncBlank, doMultiplyAssign_Y_Y,
-};
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doDivideAssign_R_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_DivideAssign[to->r->type*6+element.type](to->r, &element);
-	*from = *to->r;
-}
-
-static void doDivideAssign_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_DivideAssign[element.type*6+WR_INT]( &element, from );
-
-	wr_intValueToArray( to, element.i );
-	*from = element;
-}
-
-static void doDivideAssign_Y_F( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_DivideAssign[element.type*6+WR_FLOAT]( &element, from );
-
-	wr_floatValueToArray( to, element.f );
-	*from = element;
-}
-
-static void doDivideAssign_Y_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-
-	wr_DivideAssign[WR_REFARRAY*6+element.type]( to, &element );
-	wr_arrayToValue( to, from );
-}
-
-static void doDivideAssign_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_DivideAssign[WR_INT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doDivideAssign_F_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_DivideAssign[WR_FLOAT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doDivideAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-static void doDivideAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
-static void doDivideAssign_R_I( WRValue* to, WRValue* from ) { wr_DivideAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-static void doDivideAssign_R_F( WRValue* to, WRValue* from ) { wr_DivideAssign[to->r->type*6+WR_FLOAT](to->r, from); *from = *to->r; }
-static void doDivideAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-static void doDivideAssign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[WR_FLOAT*6+from->r->type](to, from->r); *from = *to; }
-
-static void doDivideAssign_F_F( WRValue* to, WRValue* from ) { to->f /= from->f; }
-static void doDivideAssign_I_I( WRValue* to, WRValue* from ) { to->i /= from->i; }
-static void doDivideAssign_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; to->f = (float)to->i / from->f; }
-static void doDivideAssign_F_I( WRValue* to, WRValue* from ) { from->type = WR_FLOAT; to->f /= (float)from->i; }
-
-WRVoidFunc wr_DivideAssign[36] = 
-{
-	doDivideAssign_I_I,  doDivideAssign_I_R,  doDivideAssign_I_F,  doVoidFuncBlank, doVoidFuncBlank, doDivideAssign_I_Y,
-	doDivideAssign_R_I,  doDivideAssign_R_R,  doDivideAssign_R_F,  doVoidFuncBlank, doVoidFuncBlank, doDivideAssign_R_Y,
-	doDivideAssign_F_I,  doDivideAssign_F_R,  doDivideAssign_F_F,  doVoidFuncBlank, doVoidFuncBlank, doDivideAssign_F_Y,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doDivideAssign_Y_I,  doDivideAssign_Y_R,  doDivideAssign_Y_F,  doVoidFuncBlank, doVoidFuncBlank, doDivideAssign_Y_Y,
-};
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doModAssign_R_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_ModAssign[to->r->type*6+element.type](to->r, &element);
-	*from = *to->r;
-}
-
-static void doModAssign_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_ModAssign[element.type*6+WR_INT]( &element, from );
-
-	wr_intValueToArray( to, element.i );
-	*from = element;
-}
-
-static void doModAssign_Y_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-
-	wr_ModAssign[WR_REFARRAY*6+element.type]( to, &element );
-	wr_arrayToValue( to, from );
-}
-
-static void doModAssign_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_ModAssign[WR_INT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doModAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ModAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-static void doModAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ModAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
-static void doModAssign_R_I( WRValue* to, WRValue* from ) { wr_ModAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-static void doModAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ModAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-
-static void doModAssign_I_I( WRValue* to, WRValue* from ) { to->i %= from->i; }
-
-WRVoidFunc wr_ModAssign[36] = 
-{
-	doModAssign_I_I,  doModAssign_I_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doModAssign_I_Y,
-	doModAssign_R_I,  doModAssign_R_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doModAssign_R_Y,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doModAssign_Y_I,  doModAssign_Y_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doModAssign_Y_Y,
-};
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doORAssign_R_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_ORAssign[to->r->type*6+element.type](to->r, &element);
-	*from = *to->r;
-}
-
-static void doORAssign_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_ORAssign[element.type*6+WR_INT]( &element, from );
-
-	wr_intValueToArray( to, element.i );
-	*from = element;
-}
-
-static void doORAssign_Y_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-
-	wr_ORAssign[WR_REFARRAY*6+element.type]( to, &element );
-	wr_arrayToValue( to, from );
-}
-
-static void doORAssign_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_ORAssign[WR_INT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doORAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ORAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-static void doORAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ORAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
-static void doORAssign_R_I( WRValue* to, WRValue* from ) { wr_ORAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-static void doORAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ORAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-
-static void doORAssign_I_I( WRValue* to, WRValue* from ) { to->i |= from->i; }
-
-WRVoidFunc wr_ORAssign[36] = 
-{
-	doORAssign_I_I,  doORAssign_I_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doORAssign_I_Y,
-	doORAssign_R_I,  doORAssign_R_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doORAssign_R_Y,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doORAssign_Y_I,  doORAssign_Y_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doORAssign_Y_Y,
-};
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doANDAssign_R_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_ANDAssign[to->r->type*6+element.type](to->r, &element);
-	*from = *to->r;
-}
-
-static void doANDAssign_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_ANDAssign[element.type*6+WR_INT]( &element, from );
-
-	wr_intValueToArray( to, element.i );
-	*from = element;
-}
-
-static void doANDAssign_Y_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-
-	wr_ANDAssign[WR_REFARRAY*6+element.type]( to, &element );
-	wr_arrayToValue( to, from );
-}
-
-static void doANDAssign_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_ANDAssign[WR_INT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doANDAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ANDAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-static void doANDAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ANDAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
-static void doANDAssign_R_I( WRValue* to, WRValue* from ) { wr_ANDAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-static void doANDAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_ANDAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-
-static void doANDAssign_I_I( WRValue* to, WRValue* from ) { to->i &= from->i; }
-
-WRVoidFunc wr_ANDAssign[36] = 
-{
-	doANDAssign_I_I,  doANDAssign_I_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doANDAssign_I_Y,
-	doANDAssign_R_I,  doANDAssign_R_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doANDAssign_R_Y,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doANDAssign_Y_I,  doANDAssign_Y_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doANDAssign_Y_Y,
-};
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doXORAssign_R_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_XORAssign[to->r->type*6+element.type](to->r, &element);
-	*from = *to->r;
-}
-
-static void doXORAssign_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_XORAssign[element.type*6+WR_INT]( &element, from );
-
-	wr_intValueToArray( to, element.i );
-	*from = element;
-}
-
-static void doXORAssign_Y_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-
-	wr_XORAssign[WR_REFARRAY*6+element.type]( to, &element );
-	wr_arrayToValue( to, from );
-}
-
-static void doXORAssign_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_XORAssign[WR_INT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doXORAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_XORAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-static void doXORAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_XORAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
-static void doXORAssign_R_I( WRValue* to, WRValue* from ) { wr_XORAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-static void doXORAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_XORAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-
-static void doXORAssign_I_I( WRValue* to, WRValue* from ) { to->i ^= from->i; }
-
-WRVoidFunc wr_XORAssign[36] = 
-{
-	doXORAssign_I_I,  doXORAssign_I_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doXORAssign_I_Y,
-	doXORAssign_R_I,  doXORAssign_R_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doXORAssign_R_Y,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doXORAssign_Y_I,  doXORAssign_Y_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doXORAssign_Y_Y,
-};
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doRightShiftAssign_R_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_RightShiftAssign[to->r->type*6+element.type](to->r, &element);
-	*from = *to->r;
-}
-
-static void doRightShiftAssign_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_RightShiftAssign[element.type*6+WR_INT]( &element, from );
-
-	wr_intValueToArray( to, element.i );
-	*from = element;
-}
-
-static void doRightShiftAssign_Y_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-
-	wr_RightShiftAssign[WR_REFARRAY*6+element.type]( to, &element );
-	wr_arrayToValue( to, from );
-}
-
-static void doRightShiftAssign_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_RightShiftAssign[WR_INT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doRightShiftAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_RightShiftAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-static void doRightShiftAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_RightShiftAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
-static void doRightShiftAssign_R_I( WRValue* to, WRValue* from ) { wr_RightShiftAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-static void doRightShiftAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_RightShiftAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-
-static void doRightShiftAssign_I_I( WRValue* to, WRValue* from ) { to->i >>= from->i; }
-
-WRVoidFunc wr_RightShiftAssign[36] = 
-{
-	doRightShiftAssign_I_I,  doRightShiftAssign_I_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doRightShiftAssign_I_Y,
-	doRightShiftAssign_R_I,  doRightShiftAssign_R_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doRightShiftAssign_R_Y,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doRightShiftAssign_Y_I,  doRightShiftAssign_Y_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doRightShiftAssign_Y_Y,
-};
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doLeftShiftAssign_R_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_LeftShiftAssign[to->r->type*6+element.type](to->r, &element);
-	*from = *to->r;
-}
-
-static void doLeftShiftAssign_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-
-	wr_LeftShiftAssign[element.type*6+WR_INT]( &element, from );
-
-	wr_intValueToArray( to, element.i );
-	*from = element;
-}
-
-static void doLeftShiftAssign_Y_Y( WRValue* to, WRValue* from ) 
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-
-	wr_LeftShiftAssign[WR_REFARRAY*6+element.type]( to, &element );
-	wr_arrayToValue( to, from );
-}
-
-static void doLeftShiftAssign_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_LeftShiftAssign[WR_INT*6+element.type](to, &element);
-	*from = *to;
-}
-
-static void doLeftShiftAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_LeftShiftAssign[to->r->type*6+temp.type](to->r, &temp); *from = *to->r; }
-static void doLeftShiftAssign_Y_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_LeftShiftAssign[WR_REFARRAY*6+temp.type]( to, &temp ); wr_arrayToValue( to, from ); }
-static void doLeftShiftAssign_R_I( WRValue* to, WRValue* from ) { wr_LeftShiftAssign[to->r->type*6+WR_INT](to->r, from); *from = *to->r; }
-static void doLeftShiftAssign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_LeftShiftAssign[WR_INT*6+temp.type](to, &temp); *from = *to; }
-
-static void doLeftShiftAssign_I_I( WRValue* to, WRValue* from ) { to->i <<= from->i; }
-
-WRVoidFunc wr_LeftShiftAssign[36] = 
-{
-	doLeftShiftAssign_I_I,  doLeftShiftAssign_I_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doLeftShiftAssign_I_Y,
-	doLeftShiftAssign_R_I,  doLeftShiftAssign_R_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doLeftShiftAssign_R_Y,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doVoidFuncBlank,
-	doLeftShiftAssign_Y_I,  doLeftShiftAssign_Y_R,  doVoidFuncBlank,  doVoidFuncBlank, doVoidFuncBlank, doLeftShiftAssign_Y_Y,
-};
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doBinaryAddition_Y_R( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryAddition[element.type*6+from->type](&element, from, target);
-}
-
-static void doBinaryAddition_R_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryAddition[to->r->type*6+element.type]( to->r, &element, target);
-}
-
-static void doBinaryAddition_Y_I( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryAddition[element.type*6+WR_INT](&element, from, target);
-}
-
-static void doBinaryAddition_Y_F( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryAddition[element.type*6+WR_FLOAT](&element, from, target);
-}
-
-static void doBinaryAddition_Y_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	wr_binaryAddition[element1.type*6+element2.type](&element1, &element2, target);
-}
-
-static void doBinaryAddition_I_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryAddition[WR_INT*6+element.type](to, &element, target);
-}
-
-static void doBinaryAddition_F_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryAddition[WR_FLOAT*6+element.type](to, &element, target);
-}
-
-static void doBinaryAddition_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[WR_INT*6+from->r->type](to, from->r, target); }
-static void doBinaryAddition_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[to->r->type*6+WR_FLOAT](to->r, from, target); }
-static void doBinaryAddition_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[to->r->type*6+from->r->type](to->r, from->r, target); }
-static void doBinaryAddition_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[to->r->type*6+WR_INT](to->r, from, target); }
-static void doBinaryAddition_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAddition[WR_FLOAT*6+from->r->type](to, from->r, target); }
-
-static void doBinaryAddition_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i + from->i; }
-static void doBinaryAddition_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = (float)to->i + from->f; }
-static void doBinaryAddition_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f + (float)from->i; }
-static void doBinaryAddition_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f + from->f; }
-
-WRTargetFunc wr_binaryAddition[36] = 
-{
-	doBinaryAddition_I_I,  doBinaryAddition_I_R,  doBinaryAddition_I_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryAddition_I_Y,
-	doBinaryAddition_R_I,  doBinaryAddition_R_R,  doBinaryAddition_R_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryAddition_R_Y,
-	doBinaryAddition_F_I,  doBinaryAddition_F_R,  doBinaryAddition_F_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryAddition_F_Y,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doBinaryAddition_Y_I,  doBinaryAddition_Y_R,  doBinaryAddition_Y_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryAddition_Y_Y,
-};
-
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doBinaryMultiply_Y_R( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryMultiply[element.type*6+from->type](&element, from, target);
-}
-
-static void doBinaryMultiply_R_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryMultiply[to->r->type*6+element.type]( to->r, &element, target);
-}
-
-static void doBinaryMultiply_Y_I( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryMultiply[element.type*6+WR_INT](&element, from, target);
-}
-
-static void doBinaryMultiply_Y_F( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryMultiply[element.type*6+WR_FLOAT](&element, from, target);
-}
-
-static void doBinaryMultiply_Y_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	wr_binaryMultiply[element1.type*6+element2.type](&element1, &element2, target);
-}
-
-static void doBinaryMultiply_I_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryMultiply[WR_INT*6+element.type](to, &element, target);
-}
-
-static void doBinaryMultiply_F_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryMultiply[WR_FLOAT*6+element.type](to, &element, target);
-}
-
-static void doBinaryMultiply_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[WR_INT*6+from->r->type](to, from->r, target); }
-static void doBinaryMultiply_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[to->r->type*6+WR_FLOAT](to->r, from, target); }
-static void doBinaryMultiply_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[to->r->type*6+from->r->type](to->r, from->r, target); }
-static void doBinaryMultiply_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[to->r->type*6+WR_INT](to->r, from, target); }
-static void doBinaryMultiply_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMultiply[WR_FLOAT*6+from->r->type](to, from->r, target); }
-
-static void doBinaryMultiply_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i * from->i; }
-static void doBinaryMultiply_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = (float)to->i * from->f; }
-static void doBinaryMultiply_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f * (float)from->i; }
-static void doBinaryMultiply_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f * from->f; }
-
-WRTargetFunc wr_binaryMultiply[36] = 
-{
-	doBinaryMultiply_I_I,  doBinaryMultiply_I_R,  doBinaryMultiply_I_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryMultiply_I_Y,
-	doBinaryMultiply_R_I,  doBinaryMultiply_R_R,  doBinaryMultiply_R_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryMultiply_R_Y,
-	doBinaryMultiply_F_I,  doBinaryMultiply_F_R,  doBinaryMultiply_F_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryMultiply_F_Y,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doBinaryMultiply_Y_I,  doBinaryMultiply_Y_R,  doBinaryMultiply_Y_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryMultiply_Y_Y,
-};
-
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doBinarySubtract_Y_R( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binarySubtract[element.type*6+from->type](&element, from, target);
-}
-
-static void doBinarySubtract_R_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binarySubtract[to->r->type*6+element.type]( to->r, &element, target);
-}
-
-static void doBinarySubtract_Y_I( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binarySubtract[element.type*6+WR_INT](&element, from, target);
-}
-
-static void doBinarySubtract_Y_F( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binarySubtract[element.type*6+WR_FLOAT](&element, from, target);
-}
-
-static void doBinarySubtract_Y_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	wr_binarySubtract[element1.type*6+element2.type](&element1, &element2, target);
-}
-
-static void doBinarySubtract_I_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binarySubtract[WR_INT*6+element.type](to, &element, target);
-}
-
-static void doBinarySubtract_F_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binarySubtract[WR_FLOAT*6+element.type](to, &element, target);
-}
-
-static void doBinarySubtract_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[WR_INT*6+from->r->type](to, from->r, target); }
-static void doBinarySubtract_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[to->r->type*6+WR_FLOAT](to->r, from, target); }
-static void doBinarySubtract_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[to->r->type*6+from->r->type](to->r, from->r, target); }
-static void doBinarySubtract_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[to->r->type*6+WR_INT](to->r, from, target); }
-static void doBinarySubtract_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binarySubtract[WR_FLOAT*6+from->r->type](to, from->r, target); }
-
-static void doBinarySubtract_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i - from->i; }
-static void doBinarySubtract_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = (float)to->i - from->f; }
-static void doBinarySubtract_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f - (float)from->i; }
-static void doBinarySubtract_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f - from->f; }
-
-WRTargetFunc wr_binarySubtract[36] = 
-{
-	doBinarySubtract_I_I,  doBinarySubtract_I_R,  doBinarySubtract_I_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinarySubtract_I_Y,
-	doBinarySubtract_R_I,  doBinarySubtract_R_R,  doBinarySubtract_R_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinarySubtract_R_Y,
-	doBinarySubtract_F_I,  doBinarySubtract_F_R,  doBinarySubtract_F_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinarySubtract_F_Y,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doBinarySubtract_Y_I,  doBinarySubtract_Y_R,  doBinarySubtract_Y_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinarySubtract_Y_Y,
-};
-
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doBinaryDivide_Y_R( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryDivide[element.type*6+from->type](&element, from, target);
-}
-
-static void doBinaryDivide_R_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryDivide[to->r->type*6+element.type]( to->r, &element, target);
-}
-
-static void doBinaryDivide_Y_I( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryDivide[element.type*6+WR_INT](&element, from, target);
-}
-
-static void doBinaryDivide_Y_F( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryDivide[element.type*6+WR_FLOAT](&element, from, target);
-}
-
-static void doBinaryDivide_Y_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	wr_binaryDivide[element1.type*6+element2.type](&element1, &element2, target);
-}
-
-static void doBinaryDivide_I_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryDivide[WR_INT*6+element.type](to, &element, target);
-}
-
-static void doBinaryDivide_F_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryDivide[WR_FLOAT*6+element.type](to, &element, target);
-}
-
-static void doBinaryDivide_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[WR_INT*6+from->r->type](to, from->r, target); }
-static void doBinaryDivide_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[to->r->type*6+WR_FLOAT](to->r, from, target); }
-static void doBinaryDivide_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[to->r->type*6+from->r->type](to->r, from->r, target); }
-static void doBinaryDivide_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[to->r->type*6+WR_INT](to->r, from, target); }
-static void doBinaryDivide_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryDivide[WR_FLOAT*6+from->r->type](to, from->r, target); }
-
-static void doBinaryDivide_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i / from->i; }
-static void doBinaryDivide_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = (float)to->i / from->f; }
-static void doBinaryDivide_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f / (float)from->i; }
-static void doBinaryDivide_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_FLOAT; target->f = to->f / from->f; }
-
-WRTargetFunc wr_binaryDivide[36] = 
-{
-	doBinaryDivide_I_I,  doBinaryDivide_I_R,  doBinaryDivide_I_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryDivide_I_Y,
-	doBinaryDivide_R_I,  doBinaryDivide_R_R,  doBinaryDivide_R_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryDivide_R_Y,
-	doBinaryDivide_F_I,  doBinaryDivide_F_R,  doBinaryDivide_F_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryDivide_F_Y,
-  	 doTargetFuncBlank,   doTargetFuncBlank,   doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,   doTargetFuncBlank,
-	 doTargetFuncBlank,   doTargetFuncBlank,   doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,   doTargetFuncBlank,
-	doBinaryDivide_Y_I,  doBinaryDivide_Y_R,  doBinaryDivide_Y_F,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryDivide_Y_Y,
-};
-
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doBinaryMod_Y_R( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryMod[element.type*6+from->type](&element, from, target);
-}
-
-static void doBinaryMod_R_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryMod[to->r->type*6+element.type]( to->r, &element, target);
-}
-
-static void doBinaryMod_Y_I( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryMod[element.type*6+WR_INT](&element, from, target);
-}
-
-static void doBinaryMod_Y_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	wr_binaryMod[element1.type*6+element2.type](&element1, &element2, target);
-}
-
-static void doBinaryMod_I_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryMod[WR_INT*6+element.type](to, &element, target);
-}
-
-static void doBinaryMod_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMod[WR_INT*6+from->r->type](to, from->r, target); }
-static void doBinaryMod_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMod[to->r->type*6+from->r->type](to->r, from->r, target); }
-static void doBinaryMod_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryMod[to->r->type*6+WR_INT](to->r, from, target); }
-
-static void doBinaryMod_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i % from->i; }
-
-WRTargetFunc wr_binaryMod[36] = 
-{
-	doBinaryMod_I_I,  doBinaryMod_I_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryMod_I_Y,
-	doBinaryMod_R_I,  doBinaryMod_R_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryMod_R_Y,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doBinaryMod_Y_I,  doBinaryMod_Y_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryMod_Y_Y,
-};
-
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doBinaryLeftShift_Y_R( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryLeftShift[element.type*6+from->type](&element, from, target);
-}
-
-static void doBinaryLeftShift_R_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryLeftShift[to->r->type*6+element.type]( to->r, &element, target);
-}
-
-static void doBinaryLeftShift_Y_I( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryLeftShift[element.type*6+WR_INT](&element, from, target);
-}
-
-static void doBinaryLeftShift_Y_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	wr_binaryLeftShift[element1.type*6+element2.type](&element1, &element2, target);
-}
-
-static void doBinaryLeftShift_I_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryLeftShift[WR_INT*6+element.type](to, &element, target);
-}
-
-static void doBinaryLeftShift_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryLeftShift[WR_INT*6+from->r->type](to, from->r, target); }
-static void doBinaryLeftShift_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryLeftShift[to->r->type*6+from->r->type](to->r, from->r, target); }
-static void doBinaryLeftShift_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryLeftShift[to->r->type*6+WR_INT](to->r, from, target); }
-
-static void doBinaryLeftShift_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i << from->i; }
-
-WRTargetFunc wr_binaryLeftShift[36] = 
-{
-	doBinaryLeftShift_I_I,  doBinaryLeftShift_I_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryLeftShift_I_Y,
-	doBinaryLeftShift_R_I,  doBinaryLeftShift_R_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryLeftShift_R_Y,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doBinaryLeftShift_Y_I,  doBinaryLeftShift_Y_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryLeftShift_Y_Y,
-};
-
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doBinaryRightShift_Y_R( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryRightShift[element.type*6+from->type](&element, from, target);
-}
-
-static void doBinaryRightShift_R_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryRightShift[to->r->type*6+element.type]( to->r, &element, target);
-}
-
-static void doBinaryRightShift_Y_I( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryRightShift[element.type*6+WR_INT](&element, from, target);
-}
-
-static void doBinaryRightShift_Y_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	wr_binaryRightShift[element1.type*6+element2.type](&element1, &element2, target);
-}
-
-static void doBinaryRightShift_I_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryRightShift[WR_INT*6+element.type](to, &element, target);
-}
-
-static void doBinaryRightShift_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryRightShift[WR_INT*6+from->r->type](to, from->r, target); }
-static void doBinaryRightShift_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryRightShift[to->r->type*6+from->r->type](to->r, from->r, target); }
-static void doBinaryRightShift_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryRightShift[to->r->type*6+WR_INT](to->r, from, target); }
-
-static void doBinaryRightShift_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i >> from->i; }
-
-WRTargetFunc wr_binaryRightShift[36] = 
-{
-	doBinaryRightShift_I_I,  doBinaryRightShift_I_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryRightShift_I_Y,
-	doBinaryRightShift_R_I,  doBinaryRightShift_R_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryRightShift_R_Y,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doBinaryRightShift_Y_I,  doBinaryRightShift_Y_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryRightShift_Y_Y,
-};
-
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doBinaryOR_Y_R( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryOR[element.type*6+from->type](&element, from, target);
-}
-
-static void doBinaryOR_R_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryOR[to->r->type*6+element.type]( to->r, &element, target);
-}
-
-static void doBinaryOR_Y_I( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryOR[element.type*6+WR_INT](&element, from, target);
-}
-
-static void doBinaryOR_Y_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	wr_binaryOR[element1.type*6+element2.type](&element1, &element2, target);
-}
-
-static void doBinaryOR_I_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryOR[WR_INT*6+element.type](to, &element, target);
-}
-
-static void doBinaryOR_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryOR[WR_INT*6+from->r->type](to, from->r, target); }
-static void doBinaryOR_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryOR[to->r->type*6+from->r->type](to->r, from->r, target); }
-static void doBinaryOR_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryOR[to->r->type*6+WR_INT](to->r, from, target); }
-
-static void doBinaryOR_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i | from->i; }
-
-WRTargetFunc wr_binaryOR[36] = 
-{
-	doBinaryOR_I_I,  doBinaryOR_I_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryOR_I_Y,
-	doBinaryOR_R_I,  doBinaryOR_R_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryOR_R_Y,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doBinaryOR_Y_I,  doBinaryOR_Y_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryOR_Y_Y,
-};
-
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doBinaryAND_Y_R( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryAND[element.type*6+from->type](&element, from, target);
-}
-
-static void doBinaryAND_R_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryAND[to->r->type*6+element.type]( to->r, &element, target);
-}
-
-static void doBinaryAND_Y_I( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryAND[element.type*6+WR_INT](&element, from, target);
-}
-
-static void doBinaryAND_Y_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	wr_binaryAND[element1.type*6+element2.type](&element1, &element2, target);
-}
-
-static void doBinaryAND_I_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryAND[WR_INT*6+element.type](to, &element, target);
-}
-
-static void doBinaryAND_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAND[WR_INT*6+from->r->type](to, from->r, target); }
-static void doBinaryAND_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAND[to->r->type*6+from->r->type](to->r, from->r, target); }
-static void doBinaryAND_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryAND[to->r->type*6+WR_INT](to->r, from, target); }
-
-static void doBinaryAND_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i & from->i; }
-
-WRTargetFunc wr_binaryAND[36] = 
-{
-	doBinaryAND_I_I,  doBinaryAND_I_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryAND_I_Y,
-	doBinaryAND_R_I,  doBinaryAND_R_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryAND_R_Y,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doBinaryAND_Y_I,  doBinaryAND_Y_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryAND_Y_Y,
-};
-
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static void doBinaryXOR_Y_R( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryXOR[element.type*6+from->type](&element, from, target);
-}
-
-static void doBinaryXOR_R_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryXOR[to->r->type*6+element.type]( to->r, &element, target);
-}
-
-static void doBinaryXOR_Y_I( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	wr_binaryXOR[element.type*6+WR_INT](&element, from, target);
-}
-
-static void doBinaryXOR_Y_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	wr_binaryXOR[element1.type*6+element2.type](&element1, &element2, target);
-}
-
-static void doBinaryXOR_I_Y( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	wr_binaryXOR[WR_INT*6+element.type](to, &element, target);
-}
-
-static void doBinaryXOR_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryXOR[WR_INT*6+from->r->type](to, from->r, target); }
-static void doBinaryXOR_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryXOR[to->r->type*6+from->r->type](to->r, from->r, target); }
-static void doBinaryXOR_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_binaryXOR[to->r->type*6+WR_INT](to->r, from, target); }
-
-static void doBinaryXOR_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->type = WR_INT; target->i = to->i ^ from->i; }
-
-WRTargetFunc wr_binaryXOR[36] = 
-{
-	doBinaryXOR_I_I,  doBinaryXOR_I_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryXOR_I_Y,
-	doBinaryXOR_R_I,  doBinaryXOR_R_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryXOR_R_Y,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doTargetFuncBlank,     doTargetFuncBlank,     doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,     doTargetFuncBlank,
-	doBinaryXOR_Y_I,  doBinaryXOR_Y_R,  doTargetFuncBlank,  doTargetFuncBlank,   doTargetFuncBlank,  doBinaryXOR_Y_Y,
-};
-
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static bool doCompareEQ_Y_Y( WRValue* to, WRValue* from )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	return wr_CompareEQ[element1.type*6+element2.type](&element1, &element2);
-}
-
-static bool doCompareEQ_R_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_CompareEQ[to->type*6+element.type](to, &element);
-}
-
-static bool doCompareEQ_Y_R( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_CompareEQ[element.type*6+from->type](&element, from);
-}
-
-static bool doCompareEQ_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_CompareEQ[element.type*6+WR_INT](&element, from);
-}
-
-static bool doCompareEQ_Y_F( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_CompareEQ[element.type*6+WR_FLOAT](&element, from);
-}
-
-static bool doCompareEQ_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_CompareEQ[WR_INT*6+element.type](to, &element);
-}
-static bool doCompareEQ_F_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_CompareEQ[WR_FLOAT*6+element.type](to, &element);
-}
-
-static bool doCompareEQ_R_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[to->r->type*6+from->r->type](to->r, from->r); }
-static bool doCompareEQ_R_I( WRValue* to, WRValue* from ) { return wr_CompareEQ[to->r->type*6+WR_INT](to->r, from); }
-static bool doCompareEQ_R_F( WRValue* to, WRValue* from ) { return wr_CompareEQ[to->r->type*6+WR_FLOAT](to->r, from); }
-static bool doCompareEQ_I_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[WR_INT*6+from->r->type](to, from->r); }
-static bool doCompareEQ_F_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[WR_FLOAT*6+from->r->type](to, from->r); }
-
-static bool doCompareEQ_I_I( WRValue* to, WRValue* from ) { return to->i == from->i; }
-static bool doCompareEQ_I_F( WRValue* to, WRValue* from ) { to->type = WR_FLOAT; return to->f == from->f; }
-static bool doCompareEQ_F_I( WRValue* to, WRValue* from ) { return to->f == (float)from->i; }
-static bool doCompareEQ_F_F( WRValue* to, WRValue* from ) { return to->f == from->f; }
-
-WRReturnFunc wr_CompareEQ[36] = 
-{
-	doCompareEQ_I_I,   doCompareEQ_I_R,   doCompareEQ_I_F, doReturnFuncBlank, doReturnFuncBlank,   doCompareEQ_I_Y,
-	doCompareEQ_R_I,   doCompareEQ_R_R,   doCompareEQ_R_F, doReturnFuncBlank, doReturnFuncBlank,   doCompareEQ_R_Y,
-	doCompareEQ_F_I,   doCompareEQ_F_R,   doCompareEQ_F_F, doReturnFuncBlank, doReturnFuncBlank,   doCompareEQ_F_Y,
-	doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank,
-	doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank,
-	doCompareEQ_Y_I,   doCompareEQ_Y_R,   doCompareEQ_Y_F, doReturnFuncBlank, doReturnFuncBlank,   doCompareEQ_Y_Y,
-};
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static bool doCompareGT_Y_Y( WRValue* to, WRValue* from )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	return wr_CompareGT[element1.type*6+element2.type](&element1, &element2);
-}
-
-static bool doCompareGT_R_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_CompareGT[to->type*6+element.type](to, &element);
-}
-
-static bool doCompareGT_Y_R( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_CompareGT[element.type*6+from->type](&element, from);
-}
-
-static bool doCompareGT_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_CompareGT[element.type*6+WR_INT](&element, from);
-}
-
-static bool doCompareGT_Y_F( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_CompareGT[element.type*6+WR_FLOAT](&element, from);
-}
-
-static bool doCompareGT_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_CompareGT[WR_INT*6+element.type](to, &element);
-}
-static bool doCompareGT_F_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_CompareGT[WR_FLOAT*6+element.type](to, &element);
-}
-
-static bool doCompareGT_R_R( WRValue* to, WRValue* from ) { return wr_CompareGT[to->r->type*6+from->r->type](to->r, from->r); }
-static bool doCompareGT_R_I( WRValue* to, WRValue* from ) { return wr_CompareGT[to->r->type*6+WR_INT](to->r, from); }
-static bool doCompareGT_R_F( WRValue* to, WRValue* from ) { return wr_CompareGT[to->r->type*6+WR_FLOAT](to->r, from); }
-static bool doCompareGT_I_R( WRValue* to, WRValue* from ) { return wr_CompareGT[WR_INT*6+from->r->type](to, from->r); }
-static bool doCompareGT_F_R( WRValue* to, WRValue* from ) { return wr_CompareGT[WR_FLOAT*6+from->r->type](to, from->r); }
-
-static bool doCompareGT_I_I( WRValue* to, WRValue* from ) { return to->i > from->i; }
-static bool doCompareGT_I_F( WRValue* to, WRValue* from ) { return (float)to->i > from->f; }
-static bool doCompareGT_F_I( WRValue* to, WRValue* from ) { return to->f > (float)from->i; }
-static bool doCompareGT_F_F( WRValue* to, WRValue* from ) { return to->f > from->f; }
-
-WRReturnFunc wr_CompareGT[36] = 
-{
-	doCompareGT_I_I,   doCompareGT_I_R,   doCompareGT_I_F, doReturnFuncBlank, doReturnFuncBlank,   doCompareGT_I_Y,
-	doCompareGT_R_I,   doCompareGT_R_R,   doCompareGT_R_F, doReturnFuncBlank, doReturnFuncBlank,   doCompareGT_R_Y,
-	doCompareGT_F_I,   doCompareGT_F_R,   doCompareGT_F_F, doReturnFuncBlank, doReturnFuncBlank,   doCompareGT_F_Y,
-	doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank,
-	doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank,
-	doCompareGT_Y_I,   doCompareGT_Y_R,   doCompareGT_Y_F, doReturnFuncBlank, doReturnFuncBlank,   doCompareGT_Y_Y,
-};
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static bool doCompareLT_Y_Y( WRValue* to, WRValue* from )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	return wr_CompareLT[element1.type*6+element2.type](&element1, &element2);
-}
-
-static bool doCompareLT_R_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_CompareLT[to->type*6+element.type](to, &element);
-}
-
-static bool doCompareLT_Y_R( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_CompareLT[element.type*6+from->type](&element, from);
-}
-
-static bool doCompareLT_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_CompareLT[element.type*6+WR_INT](&element, from);
-}
-
-static bool doCompareLT_Y_F( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_CompareLT[element.type*6+WR_FLOAT](&element, from);
-}
-
-static bool doCompareLT_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_CompareLT[WR_INT*6+element.type](to, &element);
-}
-static bool doCompareLT_F_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_CompareLT[WR_FLOAT*6+element.type](to, &element);
-}
-
-static bool doCompareLT_R_R( WRValue* to, WRValue* from ) { return wr_CompareLT[to->r->type*6+from->r->type](to->r, from->r); }
-static bool doCompareLT_R_I( WRValue* to, WRValue* from ) { return wr_CompareLT[to->r->type*6+WR_INT](to->r, from); }
-static bool doCompareLT_R_F( WRValue* to, WRValue* from ) { return wr_CompareLT[to->r->type*6+WR_FLOAT](to->r, from); }
-static bool doCompareLT_I_R( WRValue* to, WRValue* from ) { return wr_CompareLT[WR_INT*6+from->r->type](to, from->r); }
-static bool doCompareLT_F_R( WRValue* to, WRValue* from ) { return wr_CompareLT[WR_FLOAT*6+from->r->type](to, from->r); }
-
-static bool doCompareLT_I_I( WRValue* to, WRValue* from ) { return to->i < from->i; }
-static bool doCompareLT_I_F( WRValue* to, WRValue* from ) { return (float)to->i < from->f; }
-static bool doCompareLT_F_I( WRValue* to, WRValue* from ) { return to->f < (float)from->i; }
-static bool doCompareLT_F_F( WRValue* to, WRValue* from ) { return to->f < from->f; }
-
-WRReturnFunc wr_CompareLT[36] = 
-{
-	doCompareLT_I_I,   doCompareLT_I_R,   doCompareLT_I_F, doReturnFuncBlank, doReturnFuncBlank,   doCompareLT_I_Y,
-	doCompareLT_R_I,   doCompareLT_R_R,   doCompareLT_R_F, doReturnFuncBlank, doReturnFuncBlank,   doCompareLT_R_Y,
-	doCompareLT_F_I,   doCompareLT_F_R,   doCompareLT_F_F, doReturnFuncBlank, doReturnFuncBlank,   doCompareLT_F_Y,
-	doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank,
-	doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank,
-	doCompareLT_Y_I,   doCompareLT_Y_R,   doCompareLT_Y_F, doReturnFuncBlank, doReturnFuncBlank,   doCompareLT_Y_Y,
-};
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static bool doLogicalAND_Y_Y( WRValue* to, WRValue* from )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	return wr_LogicalAND[element1.type*6+element2.type](&element1, &element2);
-}
-
-static bool doLogicalAND_R_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_LogicalAND[to->type*6+element.type](to, &element);
-}
-
-static bool doLogicalAND_Y_R( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_LogicalAND[element.type*6+from->type](&element, from);
-}
-
-static bool doLogicalAND_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_LogicalAND[element.type*6+WR_INT](&element, from);
-}
-
-static bool doLogicalAND_Y_F( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_LogicalAND[element.type*6+WR_FLOAT](&element, from);
-}
-
-static bool doLogicalAND_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_LogicalAND[WR_INT*6+element.type](to, &element);
-}
-static bool doLogicalAND_F_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_LogicalAND[WR_FLOAT*6+element.type](to, &element);
-}
-
-static bool doLogicalAND_R_R( WRValue* to, WRValue* from ) { return wr_LogicalAND[to->r->type*6+from->r->type](to->r, from->r); }
-static bool doLogicalAND_R_I( WRValue* to, WRValue* from ) { return wr_LogicalAND[to->r->type*6+WR_INT](to->r, from); }
-static bool doLogicalAND_R_F( WRValue* to, WRValue* from ) { return wr_LogicalAND[to->r->type*6+WR_FLOAT](to->r, from); }
-static bool doLogicalAND_I_R( WRValue* to, WRValue* from ) { return wr_LogicalAND[WR_INT*6+from->r->type](to, from->r); }
-static bool doLogicalAND_F_R( WRValue* to, WRValue* from ) { return wr_LogicalAND[WR_FLOAT*6+from->r->type](to, from->r); }
-
-static bool doLogicalAND_I_I( WRValue* to, WRValue* from ) { return to->i && from->i; }
-static bool doLogicalAND_I_F( WRValue* to, WRValue* from ) { return (float)to->i && from->f; }
-static bool doLogicalAND_F_I( WRValue* to, WRValue* from ) { return to->f && (float)from->i; }
-static bool doLogicalAND_F_F( WRValue* to, WRValue* from ) { return to->f && from->f; }
-
-WRReturnFunc wr_LogicalAND[36] = 
-{
-	doLogicalAND_I_I,   doLogicalAND_I_R,   doLogicalAND_I_F, doReturnFuncBlank, doReturnFuncBlank,   doLogicalAND_I_Y,
-	doLogicalAND_R_I,   doLogicalAND_R_R,   doLogicalAND_R_F, doReturnFuncBlank, doReturnFuncBlank,   doLogicalAND_R_Y,
-	doLogicalAND_F_I,   doLogicalAND_F_R,   doLogicalAND_F_F, doReturnFuncBlank, doReturnFuncBlank,   doLogicalAND_F_Y,
-	doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank,
-	doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank,
-	doLogicalAND_Y_I,   doLogicalAND_Y_R,   doLogicalAND_Y_F, doReturnFuncBlank, doReturnFuncBlank,   doLogicalAND_Y_Y,
-};
-//==============================================================================
-
-
-//------------------------------------------------------------------------------
-static bool doLogicalOR_Y_Y( WRValue* to, WRValue* from )
-{
-	WRValue element1;
-	wr_arrayToValue( to, &element1 );
-	WRValue element2;
-	wr_arrayToValue( from, &element2 );
-	return wr_LogicalOR[element1.type*6+element2.type](&element1, &element2);
-}
-
-static bool doLogicalOR_R_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_LogicalOR[to->type*6+element.type](to, &element);
-}
-
-static bool doLogicalOR_Y_R( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_LogicalOR[element.type*6+from->type](&element, from);
-}
-
-static bool doLogicalOR_Y_I( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_LogicalOR[element.type*6+WR_INT](&element, from);
-}
-
-static bool doLogicalOR_Y_F( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( to, &element );
-	return wr_LogicalOR[element.type*6+WR_FLOAT](&element, from);
-}
-
-static bool doLogicalOR_I_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_LogicalOR[WR_INT*6+element.type](to, &element);
-}
-static bool doLogicalOR_F_Y( WRValue* to, WRValue* from )
-{
-	WRValue element;
-	wr_arrayToValue( from, &element );
-	return wr_LogicalOR[WR_FLOAT*6+element.type](to, &element);
-}
-
-static bool doLogicalOR_R_R( WRValue* to, WRValue* from ) { return wr_LogicalOR[to->r->type*6+from->r->type](to->r, from->r); }
-static bool doLogicalOR_R_I( WRValue* to, WRValue* from ) { return wr_LogicalOR[to->r->type*6+WR_INT](to->r, from); }
-static bool doLogicalOR_R_F( WRValue* to, WRValue* from ) { return wr_LogicalOR[to->r->type*6+WR_FLOAT](to->r, from); }
-static bool doLogicalOR_I_R( WRValue* to, WRValue* from ) { return wr_LogicalOR[WR_INT*6+from->r->type](to, from->r); }
-static bool doLogicalOR_F_R( WRValue* to, WRValue* from ) { return wr_LogicalOR[WR_FLOAT*6+from->r->type](to, from->r); }
-
-static bool doLogicalOR_I_I( WRValue* to, WRValue* from ) { return to->i || from->i; }
-static bool doLogicalOR_I_F( WRValue* to, WRValue* from ) { return (float)to->i || from->f; }
-static bool doLogicalOR_F_I( WRValue* to, WRValue* from ) { return to->f || (float)from->i; }
-static bool doLogicalOR_F_F( WRValue* to, WRValue* from ) { return to->f || from->f; }
-
-WRReturnFunc wr_LogicalOR[36] = 
-{
-	doLogicalOR_I_I,   doLogicalOR_I_R,   doLogicalOR_I_F, doReturnFuncBlank, doReturnFuncBlank,   doLogicalOR_I_Y,
-	doLogicalOR_R_I,   doLogicalOR_R_R,   doLogicalOR_R_F, doReturnFuncBlank, doReturnFuncBlank,   doLogicalOR_R_Y,
-	doLogicalOR_F_I,   doLogicalOR_F_R,   doLogicalOR_F_F, doReturnFuncBlank, doReturnFuncBlank,   doLogicalOR_F_Y,
-	doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank,
-	doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank, doReturnFuncBlank,
-	doLogicalOR_Y_I,   doLogicalOR_Y_R,   doLogicalOR_Y_F, doReturnFuncBlank, doReturnFuncBlank,   doLogicalOR_Y_Y,
-};
-//==============================================================================
-
+#define X_INT_BINARY( NAME, OPERATION ) \
+static void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( to, &element );\
+		NAME##Binary[(element.type<<2)|from->type](&element, from, target);\
+	}\
+}\
+static void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		NAME##Binary[(to->r->type<<2)|element.type]( to->r, &element, target);\
+	}\
+}\
+static void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( to, &element );\
+		NAME##Binary[(element.type<<2)|WR_INT](&element, from, target);\
+	}\
+}\
+static void NAME##Binary_E_E( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY && from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element1;\
+		wr_arrayToValue( to, &element1 );\
+		WRValue element2;\
+		wr_arrayToValue( from, &element2 );\
+		NAME##Binary[(element1.type<<2)|element2.type](&element1, &element2, target);\
+	}\
+}\
+static void NAME##Binary_I_E( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		NAME##Binary[(WR_INT<<2)+element.type](to, &element, target);\
+	}\
+}\
+static void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_INT<<2)+from->r->type](to, from->r, target); }\
+static void NAME##Binary_R_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }\
+static void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_INT](to->r, from, target); }\
+static void NAME##Binary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = to->i OPERATION from->i; }\
+WRTargetFunc NAME##Binary[16] = \
+{\
+	NAME##Binary_I_I, doTargetFuncBlank,   NAME##Binary_I_R,  NAME##Binary_I_E,\
+   doTargetFuncBlank, doTargetFuncBlank,  doTargetFuncBlank, doTargetFuncBlank,\
+	NAME##Binary_R_I, doTargetFuncBlank,   NAME##Binary_R_R,  NAME##Binary_R_E,\
+	NAME##Binary_E_I, doTargetFuncBlank,   NAME##Binary_E_R,  NAME##Binary_E_E,\
+};\
+
+
+X_INT_BINARY( wr_LeftShift, << );
+X_INT_BINARY( wr_RightShift, >> );
+X_INT_BINARY( wr_Mod, % );
+X_INT_BINARY( wr_AND, & );
+X_INT_BINARY( wr_OR, | );
+X_INT_BINARY( wr_XOR, ^ );
+
+
+#define X_COMPARE( NAME, OPERATION ) \
+static bool NAME##_E_E( WRValue* to, WRValue* from )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY && from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element1;\
+		wr_arrayToValue( to, &element1 );\
+		WRValue element2;\
+		wr_arrayToValue( from, &element2 );\
+		return NAME[(element1.type<<2)|element2.type](&element1, &element2);\
+	}\
+return false;\
+}\
+static bool NAME##_R_E( WRValue* to, WRValue* from )\
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		return NAME[(to->type<<2)|element.type](to, &element);\
+	}\
+return false;\
+}\
+static bool NAME##_E_R( WRValue* to, WRValue* from )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( to, &element );\
+		return NAME[(element.type<<2)|from->type](&element, from);\
+	}\
+return false;\
+}\
+static bool NAME##_E_I( WRValue* to, WRValue* from )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( to, &element );\
+		return NAME[(element.type<<2)|WR_INT](&element, from);\
+	}\
+return false;\
+}\
+static bool NAME##_E_F( WRValue* to, WRValue* from )\
+{\
+	if ( to->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( to, &element );\
+		return NAME[(element.type<<2)|WR_FLOAT](&element, from);\
+	}\
+return false;\
+}\
+static bool NAME##_I_E( WRValue* to, WRValue* from )\
+{\
+	if ( from->xtype == WR_EX_REFARRAY )\
+	{\
+		WRValue element;\
+		wr_arrayToValue( from, &element );\
+		return NAME[(WR_INT<<2)|element.type](to, &element);\
+	}\
+	return false;\
+}\
+static bool NAME##_F_E( WRValue* to, WRValue* from )\
+{\
+   if ( from->xtype == WR_EX_REFARRAY )\
+   {\
+	   WRValue element;\
+	   wr_arrayToValue( from, &element );\
+	   return NAME[(WR_FLOAT<<2)|element.type](to, &element);\
+   }\
+	return false;\
+}\
+static bool NAME##_R_R( WRValue* to, WRValue* from ) { return NAME[(to->r->type<<2)|from->r->type](to->r, from->r); }\
+static bool NAME##_R_I( WRValue* to, WRValue* from ) { return NAME[(to->r->type<<2)|WR_INT](to->r, from); }\
+static bool NAME##_R_F( WRValue* to, WRValue* from ) { return NAME[(to->r->type<<2)|WR_FLOAT](to->r, from); }\
+static bool NAME##_I_R( WRValue* to, WRValue* from ) { return NAME[(WR_INT<<2)+from->r->type](to, from->r); }\
+static bool NAME##_F_R( WRValue* to, WRValue* from ) { return NAME[(WR_FLOAT<<2)+from->r->type](to, from->r); }\
+static bool NAME##_I_I( WRValue* to, WRValue* from ) { return to->i OPERATION from->i; }\
+static bool NAME##_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; return to->f OPERATION from->f; }\
+static bool NAME##_F_I( WRValue* to, WRValue* from ) { return to->f OPERATION (float)from->i; }\
+static bool NAME##_F_F( WRValue* to, WRValue* from ) { return to->f OPERATION from->f; }\
+WRReturnFunc NAME[16] = \
+{\
+    NAME##_I_I, NAME##_I_F, NAME##_I_R, NAME##_I_E,\
+	NAME##_F_I, NAME##_F_F, NAME##_F_R, NAME##_F_E,\
+    NAME##_R_I, NAME##_R_F, NAME##_R_R, NAME##_R_E,\
+    NAME##_E_I, NAME##_E_F, NAME##_E_R, NAME##_E_E,\
+};\
+
+X_COMPARE( wr_CompareEQ, == );
+X_COMPARE( wr_CompareGT, > );
+X_COMPARE( wr_CompareLT, < );
+X_COMPARE( wr_LogicalAND, && );
+X_COMPARE( wr_LogicalOR, || );
 
 //------------------------------------------------------------------------------
 static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value )
 {
-	// indexing with an int, but what we are indexing is NOT an array,
-	// make it one and return a ref
-	value->type = WR_ARRAY;
-	value->va = c->getSVA( index->i+1 );
-
-	value->r = value->asValueArray() + index->i;
-	value->type = WR_REF;
-
+	// indexing with an int, but what we are indexing is NOT an array, make it one of this size.
+	value->va = c->getSVA( index->i, SV_VALUE, value );
+	value->p2 = INIT_AS_ARRAY;
 }
 static void doIndex_I_R( WRContext* c, WRValue* index, WRValue* value ) 
 {
 	// indexing with an int into a ref, is it an array?
-	if ( value->r->type != WR_ARRAY )
+	if ( value->r->xtype != WR_EX_ARRAY )
 	{
-		// nope, make it one and return a ref
-		value->r->type = WR_ARRAY;
-		value->r->va = c->getSVA( index->i+1 );
-
+		// nope, make it one of this size and return a ref
+		value->r->va = c->getSVA( index->i, SV_VALUE, value );
+		value->r->p2 = INIT_AS_ARRAY;
 		value->r = value->r->asValueArray() + index->i;
 		value->type = WR_REF;
 	}
@@ -7814,357 +8269,272 @@ static void doIndex_I_R( WRContext* c, WRValue* index, WRValue* value )
 		{
 			// value is easy, return a ref to the value
 			value->r = value->r->asValueArray() + index->i;
-			value->type = WR_REF;
+			value->p2 = INIT_AS_REF;
 		}
 		else
 		{
 			// this is a native array, value remains a reference to an array, but set the
 			// element to point to the indexed value
-			value->arrayElement = index->i << 8;
-			value->type = WR_REFARRAY;
+			value->p2 = INIT_AS_REFARRAY;
+
+			ARRAY_ELEMENT_TO_P2( value, index->i );
 		}
 	}
 }
-
-static void doIndex_I_A( WRContext* c, WRValue* index, WRValue* value )
+static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value )
 {
-	if ( (value->va->m_type&0x3) == SV_VALUE )
+	if ( value->xtype == WR_EX_ARRAY
+		 && (value->va->m_type&0x3) == SV_VALUE )
 	{
 		value->r = value->asValueArray() + index->i;
-		value->type = WR_REF;
+		value->p2 = INIT_AS_REF;
 	}
 }
-
 static void doIndex_R_I( WRContext* c, WRValue* index, WRValue* value )
 {
-	wr_index[index->r->type*6+WR_INT](c, index->r, value);
+	wr_index[(index->r->type<<2)|WR_INT](c, index->r, value);
 }
-
 static void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value )
 {
-	if ( value->r->type != WR_USR )
+	if ( value->r->xtype != WR_EX_USR && (value->r->xtype != WR_EX_ARRAY) )
 	{
-		if ( value->r->type != WR_ARRAY )
-		{
-			// indexing something that isn't a USR or ARRAY, make it an
-			// array
-			value->r->type = WR_ARRAY;
-			value->r->va = c->getSVA( index->i+1 );
-		}
-
-		wr_index[index->r->type*6+WR_REF](c, index->r, value);
+		// indexing something that isn't a USR or ARRAY, make it an
+		// array
+		value->r->va = c->getSVA( index->i+1, SV_VALUE, value );
+		value->r->p2 = INIT_AS_ARRAY;
 	}
+
+	wr_index[(index->r->type<<2)|WR_REF](c, index->r, value);
 }
 static void doIndex_R_F( WRContext* c, WRValue* index, WRValue* value )
 {
-	wr_index[index->r->type*6+WR_FLOAT](c, index->r, value);
+	wr_index[(index->r->type<<2)|WR_FLOAT](c, index->r, value);
 }
-static void doIndex_R_A( WRContext* c, WRValue* index, WRValue* value )
+static void doIndex_R_E( WRContext* c, WRValue* index, WRValue* value )
 {
-	wr_index[index->r->type*6+WR_ARRAY](c, index->r, value);
-}
-WRStateFunc wr_index[36] = 
-{
-	    doIndex_I_X,     doIndex_I_R,     doIndex_I_X, doVoidIndexFunc,     doIndex_I_A,     doIndex_I_R,
-	    doIndex_R_I,     doIndex_R_R,     doIndex_R_F, doVoidIndexFunc,     doIndex_R_A, doVoidIndexFunc,
-	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
-	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
-	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
-	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
-};
-
-//------------------------------------------------------------------------------
-static void doPreInc_I( WRValue* value ) { ++value->i; }
-static void doPreInc_Y( WRValue* value )
-{
-	unsigned int index = value->arrayElement >> 8;
-	int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
-
-	switch( value->r->va->m_type&0x3 )
+	if ( value->xtype == WR_EX_ARRAY )
 	{
-		case SV_VALUE:
-		{
-			WRValue* val = (WRValue *)value->r->va->m_data + s;
-			wr_preinc[ val->type ]( val );
-			*value = *val;
-			return;
-		}
-
-		case SV_CHAR: {	value->i = ++((char *)value->r->va->m_data)[s]; value->type = WR_INT; return; }
-		case SV_INT: { value->i = ++((int *)value->r->va->m_data)[s]; value->type = WR_INT; return; }
-		case SV_FLOAT: { value->f = ++((float *)value->r->va->m_data)[s]; value->type = WR_FLOAT; return; }
+		wr_index[(index->r->type<<2)|WR_EX](c, index->r, value);
 	}
 }
 
-static void doPreInc_R( WRValue* value )
-{
-	wr_preinc[ value->r->type ]( value->r );
-	*value = *value->r;
-}
-static void doPreInc_F( WRValue* value )
-{
-	++value->f;
-}
+static void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value ) {}
 
-WRUnaryFunc wr_preinc[6] = 
+WRStateFunc wr_index[16] = 
 {
-	doPreInc_I,  doPreInc_R,  doPreInc_F,  doSingleVoidBlank,  doSingleVoidBlank,  doPreInc_Y
+        doIndex_I_X,     doIndex_I_X,     doIndex_I_R,     doIndex_I_E,
+	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
+        doIndex_R_I,     doIndex_R_F,     doIndex_R_R,     doIndex_R_E, 
+	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
 };
 
 //------------------------------------------------------------------------------
-static void doPreDec_I( WRValue* value ) { --value->i; }
-static void doPreDec_Y( WRValue* value )
-{
-	unsigned int index = value->arrayElement >> 8;
-	int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
+#define X_UNARY_PRE( NAME, OPERATION ) \
+static void NAME##_E( WRValue* value )\
+{\
+	if ( value->xtype == WR_EX_REFARRAY )\
+	{\
+		unsigned int index = ARRAY_ELEMENT_FROM_P2(value->p2);\
+		int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;\
+\
+		switch( value->r->va->m_type&0x3 )\
+		{\
+			case SV_VALUE:\
+			{\
+				WRValue* val = (WRValue *)value->r->va->m_data + s;\
+				NAME[ val->type ]( val );\
+				*value = *val;\
+				return;\
+			}\
+\
+			case SV_CHAR: {	value->i = OPERATION ((char *)value->r->va->m_data)[s]; value->p2 = INIT_AS_INT; return; }\
+			case SV_INT: { value->i = OPERATION ((int *)value->r->va->m_data)[s]; value->p2 = INIT_AS_INT; return; }\
+			case SV_FLOAT: { value->f = OPERATION ((float *)value->r->va->m_data)[s]; value->p2 = INIT_AS_FLOAT; return; }\
+		}\
+	}\
+}\
+static void NAME##_I( WRValue* value ) { OPERATION value->i; }\
+static void NAME##_F( WRValue* value ) { OPERATION value->f; }\
+static void NAME##_R( WRValue* value ) { NAME [ value->r->type ]( value->r ); *value = *value->r; }\
+WRUnaryFunc NAME[4] = \
+{\
+	NAME##_I, NAME##_F, NAME##_R, NAME##_E\
+};\
 
-	switch( value->r->va->m_type&0x3 )
-	{
-		case SV_VALUE:
-		{
-			WRValue* val = (WRValue *)value->r->va->m_data + s;
-			wr_predec[ val->type ]( val );
-			*value = *val;
-			return;
-		}
-		
-		case SV_CHAR: {	value->i = --((char *)value->r->va->m_data)[s];	value->type = WR_INT; return; }
-		case SV_INT: { value->i = --((int *)value->r->va->m_data)[s]; value->type = WR_INT; return; }
-		case SV_FLOAT: { value->f = --((float *)value->r->va->m_data)[s]; value->type = WR_FLOAT; return; }
-	}
-}
-static void doPreDec_R( WRValue* value )
-{
-	wr_predec[ value->r->type ]( value->r );
-	*value = *value->r;
-}
+X_UNARY_PRE( wr_preinc, ++ );
+X_UNARY_PRE( wr_predec, -- );
 
-static void doPreDec_F( WRValue* value ) { --value->f; }
-WRUnaryFunc wr_predec[6] = 
-{
-	doPreDec_I,  doPreDec_R,  doPreDec_F,  doSingleVoidBlank,  doSingleVoidBlank,  doPreDec_Y
-};
-
+//------------------------------------------------------------------------------
+static void doSingleVoidBlank( WRValue* value ) {}
 
 //------------------------------------------------------------------------------
 static void doToInt_R( WRValue* value ) { wr_toInt[ value->r->type ]( value->r ); }
-static void doToInt_F( WRValue* value ) { value->type = WR_INT; value->i = (int32_t)value->f; }
-WRUnaryFunc wr_toInt[6] = 
+static void doToInt_F( WRValue* value ) { value->p2 = WR_INT; value->i = (int32_t)value->f; }
+WRUnaryFunc wr_toInt[4] = 
 {
-	doSingleVoidBlank, doToInt_R,  doToInt_F,  doSingleVoidBlank,  doSingleVoidBlank,  doSingleVoidBlank
+	doSingleVoidBlank, doToInt_F, doToInt_R, doSingleVoidBlank
 };
 
 static void doToFloat_R( WRValue* value ) { wr_toInt[ value->r->type ]( value->r ); }
-static void doToFloat_I( WRValue* value ) { value->type = WR_FLOAT; value->f = (float)value->i; }
-WRUnaryFunc wr_toFloat[6] = 
+static void doToFloat_I( WRValue* value ) { value->p2 = INIT_AS_FLOAT; value->f = (float)value->i; }
+WRUnaryFunc wr_toFloat[4] = 
 {
-	doToFloat_I, doToFloat_R,  doSingleVoidBlank,  doSingleVoidBlank,  doSingleVoidBlank,  doSingleVoidBlank
+	doToFloat_I, doSingleVoidBlank, doToFloat_R, doSingleVoidBlank
 };
 
 static void bitwiseNOT_R( WRValue* value ) { wr_toInt[ value->r->type ]( value->r ); }
 static void bitwiseNOT_I( WRValue* value ) { value->i = ~value->i; }
-WRUnaryFunc wr_bitwiseNOT[6] = 
+WRUnaryFunc wr_bitwiseNOT[4] = 
 {
-	bitwiseNOT_I, bitwiseNOT_R,  doSingleVoidBlank,  doSingleVoidBlank,  doSingleVoidBlank,  doSingleVoidBlank
-};
-
-
-//------------------------------------------------------------------------------
-static void doPostInc_I( WRValue* value, WRValue* stack ) { *stack = *value; ++value->i; }
-static void doPostInc_Y( WRValue* value, WRValue* stack )
-{
-	unsigned int index = value->arrayElement >> 8;
-	int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
-
-	switch( value->r->va->m_type&0x3 )
-	{
-		case SV_VALUE:
-		{
-			WRValue* val = (WRValue *)value->r->va->m_data + s;
-			wr_postinc[ val->type ]( val, stack );
-			break;
-		}
-
-		case SV_CHAR:
-		{
-			stack->type = WR_INT;
-			char c = (((char*)value->r->va->m_data)[s])++;
-			stack->i = c;
-			break;
-		}
-
-		case SV_INT:
-		{
-			stack->type = WR_INT;
-			int i = (((int*)value->r->va->m_data)[s])++;
-			stack->i = i;
-			break;
-		}
-
-		case SV_FLOAT:
-		{
-			stack->type = WR_FLOAT;
-			float f = (((float*)value->r->va->m_data)[s])++;
-			stack->f = f;
-			break;
-		}
-	}
-}
-
-static void doPostInc_R( WRValue* value, WRValue* stack ) { wr_postinc[ value->r->type ]( value->r, stack ); }
-static void doPostInc_F( WRValue* value, WRValue* stack ) { *stack = *value; ++value->f; }
-
-WRVoidFunc wr_postinc[6] = 
-{
-	doPostInc_I,  doPostInc_R,  doPostInc_F,  doVoidFuncBlank,  doVoidFuncBlank, doPostInc_Y
+	bitwiseNOT_I, doSingleVoidBlank, bitwiseNOT_R, doSingleVoidBlank
 };
 
 //------------------------------------------------------------------------------
-static void doPostDec_I( WRValue* value, WRValue* stack ) { *stack = *value; --value->i; }
-static void doPostDec_Y( WRValue* value, WRValue* stack )
-{
-	unsigned int index = value->arrayElement >> 8;
-	int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
+#define X_UNARY_POST( NAME, OPERATION ) \
+static void NAME##_E( WRValue* value, WRValue* stack )\
+{\
+	if ( value->xtype == WR_EX_REFARRAY )\
+	{\
+		unsigned int index = ARRAY_ELEMENT_FROM_P2(value->p2);\
+		int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;\
+\
+		switch( value->r->va->m_type&0x3 )\
+		{\
+			case SV_VALUE:\
+			{\
+				WRValue* val = (WRValue *)value->r->va->m_data + s;\
+				NAME[ val->type ]( val, stack );\
+				break;\
+			}\
+\
+			case SV_CHAR:\
+			{\
+				stack->p2 = INIT_AS_INT;\
+				char c = (((char*)value->r->va->m_data)[s]) OPERATION;\
+				stack->i = c;\
+				break;\
+			}\
+\
+			case SV_INT:\
+			{\
+				stack->p2 = INIT_AS_INT;\
+				int i = (((int*)value->r->va->m_data)[s]) OPERATION;\
+				stack->i = i;\
+				break;\
+			}\
+\
+			case SV_FLOAT:\
+			{\
+				stack->p2 = INIT_AS_FLOAT;\
+				float f = (((float*)value->r->va->m_data)[s]) OPERATION;\
+				stack->f = f;\
+				break;\
+			}\
+		}\
+	}\
+}\
+static void NAME##_I( WRValue* value, WRValue* stack ) { *stack = *value; OPERATION  value->i; }\
+static void NAME##_R( WRValue* value, WRValue* stack ) { NAME[ value->r->type ]( value->r, stack ); }\
+static void NAME##_F( WRValue* value, WRValue* stack ) { *stack = *value; OPERATION value->f; }\
+WRVoidFunc NAME[4] = \
+{\
+	NAME##_I,  NAME##_F,  NAME##_R, NAME##_E\
+};\
 
-	switch( value->r->va->m_type&0x3 )
-	{
-		case SV_VALUE:
-		{
-			WRValue* val = (WRValue *)value->r->va->m_data + s;
-			wr_postdec[ val->type ]( val, stack );
-			break;
-		}
+X_UNARY_POST( wr_postinc, ++ );
+X_UNARY_POST( wr_postdec, -- );
 
-		case SV_CHAR:
-		{
-			stack->type = WR_INT;
-			char c = (((char*)value->r->va->m_data)[s])--;
-			stack->i = c;
-			break;
-		}
-
-		case SV_INT:
-		{
-			stack->type = WR_INT;
-			int i = (((char*)value->r->va->m_data)[s])--;
-			stack->i = i;
-			break;
-		}
-
-		case SV_FLOAT:
-		{
-			stack->type = WR_FLOAT;
-			float f = (((char*)value->r->va->m_data)[s])--;
-			stack->f = f;
-			break;
-		}
-	}
-}
-
-static void doPostDec_R( WRValue* value, WRValue* stack ) { wr_postdec[ value->r->type ]( value->r, stack ); }
-static void doPostDec_F( WRValue* value, WRValue* stack ) { *stack = *value; --value->f; }
-
-WRVoidFunc wr_postdec[6] = 
-{
-	doPostDec_I, doPostDec_R, doPostDec_F, doVoidFuncBlank, doVoidFuncBlank, doPostDec_Y
-};
 
 //------------------------------------------------------------------------------
 static void doUserHash_X( WRValue* value, WRValue* target, int32_t hash ) { }
 static void doUserHash_R( WRValue* value, WRValue* target, int32_t hash ) { wr_UserHash[ value->r->type ]( value->r, target, hash ); }
 static void doUserHash_U( WRValue* value, WRValue* target, int32_t hash )
 {
-	target->type = WR_REF;
-	if ( !(target->r = value->u->get(hash)) )
+	if ( value->xtype == WR_EX_USR )
 	{
-		target->p = 0;
-		target->p2 = 0;
+		target->p2 = INIT_AS_REF;
+		if ( !(target->r = value->u->get(hash)) )
+		{
+			target->p = 0;
+			target->p2 = 0;
+		}
 	}
 }
-WRUserHashFunc wr_UserHash[6] = 
+WRUserHashFunc wr_UserHash[4] = 
 {
-	doUserHash_X,  doUserHash_R,  doUserHash_X,  doUserHash_U,  doUserHash_X, doUserHash_X
+	doUserHash_X,  doUserHash_X,  doUserHash_R,  doUserHash_U
 };
-
-//------------------------------------------------------------------------------
-static bool doZeroCheck_I( WRValue* value ) { return value->i == 0; }
-static bool doZeroCheck_F( WRValue* value ) { return value->f == 0; }
-static bool doZeroCheck_R( WRValue* value ) { return wr_ZeroCheck[ value->r->type ]( value->r ); }
-static bool doZeroCheck_Y( WRValue* value )
-{
-	WRValue element;
-	wr_arrayToValue( value, &element );
-	return wr_ZeroCheck[ element.type ]( &element );
-}
-
-WRValueCheckFunc wr_ZeroCheck[6] = 
-{
-	doZeroCheck_I,  doZeroCheck_R,  doZeroCheck_F,  doSingleBlank, doSingleBlank, doZeroCheck_Y
-};
-
 
 //------------------------------------------------------------------------------
 static bool doLogicalNot_I( WRValue* value ) { return value->i == 0; }
 static bool doLogicalNot_F( WRValue* value ) { return value->f == 0; }
 static bool doLogicalNot_R( WRValue* value ) { return wr_LogicalNot[ value->r->type ]( value->r ); }
-static bool doLogicalNot_Y( WRValue* value )
+static bool doLogicalNot_E( WRValue* value )
 {
-	WRValue element;
-	wr_arrayToValue( value, &element );
-	return wr_LogicalNot[ element.type ]( &element );
+	if ( value->xtype == WR_EX_REFARRAY )
+	{
+		WRValue element;
+		wr_arrayToValue( value, &element );
+		return wr_LogicalNot[ element.type ]( &element );
+	}
+	return false;
 }
-WRReturnSingleFunc wr_LogicalNot[6] = 
+WRReturnSingleFunc wr_LogicalNot[4] = 
 {
-	doLogicalNot_I,  doLogicalNot_R,  doLogicalNot_F,  doSingleBlank, doSingleBlank, doLogicalNot_Y
+	doLogicalNot_I,  doLogicalNot_F,  doLogicalNot_R,  doLogicalNot_E
 };
+
 
 //------------------------------------------------------------------------------
 static void doNegate_I( WRValue* value ) { value->i = -value->i; }
-static void doNegate_Y( WRValue* value )
+static void doNegate_E( WRValue* value )
 {
-	unsigned int index = value->arrayElement >> 8;
-	int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
-
-	switch( value->r->va->m_type&0x3 )
+	if ( value->xtype == WR_EX_REFARRAY )
 	{
-		case SV_VALUE:
+		unsigned int index = ARRAY_ELEMENT_FROM_P2(value->p2);
+		int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
+
+		switch( value->r->va->m_type&0x3 )
 		{
-			WRValue* val = (WRValue *)value->r->va->m_data + s;
-			if ( val->type == WR_INT )
+			case SV_VALUE:
 			{
-				val->i = -val->i;
-				*value = *val;
+				WRValue* val = (WRValue *)value->r->va->m_data + s;
+				if ( val->type == WR_INT )
+				{
+					val->i = -val->i;
+					*value = *val;
+				}
+				else if ( val->type == WR_FLOAT )
+				{
+					val->f = -val->f;
+					*value = *val;
+				}
+				break;
 			}
-			else if ( val->type == WR_FLOAT )
+
+			case SV_CHAR:
 			{
-				val->f = -val->f;
-				*value = *val;
+				value->p2 = INIT_AS_INT;
+				char c = ((((char*)value->r->va->m_data)[s]) = -(((char*)value->r->va->m_data)[s]));
+				value->i = c;
+				break;
 			}
-			break;
-		}
 
-		case SV_CHAR:
-		{
-			value->type = WR_INT;
-			char c = ((((char*)value->r->va->m_data)[s]) = -(((char*)value->r->va->m_data)[s]));
-			value->i = c;
-			break;
-		}
+			case SV_INT:
+			{
+				value->p2 = INIT_AS_INT;
+				int i = ((((int*)value->r->va->m_data)[s]) = -(((int*)value->r->va->m_data)[s]));
+				value->i = i;
+				break;
+			}
 
-		case SV_INT:
-		{
-			value->type = WR_INT;
-			int i = ((((int*)value->r->va->m_data)[s]) = -(((int*)value->r->va->m_data)[s]));
-			value->i = i;
-			break;
-		}
-
-		case SV_FLOAT:
-		{
-			value->type = WR_FLOAT;
-			float f = ((((float*)value->r->va->m_data)[s]) = -(((float*)value->r->va->m_data)[s]));
-			value->f = f;
-			break;
+			case SV_FLOAT:
+			{
+				value->p2 = INIT_AS_FLOAT;
+				float f = ((((float*)value->r->va->m_data)[s]) = -(((float*)value->r->va->m_data)[s]));
+				value->f = f;
+				break;
+			}
 		}
 	}
 }
@@ -8175,60 +8545,60 @@ static void doNegate_R( WRValue* value )
 }
 
 static void doNegate_F( WRValue* value ) { value->f = -value->f; }
-WRUnaryFunc wr_negate[6] = 
+WRUnaryFunc wr_negate[4] = 
 {
-	doNegate_I,  doNegate_R,  doNegate_F,  doSingleVoidBlank,  doSingleVoidBlank, doNegate_Y
+	doNegate_I,  doNegate_F,  doNegate_R,  doNegate_E
 };
 
 //------------------------------------------------------------------------------
 static void doBitwiseNot_I( WRValue* value ) { value->i = ~value->i; }
-static void doBitwiseNot_R( WRValue* value )
+static void doBitwiseNot_R( WRValue* value ) { wr_bitwiseNot[ value->r->type ]( value->r ); *value = *value->r; }
+static void doBitwiseNot_E( WRValue* value )
 {
-	wr_bitwiseNot[ value->r->type ]( value->r );
-	*value = *value->r;
-}
-static void doBitwiseNot_Y( WRValue* value )
-{
-	unsigned int index = value->arrayElement >> 8;
-	int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
-
-	switch( value->r->va->m_type&0x3 )
+	if ( value->xtype == WR_EX_REFARRAY )
 	{
-		case SV_VALUE:
+		unsigned int index = ARRAY_ELEMENT_FROM_P2(value->p2);
+		
+		int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
+
+		switch( value->r->va->m_type&0x3 )
 		{
-			WRValue* val = (WRValue *)value->r->va->m_data + s;
-			if ( val->type == WR_INT )
+			case SV_VALUE:
 			{
-				val->i = ~val->i;
-				*value = *val;
+				WRValue* val = (WRValue *)value->r->va->m_data + s;
+				if ( val->type == WR_INT )
+				{
+					val->i = ~val->i;
+					*value = *val;
+				}
+				break;
 			}
-			break;
-		}
 
-		case SV_CHAR:
-		{
-			value->type = WR_INT;
-			value->i = (((((char*)value->r->va->m_data)[s]) = ~(((char*)value->r->va->m_data)[s])));
-			break;
-		}
+			case SV_CHAR:
+			{
+				value->p2 = INIT_AS_INT;
+				value->i = (((((unsigned char*)value->r->va->m_data)[s]) = ~(((unsigned char*)value->r->va->m_data)[s])));
+				break;
+			}
 
-		case SV_INT:
-		{
-			value->type = WR_INT;
-			value->i = (((((int*)value->r->va->m_data)[s]) = ~(((int*)value->r->va->m_data)[s])));
-			break;
-		}
+			case SV_INT:
+			{
+				value->p2 = INIT_AS_INT;
+				value->i = (((((int*)value->r->va->m_data)[s]) = ~(((int*)value->r->va->m_data)[s])));
+				break;
+			}
 
-		case SV_FLOAT:
-		{
-			break;
+			case SV_FLOAT:
+			{
+				break;
+			}
 		}
 	}
 }
 
-WRUnaryFunc wr_bitwiseNot[6] = 
+WRUnaryFunc wr_bitwiseNot[4] = 
 {
-	doBitwiseNot_I,  doBitwiseNot_R, doSingleVoidBlank,  doSingleVoidBlank,  doSingleVoidBlank, doBitwiseNot_Y
+	doBitwiseNot_I,  doSingleVoidBlank, doBitwiseNot_R, doBitwiseNot_E
 };
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
@@ -8291,17 +8661,18 @@ uint32_t wr_hashStr( const char* dat )
 //------------------------------------------------------------------------------
 void wr_std_rand( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_INT;
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_INT;
 
 	int32_t	k = wr_Seed / 127773;
 	wr_Seed = 16807 * ( wr_Seed - k * 127773 ) - 2836 * k;
-	stackTop->i = (uint32_t)wr_Seed % (uint32_t)(stackTop - argn)->asInt();
+	ret->i = (uint32_t)wr_Seed % (uint32_t)stackTop->asInt();
 }
 
 //------------------------------------------------------------------------------
 void wr_std_srand( WRValue* stackTop, const int argn )
 {
-	wr_Seed = (stackTop - argn)->asInt();
+	wr_Seed = stackTop->asInt();
 }
 
 #include <math.h>
@@ -8309,64 +8680,73 @@ void wr_std_srand( WRValue* stackTop, const int argn )
 //------------------------------------------------------------------------------
 void wr_math_sin( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = sinf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = sinf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_cos( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = cosf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = cosf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_tan( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = tanf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = tanf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_sinh( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = sinhf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = sinhf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_cosh( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = coshf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = coshf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_tanh( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = tanhf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = tanhf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_asin( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = asinf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = asinf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_acos( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = acosf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = acosf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_atan( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = atanf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = atanf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
@@ -8374,58 +8754,66 @@ void wr_math_atan2( WRValue* stackTop, const int argn )
 {
 	if ( argn == 2 )
 	{
-		stackTop->type = WR_FLOAT;
-		stackTop->f = atan2f( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
+		WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+		ret->p2 = INIT_AS_FLOAT;
+		ret->f = atan2f( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
 	}
 }
 
 //------------------------------------------------------------------------------
 void wr_math_log( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = logf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = logf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_log10( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = log10f( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = log10f( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_exp( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = expf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = expf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_sqrt( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = sqrtf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = sqrtf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_ceil( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = ceilf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = ceilf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_floor( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = floorf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = floorf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_abs( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = (float)fabs( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = (float)fabs( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
@@ -8433,8 +8821,9 @@ void wr_math_pow( WRValue* stackTop, const int argn )
 {
 	if ( argn == 2 )
 	{
-		stackTop->type = WR_FLOAT;
-		stackTop->f = powf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
+		WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+		ret->p2 = INIT_AS_FLOAT;
+		ret->f = powf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
 	}
 }
 
@@ -8443,16 +8832,18 @@ void wr_math_fmod( WRValue* stackTop, const int argn )
 {
 	if ( argn == 2 )
 	{
-		stackTop->type = WR_FLOAT;
-		stackTop->f = fmodf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
+		WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+		ret->p2 = INIT_AS_FLOAT;
+		ret->f = fmodf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
 	}
 }
 
 //------------------------------------------------------------------------------
 void wr_math_trunc( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = truncf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = truncf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
@@ -8460,28 +8851,31 @@ void wr_math_ldexp( WRValue* stackTop, const int argn )
 {
 	if ( argn == 2 )
 	{
-		stackTop->type = WR_FLOAT;
-		stackTop->f = ldexpf( (stackTop - 1)->asFloat(), (stackTop - 2)->asInt() );
+		WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+		ret->p2 = INIT_AS_FLOAT;
+		ret->f = ldexpf( (stackTop - 1)->asFloat(), (stackTop - 2)->asInt() );
 	}
 }
 
 //------------------------------------------------------------------------------
-const float wr_PI = 3.14159265358979323846264338327950288419716939937510582f;
+const float wr_PI = 3.14159265358979323846f;
 const float wr_toDegrees = (180.f / wr_PI);
 const float wr_toRadians = (1.f / wr_toDegrees);
 
 //------------------------------------------------------------------------------
 void wr_math_rad2deg( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = wr_toDegrees * (stackTop - argn)->asFloat();
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = wr_toDegrees * stackTop->asFloat();
 }
 
 //------------------------------------------------------------------------------
 void wr_math_deg2rad( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = wr_toRadians * (stackTop - argn)->asFloat();
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = wr_toRadians * stackTop->asFloat();
 }
 
 //------------------------------------------------------------------------------

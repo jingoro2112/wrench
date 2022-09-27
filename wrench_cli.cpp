@@ -20,10 +20,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
 
-#include <stdio.h>
-
 #define STR_FILE_OPERATIONS
 #include <wrench.h>
+
+#include <stdio.h>
+#include <assert.h>
+
 #include "discrete_src/str.h"
 
 int runTests( int number =0 );
@@ -121,6 +123,10 @@ static void log( WRState* s, const WRValue* argv, const int argn, WRValue& retVa
 //------------------------------------------------------------------------------
 int main( int argn, char* argv[] )
 {
+	assert( sizeof(WRValue) == sizeof(void*)*2 );
+	assert( sizeof(float) == 4 );
+	assert( sizeof(unsigned char) == 1 );
+		   
 	if ( argn <= 1 )
 	{
 		return usage();
@@ -173,7 +179,7 @@ int main( int argn, char* argv[] )
 		wr_loadAllLibs(w);
 		wr_registerFunction( w, "log", log );
 
-		wr_run( w, (const unsigned char *)bytes.c_str(), bytes.size() );
+		wr_run( w, (const unsigned char *)bytes.c_str() );
 		if ( wr_getLastError( w ) )
 		{
 			printf( "err: %d\n", (int)wr_getLastError(w) );
@@ -181,6 +187,11 @@ int main( int argn, char* argv[] )
 	}
 	else if ( command == "c" || command == "ch" )
 	{
+		if ( argn < 4 )
+		{
+			return usage();
+		}
+		
 		unsigned char* out;
 		int outLen;
 
@@ -275,7 +286,7 @@ static void emit( WRState* s, const WRValue* argv, const int argn, WRValue& retV
 unsigned int cliTestLoader( const int offset, const unsigned char** block, void* usr )
 {
 	*block = (unsigned char *)usr + offset;
-	return 20; // return only 20 bytes at a time to be nasty
+	return 16; // return only 16 bytes at a time to be nasty
 }
 
 //------------------------------------------------------------------------------
@@ -363,10 +374,11 @@ int runTests( int number )
 				wr_registerFunction( w, "log", emit, &logger );
 
 
-#ifdef PARTIAL_BYTECODE_LOADS
+#ifdef WRENCH_PARTIAL_BYTECODE_LOADS
 				WRContext* context = wr_run( w, cliTestLoader, out );
+//				WRContext* context = wr_run( w, out );
 #else
-				WRContext* context = wr_run( w, out, outLen );
+				WRContext* context = wr_run( w, out );
 #endif
 
 				if ( !wr_getLastError(w) )
@@ -432,7 +444,6 @@ void log2( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, voi
 	char buf[512];
 	for( int i=0; i<argn; ++i )
 	{
-		printf( "%s", wr_valueToString(argv[i], buf) );
 		printf( "%s", argv[i].asString(buf) );
 	}
 }
@@ -458,10 +469,10 @@ void setup()
 	unsigned char* outBytes; // compiled code is alloc'ed
 	int outLen;
 
-	int err = wr_compile( wrenchCode, (int)strlen(wrenchCode), &outBytes, &outLen );                     
+	int err = wr_compile( wrenchCode, (int)strlen(wrenchCode), &outBytes, &outLen );
 	if ( err == 0 )
 	{
-		wr_run( w, outBytes, outLen ); // load and run the code!
+		wr_run( w, outBytes ); // load and run the code!
 		delete[] outBytes; // clean up 
 	}
 

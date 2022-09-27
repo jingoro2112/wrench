@@ -1,4 +1,6 @@
 /*~
+94
+90
 hello world
 0.1
 -0.1
@@ -52,6 +54,20 @@ hello world
 1
 ~*/
 
+c = --a + a-- + ++a + a--;
+
+a = 90;
+a++;
+++a;
+b = a++;
+c = ++a;
+log(a);
+a--;
+--a;
+b = a--;
+c = --a;
+log(a);
+
 log( "hello world" );
 
 log( .1 );
@@ -65,8 +81,10 @@ b = 4000000;
 log( b );
 b = 20;
 log( b );
+
 b = 0;
 log( b );
+
 b = 1.2;
 log( b );
 
@@ -147,3 +165,4 @@ a = 1.3;
 log( a );
 (int)a;
 log( a );
+

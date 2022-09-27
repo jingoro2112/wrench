@@ -22,95 +22,7 @@ SOFTWARE.
 
 #include "wrench.h"
 
-//------------------------------------------------------------------------------
-WRValue* WRValue::asValueArray( int* len )
-{
-	if ( type != WR_ARRAY )
-	{
-		return 0;
-	}
-
-	if ( (va->m_type&0x3) != SV_VALUE )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-
-	return (WRValue*)va->m_data;
-}
-
-//------------------------------------------------------------------------------
-unsigned char* WRValue::asCharArray( int* len )
-{
-	if ( type != WR_ARRAY )
-	{
-		return 0;
-	}
-
-	if ( (va->m_type&0x3) != SV_CHAR )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-
-	return (unsigned char*)va->m_data;
-}
-
-//------------------------------------------------------------------------------
-int* WRValue::asIntArray( int* len )
-{
-	if ( type != WR_ARRAY )
-	{
-		return 0;
-	}
-
-	if ( (va->m_type&0x3) != SV_INT )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-	
-	return (int*)va->m_data;
-}
-
-//------------------------------------------------------------------------------
-float* WRValue::asFloatArray( int* len )
-{
-	if ( type != WR_ARRAY )
-	{
-		return 0;
-	}
-
-	if ( (va->m_type&0x3) != SV_FLOAT )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-
-	return (float*)va->m_data;
-}
-
-//------------------------------------------------------------------------------
-WRState* wr_newState( int stackSize )
-{
-	return new WRState( stackSize );
-}
+#include <memory.h>
 
 //------------------------------------------------------------------------------
 WRContext::WRContext( WRState* state ) : w(state)
@@ -128,6 +40,9 @@ WRContext::~WRContext()
 {
 	delete[] globalSpace;
 	delete[] localFunctions;
+
+	loader = 0;
+	usr = 0;
 
 	while( svAllocated )
 	{
@@ -148,11 +63,7 @@ WRState::WRState( int EntriesInStack )
 	{
 		stack[i].init();
 	}
-	stackTop = stack;
 
-	loader = 0;
-	usr = 0;
-	returnValue = 0;
 	contextList = 0;
 }
 
@@ -174,16 +85,16 @@ WRState::~WRState()
 }
 
 //------------------------------------------------------------------------------
-WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type )
+WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type, WRValue* stackTop )
 {
 	// gc before every alloc may seem a bit much but we want to be miserly
 	if ( svAllocated )
 	{
 		// mark stack
-		for( WRValue* s=w->stack; s<w->stackTop; ++s)
+		for( WRValue* s=w->stack; s<stackTop; ++s)
 		{
 			// an array in the chain?
-			if ( s->type == WR_ARRAY && !(s->va->m_type & SV_PRE_ALLOCATED) )
+			if ( (s->xtype&0x3) == WR_EX_ARRAY && !(s->va->m_type & SV_PRE_ALLOCATED) )
 			{
 				gcArray( s->va );
 			}
@@ -192,8 +103,7 @@ WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type )
 		// mark context's global
 		for( int i=0; i<globals; ++i )
 		{
-			// an array in the chain?
-			if ( globalSpace[i].type == WR_ARRAY && !(globalSpace[i].va->m_type & SV_PRE_ALLOCATED) )
+			if ( globalSpace[i].xtype == WR_EX_ARRAY && !(globalSpace[i].va->m_type & SV_PRE_ALLOCATED) )
 			{
 				gcArray( globalSpace[i].va );
 			}
@@ -227,21 +137,21 @@ WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type )
 		}
 	}
 
-	
+//	if ( !size )
+//	{
+//		return 0;
+//	}
+
 	WRStaticValueArray* ret = new WRStaticValueArray( size, type );
 	if ( type == SV_VALUE )
 	{
 		WRValue *array = (WRValue *)ret->m_data;
-		for( int i=0; i<size; ++i )
-		{
-			array[i].p = 0;
-			array[i].p2 = 0;
-		}
+		memset( (void*)array, 0, sizeof(WRValue) * size);
 	}
-
+	
 	ret->m_next = svAllocated;
 	svAllocated = ret;
-
+	
 	return ret;
 }
 
@@ -257,7 +167,7 @@ void WRContext::gcArray( WRStaticValueArray* sva )
 		WRValue* top = (WRValue*)sva->m_data + (sva->m_size & ~0x40000000);
 		for( WRValue* i = (WRValue*)sva->m_data; i<top; ++i )
 		{
-			if ( i->type == WR_ARRAY && !(i->va->m_type & SV_PRE_ALLOCATED) )
+			if ( i->xtype == WR_EX_ARRAY && !(i->va->m_type & SV_PRE_ALLOCATED) )
 			{
 				gcArray( i->va );
 			}
@@ -274,7 +184,7 @@ void wr_destroyState( WRState* w )
 //------------------------------------------------------------------------------
 unsigned int wr_loadSingleBlock( int offset, const unsigned char** block, void* usr )
 {
-	*block = (unsigned char *)usr;
+	*block = (unsigned char *)usr + offset;
 	return 0xFFFFFFF; // larger than any bytecode possible
 }
 
@@ -285,9 +195,8 @@ WRError wr_getLastError( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_runEx( WRState* w )
+WRContext* wr_runEx( WRState* w, WRContext* C )
 {
-	WRContext* C = new WRContext( w );
 	C->next = w->contextList;
 	w->contextList = C;
 	
@@ -301,19 +210,21 @@ WRContext* wr_runEx( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_run( WRState* w, const unsigned char* block, const int size )
+WRContext* wr_run( WRState* w, const unsigned char* block )
 {
-	w->loader = wr_loadSingleBlock;
-	w->usr = (void*)block;
-	return wr_runEx( w );
+	WRContext* C = new WRContext( w );
+	C->loader = wr_loadSingleBlock;
+	C->usr = (void*)block;
+	return wr_runEx( w, C );
 }
 
 //------------------------------------------------------------------------------
 WRContext* wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr )
 {
-	w->loader = loader;
-	w->usr = usr;
-	return wr_runEx( w );
+	WRContext* C = new WRContext( w );
+	C->loader = loader;
+	C->usr = usr;
+	return wr_runEx( w, C );
 }
 
 //------------------------------------------------------------------------------
@@ -365,81 +276,67 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 	w->c_libFunctionRegistry.set( wr_hashStr(signature), function );
 }
 
-//------------------------------------------------------------------------------
-char* wr_valueToString( WRValue const& value, char* string )
-{
-	return value.asString( string );
-}
-
-
-#ifdef SPRINTF_OPERATIONS
+#ifdef WRENCH_SPRINTF_OPERATIONS
 #include <stdio.h>
 #endif
 //------------------------------------------------------------------------------
 char* WRValue::asString( char* string ) const
 {
-	switch( type )
+	if ( xtype )
 	{
-#ifdef SPRINTF_OPERATIONS
-		case WR_INT: { sprintf( string, "%d", i ); break; }
-		case WR_FLOAT: { sprintf( string, "%g", f ); break; }
-#else
-		case WR_INT: 
-		case WR_FLOAT:
+		switch( xtype )
 		{
-			string[0] = 0;
-			break;
-		}
-#endif
-		case WR_REF: { return r->asString( string ); }
-		case WR_USR:
-		{
-			return string;
-		}
-
-		case WR_ARRAY:
-		{
-			unsigned int s = 0;
-
-			for( ; s<va->m_size; ++s )
+			case WR_EX_USR:
 			{
-				switch( va->m_type & 0x3)
-				{
-					case SV_VALUE: string[s] = ((WRValue *)va->m_data)[s].i; break;
-					case SV_CHAR: string[s] = ((char *)va->m_data)[s]; break;
-					default: break;
-				}
+				return string;
 			}
-			string[s] = 0;
-			break;
+			
+			case WR_EX_ARRAY:
+			{
+				unsigned int s = 0;
+					
+				for( ; s<va->m_size; ++s )
+				{
+					switch( va->m_type & 0x3)
+					{
+						case SV_VALUE: string[s] = ((WRValue *)va->m_data)[s].i; break;
+						case SV_CHAR: string[s] = ((char *)va->m_data)[s]; break;
+						default: break;
+					}
+				}
+				string[s] = 0;
+				break;
+			}
+			
+			case WR_EX_REFARRAY:
+			{
+				WRValue temp;
+				wr_arrayToValue(this, &temp);
+				return temp.asString(string);
+			}
 		}
-
-		case WR_REFARRAY:
+	}
+	else
+	{
+		switch( type )
 		{
-			WRValue temp;
-			wr_arrayToValue(this, &temp);
-			return temp.asString(string);
+#ifdef WRENCH_SPRINTF_OPERATIONS
+			case WR_INT: { sprintf( string, "%d", i ); break; }
+			case WR_FLOAT: { sprintf( string, "%g", f ); break; }
+#else
+			case WR_INT: 
+			case WR_FLOAT:
+			{
+				string[0] = 0;
+				break;
+			}
+#endif
+			case WR_REF: { return r->asString( string ); }
 		}
 	}
 	
 	return string;
 }
-
-
-#ifdef D_OPCODE
-#define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)*pc, c_opcodeName[*pc]);
-#else
-#define PER_INSTRUCTION
-#endif
-
-#ifdef JUMPTABLE_INTERPRETER
-#define CONTINUE { goto *opcodeJumptable[*pc++]; PER_INSTRUCTION; }
-#define CASE(LABEL) LABEL
-#else
-#define CONTINUE continue
-#define CASE(LABEL) case O_##LABEL
-#endif
-
 
 //------------------------------------------------------------------------------
 int wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv, const int argn )
@@ -471,49 +368,48 @@ int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const W
 	return wr_callFunction( w, context, function, argv, argn );
 }
 
-
 //------------------------------------------------------------------------------
-WRFunction* wr_functionToIndex( WRContext* context, const int32_t hash )
+WRFunction* wr_getFunction( WRContext* context, const char* functionName )
 {
-	return context->localFunctionRegistry.getItem( hash );
+	return context->localFunctionRegistry.getItem( wr_hashStr(functionName) );
 }
 
-//------------------------------------------------------------------------------
-WRFunction* wr_functionToIndex( WRContext* context, const char* functionName )
-{
-	return wr_functionToIndex( context, wr_hashStr(functionName) );
-}
+#ifdef D_OPCODE
+#define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)*pc, c_opcodeName[*pc]);
+#else
+#define PER_INSTRUCTION
+#endif
+
+#ifdef WRENCH_JUMPTABLE_INTERPRETER
+#define CONTINUE { goto *opcodeJumptable[*pc++]; PER_INSTRUCTION; }
+#define CASE(LABEL) LABEL
+#else
+#define CONTINUE { PER_INSTRUCTION; continue; }
+#define CASE(LABEL) case O_##LABEL
+#endif
 
 //------------------------------------------------------------------------------
 int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const WRValue* argv, const int argn )
-//int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
 {
-#ifdef JUMPTABLE_INTERPRETER
+#ifdef WRENCH_JUMPTABLE_INTERPRETER
 	const void* opcodeJumptable[] =
 	{
 		&&RegisterFunction,
 		&&FunctionListSize,
-		&&LiteralZero,
-		&&LiteralInt8,
 		&&LiteralInt32,
+		&&LiteralZero,
 		&&LiteralFloat,
 		&&LiteralString,
 		&&CallFunctionByHash,
-		&&CallFunctionByHashAndPop,
 		&&CallFunctionByIndex,
 		&&CallLibFunction,
-		&&CallLibFunctionAndPop,
 		&&Index,
-		&&IndexLiteral8,
-		&&IndexLiteral32,
 		&&StackIndexHash,
 		&&GlobalIndexHash,
 		&&LocalIndexHash,
 		&&Assign,
-		&&AssignAndPop,
-		&&AssignToGlobalAndPop,
-		&&AssignToLocalAndPop,
 		&&StackSwap,
+		&&SwapTwoToTop,
 		&&ReserveFrame,
 		&&ReserveGlobalFrame,
 		&&LoadFromLocal,
@@ -535,17 +431,93 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&CoerceToInt,
 		&&CoerceToFloat,
 		&&RelativeJump,
-		&&RelativeJump8,
 		&&BZ,
-		&&BZ8,
-		&&BNZ,
-		&&BNZ8,
-		&&CompareEQ,
-		&&CompareNE,
+		&&CompareEQ, 
+		&&CompareNE, 
 		&&CompareGE,
 		&&CompareLE,
 		&&CompareGT,
 		&&CompareLT,
+		&&GSCompareEQ, 
+		&&LSCompareEQ, 
+		&&GSCompareNE, 
+		&&LSCompareNE, 
+		&&GSCompareGE,
+		&&LSCompareGE,
+		&&GSCompareLE,
+		&&LSCompareLE,
+		&&GSCompareGT,
+		&&LSCompareGT,
+		&&GSCompareLT,
+		&&LSCompareLT,
+		&&GSCompareEQBZ, 
+		&&LSCompareEQBZ, 
+		&&GSCompareNEBZ, 
+		&&LSCompareNEBZ, 
+		&&GSCompareGEBZ,
+		&&LSCompareGEBZ,
+		&&GSCompareLEBZ,
+		&&LSCompareLEBZ,
+		&&GSCompareGTBZ,
+		&&LSCompareGTBZ,
+		&&GSCompareLTBZ,
+		&&LSCompareLTBZ,
+		&&GSCompareEQBZ8,
+		&&LSCompareEQBZ8,
+		&&GSCompareNEBZ8,
+		&&LSCompareNEBZ8,
+		&&GSCompareGEBZ8,
+		&&LSCompareGEBZ8,
+		&&GSCompareLEBZ8,
+		&&LSCompareLEBZ8,
+		&&GSCompareGTBZ8,
+		&&LSCompareGTBZ8,
+		&&GSCompareLTBZ8,
+		&&LSCompareLTBZ8,
+		&&PostIncrement,
+		&&PostDecrement,
+		&&PreIncrement,
+		&&PreDecrement,
+		&&PreIncrementAndPop,
+		&&PreDecrementAndPop,
+		&&IncGlobal,
+		&&DecGlobal,
+		&&IncLocal,
+		&&DecLocal,
+		&&Negate,
+		&&SubtractAssign,
+		&&AddAssign,
+		&&ModAssign,
+		&&MultiplyAssign,
+		&&DivideAssign,
+		&&ORAssign,
+		&&ANDAssign,
+		&&XORAssign,
+		&&RightShiftAssign,
+		&&LeftShiftAssign,
+		&&LogicalAnd,
+		&&LogicalOr,
+		&&LogicalNot,
+		&&RelativeJump8,
+		&&LiteralInt8,
+		&&LiteralInt16,
+		&&CallFunctionByHashAndPop,
+		&&CallLibFunctionAndPop,
+		&&IndexLiteral8,
+		&&IndexLiteral16,
+		&&IndexLiteral32,
+		&&AssignAndPop,
+		&&AssignToGlobalAndPop,
+		&&AssignToLocalAndPop,
+		&&BinaryAdditionAndStoreGlobal,
+		&&BinarySubtractionAndStoreGlobal,
+		&&BinaryMultiplicationAndStoreGlobal,
+		&&BinaryDivisionAndStoreGlobal,
+		&&BinaryAdditionAndStoreLocal,
+		&&BinarySubtractionAndStoreLocal,
+		&&BinaryMultiplicationAndStoreLocal,
+		&&BinaryDivisionAndStoreLocal,
+		&&BZ8,
 		&&CompareBEQ,
 		&&CompareBNE,
 		&&CompareBGE,
@@ -558,21 +530,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&CompareBLE8,
 		&&CompareBGT8,
 		&&CompareBLT8,
-		&&PostIncrement,
-		&&PostDecrement,
-		&&PreIncrement,
-		&&PreDecrement,
-		&&Negate,
-		&&SubtractAssign,
-		&&AddAssign,
-		&&ModAssign,
-		&&MultiplyAssign,
-		&&DivideAssign,
-		&&ORAssign,
-		&&ANDAssign,
-		&&XORAssign,
-		&&RightShiftAssign,
-		&&LeftShiftAssign,
 		&&SubtractAssignAndPop,
 		&&AddAssignAndPop,
 		&&ModAssignAndPop,
@@ -583,15 +540,32 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&XORAssignAndPop,
 		&&RightShiftAssignAndPop,
 		&&LeftShiftAssignAndPop,
-		&&LogicalAnd,
-		&&LogicalOr,
-		&&LogicalNot,
+		&&BLA,
+		&&BLA8,
+		&&BLO,
+		&&BLO8,
 		&&LiteralInt8ToGlobal,
+		&&LiteralInt16ToGlobal,
 		&&LiteralInt32ToLocal,
 		&&LiteralInt8ToLocal,
+		&&LiteralInt16ToLocal,
 		&&LiteralFloatToGlobal,
 		&&LiteralFloatToLocal,
 		&&LiteralInt32ToGlobal,
+		&&GGBinaryMultiplication,
+		&&GLBinaryMultiplication,
+		&&LLBinaryMultiplication,
+		&&GGBinaryAddition,
+		&&GLBinaryAddition,
+		&&LLBinaryAddition,
+		&&GGBinarySubtraction,
+		&&GLBinarySubtraction,
+		&&LGBinarySubtraction,
+		&&LLBinarySubtraction,
+		&&GGBinaryDivision,
+		&&GLBinaryDivision,
+		&&LGBinaryDivision,
+		&&LLBinaryDivision,
 	};
 #endif
 
@@ -600,6 +574,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	register WRValue* tempValue2;
 	WRValue* frameBase = 0;
 	WRValue* stackTop = w->stack;
+	WRValue* globalSpace = context->globalSpace;
 
 	w->err = WR_ERR_None;
 	
@@ -615,27 +590,28 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 	if ( !(pc = context->bottom) )
 	{
-		w->loader( 0, &pc, w->usr );
+		context->loader( 0, &pc, context->usr );
 		context->bottom = pc;
 	}
 #else
 	// cache these values they are used a lot
-	WR_LOAD_BLOCK_FUNC loader = w->loader;
-	void* usr = w->usr;
+	WR_LOAD_BLOCK_FUNC loader = context->loader;
+	void* usr = context->usr;
 	const unsigned char* top = 0;
 	pc = 0;
 	int absoluteBottom = 0; // pointer to where in the codebase out bottom actually points to
 #endif
 
+	// make room on the bottom for the return value of this script
+
 	if ( function )
 	{
-		args = 0;
-		if ( argv && argn )
+		stackTop->p = 0;
+		(stackTop++)->p2 = INIT_AS_INT;
+
+		for( args = 0; args < argn; ++args )
 		{
-			for( ; args < argn; ++args )
-			{
-				*stackTop++ = argv[args];
-			}
+			*stackTop++ = argv[args];
 		}
 		
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
@@ -648,7 +624,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		goto callFunction;
 	}
 
-#ifdef JUMPTABLE_INTERPRETER
+#ifdef WRENCH_JUMPTABLE_INTERPRETER
 
 	CONTINUE;
 	
@@ -670,24 +646,27 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 #endif
 			CASE(RegisterFunction):
 			{
-				int index = (stackTop - 5)->i;
-				context->localFunctions[ index ].arguments = (stackTop - 4)->i;
-				context->localFunctions[ index ].frameSpaceNeeded = (stackTop - 3)->i;
+				unsigned int i = (stackTop - 3)->i;
+				unsigned char index = (unsigned char)i;
+
+				context->localFunctions[ index ].arguments = (unsigned char)(i>>8);
+				context->localFunctions[ index ].frameSpaceNeeded = (unsigned char)(i>>16);
 				context->localFunctions[ index ].hash = (stackTop - 2)->i;
-				
+
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
-				context->localFunctions[index].offset = (stackTop - 1)->i + context->bottom; // absolute
+				context->localFunctions[ index ].offset = (stackTop - 1)->i + context->bottom; // absolute
 #else
-				context->localFunctions[index].offsetI = (stackTop - 1)->i; // relative
+				context->localFunctions[ index ].offset = 0; // make sure the offset is clear
+				context->localFunctions[ index ].offsetI = (stackTop - 1)->i; // relative
 #endif
-				
-				context->localFunctions[ index ].frameBaseAdjustment = 2
+
+				context->localFunctions[ index ].frameBaseAdjustment = 1
 																	   + context->localFunctions[ index ].frameSpaceNeeded
 																	   + context->localFunctions[ index ].arguments;
 
 				context->localFunctionRegistry.set( context->localFunctions[ index ].hash,
 													context->localFunctions + index );
-				stackTop -= 5;
+				stackTop -= 3;
 				CONTINUE;
 			}
 
@@ -699,35 +678,24 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 				CONTINUE;
 			}
 
-			CASE(LiteralZero):
-			{
-				stackTop->p = 0;
-				(stackTop++)->p2 = 0;
-				CONTINUE;
-			}
-			
-			CASE(LiteralInt8):
-			{
-				stackTop->type = WR_INT;
-				(stackTop++)->i = (int32_t)(int8_t)*pc++;
-				CONTINUE;
-			}
-			
 			CASE(LiteralFloat):
 			{
-				stackTop->type = WR_FLOAT;
-				goto load32ToStackTop;
+				tempValue = stackTop++;
+				tempValue->p2 = INIT_AS_FLOAT;
+				goto load32ToTemp;
 			}
 			
 			CASE(LiteralInt32):
 			{
-				stackTop->type = WR_INT;
-load32ToStackTop:
-				(stackTop++)->i = (((int32_t)*pc) << 24)
-								  | (((int32_t)*(pc+1)) << 16)
-								  | (((int32_t)*(pc+2)) << 8)
-								  | ((int32_t)*(pc+3));
-				pc += 4;
+				tempValue = stackTop++;
+				tempValue->p2 = INIT_AS_INT;
+				goto load32ToTemp;
+			}
+
+			CASE(LiteralZero):
+			{
+				stackTop->p = 0;
+				(stackTop++)->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
 
@@ -735,8 +703,8 @@ load32ToStackTop:
 			{
 				int16_t len = (((int16_t)*pc)<<8) | (int16_t)*(pc + 1);
 				pc += 2;
-				stackTop->type = WR_ARRAY;
-				stackTop->va = context->getSVA( len, SV_CHAR );
+				stackTop->p2 = INIT_AS_ARRAY;
+				stackTop->va = context->getSVA( len, SV_CHAR, stackTop );
 
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				memcpy( (unsigned char *)stackTop->va->m_data, pc, len );
@@ -750,6 +718,8 @@ load32ToStackTop:
 						top = pc + (size - 6);
 						context->bottom = pc;
 					}
+
+					((unsigned char *)stackTop->va->m_data)[c] = *pc++;
 				}
 #endif
 				++stackTop;
@@ -759,11 +729,10 @@ load32ToStackTop:
 			CASE(ReserveFrame):
 			{
 				frameBase = stackTop;
-				for( unsigned char i=0; i<*pc; ++i )
+				for( int i=0; i<*pc; ++i )
 				{
 					(stackTop)->p = 0;
-					(++stackTop)->p2 = 0;
-
+					(++stackTop)->p2 = INIT_AS_INT;
 				}
 				++pc;
 				CONTINUE;
@@ -771,44 +740,32 @@ load32ToStackTop:
 
 			CASE(ReserveGlobalFrame):
 			{
-				delete[] context->globalSpace;
+				if ( context->globalSpace )
+				{
+					delete[] context->globalSpace;
+				}
 				context->globals = *pc++;
 				context->globalSpace = new WRValue[ context->globals ];
-				for( unsigned char i=0; i<context->globals; ++i )
+				for( int i=0; i<context->globals; ++i )
 				{
 					context->globalSpace[i].p = 0;
-					context->globalSpace[i].p2 = 0;
+					context->globalSpace[i].p2 = INIT_AS_INT;
 				}
+				globalSpace = context->globalSpace;
 				CONTINUE;
 			}
 
 			CASE(LoadFromLocal):
 			{
-				stackTop->type = WR_REF;
+				stackTop->p2 = INIT_AS_REF;
 				(stackTop++)->p = frameBase + *pc++;
 				CONTINUE;
 			}
 
 			CASE(LoadFromGlobal):
 			{
-				stackTop->type = WR_REF;
-				(stackTop++)->p = context->globalSpace + *pc++;
-				CONTINUE;
-			}
-
-			CASE(AssignToGlobalAndPop):
-			{
-				tempValue = context->globalSpace + *pc++;
-				tempValue2 = --stackTop;
-				wr_assign[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				CONTINUE;
-			}
-
-			CASE(AssignToLocalAndPop):
-			{
-				tempValue = frameBase + *pc++;
-				tempValue2 = --stackTop;
-				wr_assign[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
+				stackTop->p2 = INIT_AS_REF;
+				(stackTop++)->p = globalSpace + *pc++;
 				CONTINUE;
 			}
 
@@ -816,26 +773,7 @@ load32ToStackTop:
 			{
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
-				wr_index[tempValue->type*6+tempValue2->type]( context, tempValue, tempValue2 );
-				CONTINUE;
-			}
-
-			CASE(IndexLiteral32):
-			{
-				stackTop->i = (((int32_t)*pc) << 24) |
-					(((int32_t) * (pc + 1)) << 16) |
-					(((int32_t) * (pc + 2)) << 8) |
-					(int32_t) * (pc + 3);
-				pc += 4;
-				goto indexLiteral;
-			}
-
-			CASE(IndexLiteral8):
-			{
-				stackTop->i = *pc++;
-indexLiteral:
-				tempValue = stackTop - 1;
-				wr_index[WR_INT*6+tempValue->type]( context, stackTop, tempValue );
+				wr_index[(tempValue->type<<2)|tempValue2->type]( context, tempValue, tempValue2 );
 				CONTINUE;
 			}
 
@@ -854,10 +792,10 @@ indexLiteral:
 
 			CASE(GlobalIndexHash):
 			{
-				tempValue = context->globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
 				goto indexHash;
 			}
-
+			
 			CASE(LocalIndexHash):
 			{
 				tempValue = frameBase + *pc++;
@@ -871,23 +809,259 @@ indexHash:
 				pc += 4;
 				CONTINUE;
 			}
+
+			CASE(LogicalAnd): { returnFunc = wr_LogicalAND; goto returnFuncNormal; }
+			CASE(LogicalOr): { returnFunc = wr_LogicalOR; goto returnFuncNormal; }
+			CASE(CompareLE): { returnFunc = wr_CompareGT; goto returnFuncInverted; }
+			CASE(CompareGE): { returnFunc = wr_CompareLT; goto returnFuncInverted; }
+			CASE(CompareGT): { returnFunc = wr_CompareGT; goto returnFuncNormal; }
+			CASE(CompareLT): { returnFunc = wr_CompareLT; goto returnFuncNormal; }
+			CASE(CompareEQ):
+			{
+				returnFunc = wr_CompareEQ;
+returnFuncNormal:
+				tempValue = --stackTop;
+returnFuncPostLoad:
+				tempValue2 = stackTop - 1;
+				tempValue2->i = (int)returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				tempValue2->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+
+			CASE(CompareNE):
+			{
+				returnFunc = wr_CompareEQ;
+returnFuncInverted:
+				tempValue = --stackTop;
+returnFuncInvertedPostLoad:
+				tempValue2 = stackTop - 1;
+				tempValue2->i = (int)!returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				tempValue2->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+
+			CASE(GSCompareEQ):
+			{
+				tempValue = globalSpace + *pc++;
+				returnFunc = wr_CompareEQ;
+				goto returnFuncPostLoad;
+			}
 			
-			CASE(BinaryMultiplication): { targetFunc = wr_binaryMultiply; goto targetFuncOp; }
-			CASE(BinarySubtraction): { targetFunc = wr_binarySubtract; goto targetFuncOp; }
-			CASE(BinaryDivision): { targetFunc = wr_binaryDivide; goto targetFuncOp; }
-			CASE(BinaryRightShift): { targetFunc = wr_binaryRightShift; goto targetFuncOp; }
-			CASE(BinaryLeftShift): { targetFunc = wr_binaryLeftShift; goto targetFuncOp; }
-			CASE(BinaryMod): { targetFunc = wr_binaryMod; goto targetFuncOp; }
-			CASE(BinaryOr): { targetFunc = wr_binaryOR; goto targetFuncOp; }
-			CASE(BinaryXOR): { targetFunc = wr_binaryXOR; goto targetFuncOp; }
-			CASE(BinaryAnd): { targetFunc = wr_binaryAND; goto targetFuncOp; }
+			CASE(LSCompareEQ):
+			{
+				tempValue = frameBase + *pc++;
+				returnFunc = wr_CompareEQ;
+				goto returnFuncPostLoad;
+			}
+			
+			CASE(GSCompareNE):
+			{
+				tempValue = globalSpace + *pc++;
+				returnFunc = wr_CompareEQ;
+				goto returnFuncInvertedPostLoad;
+			}
+			
+			CASE(LSCompareNE):
+			{
+				tempValue = frameBase + *pc++;
+				returnFunc = wr_CompareEQ;
+				goto returnFuncInvertedPostLoad;
+			}
+			
+			CASE(GSCompareGT):
+			{
+				tempValue = globalSpace + *pc++;
+				returnFunc = wr_CompareGT;
+				goto returnFuncPostLoad;
+			}
+			
+			CASE(LSCompareGT):
+			{
+				tempValue = frameBase + *pc++;
+				returnFunc = wr_CompareGT;
+				goto returnFuncPostLoad;
+			}
+			
+			CASE(GSCompareLT):
+			{
+				tempValue = globalSpace + *pc++;
+				returnFunc = wr_CompareLT;
+				goto returnFuncPostLoad;
+			}
+			
+			CASE(LSCompareLT):
+			{
+				tempValue = frameBase + *pc++;
+				returnFunc = wr_CompareLT;
+				goto returnFuncPostLoad;
+			}
+			
+			CASE(GSCompareGE):
+			{
+				tempValue = globalSpace + *pc++;
+				returnFunc = wr_CompareLT;
+				goto returnFuncInvertedPostLoad;
+			}
+			
+			CASE(LSCompareGE):
+			{
+				tempValue = frameBase + *pc++;
+				returnFunc = wr_CompareLT;
+				goto returnFuncInvertedPostLoad;
+			}
+			
+			CASE(GSCompareLE):
+			{
+				tempValue = globalSpace + *pc++;
+				returnFunc = wr_CompareGT;
+				goto returnFuncInvertedPostLoad;
+			}
+			
+			CASE(LSCompareLE):
+			{
+				tempValue = frameBase + *pc++;
+				returnFunc = wr_CompareGT;
+				goto returnFuncInvertedPostLoad;
+			}
+
+			CASE(GSCompareGEBZ): { returnFunc = wr_CompareLT; goto CompareGInverted; }
+			CASE(GSCompareLEBZ): { returnFunc = wr_CompareGT; goto CompareGInverted; }
+			CASE(GSCompareNEBZ):
+			{
+				returnFunc = wr_CompareEQ;
+CompareGInverted:
+				tempValue = globalSpace + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
+				CONTINUE;
+			}
+			
+			CASE(GSCompareEQBZ): { returnFunc = wr_CompareEQ; goto CompareGNormal; }
+			CASE(GSCompareGTBZ): { returnFunc = wr_CompareGT; goto CompareGNormal; }
+			CASE(GSCompareLTBZ):
+			{
+				returnFunc = wr_CompareLT;
+CompareGNormal:
+				tempValue = globalSpace + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
+				CONTINUE;
+			}
+			
+			CASE(LSCompareGEBZ): { returnFunc = wr_CompareLT; goto CompareLInverted; }
+			CASE(LSCompareLEBZ): { returnFunc = wr_CompareGT; goto CompareLInverted; }
+			CASE(LSCompareNEBZ):
+			{
+				returnFunc = wr_CompareEQ;
+CompareLInverted:
+				tempValue = frameBase + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
+				CONTINUE;
+			}
+			
+			CASE(LSCompareEQBZ): { returnFunc = wr_CompareEQ; goto CompareLNormal; }
+			CASE(LSCompareGTBZ): { returnFunc = wr_CompareGT; goto CompareLNormal; }
+			CASE(LSCompareLTBZ):
+			{
+				returnFunc = wr_CompareLT;
+CompareLNormal:
+				tempValue = frameBase + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
+				CONTINUE;
+			}
+			
+			CASE(GSCompareGEBZ8): { returnFunc = wr_CompareLT; goto CompareG8Inverted; }
+			CASE(GSCompareLEBZ8): { returnFunc = wr_CompareGT; goto CompareG8Inverted; }
+			CASE(GSCompareNEBZ8):
+			{
+				returnFunc = wr_CompareEQ;
+CompareG8Inverted:
+				tempValue = globalSpace + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int8_t)*pc : 2;
+				CONTINUE;
+			}
+
+			CASE(GSCompareEQBZ8): { returnFunc = wr_CompareEQ; goto CompareG8Normal; }
+			CASE(GSCompareGTBZ8): { returnFunc = wr_CompareGT; goto CompareG8Normal; }
+			CASE(GSCompareLTBZ8):
+			{
+				returnFunc = wr_CompareLT;
+CompareG8Normal:
+				tempValue = globalSpace + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int8_t)*pc;
+				CONTINUE;
+			}
+
+			CASE(LSCompareGEBZ8): { returnFunc = wr_CompareLT; goto CompareL8Inverted; }
+			CASE(LSCompareLEBZ8): { returnFunc = wr_CompareGT; goto CompareL8Inverted; }
+			CASE(LSCompareNEBZ8):
+			{
+				returnFunc = wr_CompareEQ;
+CompareL8Inverted:
+				tempValue = frameBase + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int8_t)*pc : 2;
+				CONTINUE;
+			}
+
+			CASE(LSCompareEQBZ8): { returnFunc = wr_CompareEQ; goto CompareL8Normal; }
+			CASE(LSCompareGTBZ8): { returnFunc = wr_CompareGT; goto CompareL8Normal; }
+			CASE(LSCompareLTBZ8):
+			{
+				returnFunc = wr_CompareLT;
+CompareL8Normal:
+				tempValue = frameBase + *pc++;
+				tempValue2 = --stackTop;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int8_t)*pc;
+				CONTINUE;
+			}
+			
+			CASE(PostIncrement): { tempValue = stackTop - 1; wr_postinc[ tempValue->type ]( tempValue, tempValue ); CONTINUE; }
+			CASE(PostDecrement): { tempValue = stackTop - 1; wr_postdec[ tempValue->type ]( tempValue, tempValue ); CONTINUE; }
+			CASE(PreIncrement): { tempValue = stackTop - 1; wr_preinc[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(PreDecrement): { tempValue = stackTop - 1; wr_predec[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(PreIncrementAndPop): { tempValue = --stackTop; wr_preinc[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(PreDecrementAndPop): { tempValue = --stackTop; wr_predec[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(IncGlobal): { tempValue = globalSpace + *pc++; wr_preinc[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(DecGlobal): { tempValue = globalSpace + *pc++; wr_predec[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(IncLocal): { tempValue = frameBase + *pc++; wr_preinc[ tempValue->type ]( tempValue ); CONTINUE; }
+			CASE(DecLocal): { tempValue = frameBase + *pc++; wr_predec[ tempValue->type ]( tempValue ); CONTINUE; }
+
+			CASE(LogicalNot):
+			{
+				tempValue = stackTop - 1;
+				tempValue->i = wr_LogicalNot[ tempValue->type ]( tempValue );
+				tempValue->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+
+			CASE(Negate):
+			{
+				tempValue = stackTop - 1;
+				wr_negate[ tempValue->type ]( tempValue );
+				CONTINUE;
+			}
+
+			CASE(BinaryMultiplication): { targetFunc = wr_MultiplyBinary; goto targetFuncOp; }
+			CASE(BinarySubtraction): { targetFunc = wr_SubtractBinary; goto targetFuncOp; }
+			CASE(BinaryDivision): { targetFunc = wr_DivideBinary; goto targetFuncOp; }
+			CASE(BinaryRightShift): { targetFunc = wr_RightShiftBinary; goto targetFuncOp; }
+			CASE(BinaryLeftShift): { targetFunc = wr_LeftShiftBinary; goto targetFuncOp; }
+			CASE(BinaryMod): { targetFunc = wr_ModBinary; goto targetFuncOp; }
+			CASE(BinaryOr): { targetFunc = wr_ORBinary; goto targetFuncOp; }
+			CASE(BinaryXOR): { targetFunc = wr_XORBinary; goto targetFuncOp; }
+			CASE(BinaryAnd): { targetFunc = wr_ANDBinary; goto targetFuncOp; }
 			CASE(BinaryAddition):
 			{
-				targetFunc = wr_binaryAddition;
+				targetFunc = wr_AdditionBinary;
 targetFuncOp:
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
-				targetFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2, tempValue2 );
+				targetFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, tempValue2 );
 				CONTINUE;
 			}
 
@@ -897,7 +1071,6 @@ targetFuncOp:
 				wr_bitwiseNot[ tempValue->type ]( tempValue );
 				CONTINUE;
 			}
-
 
 			CASE(SubtractAssign): { voidFunc = wr_SubtractAssign; goto binaryTableOp; }
 			CASE(AddAssign): { voidFunc = wr_AddAssign; goto binaryTableOp; }
@@ -915,29 +1088,7 @@ targetFuncOp:
 binaryTableOp:
 				tempValue = --stackTop;
 				tempValue2 = stackTop - 1;
-				voidFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				CONTINUE;
-			}
-
-			CASE(SubtractAssignAndPop): { voidFunc = wr_SubtractAssign; goto binaryTableOpAndPop; }
-			CASE(AddAssignAndPop): { voidFunc = wr_AddAssign; goto binaryTableOpAndPop; }
-			CASE(ModAssignAndPop): { voidFunc = wr_ModAssign; goto binaryTableOpAndPop; }
-			CASE(MultiplyAssignAndPop): { voidFunc = wr_MultiplyAssign; goto binaryTableOpAndPop; }
-			CASE(DivideAssignAndPop): { voidFunc = wr_DivideAssign; goto binaryTableOpAndPop; }
-			CASE(ORAssignAndPop): { voidFunc = wr_ORAssign; goto binaryTableOpAndPop; }
-			CASE(ANDAssignAndPop): { voidFunc = wr_ANDAssign; goto binaryTableOpAndPop; }
-			CASE(XORAssignAndPop): { voidFunc = wr_XORAssign; goto binaryTableOpAndPop; }
-			CASE(RightShiftAssignAndPop): { voidFunc = wr_RightShiftAssign; goto binaryTableOpAndPop; }
-			CASE(LeftShiftAssignAndPop): { voidFunc = wr_LeftShiftAssign; goto binaryTableOpAndPop; }
-			CASE(AssignAndPop):
-			{
-				voidFunc = wr_assign;
-
-binaryTableOpAndPop:
-				tempValue = --stackTop;
-				tempValue2 = --stackTop;
-				voidFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				
+				voidFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
 				CONTINUE;
 			}
 
@@ -947,7 +1098,7 @@ binaryTableOpAndPop:
 				tempValue2 = stackTop - *pc++;
 				uint32_t t = tempValue->p2;
 				const void* p = tempValue->p;
-				
+
 				tempValue->p2 = tempValue2->p2;
 				tempValue->p = tempValue2->p;
 
@@ -955,73 +1106,69 @@ binaryTableOpAndPop:
 				tempValue2->p2 = t;
 
 				CONTINUE;
+			} 
+
+			CASE(SwapTwoToTop): // accomplish two (or three when optimized) swaps into one instruction
+			{
+				tempValue = stackTop - *pc++;
+
+				uint32_t t = (stackTop - 1)->p2;
+				const void* p = (stackTop - 1)->p;
+
+				(stackTop - 1)->p2 = tempValue->p2;
+				(stackTop - 1)->p = tempValue->p;
+
+				tempValue->p = p;
+				tempValue->p2 = t;
+
+				tempValue = stackTop - *pc++;
+
+				t = (stackTop - 2)->p2;
+				p = (stackTop - 2)->p;
+
+				(stackTop - 2)->p2 = tempValue->p2;
+				(stackTop - 2)->p = tempValue->p;
+
+				tempValue->p = p;
+				tempValue->p2 = t;
+
+				CONTINUE;
 			}
 
 			CASE(CallFunctionByHash):
 			{
-				int32_t hash = (((int32_t)*pc) << 24)
-							   | (((int32_t)*(pc+1)) << 16)
-							   | (((int32_t)*(pc+2)) << 8)
-							   | ((int32_t)*(pc+3));
-				args = *(pc+4); // which have already been pushed
-				pc += 5;
+				WRCFunctionCallback* cF;
 
-				WRCFunctionCallback* cF = w->c_functionRegistry.get( hash );
-				if ( cF )
+				args = *(pc+4); // which have already been pushed
+				if ( (cF = w->c_functionRegistry.get( (((int32_t)*pc) << 24)
+													  | (((int32_t)*(pc+1)) << 16)
+													  | (((int32_t)*(pc+2)) << 8)
+													  | ((int32_t)*(pc+3)))) )
 				{
-					if ( !args )
-					{
-						cF->function( w, 0, 0, *stackTop++, cF->usr );
-					}
-					else
-					{
-						stackTop->p = 0;
-						stackTop->p2 = 0;
-						cF->function( w, stackTop - args, args, *stackTop, cF->usr );
-						*(stackTop - args) = *stackTop;
-						stackTop -= args - 1;
-					}
+					cF->function( w, stackTop - args, args, *(stackTop - (args+1)), cF->usr );
 				}
-				else
-				{
-					w->err = WR_WARN_c_function_not_found;
-					stackTop -= args;
-					(stackTop)->p = 0;
-					(stackTop++)->p2 = 0; // push a fake return value
-				}
-				
+
+				stackTop -= args;
+				pc += 5;
 				CONTINUE;
 			}
 
 			CASE(CallFunctionByHashAndPop):
 			{
 				// don't care about return value
-				int32_t hash = (((int32_t)*pc) << 24)
-							   | (((int32_t)*(pc+1)) << 16)
-							   | (((int32_t)*(pc+2)) << 8)
-							   | ((int32_t)*(pc+3));
-				args = *(pc+4); // which have already been pushed
-				pc += 6; // skip past the pop operation that is next in line (linking can't remove the instruction... yet)
+				WRCFunctionCallback* cF;
 
-				WRCFunctionCallback* cF = w->c_functionRegistry.get( hash );
-				if ( cF )
+				args = *(pc+4); // which have already been pushed
+				if ( (cF = w->c_functionRegistry.get( (((int32_t)*pc) << 24)
+													  | (((int32_t)*(pc+1)) << 16)
+													  | (((int32_t)*(pc+2)) << 8)
+													  | ((int32_t)*(pc+3)))) )
 				{
-					if ( !args )
-					{
-						cF->function( w, 0, 0, *stackTop, cF->usr );
-					}
-					else
-					{
-						cF->function( w, stackTop - args, args, *stackTop, cF->usr );
-						stackTop -= args;
-					}
+					cF->function( w, stackTop - args, args, *(stackTop - (args+1)), cF->usr );
 				}
-				else
-				{
-					w->err = WR_WARN_c_function_not_found;
-					stackTop -= args;
-				}
-				
+
+				stackTop -= args + 1;
+				pc += 6; // skip past the pop operation that is next in line (linking can't remove the instruction... yet)
 				CONTINUE;
 			}
 
@@ -1036,29 +1183,36 @@ callFunction:
 				{
 					if ( args > function->arguments )
 					{
-						stackTop -= args - function->arguments; // poof
+						stackTop -= args - function->arguments; // unexpected arguments are poofed
 					}
 					else
 					{
-						for( char a=args; a < function->arguments; ++a )
+						// un-specified arguments are set to IntZero
+						for( int a=args; a < function->arguments; ++a )
 						{
 							stackTop->p = 0;
-							(stackTop++)->p2 = 0;
+							(stackTop++)->p2 = INIT_AS_INT;
 						}
 					}
 				}
 
-				// the arguments are at framepace 0, add more to make
+				// the arguments are at framepace +0, add more to make
 				// up for the locals in the function
-				for( int i=0; i<function->frameSpaceNeeded; ++i )
+
+				// really wish I could do this.. alas.. if array chaff
+				// is left on the stack, released memory might be
+				// written to :(
+				//stackTop += function->frameSpaceNeeded; // locals are NOT initialized
+
+				for( int l=0; l<function->frameSpaceNeeded; ++l ) // locals are NOT initialized
 				{
-					stackTop->p = 0;
-					(stackTop++)->p2 = 0;
+					(stackTop++)->p2 = INIT_AS_INT;
 				}
 
-				// temp value contains return vector
+
+				// temp value contains return vector/frame base
 				tempValue = stackTop++; // return vector
-				tempValue->type = WR_INT;
+				tempValue->frame = frameBase;
 				
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				
@@ -1080,11 +1234,7 @@ callFunction:
 					top = pc + (size - 6);
 					context->bottom = pc;
 				}
-				
 #endif
-				
-				stackTop->type = WR_INT;
-				(stackTop++)->p = frameBase; // very top is the old framebase
 
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - function->frameBaseAdjustment;
@@ -1092,75 +1242,60 @@ callFunction:
 				CONTINUE;
 			}
 
+			// it kills me that these are identical except for the "+1"
+			// but I have yet to figure out a way around that, "andPop"
+			// is just too good and common an optimization :(
 			CASE(CallLibFunction):
 			{
-				WR_LIB_CALLBACK callback = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
-																			  | (((int32_t)*(pc+1)) << 16)
-																			  | (((int32_t)*(pc+2)) << 8)
-																			  | ((int32_t)*(pc+3)) );
-				args = *(pc+4); // which have already been pushed
-				pc += 5;
+				WR_LIB_CALLBACK lib;
+				stackTop -= (args = *(pc+4)); // which have already been pushed
 
-				if ( callback )
+				if ( (lib = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
+															 | (((int32_t)*(pc+1)) << 16)
+															 | (((int32_t)*(pc+2)) << 8)
+															 | ((int32_t)*(pc+3)) )) )
 				{
-					callback( stackTop, args );
-					if ( args )
-					{
-						*(stackTop - args) = *stackTop;
-						stackTop -= args - 1;
-					}
-					else
-					{
-						++stackTop;
-					}
+					lib( stackTop, args );
 				}
-				else
+
+				pc += 5;
+				CONTINUE;
+			}
+
+			CASE(CallLibFunctionAndPop):
+			{
+				WR_LIB_CALLBACK lib;
+				stackTop -= (args = *(pc+4)); // which have already been pushed
+
+				if ( (lib = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
+															 | (((int32_t)*(pc+1)) << 16)
+															 | (((int32_t)*(pc+2)) << 8)
+															 | ((int32_t)*(pc+3)) )) )
 				{
-					w->err = WR_WARN_lib_function_not_found;
-					stackTop -= args;
-					stackTop->p = 0;
-					(stackTop++)->p2 = 0; // fake return val
+					lib( stackTop, args );
 				}
 				
+				--stackTop;
+				pc += 5;
 				CONTINUE;
 			}
 			
-			CASE(CallLibFunctionAndPop):
-			{
-				WR_LIB_CALLBACK callback = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
-																			  | (((int32_t)*(pc+1)) << 16)
-																			  | (((int32_t)*(pc+2)) << 8)
-																			  | ((int32_t)*(pc+3)) );
-				args = *(pc+4); // which have already been pushed
-				pc += 5;
-
-				if ( callback )
-				{
-					callback( stackTop, args );
-				}
-				else
-				{
-					w->err = WR_WARN_lib_function_not_found;
-				}
-				stackTop -= args;
-				CONTINUE;
-			}
-
 			CASE(Stop):
 			{
-				// stack will be zero at this point, stop execution
-				w->returnValue = stackTop--;
 				context->stopLocation = (int32_t)((pc - 1) - context->bottom);
 				return WR_ERR_None;
 			}
 
 			CASE(Return):
 			{
+				tempValue = stackTop - 2;
+				
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
-				// copy the return value
-				pc = (unsigned char*)((stackTop - 3)->p); // grab return PC
+				
+				pc = (unsigned char*)tempValue->p; // grab return PC
+				
 #else
-				int returnOffset = (stackTop - 3)->i;
+				int returnOffset = (stackTop - 2)->i;
 				if ( returnOffset >= absoluteBottom )
 				{
 					// easy, function is within this loaded block
@@ -1177,16 +1312,15 @@ callFunction:
 #endif
 				if ( (--stackTop)->type == WR_REF )
 				{
-					*frameBase = *stackTop->r;
+					*(frameBase - 1) = *stackTop->r;
 				}
 				else
 				{
-					*frameBase = *stackTop; // copy return value down
+					*(frameBase - 1) = *stackTop;
 				}
 				
-				tempValue = (WRValue*)(stackTop - 1)->p;
-				stackTop = frameBase + 1;
-				frameBase = tempValue;
+				stackTop = frameBase;
+				frameBase = tempValue->frame;
 				CONTINUE;
 			}
 			
@@ -1212,69 +1346,278 @@ callFunction:
 
 			CASE(RelativeJump):
 			{
-				pc += (int16_t)(((int16_t)*pc)<<8) + *(pc+1);
-				CONTINUE;
-			}
-
-			CASE(RelativeJump8):
-			{
-				pc += (int8_t)*pc;
+				pc += (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
 				CONTINUE;
 			}
 
 			CASE(BZ):
 			{
 				tempValue = --stackTop;
-				pc += wr_ZeroCheck[tempValue->type](tempValue) ? (((int16_t)*pc)<< 8) + *(pc+1) : 2;
+				pc += wr_LogicalNot[tempValue->type](tempValue) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
 				CONTINUE;
 			}
 			
+			CASE(SubtractAssignAndPop): { voidFunc = wr_SubtractAssign; goto binaryTableOpAndPop; }
+			CASE(AddAssignAndPop): { voidFunc = wr_AddAssign; goto binaryTableOpAndPop; }
+			CASE(ModAssignAndPop): { voidFunc = wr_ModAssign; goto binaryTableOpAndPop; }
+			CASE(MultiplyAssignAndPop): { voidFunc = wr_MultiplyAssign; goto binaryTableOpAndPop; }
+			CASE(DivideAssignAndPop): { voidFunc = wr_DivideAssign; goto binaryTableOpAndPop; }
+			CASE(ORAssignAndPop): { voidFunc = wr_ORAssign; goto binaryTableOpAndPop; }
+			CASE(ANDAssignAndPop): { voidFunc = wr_ANDAssign; goto binaryTableOpAndPop; }
+			CASE(XORAssignAndPop): { voidFunc = wr_XORAssign; goto binaryTableOpAndPop; }
+			CASE(RightShiftAssignAndPop): { voidFunc = wr_RightShiftAssign; goto binaryTableOpAndPop; }
+			CASE(LeftShiftAssignAndPop): { voidFunc = wr_LeftShiftAssign; goto binaryTableOpAndPop; }
+			CASE(AssignAndPop):
+			{
+				voidFunc = wr_assign;
+				
+binaryTableOpAndPop:
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+				voidFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				
+				CONTINUE;
+			}
+			
+			CASE(BinaryAdditionAndStoreGlobal) : { targetFunc = wr_AdditionBinary; goto targetFuncStoreGlobalOp; }
+			CASE(BinarySubtractionAndStoreGlobal): { targetFunc = wr_SubtractBinary; goto targetFuncStoreGlobalOp; }
+			CASE(BinaryMultiplicationAndStoreGlobal): { targetFunc = wr_MultiplyBinary; goto targetFuncStoreGlobalOp; }
+			CASE(BinaryDivisionAndStoreGlobal):
+			{
+				targetFunc = wr_DivideBinary;
+
+targetFuncStoreGlobalOp:
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+				targetFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, globalSpace + *pc++ );
+				CONTINUE;
+			}
+
+			CASE(BinaryAdditionAndStoreLocal): { targetFunc = wr_AdditionBinary; goto targetFuncStoreLocalOp; }
+			CASE(BinarySubtractionAndStoreLocal): { targetFunc = wr_SubtractBinary; goto targetFuncStoreLocalOp; }
+			CASE(BinaryMultiplicationAndStoreLocal): { targetFunc = wr_MultiplyBinary; goto targetFuncStoreLocalOp; }
+			CASE(BinaryDivisionAndStoreLocal):
+			{
+				targetFunc = wr_DivideBinary;
+
+targetFuncStoreLocalOp:
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+				targetFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, frameBase + *pc++ );
+				CONTINUE;
+			}
+
+			CASE(IndexLiteral32):
+			{
+				stackTop->i = (((int32_t)*pc) << 24) |
+							  (((int32_t)*(pc + 1)) << 16) |
+							  (((int32_t)*(pc + 2)) << 8) |
+							  (int32_t)*(pc + 3);
+				pc += 4;
+				goto indexLiteral;
+			}
+
+			CASE(IndexLiteral16):
+			{
+				stackTop->i = (int32_t)(int16_t)((((int16_t)*(pc)) << 8) | ((int16_t)*(pc+1)));
+				pc += 2;
+				goto indexLiteral;
+			}
+
+			CASE(IndexLiteral8):
+			{
+				stackTop->i = *pc++;
+indexLiteral:
+				tempValue = stackTop - 1;
+				wr_index[(WR_INT*4)|tempValue->type]( context, stackTop, tempValue );
+				CONTINUE;
+			}
+			
+			CASE(AssignToGlobalAndPop):
+			{
+				tempValue = globalSpace + *pc++;
+				tempValue2 = --stackTop;
+				wr_assign[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				CONTINUE;
+			}
+
+			CASE(AssignToLocalAndPop):
+			{
+				tempValue = frameBase + *pc++;
+				tempValue2 = --stackTop;
+				wr_assign[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				CONTINUE;
+			}
+
+			CASE(LiteralInt8):
+			{
+				stackTop->i = (int32_t)(int8_t)*pc++;
+				(stackTop++)->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+
+			CASE(LiteralInt16):
+			{
+				stackTop->i = (int32_t)(int16_t)((((int16_t)*(pc)) << 8) | ((int16_t)*(pc+1)));
+				pc += 2;
+				(stackTop++)->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+			
+			CASE(RelativeJump8):
+			{
+				pc += (int8_t)*pc;
+				CONTINUE;
+			}
+
 			CASE(BZ8):
 			{
 				tempValue = --stackTop;
-				pc += wr_ZeroCheck[tempValue->type](tempValue) ? (int8_t)*pc : 2;
+				pc += wr_LogicalNot[tempValue->type](tempValue) ? (int8_t)*pc : 2;
 				CONTINUE;
 			}
 
-			CASE(BNZ):
+			CASE(BLA):
 			{
 				tempValue = --stackTop;
-				pc += wr_ZeroCheck[tempValue->type](tempValue) ? 2 : (((int16_t)*pc)<< 8) + *(pc+1);
-				CONTINUE;
-			}
-			
-			CASE(BNZ8):
-			{
-				tempValue = --stackTop;
-				pc += wr_ZeroCheck[tempValue->type](tempValue) ? 2 : (int8_t)*pc;
+				tempValue2 = --stackTop;
+				pc += wr_LogicalAND[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
 				CONTINUE;
 			}
 
-			CASE(LogicalAnd): { returnFunc = wr_LogicalAND; goto returnFuncNormal; }
-			CASE(LogicalOr): { returnFunc = wr_LogicalOR; goto returnFuncNormal; }
-			CASE(CompareLE): { returnFunc = wr_CompareGT; goto returnFuncInverted; }
-			CASE(CompareGE): { returnFunc = wr_CompareLT; goto returnFuncInverted; }
-			CASE(CompareGT): { returnFunc = wr_CompareGT; goto returnFuncNormal; }
-			CASE(CompareLT): { returnFunc = wr_CompareLT; goto returnFuncNormal; }
-			CASE(CompareEQ):
+			CASE(BLA8):
 			{
-				returnFunc = wr_CompareEQ;
-returnFuncNormal:
 				tempValue = --stackTop;
-				tempValue2 = stackTop - 1;
-				tempValue2->i = (int)returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				tempValue2->type = WR_INT;
+				tempValue2 = --stackTop;
+				pc += wr_LogicalAND[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int8_t)*pc;
 				CONTINUE;
 			}
-			
-			CASE(CompareNE):
+
+			CASE(BLO):
 			{
-				returnFunc = wr_CompareEQ;
-returnFuncInverted:
 				tempValue = --stackTop;
-				tempValue2 = stackTop - 1;
-				tempValue2->i = (int)!returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 );
-				tempValue2->type = WR_INT;
+				tempValue2 = --stackTop;
+				pc += wr_LogicalOR[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
+				CONTINUE;
+			}
+
+			CASE(BLO8):
+			{
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+				pc += wr_LogicalOR[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int8_t)*pc;
+				CONTINUE;
+			}
+
+			CASE(GGBinaryMultiplication):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
+				wr_MultiplyBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GLBinaryMultiplication):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_MultiplyBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(LLBinaryMultiplication):
+			{
+				tempValue2 = frameBase + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_MultiplyBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GGBinaryAddition):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
+				wr_AdditionBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GLBinaryAddition):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_AdditionBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(LLBinaryAddition):
+			{
+				tempValue2 = frameBase + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_AdditionBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GGBinarySubtraction):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
+				wr_SubtractBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GLBinarySubtraction):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_SubtractBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(LGBinarySubtraction):
+			{
+				tempValue2 = frameBase + *pc++;
+				tempValue = globalSpace + *pc++;
+				wr_SubtractBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(LLBinarySubtraction):
+			{
+				tempValue2 = frameBase + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_SubtractBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GGBinaryDivision):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
+				wr_DivideBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(GLBinaryDivision):
+			{
+				tempValue2 = globalSpace + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_DivideBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(LGBinaryDivision):
+			{
+				tempValue2 = frameBase + *pc++;
+				tempValue = globalSpace + *pc++;
+				wr_DivideBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+
+			CASE(LLBinaryDivision):
+			{
+				tempValue2 = frameBase + *pc++;
+				tempValue = frameBase + *pc++;
+				wr_DivideBinary[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2, stackTop++ );
 				CONTINUE;
 			}
 
@@ -1288,7 +1631,7 @@ returnFuncInverted:
 returnFuncBNormal:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
-				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? 2 : (((int16_t)*pc)<< 8) + *(pc+1);
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
 				CONTINUE;
 			}
 
@@ -1298,7 +1641,7 @@ returnFuncBNormal:
 returnFuncBInverted:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
-				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? (((int16_t)*pc)<< 8) + *(pc+1) : 2;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
 				CONTINUE;
 			}
 
@@ -1312,7 +1655,7 @@ returnFuncBInverted:
 returnFuncBNormal8:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
-				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? 2 : *pc;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : *pc;
 				CONTINUE;
 			}
 
@@ -1322,94 +1665,69 @@ returnFuncBNormal8:
 returnFuncBInverted8:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
-				pc += returnFunc[tempValue->type*6+tempValue2->type]( tempValue, tempValue2 ) ? *pc : 2;
-				CONTINUE;
-			}
-
-			CASE(PostIncrement):
-			{
-				tempValue = stackTop - 1;
-				wr_postinc[ tempValue->type ]( tempValue, tempValue );
-				CONTINUE;
-			}
-
-			CASE(PostDecrement):
-			{
-				tempValue = stackTop - 1;
-				wr_postdec[ tempValue->type ]( tempValue, tempValue );
-				CONTINUE;
-			}
-			
-			CASE(PreIncrement):
-			{
-				tempValue = stackTop - 1;
-				wr_preinc[ tempValue->type ]( tempValue );
-				CONTINUE;
-			}
-			
-			CASE(PreDecrement):
-			{
-				tempValue = stackTop - 1;
-				wr_predec[ tempValue->type ]( tempValue );
-				CONTINUE;
-			}
-
-			CASE(LogicalNot):
-			{
-				tempValue = stackTop - 1;
-				tempValue->i = wr_LogicalNot[ tempValue->type ]( tempValue );
-				tempValue->type = WR_INT;
-				CONTINUE;
-			}
-
-			CASE(Negate):
-			{
-				tempValue = stackTop - 1;
-				wr_negate[ tempValue->type ]( tempValue );
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? *pc : 2;
 				CONTINUE;
 			}
 			
 			CASE(LiteralInt8ToGlobal):
 			{
-				tempValue = context->globalSpace + *pc++;
-				tempValue->type = WR_INT;
+				tempValue = globalSpace + *pc++;
 				tempValue->i = (int32_t)(int8_t)*pc++;
+				tempValue->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
-			
+
+			CASE(LiteralInt16ToGlobal):
+			{
+				tempValue = globalSpace + *pc++;
+				tempValue->i = (int32_t)(int16_t)((((int16_t) * (pc)) << 8) | ((int16_t) * (pc + 1)));
+				tempValue->p2 = INIT_AS_INT;
+				pc += 2;
+				CONTINUE;
+			}
+
 			CASE(LiteralInt32ToLocal):
 			{
 				tempValue = frameBase + *pc++;
-				tempValue->type = WR_INT;
+				tempValue->p2 = INIT_AS_INT;
 				goto load32ToTemp;
 			}
 			
 			CASE(LiteralInt8ToLocal):
 			{
 				tempValue = frameBase + *pc++;
-				tempValue->type = WR_INT;
 				tempValue->i = (int32_t)(int8_t)*pc++;
+				tempValue->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
-			
+
+			CASE(LiteralInt16ToLocal):
+			{
+				tempValue = frameBase + *pc++;
+				tempValue->i = (int32_t)(int16_t)((((int16_t) * (pc)) << 8) | ((int16_t) * (pc + 1)));
+				tempValue->p2 = INIT_AS_INT;
+				pc += 2;
+				CONTINUE;
+			}
+
 			CASE(LiteralFloatToGlobal):
 			{
-				tempValue = context->globalSpace + *pc++;
-				tempValue->type = WR_FLOAT;
+				tempValue = globalSpace + *pc++;
+				tempValue->p2 = INIT_AS_FLOAT;
 				goto load32ToTemp;
 			}
 			
 			CASE(LiteralFloatToLocal):
 			{
 				tempValue = frameBase + *pc++;
-				tempValue->type = WR_FLOAT;
+				tempValue->p2 = INIT_AS_FLOAT;
 				goto load32ToTemp;
 			}
 
 			CASE(LiteralInt32ToGlobal):
 			{
-				tempValue = context->globalSpace + *pc++;
-				tempValue->type = WR_INT;
+				tempValue = globalSpace + *pc++;
+				tempValue->p2 = INIT_AS_INT;
 load32ToTemp:
 				tempValue->i = (((int32_t)*pc) << 24)
 							   | (((int32_t)*(pc+1)) << 16)
@@ -1419,7 +1737,7 @@ load32ToTemp:
 				CONTINUE;
 			}
 			
-#ifndef JUMPTABLE_INTERPRETER
+#ifndef WRENCH_JUMPTABLE_INTERPRETER
 		}
 	}
 #endif
@@ -1428,21 +1746,21 @@ load32ToTemp:
 //------------------------------------------------------------------------------
 void wr_makeInt( WRValue* val, int i )
 {
-	val->type = WR_INT;
+	val->p2 = INIT_AS_INT;
 	val->i = i;
 }
 
 //------------------------------------------------------------------------------
 void wr_makeFloat( WRValue* val, float f )
 {
-	val->type = WR_FLOAT;
+	val->p2 = INIT_AS_FLOAT;
 	val->f = f;
 }
 
 //------------------------------------------------------------------------------
 void wr_makeUserData( WRValue* val, int sizeHint )
 {
-	val->type = WR_USR;
+	val->p2 = INIT_AS_USR;
 	val->u = new WRUserData( sizeHint );
 }
 
@@ -1456,7 +1774,7 @@ void wr_addUserValue( WRValue* userData, const char* key, WRValue* value )
 void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned char* data, const int len )
 {
 	WRValue* val = userData->u->addValue( name );
-	val->type = WR_ARRAY;
+	val->p2 = INIT_AS_ARRAY;
 	val->va = new WRStaticValueArray( len, SV_CHAR, data );
 }
 
@@ -1464,7 +1782,7 @@ void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned ch
 void wr_addUserIntArray( WRValue* userData, const char* name, const int* data, const int len )
 {
 	WRValue* val = userData->u->addValue( name );
-	val->type = WR_ARRAY;
+	val->p2 = INIT_AS_ARRAY;
 	val->va = new WRStaticValueArray( len, SV_INT, data );
 }
 
@@ -1472,18 +1790,18 @@ void wr_addUserIntArray( WRValue* userData, const char* name, const int* data, c
 void wr_addUserFloatArray( WRValue* userData, const char* name, const float* data, const int len )
 {
 	WRValue* val = userData->u->addValue( name );
-	val->type = WR_ARRAY;
+	val->p2 = INIT_AS_ARRAY;
 	val->va = new WRStaticValueArray( len, SV_FLOAT, data );
 }
 
 //------------------------------------------------------------------------------
 void WRValue::free()
 {
-	if ( type == WR_USR )
+	if ( xtype == WR_EX_USR )
 	{
 		delete u;
 	}
-	else if ( type == WR_ARRAY && (va->m_type & SV_PRE_ALLOCATED) )
+	else if ( xtype == WR_EX_ARRAY && (va->m_type & SV_PRE_ALLOCATED) )
 	{
 		delete va;
 	}

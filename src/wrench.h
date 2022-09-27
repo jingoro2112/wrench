@@ -92,22 +92,14 @@ On most systems this will consume 8 bytes per stack entry
 /***********************************************************************/
 
 /************************************************************************
-Ignoring these buys a few cycles when speed is of the utmost
-importance, it is strongly reccomended to leave these on and only turn
-this off once the app is fully debugged and tested.
-*/
-//#define WRENCH_IGNORE_BYTECODE_WARNINGS
-/***********************************************************************/
-
-/************************************************************************
 .asString() uses sprintf from stdio. If you don't want to
 include or use that library then undefine this and that method will no
 longer function
 */
-#define SPRINTF_OPERATIONS
+#define WRENCH_SPRINTF_OPERATIONS
 /***********************************************************************/
 
-#define WRENCH_VERSION 120
+#define WRENCH_VERSION 121
 
 #include <stdint.h>
 struct WRState;
@@ -129,44 +121,48 @@ void wr_destroyState( WRState* w );
 /**************************************************************/
 //                        Running Code
 
-//     function the interpreter calls to get a block of bytecode
-// if WRENCH_PARTIAL_BYTECODE_LOADS is defined, it expects at least 20 bytes
-// of code returned per call and will re-call it any time code is
-// needed from outside the returned region.
+// the interpreter calls this to get a block of bytecode
 //
 // if WRENCH_PARTIAL_BYTECODE_LOADS is NOT defined (default) this will be
-// called exactly one time and expects the entire code block to be
+// called exactly one time and expect the entire code block to be
 // returned; it will not be checked again.
+//
+// if WRENCH_PARTIAL_BYTECODE_LOADS is defined, it expects at least 20 bytes
+// of code returned per call and will re-call any time code is
+// needed from outside the returned region.
+//
 //
 // NOTE: The returned memory IS USED IN PLACE. it is NOT copied to an
 // internal buffer so it must remain valid for the life of the execution
 //
-// offset: where in the bytecode stream wrench wants to load (will be zero
+// offset: where in the bytecode stream wrench wants to load (always zero
 //         for non - WRENCH_PARTIAL_BYTECODE_LOADS)
 // block:  pointer to pointer where the block is mapped, this can be
 //         read-only and must remain valid for the life of the script!
 // usr:    opaque user-supplied pointer passed to each load call (optional)
 typedef unsigned int (*WR_LOAD_BLOCK_FUNC)( int offset, const unsigned char** block, void* usr );
 
-// compile a block of code and return a new'ed block of bytecode ready
+// compile source code and return a new'ed block of bytecode ready
 // for wr_run(), memory must be delete[]'ed
 // return value is a WRError
+// optionally an "errMsg" buffer can be passed which will output a
+//   human-readable string of what went wrong and where.
 int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg =0 );
 
 // run a block of code, either as a single block or with a loader that
 // will be called back. PLEASE SEE NOTES ABOVE REGARDING: WRENCH_PARTIAL_BYTECODE_LOADS
 
-// w:          state
+// w:          state (see wr_newState)
 // block/size: location of bytecode
 // loader/usr: callback for loader and a void* pointer that will be
 //             passed to the loader opaquely (optional)
-// RETURNS:    a WRContext pointer be passed to callFunction
+// RETURNS:    a WRContext pointer to be passed to wr_callFunction
 //             'global' values are NOT SHARED between contexts
-WRContext* wr_run( WRState* w, const unsigned char* block, const int size );
+WRContext* wr_run( WRState* w, const unsigned char* block );
 WRContext* wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr =0 );
 
 
-// after wr_run, this allows any function contained to be
+// after wr_run() this allows any function contained to be
 // called with the given arguments, returning a single value
 //
 // contextId:    the context in which the function was loaded
@@ -182,23 +178,21 @@ int wr_callFunction( WRState* w, WRContext* context, const char* functionName, c
 // functionName
 int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv =0, const int argn =0 );
 
-// the function must be a function pointed to in the supplied
-// context and is not globally unique, fetch it with
-// wr_getFunction(...)
-// This method is exposed so functions can be called without any of the
-// internal overhead required.
+// The raw function pointer can be pre-loaded with wr_getFunction() and
+// passed directly
+// This method is exposed so functions can be called with an absolute
+// minmum of overhead
 int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const WRValue* argv, const int argn );
 
-// hash is obtained by calling wr_hashStr(...) if you want to
-// precompute/cache it
-WRFunction* wr_getFunction( WRContext* context, const int32_t hash );
+// once wr_run() is called the returned context object can be used to
+// pre-fetch a function pointer. This reduces the overhead of calling
+// that function to almost nothing.
 WRFunction* wr_getFunction( WRContext* context, const char* functionName );
 
-
-// use this to destroy a context you no longer need and free up all the
-// memory it was using, all contexts are freed when wr_destroyState()
-// is called, so calling this is not necessary, but reccomended so the
-// memory can be re-used
+// Destroy a context you no longer need and free up all the memory it
+// was using, all contexts are freed when wr_destroyState() is called,
+// so calling this is not necessary, but reccomended so the memory can
+// be re-used
 void wr_destroyContext( WRState* w, WRContext* context );
 
 
@@ -210,10 +204,10 @@ void wr_destroyContext( WRState* w, WRContext* context );
 // contexts)
 // callback will contain:
 // w:             state it was called back from
-// argv:          pointer to number of arguments function was called
+// argv:          pointer to arguments function was called
 //                with (may be null!)
 // argn:          how many arguments it was called with
-// retVal:        this value will be passed back, default zero
+// retVal:        this value will be passed back, default: integer zero
 // usr:           opaque pointer function was registered with
 typedef void (*WR_C_CALLBACK)(WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr );
 
@@ -238,7 +232,7 @@ int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, v
 // these calls are installed in such a way that they impose ZERO
 // overhead if not used, zero memory footprint, text segment, etc.
 
-// library calls do assume a deep knowledge of internal workings of
+// library calls do assume a deep knowledge of the internal workings of
 // wrench so the callback is an absolute minimum of info:
 // stackTop: current top of the stack, arguments have been pushed here,
 //           and any return value must be placed here, not pushed!
@@ -271,7 +265,7 @@ void wr_loadStdLib( WRState* w ); // standard functions like sprintf/rand/
 //              wrench types and how to make them!
 
 // The WRValue is the basic data unit inside wrench, it can be a
-// float/int/array whatever... think of it as a thneed. Its 8 bytes on
+// float/int/array whatever... think of it as a thneed. It's 8 bytes on
 // a 32 bit system and you can create one on the stack no problemo, no
 // heap will be harmed
 
@@ -285,6 +279,7 @@ void wr_makeFloat( WRValue* val, float f );
 //
 // someUserData.value1      <- simple value
 // someUserData.value2[20]  <- array
+// someUserData.value1.value2 <- yes this works too
 
 // STEP 1:    create the user data. This will be the 'top level' object
 // the other members are loaded into. It can be passed to any function as
@@ -391,16 +386,18 @@ extern int32_t wr_Seed;
 enum WRValueType
 {
 	WR_INT =   0x00,
-	WR_REF =   0x01,
-	WR_FLOAT = 0x02,
-	WR_USR =   0x03,
-	WR_ARRAY = 0x04,
-	WR_REFARRAY = 0x05,
+	WR_FLOAT = 0x01,
+	WR_REF = 0x02,
+	WR_EX = 0x3,
+};
+enum WRExType
+{
+	WR_EX_NONE = 0x0,
+	WR_EX_USR = 0x01,
+	WR_EX_ARRAY = 0x02,
+	WR_EX_REFARRAY = 0x03,
 };
 
-char* wr_valueToString( WRValue const& value, char* string );
-int wr_arrayValueAsInt( const WRValue* array );
-float wr_arrayValueAsFloat( const WRValue* array );
 
 //------------------------------------------------------------------------------
 class WRUserData;
@@ -412,29 +409,68 @@ struct WRValue
 	// methods
 	int asInt() const
 	{
+		// this should be faster than a switch by checking the most common cases first
+		if ( type == WR_INT )
+		{
+			return i;
+		}
+		if ( type == WR_REF )
+		{
+			return r->asInt();
+		}
+		if ( type == WR_FLOAT )
+		{
+			return (int)f;
+		}
+		if ( type == WR_EX )
+		{
+			return xtype == WR_EX_REFARRAY ? arrayValueAsInt() : 0;
+		}
+		return i;
+
+		// but the switch looks like this:
+/* 
 		switch( type )
 		{
 			case WR_REF: return r->asInt();
-			case WR_REFARRAY: return wr_arrayValueAsInt(this); 
+			case WR_EX: return xtype == WR_EX_REFARRAY ? arrayValueAsInt() : 0;
 			case WR_FLOAT: return (int)f;
 			default: return i;
 		}
+		*/
 	}
 	
 	float asFloat() const
 	{
-		switch( type )
+		if ( type == WR_FLOAT )
 		{
-			case WR_REF: return r->asFloat();
-			case WR_REFARRAY: return wr_arrayValueAsFloat(this);
-			case WR_INT: return (float)i;
-			default: return f;
+			return f;
 		}
+		if ( type == WR_REF )
+		{
+			return r->asFloat();
+		}
+		if ( type == WR_INT )
+		{
+			return (float)i;
+		}
+		if ( type == WR_EX )
+		{
+			return xtype == WR_EX_REFARRAY ? arrayValueAsFloat() : 0;
+		}
+		return f;
 	}
 	
 	// string: must point to a buffer long enough to contain the string in
 	// the case value is an array of chars. the pointer will be passed back
 	char* asString( char* string ) const;
+
+	//WRValueType getType() { return enumType == WR_REF ? r->getType() : enumType; }
+
+	WRValue* asValueArray( int* len =0 );
+	unsigned char* asCharArray( int* len =0 );
+	int* asIntArray( int* len =0 );
+	float* asFloatArray( int* len =0 );
 
 	void init() { p = 0; p2 = 0; } // call upon first create or when you're sure no memory is hanging from one
 
@@ -442,19 +478,14 @@ struct WRValue
 		   // VM is not an object that can be friended. don't mess
 		   // around here unless you really feel comfortable with the
 		   // internal workings of wrench.. in fact.. same goes for
-		   // abover here :)
+		   // above here :)
 		   
 	void free(); // treat this object as if it owns any memory allocated on u or va pointer
+	int arrayValueAsInt() const;
+	float arrayValueAsFloat() const;
 
-	// easy access to the void* dynamically typed
-	WRValue* asValueArray( int* len =0 );
-	unsigned char* asCharArray( int* len =0 );
-	int* asIntArray( int* len =0 );
-	float* asFloatArray( int* len =0 );
+	inline ~WRValue() { if (xtype) { free(); } } // this will stay inline MOST of the time
 
-	inline ~WRValue() { if ( type > WR_FLOAT ) { free(); } }
-
-	//-----------------
 	union // first 4 bytes (or 8 on a 64-bit system but.. what are you doing here?)
 	{
 		int32_t i;
@@ -465,13 +496,21 @@ struct WRValue
 		WRUserData* u;
 	};
 
-	union // next 4 bytes
+	union
 	{
-		uint8_t type; // carries the type
-		uint32_t arrayElement; // if this is a reference to an array, this carries the currently indexed item in the top 24 bits
-		WRValueType enumType; // for debug, this will display the type in the watch window
+		struct
+		{
+			uint8_t type; // carries the type
+			uint8_t padL;
+			uint8_t padH;
+			uint8_t xtype; // carries the extra type (if it exists)
+		};
+
 		uint32_t p2;
+		WRValue* frame;
 	};
+
+	inline WRValue& operator = (const WRValue& V) { p = V.p; p2 = V.p2; return *this; }
 };
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER

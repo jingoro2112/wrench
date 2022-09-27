@@ -47,7 +47,13 @@
 21
 34
 55
+10
+10
+10
+20
 ~*/
+
+
 
 f(f(0));
 a = 5;
@@ -147,3 +153,20 @@ for ( i = 0; i <= 10; ++i)
 {
 	log( fibonacci(i) );
 }
+
+
+a = 10;
+function fa()
+{
+	a = 20;
+}
+function g_fa()
+{
+	::a = 20;
+}
+log(a);
+log(::a);
+fa();
+log(a);
+g_fa();
+log(a);

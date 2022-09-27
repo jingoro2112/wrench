@@ -162,7 +162,6 @@ function userCheck( data )
 	if ( data.ac[4] != data.ac[2] ) log( "bad" );
 	if ( data.ac[2] != data.ac[4] ) log( "bad" );
 
-
 	a = 11;
 	data.ac[4] = 12;
 	data.ac[2] = 10;

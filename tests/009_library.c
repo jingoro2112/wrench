@@ -8,7 +8,7 @@
 -4
 ~*/
 
-math::floor();
+f = math::floor();
 log( math::floor(1.5) );
 log( math::floor(1) );
 

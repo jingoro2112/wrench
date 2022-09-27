@@ -32,7 +32,7 @@ clean:
 	-@mkdir src
 
 valgrind: $(OBJS) wrench_cli.cpp
-	g++ -o wrench_v -Wall -Werror -I. -Idiscrete_src -O3 -ggdb $(OBJS) wrench_cli.cpp 
+	g++ -o wrench_v $(FLAGS) -Wall -Werror -I. -Idiscrete_src -O3 -ggdb $(OBJS) wrench_cli.cpp 
 
 wrench: $(OBJS) wrench_cli.cpp
 	g++ $(OBJS) -Wall -Werror wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_cli

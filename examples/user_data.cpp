@@ -44,7 +44,7 @@ int main( int argn, char** argv )
 	int err = wr_compile( wrenchCode, strlen(wrenchCode), &outBytes, &outLen ); // compile it
 	if ( err == 0 )
 	{
-		WRContet* context = wr_run( w, outBytes, outLen ); // load and run the code!
+		WRContet* context = wr_run( w, outBytes ); // load and run the code!
 
 		usrInt[3] = 55;
 

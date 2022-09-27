@@ -113,8 +113,6 @@ public:
 	inline WRstr& truncate( const unsigned int newLen ); // reduce size to 'newlen'
 	WRstr& shave( const unsigned int e ) { return (e > m_len) ? clear() : truncate(m_len - e); } // remove 'x' trailing characters
 	
-	// memmove from sourcePosition to end of string down to the start of the string
-	
 	inline bool isMatch( const char* buf ) const;
 
 	inline WRstr& insert( const char* buf, const unsigned int len, const unsigned int startPos =0 );

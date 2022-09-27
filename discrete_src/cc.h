@@ -24,6 +24,81 @@ SOFTWARE.
 #ifndef WRENCH_WITHOUT_COMPILER
 /*------------------------------------------------------------------------------*/
 
+//-----------------------------------------------------------------------------
+class WROpcodeStream
+{
+public:
+	WROpcodeStream() { m_buf = 0; clear(); }
+	~WROpcodeStream() { clear(); }
+	WROpcodeStream& clear()
+	{
+		m_len = 0;
+		delete[] m_buf;
+		m_buf = 0;
+		m_bufLen = 0;
+		return *this;
+	}
+	
+	unsigned int size() const { return m_len; }
+
+	WROpcodeStream (const WROpcodeStream &other ) { m_buf = 0; *this = other; }
+	WROpcodeStream& operator = ( const WROpcodeStream& str )
+	{
+		clear();
+		if ( str.m_len )
+		{
+			*this += str;
+		}
+		return *this;
+	}
+
+	WROpcodeStream& operator += ( const WROpcodeStream& stream ) { return append(stream.m_buf, stream.m_len); }
+	WROpcodeStream& operator += ( const unsigned char data ) { return append(&data, 1); }
+	WROpcodeStream& append( const unsigned char* data, const int size )
+	{
+		if ( (size + m_len) >= m_bufLen )
+		{
+			unsigned char* buf = m_buf;
+			m_bufLen = size + m_len + 16;
+			m_buf = new unsigned char[ m_bufLen ];
+			if ( m_len )
+			{
+				memcpy( m_buf, buf, m_len );
+				delete[] buf;
+			}
+		}
+
+		memcpy( m_buf + m_len, data, size );
+		m_len += size;
+		return *this;
+
+	}
+		
+	unsigned char* p_str( int offset =0 ) { return m_buf + offset; }
+	operator const unsigned char*() const { return m_buf; }
+	unsigned char& operator[]( const int l ) { return *p_str(l); }
+
+	WROpcodeStream& shave( const unsigned int e )
+	{
+		m_len -= e;
+		return *this;
+	}
+
+	unsigned int release( unsigned char** toBuf )
+	{
+		unsigned int retLen = m_len;
+		*toBuf = m_buf;
+		m_buf = 0;
+		clear();
+		return retLen;
+	}
+	
+private:
+	unsigned char *m_buf;
+	unsigned int m_len;
+	unsigned int m_bufLen;
+};
+
 //------------------------------------------------------------------------------
 enum WROperationType
 {
@@ -41,6 +116,7 @@ struct WROperation
 	WROpcode opcode;
 	bool leftToRight;
 	WROperationType type;
+	WROpcode alt;
 };
 
 //------------------------------------------------------------------------------
@@ -48,60 +124,60 @@ struct WROperation
 // https://en.cppreference.com/w/cpp/language/operator_precedence
 const WROperation c_operations[] =
 {
-//       precedence                      L2R      type
+//       precedence                      L2R      type             alt
 
-	{ "==",  10, O_CompareEQ,           true,  WR_OPER_BINARY_COMMUTE },
-	{ "!=",  10, O_CompareNE,           true,  WR_OPER_BINARY },
-	{ ">=",   9, O_CompareGE,           true,  WR_OPER_BINARY },
-	{ "<=",   9, O_CompareLE,           true,  WR_OPER_BINARY },
-	{ ">",    9, O_CompareGT,           true,  WR_OPER_BINARY },
-	{ "<",    9, O_CompareLT,           true,  WR_OPER_BINARY },
-	{ "&&",  14, O_LogicalAnd,          true,  WR_OPER_BINARY_COMMUTE },
-	{ "||",  15, O_LogicalOr,           true,  WR_OPER_BINARY_COMMUTE },
+	{ "==",  10, O_CompareEQ,           true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "!=",  10, O_CompareNE,           true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ ">=",   9, O_CompareGE,           true,  WR_OPER_BINARY, O_CompareLE },
+	{ "<=",   9, O_CompareLE,           true,  WR_OPER_BINARY, O_CompareGE },
+	{ ">",    9, O_CompareGT,           true,  WR_OPER_BINARY, O_CompareLT },
+	{ "<",    9, O_CompareLT,           true,  WR_OPER_BINARY, O_CompareGT },
+	{ "&&",  14, O_LogicalAnd,          true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "||",  15, O_LogicalOr,           true,  WR_OPER_BINARY_COMMUTE, O_LAST },
 
-	{ "++",   3, O_PreIncrement,        true,  WR_OPER_PRE },
-	{ "++",   2, O_PostIncrement,       true,  WR_OPER_POST },
+	{ "++",   3, O_PreIncrement,        true,  WR_OPER_PRE, O_LAST },
+	{ "++",   2, O_PostIncrement,       true,  WR_OPER_POST, O_LAST },
 
-	{ "--",   3, O_PreDecrement,        true,  WR_OPER_PRE },
-	{ "--",   2, O_PostDecrement,       true,  WR_OPER_POST },
+	{ "--",   3, O_PreDecrement,        true,  WR_OPER_PRE, O_LAST },
+	{ "--",   2, O_PostDecrement,       true,  WR_OPER_POST, O_LAST },
 
-	{ ".",    2, O_HASH_PLACEHOLDER,    true,  WR_OPER_BINARY },
+	{ ".",    2, O_HASH_PLACEHOLDER,    true,  WR_OPER_BINARY, O_LAST },
 
-	{ "!",    3, O_LogicalNot,         false,  WR_OPER_PRE },
-	{ "~",    3, O_BitwiseNOT,         false,  WR_OPER_PRE },
-	{ "-",    3, O_Negate,             false,  WR_OPER_PRE },
+	{ "!",    3, O_LogicalNot,         false,  WR_OPER_PRE, O_LAST },
+	{ "~",    3, O_BitwiseNOT,         false,  WR_OPER_PRE, O_LAST },
+	{ "-",    3, O_Negate,             false,  WR_OPER_PRE, O_LAST },
 
-	{ "+",    6, O_BinaryAddition,      true,  WR_OPER_BINARY_COMMUTE },
-	{ "-",    6, O_BinarySubtraction,   true,  WR_OPER_BINARY },
-	{ "*",    5, O_BinaryMultiplication,true,  WR_OPER_BINARY_COMMUTE },
-	{ "/",    5, O_BinaryDivision,      true,  WR_OPER_BINARY },
-	{ "%",    6, O_BinaryMod,           true,  WR_OPER_BINARY },
+	{ "+",    6, O_BinaryAddition,      true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "-",    6, O_BinarySubtraction,   true,  WR_OPER_BINARY, O_LAST },
+	{ "*",    5, O_BinaryMultiplication,true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "/",    5, O_BinaryDivision,      true,  WR_OPER_BINARY, O_LAST },
+	{ "%",    6, O_BinaryMod,           true,  WR_OPER_BINARY, O_LAST },
 
-	{ "|",   13, O_BinaryOr,            true,  WR_OPER_BINARY_COMMUTE },
-	{ "&",   11, O_BinaryAnd,           true,  WR_OPER_BINARY_COMMUTE },
-	{ "^",   11, O_BinaryXOR,           true,  WR_OPER_BINARY_COMMUTE },
+	{ "|",   13, O_BinaryOr,            true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "&",   11, O_BinaryAnd,           true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "^",   11, O_BinaryXOR,           true,  WR_OPER_BINARY_COMMUTE, O_LAST },
 
-	{ ">>",   7, O_BinaryRightShift,    true,  WR_OPER_BINARY },
-	{ "<<",   7, O_BinaryLeftShift,     true,  WR_OPER_BINARY },
+	{ ">>",   7, O_BinaryRightShift,    true,  WR_OPER_BINARY, O_LAST },
+	{ "<<",   7, O_BinaryLeftShift,     true,  WR_OPER_BINARY, O_LAST },
 
-	{ "+=",  16, O_AddAssign,           true,  WR_OPER_BINARY },
-	{ "-=",  16, O_SubtractAssign,      true,  WR_OPER_BINARY },
-	{ "%=",  16, O_ModAssign,           true,  WR_OPER_BINARY },
-	{ "*=",  16, O_MultiplyAssign,      true,  WR_OPER_BINARY },
-	{ "/=",  16, O_DivideAssign,        true,  WR_OPER_BINARY },
-	{ "|=",  16, O_ORAssign,            true,  WR_OPER_BINARY },
-	{ "&=",  16, O_ANDAssign,           true,  WR_OPER_BINARY },
-	{ "^=",  16, O_XORAssign,           true,  WR_OPER_BINARY },
-	{ ">>=", 16, O_RightShiftAssign,   false,  WR_OPER_BINARY },
-	{ "<<=", 16, O_LeftShiftAssign,    false,  WR_OPER_BINARY },
+	{ "+=",  16, O_AddAssign,           true,  WR_OPER_BINARY, O_LAST },
+	{ "-=",  16, O_SubtractAssign,      true,  WR_OPER_BINARY, O_LAST },
+	{ "%=",  16, O_ModAssign,           true,  WR_OPER_BINARY, O_LAST },
+	{ "*=",  16, O_MultiplyAssign,      true,  WR_OPER_BINARY, O_LAST },
+	{ "/=",  16, O_DivideAssign,        true,  WR_OPER_BINARY, O_LAST },
+	{ "|=",  16, O_ORAssign,            true,  WR_OPER_BINARY, O_LAST },
+	{ "&=",  16, O_ANDAssign,           true,  WR_OPER_BINARY, O_LAST },
+	{ "^=",  16, O_XORAssign,           true,  WR_OPER_BINARY, O_LAST },
+	{ ">>=", 16, O_RightShiftAssign,   false,  WR_OPER_BINARY, O_LAST },
+	{ "<<=", 16, O_LeftShiftAssign,    false,  WR_OPER_BINARY, O_LAST },
 
-	{ "=",   16, O_Assign,             false,  WR_OPER_BINARY },
+	{ "=",   16, O_Assign,             false,  WR_OPER_BINARY, O_LAST },
 
-	{ "@i",   3, O_CoerceToInt,         true,  WR_OPER_PRE },
-	{ "@f",   3, O_CoerceToFloat,       true,  WR_OPER_PRE },
-	{ "@[]",  2, O_Index,               true,  WR_OPER_POST },
+	{ "@i",   3, O_CoerceToInt,         true,  WR_OPER_PRE, O_LAST },
+	{ "@f",   3, O_CoerceToFloat,       true,  WR_OPER_PRE, O_LAST },
+	{ "@[]",  2, O_Index,               true,  WR_OPER_POST, O_LAST },
 
-	{ 0, 0, O_LAST, false, WR_OPER_PRE },
+	{ 0, 0, O_LAST, false, WR_OPER_PRE, O_LAST },
 };
 const int c_highestPrecedence = 17; // one higher than the highest entry above, things that happen absolutely LAST
 
@@ -144,8 +220,9 @@ struct BytecodeJumpOffset
 //------------------------------------------------------------------------------
 struct WRBytecode
 {
-	WRstr all;
-	WRstr opcodes;
+	WROpcodeStream all;
+	WROpcodeStream opcodes;
+
 	WRarray<WRNamespaceLookup> localSpace;
 	WRarray<WRNamespaceLookup> functionSpace;
 
@@ -267,7 +344,7 @@ struct WRExpression
 	}
 
 	//------------------------------------------------------------------------------
-	void swapWithTop( int stackPosition );
+	void swapWithTop( int stackPosition, bool addOpcodes =true );
 	
 	WRExpression() { reset(); }
 	WRExpression( WRarray<WRNamespaceLookup>& localSpace )
@@ -315,13 +392,16 @@ private:
 	bool isReserved( const char* token );
 	bool isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix );
 	bool getToken( WRExpressionContext& ex, const char* expect =0 );
-	char* pack16( int16_t i, char* buf )
+	static bool IsLiteralLoadOpcode( unsigned char opcode );
+	static bool CheckCompareReplace( WROpcode LS, WROpcode GS, WROpcode ILS, WROpcode IGS, WRBytecode& bytecode, unsigned int a, unsigned int o );
+	
+	unsigned char* pack16( int16_t i, unsigned char* buf )
 	{
 		*buf = (i>>8) & 0xFF;
 		*(buf + 1) = i & 0xFF;
 		return buf;
 	}
-	char* pack32( int32_t l, char* buf )
+	unsigned char* pack32( int32_t l, unsigned char* buf )
 	{
 		*buf = (l>>24) & 0xFF;
 		*(buf + 1) = (l>>16) & 0xFF;
@@ -332,7 +412,8 @@ private:
 
 	friend struct WRExpression;
 	static void pushOpcode( WRBytecode& bytecode, WROpcode opcode );
-	static void pushData( WRBytecode& bytecode, const char* data, const int len ) { bytecode.all.append( data, len ); }
+	static void pushData( WRBytecode& bytecode, const unsigned char* data, const int len ) { bytecode.all.append( data, len ); }
+	static void pushData( WRBytecode& bytecode, const char* data, const int len ) { bytecode.all.append( (unsigned char*)data, len ); }
 
 	int getBytecodePosition( WRBytecode& bytecode ) { return bytecode.all.size(); }
 	
@@ -371,6 +452,7 @@ private:
 
 	WRError m_err;
 	bool m_EOF;
+	bool m_LastParsedLabel;
 
 	int m_unitTop;
 	WRarray<WRUnitContext> m_units;

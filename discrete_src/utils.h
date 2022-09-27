@@ -198,7 +198,7 @@ const char* wr_asciiDump( const void* d, unsigned int len, WRstr* str =0 );
 //------------------------------------------------------------------------------
 const uint16_t c_primeTable[] =
 {
-//	2,
+	2,
 	5,
 	11,
 	17,
@@ -212,7 +212,6 @@ const uint16_t c_primeTable[] =
 	1543,
 	3079,
 	6151,
-
 	12289,
 	24593,
 	49157,

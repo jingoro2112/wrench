@@ -59,17 +59,18 @@ uint32_t wr_hashStr( const char* dat )
 //------------------------------------------------------------------------------
 void wr_std_rand( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_INT;
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_INT;
 
 	int32_t	k = wr_Seed / 127773;
 	wr_Seed = 16807 * ( wr_Seed - k * 127773 ) - 2836 * k;
-	stackTop->i = (uint32_t)wr_Seed % (uint32_t)(stackTop - argn)->asInt();
+	ret->i = (uint32_t)wr_Seed % (uint32_t)stackTop->asInt();
 }
 
 //------------------------------------------------------------------------------
 void wr_std_srand( WRValue* stackTop, const int argn )
 {
-	wr_Seed = (stackTop - argn)->asInt();
+	wr_Seed = stackTop->asInt();
 }
 
 #include <math.h>
@@ -77,64 +78,73 @@ void wr_std_srand( WRValue* stackTop, const int argn )
 //------------------------------------------------------------------------------
 void wr_math_sin( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = sinf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = sinf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_cos( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = cosf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = cosf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_tan( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = tanf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = tanf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_sinh( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = sinhf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = sinhf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_cosh( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = coshf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = coshf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_tanh( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = tanhf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = tanhf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_asin( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = asinf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = asinf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_acos( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = acosf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = acosf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_atan( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = atanf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = atanf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
@@ -142,58 +152,66 @@ void wr_math_atan2( WRValue* stackTop, const int argn )
 {
 	if ( argn == 2 )
 	{
-		stackTop->type = WR_FLOAT;
-		stackTop->f = atan2f( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
+		WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+		ret->p2 = INIT_AS_FLOAT;
+		ret->f = atan2f( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
 	}
 }
 
 //------------------------------------------------------------------------------
 void wr_math_log( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = logf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = logf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_log10( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = log10f( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = log10f( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_exp( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = expf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = expf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_sqrt( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = sqrtf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = sqrtf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_ceil( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = ceilf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = ceilf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_floor( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = floorf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = floorf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
 void wr_math_abs( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = (float)fabs( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = (float)fabs( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
@@ -201,8 +219,9 @@ void wr_math_pow( WRValue* stackTop, const int argn )
 {
 	if ( argn == 2 )
 	{
-		stackTop->type = WR_FLOAT;
-		stackTop->f = powf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
+		WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+		ret->p2 = INIT_AS_FLOAT;
+		ret->f = powf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
 	}
 }
 
@@ -211,16 +230,18 @@ void wr_math_fmod( WRValue* stackTop, const int argn )
 {
 	if ( argn == 2 )
 	{
-		stackTop->type = WR_FLOAT;
-		stackTop->f = fmodf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
+		WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+		ret->p2 = INIT_AS_FLOAT;
+		ret->f = fmodf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
 	}
 }
 
 //------------------------------------------------------------------------------
 void wr_math_trunc( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = truncf( (stackTop - argn)->asFloat() );
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = truncf( stackTop->asFloat() );
 }
 
 //------------------------------------------------------------------------------
@@ -228,28 +249,31 @@ void wr_math_ldexp( WRValue* stackTop, const int argn )
 {
 	if ( argn == 2 )
 	{
-		stackTop->type = WR_FLOAT;
-		stackTop->f = ldexpf( (stackTop - 1)->asFloat(), (stackTop - 2)->asInt() );
+		WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+		ret->p2 = INIT_AS_FLOAT;
+		ret->f = ldexpf( (stackTop - 1)->asFloat(), (stackTop - 2)->asInt() );
 	}
 }
 
 //------------------------------------------------------------------------------
-const float wr_PI = 3.14159265358979323846264338327950288419716939937510582f;
+const float wr_PI = 3.14159265358979323846f;
 const float wr_toDegrees = (180.f / wr_PI);
 const float wr_toRadians = (1.f / wr_toDegrees);
 
 //------------------------------------------------------------------------------
 void wr_math_rad2deg( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = wr_toDegrees * (stackTop - argn)->asFloat();
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = wr_toDegrees * stackTop->asFloat();
 }
 
 //------------------------------------------------------------------------------
 void wr_math_deg2rad( WRValue* stackTop, const int argn )
 {
-	stackTop->type = WR_FLOAT;
-	stackTop->f = wr_toRadians * (stackTop - argn)->asFloat();
+	WRValue* ret = GET_LIB_RETURN_VALUE_LOCATION(stackTop, argn);
+	ret->p2 = INIT_AS_FLOAT;
+	ret->f = wr_toRadians * stackTop->asFloat();
 }
 
 //------------------------------------------------------------------------------

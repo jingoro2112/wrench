@@ -1,3 +1,17 @@
+1.2.1 ---------------------------------------------------------------------------
+- added 0b prefix for parsing binary numbers
+- added catch for two label/literals in a row 
+- changed the 6x6 arrays to 4x4 so the operands could be left-shifted instead of
+  multiplied. This shows measureable gains on the embedded systems, no change to
+  Intel and a slight loss on Ryzen
+- added 16-bit loads for integers and indexes, reduces bytecode size considerably
+- added super-instructions for binary operation + store so it never touches stack
+  pretty big speed boost on all platforms
+- require 1 less stack ewntry (from 3 to 2) to call a function
+- added optimized inc/dec functions for faster [typical] for loops
+- added optimized compareL/G instructions for common (x < 0) -ish cases
+- optimized if conditionals more with a compare/jump combination instruction
+
 9/11/22 1.2.0 -------------------------------------------------------------------
 - removed need for context ID and just track the object directly
 - added function to call a pre-indexed function
