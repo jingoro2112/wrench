@@ -18,6 +18,39 @@ yay2
 yay3
 ~*/
 
+a = 8;
+b = 7;
+if ( a == b && 1 ) log("G1");
+if ( a != a && 1 ) log("G2");
+if ( a < b && 1 )  log("G3");
+if ( b > a && 1 )  log("G4");
+if ( b >= a && 1 ) log("G5");
+if ( a <= b && 1 ) log("G6");
+
+localIf();
+function localIf()
+{
+	a = 8;
+	b = 7;
+	if ( a == b && 1 ) log("L1");
+	if ( a != a && 1 ) log("L2");
+	if ( a < b && 1 )  log("L3");
+	if ( b > a && 1 )  log("L4");
+	if ( b >= a && 1 ) log("L5");
+	if ( a <= b && 1 ) log("L6");
+
+	if ( 11 < 10 ) log("La fail");
+	if ( 9 > 10 ) log("Lb fail");
+	if ( 11 <= 10 ) log("Lc fail");
+	if ( 9 >= 10 ) log("Ld fail");
+	if ( 9 == 10 ) log("Le fail");
+	if ( 10 != 10 ) log("Lf faile");
+}
+
+if ( n != n )
+{
+	log( "null NOT okay" );
+}
 
 if ( 9 < 10 ) log("a");
 if ( 11 < 10 ) log("a fail");
@@ -30,7 +63,7 @@ if ( 9 >= 10 ) log("d fail");
 if ( 10 == 10 ) log("e");
 if ( 9 == 10 ) log("e fail");
 if ( 9 != 10 ) log("f");
-if ( 10 != 10 ) log("f faile");
+if ( 10 != 10 ) log("f fail");
 
 
 a = 10;

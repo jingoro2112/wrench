@@ -259,6 +259,7 @@ public:
 		delete[] m_list;
 		m_mod = (int)c_primeTable[0];
 		m_list = new Node[m_mod];
+		for( int i=0; i<m_mod; ++i ){ m_list[i].hash = 0; }
 	}
 
 	//------------------------------------------------------------------------------
@@ -317,6 +318,7 @@ public:
 
 			// this causes a bad fragmentation on small memory systems
 			Node* newList = new Node[newMod];
+			for( int i=0; i<m_mod; ++i ){ newList[i].hash = 0; }
 
 			int h = 0;
 			for( ; h<m_mod; ++h )
@@ -356,7 +358,10 @@ public:
 		Node() { hash = 0; }
 	};
 
+	friend struct WRCompilationContext;
+
 private:
+	
 	Node* m_list;
 	int m_mod;
 };

@@ -22,8 +22,6 @@ SOFTWARE.
 
 #include "wrench.h"
 
-#include <memory.h>
-
 //------------------------------------------------------------------------------
 WRContext::WRContext( WRState* state ) : w(state)
 {
@@ -46,7 +44,7 @@ WRContext::~WRContext()
 
 	while( svAllocated )
 	{
-		WRStaticValueArray* next = svAllocated->m_next;
+		WRGCArray* next = svAllocated->m_next;
 		delete svAllocated;
 		svAllocated = next;
 	}
@@ -85,16 +83,16 @@ WRState::~WRState()
 }
 
 //------------------------------------------------------------------------------
-WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type, WRValue* stackTop )
+WRGCArray* WRContext::getSVA( int size, WRGCArrayType type, WRValue* stackTop )
 {
 	// gc before every alloc may seem a bit much but we want to be miserly
-	if ( svAllocated )
+	if ( svAllocated && stackTop )
 	{
 		// mark stack
 		for( WRValue* s=w->stack; s<stackTop; ++s)
 		{
 			// an array in the chain?
-			if ( (s->xtype&0x3) == WR_EX_ARRAY && !(s->va->m_type & SV_PRE_ALLOCATED) )
+			if ( (s->xtype & 0x4) && !(s->va->m_preAllocated) )
 			{
 				gcArray( s->va );
 			}
@@ -103,15 +101,15 @@ WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type, WR
 		// mark context's global
 		for( int i=0; i<globals; ++i )
 		{
-			if ( globalSpace[i].xtype == WR_EX_ARRAY && !(globalSpace[i].va->m_type & SV_PRE_ALLOCATED) )
+			if ( (globalSpace[i].xtype & 0x4) && !(globalSpace[i].va->m_preAllocated) )
 			{
 				gcArray( globalSpace[i].va );
 			}
 		}
 
 		// sweep
-		WRStaticValueArray* current = svAllocated;
-		WRStaticValueArray* prev = 0;
+		WRGCArray* current = svAllocated;
+		WRGCArray* prev = 0;
 		while( current )
 		{
 			// if set, clear it
@@ -137,16 +135,10 @@ WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type, WR
 		}
 	}
 
-//	if ( !size )
-//	{
-//		return 0;
-//	}
-
-	WRStaticValueArray* ret = new WRStaticValueArray( size, type );
-	if ( type == SV_VALUE )
+	WRGCArray* ret = new WRGCArray( size, type );
+	if ( type == SV_VALUE && stackTop )
 	{
-		WRValue *array = (WRValue *)ret->m_data;
-		memset( (void*)array, 0, sizeof(WRValue) * size);
+		memset( (char*)ret->m_Cdata, 0, sizeof(WRValue) * size);
 	}
 	
 	ret->m_next = svAllocated;
@@ -156,23 +148,23 @@ WRStaticValueArray* WRContext::getSVA( int size, WRStaticValueArrayType type, WR
 }
 
 //------------------------------------------------------------------------------
-void WRContext::gcArray( WRStaticValueArray* sva )
+void WRContext::gcArray( WRGCArray* sva )
 {
-	sva->m_size |= 0x40000000;
-
-	if ( (sva->m_type&0x3) == SV_VALUE )
+	if ( (sva->m_type) == SV_VALUE )
 	{
 		// this is an array of values, check them for array-ness too
 		
-		WRValue* top = (WRValue*)sva->m_data + (sva->m_size & ~0x40000000);
-		for( WRValue* i = (WRValue*)sva->m_data; i<top; ++i )
+		WRValue* top = sva->m_Vdata + sva->m_size;
+		for( WRValue* V = sva->m_Vdata; V<top; ++V )
 		{
-			if ( i->xtype == WR_EX_ARRAY && !(i->va->m_type & SV_PRE_ALLOCATED) )
+			if ( (V->xtype & 0x4) && !(V->va->m_preAllocated) )
 			{
-				gcArray( i->va );
+				gcArray( V->va );
 			}
 		}
 	}
+
+	sva->m_size |= 0x40000000;
 }
 
 //------------------------------------------------------------------------------
@@ -185,7 +177,7 @@ void wr_destroyState( WRState* w )
 unsigned int wr_loadSingleBlock( int offset, const unsigned char** block, void* usr )
 {
 	*block = (unsigned char *)usr + offset;
-	return 0xFFFFFFF; // larger than any bytecode possible
+	return 0x3FFFFFF; // larger than any bytecode possible
 }
 
 //------------------------------------------------------------------------------
@@ -291,13 +283,19 @@ char* WRValue::asString( char* string ) const
 				return string;
 			}
 			
+			case WR_EX_STRUCT:
+			{
+				strcpy( string, "struct" );
+				return string;
+			}
+			
 			case WR_EX_ARRAY:
 			{
 				unsigned int s = 0;
 					
 				for( ; s<va->m_size; ++s )
 				{
-					switch( va->m_type & 0x3)
+					switch( va->m_type)
 					{
 						case SV_VALUE: string[s] = ((WRValue *)va->m_data)[s].i; break;
 						case SV_CHAR: string[s] = ((char *)va->m_data)[s]; break;
@@ -369,6 +367,12 @@ int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const W
 }
 
 //------------------------------------------------------------------------------
+WRValue* wr_returnValueFromLastCall( WRState* w )
+{
+	return w->stack + 1; // this is where it ends up
+}
+
+//------------------------------------------------------------------------------
 WRFunction* wr_getFunction( WRContext* context, const char* functionName )
 {
 	return context->localFunctionRegistry.getItem( wr_hashStr(functionName) );
@@ -396,27 +400,56 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	{
 		&&RegisterFunction,
 		&&FunctionListSize,
+
 		&&LiteralInt32,
 		&&LiteralZero,
 		&&LiteralFloat,
 		&&LiteralString,
+
 		&&CallFunctionByHash,
+
 		&&CallFunctionByIndex,
+		&&PushIndexFunctionReturnValue,
+
 		&&CallLibFunction,
+
+		&&NewHashTable,
+		&&AssignToHashTableByOffset,
+
 		&&Index,
+		&&IndexSkipLoad,
+
 		&&StackIndexHash,
 		&&GlobalIndexHash,
 		&&LocalIndexHash,
+
 		&&Assign,
+
 		&&StackSwap,
 		&&SwapTwoToTop,
+
 		&&ReserveFrame,
 		&&ReserveGlobalFrame,
+
 		&&LoadFromLocal,
 		&&LoadFromGlobal,
+
 		&&PopOne,
 		&&Return,
 		&&Stop,
+
+		&&LLValues,
+		&&LGValues,
+		&&GLValues,
+		&&GGValues,
+
+		&&BinaryModSkipLoad,
+		&&BinaryRightShiftSkipLoad,
+		&&BinaryLeftShiftSkipLoad,
+		&&BinaryAndSkipLoad,
+		&&BinaryOrSkipLoad,
+		&&BinaryXORSkipLoad,
+
 		&&BinaryAddition,
 		&&BinarySubtraction,
 		&&BinaryMultiplication,
@@ -427,17 +460,32 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&BinaryAnd,
 		&&BinaryOr,
 		&&BinaryXOR,
+
 		&&BitwiseNOT,
+
 		&&CoerceToInt,
 		&&CoerceToFloat,
+
 		&&RelativeJump,
+
 		&&BZ,
+
 		&&CompareEQ, 
 		&&CompareNE, 
 		&&CompareGE,
 		&&CompareLE,
 		&&CompareGT,
 		&&CompareLT,
+
+		&&GGCompareEQ, 
+		&&GGCompareNE, 
+		&&GGCompareGT,
+		&&GGCompareLT,
+		&&LLCompareEQ, 
+		&&LLCompareNE, 
+		&&LLCompareGT,
+		&&LLCompareLT,
+
 		&&GSCompareEQ, 
 		&&LSCompareEQ, 
 		&&GSCompareNE, 
@@ -450,6 +498,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&LSCompareGT,
 		&&GSCompareLT,
 		&&LSCompareLT,
+
 		&&GSCompareEQBZ, 
 		&&LSCompareEQBZ, 
 		&&GSCompareNEBZ, 
@@ -462,6 +511,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&LSCompareGTBZ,
 		&&GSCompareLTBZ,
 		&&LSCompareLTBZ,
+
 		&&GSCompareEQBZ8,
 		&&LSCompareEQBZ8,
 		&&GSCompareNEBZ8,
@@ -474,17 +524,39 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&LSCompareGTBZ8,
 		&&GSCompareLTBZ8,
 		&&LSCompareLTBZ8,
+
+		&&LLCompareLTBZ,
+		&&LLCompareGTBZ,
+		&&LLCompareEQBZ,
+		&&LLCompareNEBZ,
+		&&GGCompareLTBZ,
+		&&GGCompareGTBZ,
+		&&GGCompareEQBZ,
+		&&GGCompareNEBZ,
+
+		&&LLCompareLTBZ8,
+		&&LLCompareGTBZ8,
+		&&LLCompareEQBZ8,
+		&&LLCompareNEBZ8,
+		&&GGCompareLTBZ8,
+		&&GGCompareGTBZ8,
+		&&GGCompareEQBZ8,
+		&&GGCompareNEBZ8,
+
 		&&PostIncrement,
 		&&PostDecrement,
 		&&PreIncrement,
 		&&PreDecrement,
+
 		&&PreIncrementAndPop,
 		&&PreDecrementAndPop,
 		&&IncGlobal,
 		&&DecGlobal,
 		&&IncLocal,
 		&&DecLocal,
+
 		&&Negate,
+
 		&&SubtractAssign,
 		&&AddAssign,
 		&&ModAssign,
@@ -495,41 +567,56 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&XORAssign,
 		&&RightShiftAssign,
 		&&LeftShiftAssign,
+
 		&&LogicalAnd,
 		&&LogicalOr,
 		&&LogicalNot,
+
 		&&RelativeJump8,
+
 		&&LiteralInt8,
 		&&LiteralInt16,
+
 		&&CallFunctionByHashAndPop,
 		&&CallLibFunctionAndPop,
+
 		&&IndexLiteral8,
 		&&IndexLiteral16,
-		&&IndexLiteral32,
+		&&CreateIndex,
+		&&CreateIndexLiteral8,
+		&&CreateIndexLiteral16,
+
 		&&AssignAndPop,
 		&&AssignToGlobalAndPop,
 		&&AssignToLocalAndPop,
+		&&AssignToArrayAndPop,
+
 		&&BinaryAdditionAndStoreGlobal,
 		&&BinarySubtractionAndStoreGlobal,
 		&&BinaryMultiplicationAndStoreGlobal,
 		&&BinaryDivisionAndStoreGlobal,
+
 		&&BinaryAdditionAndStoreLocal,
 		&&BinarySubtractionAndStoreLocal,
 		&&BinaryMultiplicationAndStoreLocal,
 		&&BinaryDivisionAndStoreLocal,
+
 		&&BZ8,
+
 		&&CompareBEQ,
 		&&CompareBNE,
 		&&CompareBGE,
 		&&CompareBLE,
 		&&CompareBGT,
 		&&CompareBLT,
+
 		&&CompareBEQ8,
 		&&CompareBNE8,
 		&&CompareBGE8,
 		&&CompareBLE8,
 		&&CompareBGT8,
 		&&CompareBLT8,
+
 		&&SubtractAssignAndPop,
 		&&AddAssignAndPop,
 		&&ModAssignAndPop,
@@ -540,10 +627,12 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&XORAssignAndPop,
 		&&RightShiftAssignAndPop,
 		&&LeftShiftAssignAndPop,
+
 		&&BLA,
 		&&BLA8,
 		&&BLO,
 		&&BLO8,
+
 		&&LiteralInt8ToGlobal,
 		&&LiteralInt16ToGlobal,
 		&&LiteralInt32ToLocal,
@@ -552,16 +641,20 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&LiteralFloatToGlobal,
 		&&LiteralFloatToLocal,
 		&&LiteralInt32ToGlobal,
+
 		&&GGBinaryMultiplication,
 		&&GLBinaryMultiplication,
 		&&LLBinaryMultiplication,
+
 		&&GGBinaryAddition,
 		&&GLBinaryAddition,
 		&&LLBinaryAddition,
+
 		&&GGBinarySubtraction,
 		&&GLBinarySubtraction,
 		&&LGBinarySubtraction,
 		&&LLBinarySubtraction,
+
 		&&GGBinaryDivision,
 		&&GLBinaryDivision,
 		&&LGBinaryDivision,
@@ -570,8 +663,13 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 #endif
 
 	register const unsigned char* pc;
-	register WRValue* tempValue;
-	register WRValue* tempValue2;
+	
+	WRValue* tempValue = 0;
+	union
+	{
+		WRValue* tempValue2;
+		WR_LIB_CALLBACK lib;
+	};
 	WRValue* frameBase = 0;
 	WRValue* stackTop = w->stack;
 	WRValue* globalSpace = context->globalSpace;
@@ -580,7 +678,8 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	
 	union
 	{
-		// these are never used at the same time so don't waste ram
+		// never used at the same time..save RAM!
+		WRValue* tempValue3;
 		unsigned char args;
 		WRVoidFunc* voidFunc;
 		WRReturnFunc* returnFunc;
@@ -599,7 +698,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	void* usr = context->usr;
 	const unsigned char* top = 0;
 	pc = 0;
-	int absoluteBottom = 0; // pointer to where in the codebase out bottom actually points to
+	int absoluteBottom = 0; // pointer to where in the codebase our bottom actually points to
 #endif
 
 	// make room on the bottom for the return value of this script
@@ -632,14 +731,15 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 	for(;;)
 	{
-        #ifdef WRENCH_PARTIAL_BYTECODE_LOADS
+		
+#ifdef WRENCH_PARTIAL_BYTECODE_LOADS
 		if ( pc >= top )
 		{
 			unsigned int size = loader( absoluteBottom += (pc - context->bottom), &pc, usr );
 			top = pc + (size - 6);
 			context->bottom = pc;
 		}
-        #endif
+#endif
 
 		switch( *pc++)
 		{
@@ -694,6 +794,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 			CASE(LiteralZero):
 			{
+literalZero:
 				stackTop->p = 0;
 				(stackTop++)->p2 = INIT_AS_INT;
 				CONTINUE;
@@ -769,44 +870,43 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 				CONTINUE;
 			}
 
-			CASE(Index):
-			{
-				tempValue = --stackTop;
-				tempValue2 = stackTop - 1;
-				wr_index[(tempValue->type<<2)|tempValue2->type]( context, tempValue, tempValue2 );
-				CONTINUE;
-			}
-
 			CASE(StackIndexHash):
 			{
 				tempValue = stackTop - 1;
-				wr_UserHash[ tempValue->type ]( tempValue,
-												tempValue,
-												(((int32_t)*pc) << 24) |
-												(((int32_t)*(pc+1)) << 16) |
-												(((int32_t)*(pc+2)) << 8) |
-												(int32_t)*(pc+3) );
-				pc += 4;
-				CONTINUE;
+				tempValue2 = tempValue;
+				goto indexHash;
 			}
 
 			CASE(GlobalIndexHash):
 			{
 				tempValue = globalSpace + *pc++;
-				goto indexHash;
+				goto indexHashPreload;
 			}
-			
+
 			CASE(LocalIndexHash):
 			{
 				tempValue = frameBase + *pc++;
+indexHashPreload:
+				tempValue2 = stackTop++;
 indexHash:
-				wr_UserHash[ tempValue->type ]( tempValue,
-												stackTop++,
-												(((int32_t)*pc) << 24) |
-												(((int32_t)*(pc+1)) << 16) |
-												(((int32_t)*(pc+2)) << 8) |
-												(int32_t)*(pc+3) );
+				wr_IndexHash[ tempValue->type ]( tempValue,
+												tempValue2,
+												(((uint32_t)*pc) << 24) |
+												(((uint32_t)*(pc+1)) << 16) |
+												(((uint32_t)*(pc+2)) << 8) |
+												(uint32_t)*(pc+3) );
 				pc += 4;
+				CONTINUE;
+			}
+
+			CASE(Index):
+			{
+				tempValue = --stackTop;
+				tempValue2 = --stackTop;
+			}
+			CASE(IndexSkipLoad):
+			{
+				wr_index[(tempValue->type<<2)|tempValue2->type]( context, tempValue, tempValue2, stackTop++ );
 				CONTINUE;
 			}
 
@@ -840,6 +940,59 @@ returnFuncInvertedPostLoad:
 				CONTINUE;
 			}
 
+			CASE(GGCompareEQ):
+			{
+				returnFunc = wr_CompareEQ;
+				tempValue2 = globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
+				goto returnCompareEQPost;
+			}
+			CASE(GGCompareNE):
+			{
+				returnFunc = wr_CompareEQ;
+				tempValue2 = globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
+				goto returnCompareNEPost;
+			}
+			CASE(GGCompareGT):
+			{
+				returnFunc = wr_CompareGT;
+				tempValue2 = globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
+				goto returnCompareEQPost;
+			}
+			CASE(GGCompareLT):
+			{
+				returnFunc = wr_CompareLT;
+				tempValue2 = globalSpace + *pc++;
+				tempValue = globalSpace + *pc++;
+				goto returnCompareEQPost;
+			}
+
+			CASE(LLCompareGT): { returnFunc = wr_CompareGT; goto returnCompareEQ; }
+			CASE(LLCompareLT): { returnFunc = wr_CompareLT; goto returnCompareEQ; }
+			CASE(LLCompareEQ):
+			{
+				returnFunc = wr_CompareEQ;
+returnCompareEQ:
+				tempValue2 = frameBase + *pc++;
+				tempValue = frameBase + *pc++;
+returnCompareEQPost:
+				stackTop->i = (int)returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				(stackTop++)->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+			CASE(LLCompareNE):
+			{
+				returnFunc = wr_CompareEQ;
+				tempValue2 = frameBase + *pc++;
+				tempValue = frameBase + *pc++;
+returnCompareNEPost:
+				stackTop->i = (int)!returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				(stackTop++)->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+			
 			CASE(GSCompareEQ):
 			{
 				tempValue = globalSpace + *pc++;
@@ -923,6 +1076,7 @@ returnFuncInvertedPostLoad:
 				returnFunc = wr_CompareGT;
 				goto returnFuncInvertedPostLoad;
 			}
+
 
 			CASE(GSCompareGEBZ): { returnFunc = wr_CompareLT; goto CompareGInverted; }
 			CASE(GSCompareLEBZ): { returnFunc = wr_CompareGT; goto CompareGInverted; }
@@ -1020,6 +1174,83 @@ CompareL8Normal:
 				CONTINUE;
 			}
 			
+			CASE(LLCompareEQBZ):
+			{
+				tempValue = frameBase + *pc++;
+				tempValue2 = frameBase + *pc++;
+				pc += wr_CompareEQ[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
+				CONTINUE;
+			}
+			CASE(LLCompareNEBZ): { returnFunc = wr_CompareEQ; goto CompareLL; }
+			CASE(LLCompareGTBZ): { returnFunc = wr_CompareGT; goto CompareLL; }
+			CASE(LLCompareLTBZ):
+			{
+				returnFunc = wr_CompareLT;
+CompareLL:
+				tempValue = frameBase + *pc++;
+				tempValue2 = frameBase + *pc++;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
+				CONTINUE;
+			}
+
+			CASE(LLCompareEQBZ8):
+			{
+				tempValue = frameBase + *pc++;
+				tempValue2 = frameBase + *pc++;
+				pc += wr_CompareEQ[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int8_t)*pc;
+				CONTINUE;
+			}
+			CASE(LLCompareNEBZ8): { returnFunc = wr_CompareEQ; goto CompareLL8; }
+			CASE(LLCompareGTBZ8): { returnFunc = wr_CompareGT; goto CompareLL8; }
+			CASE(LLCompareLTBZ8):
+			{
+				returnFunc = wr_CompareLT;
+CompareLL8:
+				tempValue = frameBase + *pc++;
+				tempValue2 = frameBase + *pc++;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int8_t)*pc : 2;
+				CONTINUE;
+			}
+
+			CASE(GGCompareEQBZ):
+			{
+				tempValue = globalSpace + *pc++;
+				tempValue2 = globalSpace + *pc++;
+				pc += wr_CompareEQ[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
+				CONTINUE;
+			}
+
+			CASE(GGCompareNEBZ): { returnFunc = wr_CompareEQ; goto CompareGG; }
+			CASE(GGCompareGTBZ): { returnFunc = wr_CompareGT; goto CompareGG; }
+			CASE(GGCompareLTBZ):
+			{
+				returnFunc = wr_CompareLT;
+CompareGG:
+				tempValue = globalSpace + *pc++;
+				tempValue2 = globalSpace + *pc++;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
+				CONTINUE;
+			}
+			
+			CASE(GGCompareEQBZ8):
+			{
+				tempValue = globalSpace + *pc++;
+				tempValue2 = globalSpace + *pc++;
+				pc += wr_CompareEQ[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ? 2 : (int8_t)*pc;
+				CONTINUE;
+			}
+			CASE(GGCompareNEBZ8): { returnFunc = wr_CompareEQ; goto CompareGG8; }
+			CASE(GGCompareGTBZ8): { returnFunc = wr_CompareGT; goto CompareGG8; }
+			CASE(GGCompareLTBZ8):
+			{
+				returnFunc = wr_CompareLT;
+CompareGG8:
+				tempValue = globalSpace + *pc++;
+				tempValue2 = globalSpace + *pc++;
+				pc += returnFunc[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 ) ?  (int8_t)*pc : 2;
+				CONTINUE;
+			}
+
 			CASE(PostIncrement): { tempValue = stackTop - 1; wr_postinc[ tempValue->type ]( tempValue, tempValue ); CONTINUE; }
 			CASE(PostDecrement): { tempValue = stackTop - 1; wr_postdec[ tempValue->type ]( tempValue, tempValue ); CONTINUE; }
 			CASE(PreIncrement): { tempValue = stackTop - 1; wr_preinc[ tempValue->type ]( tempValue ); CONTINUE; }
@@ -1046,6 +1277,47 @@ CompareL8Normal:
 				CONTINUE;
 			}
 
+			CASE(LLValues):
+			{
+				tempValue = frameBase + *pc++;
+				tempValue2 = frameBase + *pc++;
+				CONTINUE;
+			}
+			
+			CASE(LGValues):
+			{
+				tempValue = frameBase + *pc++;
+				tempValue2 = globalSpace + *pc++;
+				CONTINUE;
+			}
+
+			CASE(GLValues):
+			{
+				tempValue = globalSpace + *pc++;
+				tempValue2 = frameBase + *pc++;
+				CONTINUE;
+			}
+
+			CASE(GGValues):
+			{
+				tempValue = globalSpace + *pc++;
+				tempValue2 = globalSpace + *pc++;
+				CONTINUE;
+			}
+
+			CASE(BinaryRightShiftSkipLoad): { targetFunc = wr_RightShiftBinary; goto targetFuncOpSkipLoad; }
+			CASE(BinaryLeftShiftSkipLoad): { targetFunc = wr_LeftShiftBinary; goto targetFuncOpSkipLoad; }
+			CASE(BinaryAndSkipLoad): { targetFunc = wr_ANDBinary; goto targetFuncOpSkipLoad; }
+			CASE(BinaryOrSkipLoad): { targetFunc = wr_ORBinary; goto targetFuncOpSkipLoad; }
+			CASE(BinaryXORSkipLoad): { targetFunc = wr_XORBinary; goto targetFuncOpSkipLoad; }
+			CASE(BinaryModSkipLoad):
+			{
+				targetFunc = wr_ModBinary;
+targetFuncOpSkipLoad:
+				targetFunc[(tempValue2->type<<2)|tempValue->type]( tempValue2, tempValue, stackTop++ );
+				CONTINUE;
+			}
+			
 			CASE(BinaryMultiplication): { targetFunc = wr_MultiplyBinary; goto targetFuncOp; }
 			CASE(BinarySubtraction): { targetFunc = wr_SubtractBinary; goto targetFuncOp; }
 			CASE(BinaryDivision): { targetFunc = wr_DivideBinary; goto targetFuncOp; }
@@ -1096,14 +1368,14 @@ binaryTableOp:
 			{
 				tempValue = stackTop - 1;
 				tempValue2 = stackTop - *pc++;
-				uint32_t t = tempValue->p2;
+				tempValue3 = tempValue->frame;
 				const void* p = tempValue->p;
 
-				tempValue->p2 = tempValue2->p2;
+				tempValue->frame = tempValue2->frame;
 				tempValue->p = tempValue2->p;
 
 				tempValue2->p = p;
-				tempValue2->p2 = t;
+				tempValue2->frame = tempValue3;
 
 				CONTINUE;
 			} 
@@ -1137,53 +1409,69 @@ binaryTableOp:
 
 			CASE(CallFunctionByHash):
 			{
+				args = *pc++;
+
 				WRCFunctionCallback* cF;
 
-				args = *(pc+4); // which have already been pushed
+				// initialize a return value of 'zero'
+				tempValue = stackTop;
+				tempValue->p = 0;
+				tempValue->p2 = INIT_AS_INT;
+
 				if ( (cF = w->c_functionRegistry.get( (((int32_t)*pc) << 24)
 													  | (((int32_t)*(pc+1)) << 16)
 													  | (((int32_t)*(pc+2)) << 8)
 													  | ((int32_t)*(pc+3)))) )
 				{
-					cF->function( w, stackTop - args, args, *(stackTop - (args+1)), cF->usr );
+					cF->function( w, stackTop - args, args, *stackTop, cF->usr );
 				}
 
-				stackTop -= args;
-				pc += 5;
+				// DO care about return value, which will be at the top
+				// of the stack
+				
+				if ( args )
+				{
+					stackTop -= (args - 1);
+					*stackTop = *tempValue;
+				}
+				else
+				{
+					++stackTop; // tempvalue IS the stack top no other work needed
+				}
+				pc += 4;
 				CONTINUE;
 			}
 
 			CASE(CallFunctionByHashAndPop):
 			{
-				// don't care about return value
+				args = *pc++;
+				
 				WRCFunctionCallback* cF;
-
-				args = *(pc+4); // which have already been pushed
 				if ( (cF = w->c_functionRegistry.get( (((int32_t)*pc) << 24)
 													  | (((int32_t)*(pc+1)) << 16)
 													  | (((int32_t)*(pc+2)) << 8)
 													  | ((int32_t)*(pc+3)))) )
 				{
-					cF->function( w, stackTop - args, args, *(stackTop - (args+1)), cF->usr );
+					cF->function( w, stackTop - args, args, *stackTop, cF->usr );
 				}
 
-				stackTop -= args + 1;
-				pc += 6; // skip past the pop operation that is next in line (linking can't remove the instruction... yet)
+				stackTop -= args;
+				pc += 4;
 				CONTINUE;
 			}
 
 			CASE(CallFunctionByIndex):
 			{
-				function = context->localFunctions + *pc;
-				pc += 4;
 				args = *pc++;
+				function = context->localFunctions + *pc++;
+				pc += *pc;
 callFunction:				
-				// rectify arg count
-				if ( args != function->arguments )
+				// rectify arg count?
+				if ( args != function->arguments ) // expect correctness, so optimize that code path
 				{
 					if ( args > function->arguments )
 					{
-						stackTop -= args - function->arguments; // unexpected arguments are poofed
+						stackTop -= args - function->arguments; // extra arguments are *poofed*
 					}
 					else
 					{
@@ -1196,43 +1484,32 @@ callFunction:
 					}
 				}
 
-				// the arguments are at framepace +0, add more to make
-				// up for the locals in the function
-
-				// really wish I could do this.. alas.. if array chaff
-				// is left on the stack, released memory might be
-				// written to :(
-				//stackTop += function->frameSpaceNeeded; // locals are NOT initialized
-
-				for( int l=0; l<function->frameSpaceNeeded; ++l ) // locals are NOT initialized
+				// locals are NOT initialized.. but we have to make
+				// sure they have a non-collectable type or the gc can
+				// get confused.. shame though this would be SO much
+				// faster... TODO figure out how to use it!
+//				stackTop += function->frameSpaceNeeded; 
+				for( int l=0; l<function->frameSpaceNeeded; ++l )
 				{
 					(stackTop++)->p2 = INIT_AS_INT;
 				}
 
-
 				// temp value contains return vector/frame base
 				tempValue = stackTop++; // return vector
 				tempValue->frame = frameBase;
-				
+										
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				
-				tempValue->p = pc; // simple for big-blob case
+				tempValue->p = pc;
 				pc = function->offset;
 #else
 				// relative position in the code to return to
 				tempValue->i = absoluteBottom + (pc - context->bottom);
 
-				if ( function->offsetI >= absoluteBottom )
+				pc = context->bottom + (function->offsetI - absoluteBottom);
+				if ( pc < (top - absoluteBottom) )
 				{
-					// easy, function is within this loaded block
-					pc = context->bottom + (function->offsetI - absoluteBottom);
-				}
-				else
-				{
-					// less easy, have to load the new block
-					unsigned int size = loader( absoluteBottom = function->offsetI, &pc, usr );
-					top = pc + (size - 6);
-					context->bottom = pc;
+					top = 0; // trigger reload at top of loop
 				}
 #endif
 
@@ -1242,13 +1519,29 @@ callFunction:
 				CONTINUE;
 			}
 
+			CASE(PushIndexFunctionReturnValue):
+			{
+				if ( (++tempValue)->type == WR_REF )
+				{
+					*(stackTop++) = *tempValue->r;
+				}
+				else
+				{
+					*(stackTop++) = *tempValue;
+				}
+				
+				CONTINUE;
+			}
+
 			// it kills me that these are identical except for the "+1"
 			// but I have yet to figure out a way around that, "andPop"
 			// is just too good and common an optimization :(
 			CASE(CallLibFunction):
 			{
-				WR_LIB_CALLBACK lib;
-				stackTop -= (args = *(pc+4)); // which have already been pushed
+				args = *pc++; // which have already been pushed
+				tempValue = stackTop;
+				tempValue->p2 = INIT_AS_INT;
+				tempValue->p = 0;
 
 				if ( (lib = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
 															 | (((int32_t)*(pc+1)) << 16)
@@ -1258,14 +1551,68 @@ callFunction:
 					lib( stackTop, args );
 				}
 
-				pc += 5;
+				stackTop -= (args - 1);
+				*(stackTop - 1) = *tempValue;
+				
+				pc += 4;
+				CONTINUE;
+			}
+
+			CASE(NewHashTable):
+			{
+				const unsigned char* table = context->bottom + (int32_t)((((int16_t)*pc)<<8) + *(pc+1));
+				pc += 2;
+				
+				if ( table > context->bottom )
+				{
+					tempValue2 = (WRValue*)stackTop->p;
+					tempValue3 = (WRValue*)stackTop->frame;
+
+					stackTop->p2 = INIT_AS_STRUCT;
+					unsigned char count = *table++;
+					stackTop->va = context->getSVA( count, SV_VALUE, 0 );
+					stackTop->va->m_ROMHashTable = table + 3;
+					stackTop->va->m_mod = (((int16_t)*(table+1)) << 8) + *(table+2);
+
+					tempValue = (WRValue*)(stackTop->va->m_data);
+					tempValue->p = tempValue2;
+					(tempValue++)->frame = tempValue3;
+
+					if ( --count > 0 )
+					{
+						memcpy( (char*)tempValue, stackTop + *table + 1, count*sizeof(WRValue) );
+					}
+						
+					++stackTop;
+				}
+				else
+				{
+					goto literalZero;
+				}
+
+				CONTINUE;
+			}
+
+			CASE(AssignToHashTableByOffset):
+			{
+				tempValue = --stackTop;
+				tempValue2 = (stackTop - 1);
+				if ( *pc < tempValue2->va->m_size )
+				{
+					tempValue2 = tempValue2->va->m_Vdata + *pc++;
+					wr_assign[tempValue2->type<<2|tempValue->type]( tempValue2, tempValue );
+				}
+				else
+				{
+					++pc;
+				}
+
 				CONTINUE;
 			}
 
 			CASE(CallLibFunctionAndPop):
 			{
-				WR_LIB_CALLBACK lib;
-				stackTop -= (args = *(pc+4)); // which have already been pushed
+				args = *pc++; // which have already been pushed
 
 				if ( (lib = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
 															 | (((int32_t)*(pc+1)) << 16)
@@ -1275,8 +1622,8 @@ callFunction:
 					lib( stackTop, args );
 				}
 				
-				--stackTop;
-				pc += 5;
+				stackTop -= args;
+				pc += 4;
 				CONTINUE;
 			}
 			
@@ -1295,30 +1642,12 @@ callFunction:
 				pc = (unsigned char*)tempValue->p; // grab return PC
 				
 #else
-				int returnOffset = (stackTop - 2)->i;
-				if ( returnOffset >= absoluteBottom )
+				pc = context->bottom + ((stackTop - 2)->i - absoluteBottom);
+				if ( pc < (top - absoluteBottom) )
 				{
-					// easy, function is within this loaded block
-					pc = context->bottom + (returnOffset - absoluteBottom);
+					top = 0; // trigger reload at top of loop
 				}
-				else
-				{
-					// less easy, have to load the new block
-					unsigned int size = loader( absoluteBottom = returnOffset, &pc, usr );
-					top = pc + (size - 6);
-					context->bottom = pc;
-				}
-
 #endif
-				if ( (--stackTop)->type == WR_REF )
-				{
-					*(frameBase - 1) = *stackTop->r;
-				}
-				else
-				{
-					*(frameBase - 1) = *stackTop;
-				}
-				
 				stackTop = frameBase;
 				frameBase = tempValue->frame;
 				CONTINUE;
@@ -1407,16 +1736,6 @@ targetFuncStoreLocalOp:
 				CONTINUE;
 			}
 
-			CASE(IndexLiteral32):
-			{
-				stackTop->i = (((int32_t)*pc) << 24) |
-							  (((int32_t)*(pc + 1)) << 16) |
-							  (((int32_t)*(pc + 2)) << 8) |
-							  (int32_t)*(pc + 3);
-				pc += 4;
-				goto indexLiteral;
-			}
-
 			CASE(IndexLiteral16):
 			{
 				stackTop->i = (int32_t)(int16_t)((((int16_t)*(pc)) << 8) | ((int16_t)*(pc+1)));
@@ -1429,7 +1748,7 @@ targetFuncStoreLocalOp:
 				stackTop->i = *pc++;
 indexLiteral:
 				tempValue = stackTop - 1;
-				wr_index[(WR_INT*4)|tempValue->type]( context, stackTop, tempValue );
+				wr_index[(WR_INT*4)|tempValue->type]( context, stackTop, tempValue, tempValue );
 				CONTINUE;
 			}
 			
@@ -1446,6 +1765,53 @@ indexLiteral:
 				tempValue = frameBase + *pc++;
 				tempValue2 = --stackTop;
 				wr_assign[(tempValue->type<<2)|tempValue2->type]( tempValue, tempValue2 );
+				CONTINUE;
+			}
+
+			CASE(CreateIndex):
+			{
+				*stackTop = *(stackTop - 2);
+				tempValue = --stackTop;
+				tempValue2 = stackTop - 1;
+				wr_index[(tempValue->type<<2)|tempValue2->type]( context, tempValue, tempValue2, tempValue2 );
+				*tempValue2 = *(stackTop + 1);
+				CONTINUE;
+			}
+
+			CASE(CreateIndexLiteral8):
+			{
+				(stackTop + 1)->i = *pc++;
+				goto createIndexLiteral;
+			}
+
+			CASE(CreateIndexLiteral16):
+			{
+				(stackTop + 1)->i = (int32_t)(int16_t)((((int16_t)*(pc)) << 8) | ((int16_t)*(pc+1)));
+				pc += 2;
+createIndexLiteral:
+				tempValue = stackTop - 1;
+				*stackTop = *tempValue;
+				wr_index[(WR_INT*4)|tempValue->type]( context, stackTop + 1, tempValue, tempValue );
+				*(stackTop - 1) = *stackTop;
+				CONTINUE;
+			}
+
+			CASE(AssignToArrayAndPop):
+			{
+				tempValue = stackTop - 1; // value
+				tempValue2 = stackTop - 2; // array
+				
+				if ( tempValue2->r->xtype == WR_EX_ARRAY )
+				{
+					stackTop->r = tempValue2->r;
+					stackTop->p2 = INIT_AS_REFARRAY;
+					ARRAY_ELEMENT_TO_P2( stackTop, (int32_t)(int16_t)((((int16_t)*(pc)) << 8) | ((int16_t)*(pc+1))) );
+
+					wr_assign[(stackTop->type<<2)|tempValue->type]( stackTop, tempValue );
+				}
+
+				pc += 2;
+				--stackTop;
 				CONTINUE;
 			}
 
@@ -1758,10 +2124,35 @@ void wr_makeFloat( WRValue* val, float f )
 }
 
 //------------------------------------------------------------------------------
+WRContainerData::~WRContainerData()
+{
+	while( m_head )
+	{
+		UDNode* next = m_head->next;
+
+		if ( m_head->val->xtype & 0x4 )
+		{
+			delete m_head->val->va;
+		}
+
+		delete m_head->val;
+		delete m_head;
+		m_head = next;
+	}
+
+	while (m_nodeOnlyHead)
+	{
+		UDNode* next = m_nodeOnlyHead->next;
+		delete m_nodeOnlyHead;
+		m_nodeOnlyHead = next;
+	}
+}
+
+//------------------------------------------------------------------------------
 void wr_makeUserData( WRValue* val, int sizeHint )
 {
 	val->p2 = INIT_AS_USR;
-	val->u = new WRUserData( sizeHint );
+	val->u = new WRContainerData( sizeHint );
 }
 
 //------------------------------------------------------------------------------
@@ -1775,7 +2166,7 @@ void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned ch
 {
 	WRValue* val = userData->u->addValue( name );
 	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRStaticValueArray( len, SV_CHAR, data );
+	val->va = new WRGCArray( len, SV_CHAR, data );
 }
 
 //------------------------------------------------------------------------------
@@ -1783,7 +2174,7 @@ void wr_addUserIntArray( WRValue* userData, const char* name, const int* data, c
 {
 	WRValue* val = userData->u->addValue( name );
 	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRStaticValueArray( len, SV_INT, data );
+	val->va = new WRGCArray( len, SV_INT, data );
 }
 
 //------------------------------------------------------------------------------
@@ -1791,7 +2182,7 @@ void wr_addUserFloatArray( WRValue* userData, const char* name, const float* dat
 {
 	WRValue* val = userData->u->addValue( name );
 	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRStaticValueArray( len, SV_FLOAT, data );
+	val->va = new WRGCArray( len, SV_FLOAT, data );
 }
 
 //------------------------------------------------------------------------------
@@ -1800,10 +2191,6 @@ void WRValue::free()
 	if ( xtype == WR_EX_USR )
 	{
 		delete u;
-	}
-	else if ( xtype == WR_EX_ARRAY && (va->m_type & SV_PRE_ALLOCATED) )
-	{
-		delete va;
 	}
 }
 

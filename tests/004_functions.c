@@ -54,6 +54,12 @@
 ~*/
 
 
+tle(tle());
+a = tle();
+function tle
+{
+}
+
 
 f(f(0));
 a = 5;
@@ -78,6 +84,7 @@ function test()
 	log( b );
 	++::a;
 	log( ::a );
+	
 }
 
 test();

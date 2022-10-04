@@ -3,8 +3,7 @@ good
 good
 ~*/
 
-
-
+a[500];
 for( i=0; i<500; ++i )
 {
 	allocArray();
@@ -24,7 +23,6 @@ if ( b[1] != 10 || b[35000] != 20 )
 }
 
 
-a[500];
 a[2] = 3;
 a[400] = 4;
 if ( a[2] != 3 )
@@ -44,6 +42,8 @@ else
 	log("good");
 }
 
+gi = 0;
+
 function allocArray()
 {
 	ab[500];
@@ -60,6 +60,7 @@ function allocArray()
 	}
 
 	ac[50];
+
 	for( i=0; i<50; ++i )
 	{
 		ac[i] = i+1;
@@ -73,4 +74,45 @@ function allocArray()
 		}
 	}
 
+	for( i=0; i<50; ++i )
+	{
+		ac[i] = i+1;
+	}
+
+	for( i=0; i<50; ++i )
+	{
+		::a[i] = i+1;
+	}
+
+	for( i=0; i<50; ++i )
+	{
+		if ( ac[i] != i+1 )
+		{
+			log( "oops_LL" );
+		}
+	}
+
+	for( i=0; i<50; ++i )
+	{
+		if ( ::a[i] != i+1 )
+		{
+			log( "oops_GL" );
+		}
+	}
+	
+	for( ::gi=0; ::gi<50; ++::gi )
+	{
+		if ( ac[::gi] != ::gi+1 )
+		{
+			log( "oops_LG" );
+		}
+	}
+
+	for( ::gi=0; ::gi<50; ++::gi )
+	{
+		if ( ::a[::gi] != ::gi+1 )
+		{
+			log( "oops_GG" );
+		}
+	}
 }

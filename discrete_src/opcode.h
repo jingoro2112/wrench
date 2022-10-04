@@ -36,9 +36,16 @@ enum WROpcode
 
 	O_CallFunctionByHash,
 	O_CallFunctionByIndex,
+	O_PushIndexFunctionReturnValue,
+	
 	O_CallLibFunction,
 
+	O_NewHashTable,
+	O_AssignToHashTableByOffset,
+
 	O_Index,
+	O_IndexSkipLoad,
+
 	O_StackIndexHash,
 	O_GlobalIndexHash,
 	O_LocalIndexHash,
@@ -58,6 +65,18 @@ enum WROpcode
 	O_Return,
 	O_Stop,
 
+	O_LLValues,
+	O_LGValues,
+	O_GLValues,
+	O_GGValues,
+
+	O_BinaryModSkipLoad,
+	O_BinaryRightShiftSkipLoad,
+	O_BinaryLeftShiftSkipLoad,
+	O_BinaryAndSkipLoad,
+	O_BinaryOrSkipLoad,
+	O_BinaryXORSkipLoad,
+	
 	O_BinaryAddition,
 	O_BinarySubtraction,
 	O_BinaryMultiplication,
@@ -85,6 +104,15 @@ enum WROpcode
 	O_CompareGT,
 	O_CompareLT,
 
+	O_GGCompareEQ, 
+	O_GGCompareNE, 
+	O_GGCompareGT,
+	O_GGCompareLT,
+	O_LLCompareEQ, 
+	O_LLCompareNE, 
+	O_LLCompareGT,
+	O_LLCompareLT,
+	
 	O_GSCompareEQ, 
 	O_LSCompareEQ, 
 	O_GSCompareNE, 
@@ -123,6 +151,24 @@ enum WROpcode
 	O_LSCompareGTBZ8,
 	O_GSCompareLTBZ8,
 	O_LSCompareLTBZ8,
+
+	O_LLCompareLTBZ,
+	O_LLCompareGTBZ,
+	O_LLCompareEQBZ,
+	O_LLCompareNEBZ,
+	O_GGCompareLTBZ,
+	O_GGCompareGTBZ,
+	O_GGCompareEQBZ,
+	O_GGCompareNEBZ,
+
+	O_LLCompareLTBZ8,
+	O_LLCompareGTBZ8,
+	O_LLCompareEQBZ8,
+	O_LLCompareNEBZ8,
+	O_GGCompareLTBZ8,
+	O_GGCompareGTBZ8,
+	O_GGCompareEQBZ8,
+	O_GGCompareNEBZ8,
 
 	O_PostIncrement,
 	O_PostDecrement,
@@ -163,11 +209,14 @@ enum WROpcode
 
 	O_IndexLiteral8,
 	O_IndexLiteral16,
-	O_IndexLiteral32,
+	O_CreateIndex,
+	O_CreateIndexLiteral8,
+	O_CreateIndexLiteral16,
 
 	O_AssignAndPop,
 	O_AssignToGlobalAndPop,
 	O_AssignToLocalAndPop,
+	O_AssignToArrayAndPop,
 
 	O_BinaryAdditionAndStoreGlobal,
 	O_BinarySubtractionAndStoreGlobal,
@@ -237,8 +286,11 @@ enum WROpcode
 	O_GLBinaryDivision,
 	O_LGBinaryDivision,
 	O_LLBinaryDivision,
-	
+
+	// nmon-interpreted opcodes
 	O_HASH_PLACEHOLDER,
+	O_FUNCTION_CALL_PLACEHOLDER,
+	
 	O_LAST,
 };
 
@@ -250,3 +302,4 @@ extern const char* c_opcodeName[];
 #endif
 
 #endif
+

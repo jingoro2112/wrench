@@ -166,3 +166,62 @@ log( a );
 (int)a;
 log( a );
 
+// excercise keyhole optimizer loads
+local();
+ag = 8;
+bg = 3;
+function local()
+{
+	a = 8;
+	b = 3;
+	c = a % b;if ( c != 2 ) log("F1");
+	c = a << b;if ( c != 64 ) log("F2");
+	c = a >> b;if ( c != 1 ) log("F3");
+	
+	a = 9;
+	c = a & b;if ( c != 1 ) log("F4");
+	c = a ^ b;if ( c != 10 ) log("F5");
+	a = 8;
+	c = a | b;if ( c != 11 ) log("F6");
+
+	::ag = 8;
+	b = 3;
+	c = ::ag % b;if ( c != 2 ) log("F1");
+	c = ::ag << b;if ( c != 64 ) log("F2");
+	c = ::ag >> b;if ( c != 1 ) log("F3");
+
+	::ag = 9;
+	c = ::ag & b;if ( c != 1 ) log("F4");
+	c = ::ag ^ b;if ( c != 10 ) log("F5");
+	::ag = 8;
+	c = ::ag | b;if ( c != 11 ) log("F6");
+
+
+	a = 8;
+	::ab = 3;
+	c = a % ::ab;if ( c != 2 ) log("F1");
+	c = a << ::ab;if ( c != 64 ) log("F2");
+	c = a >> ::ab;if ( c != 1 ) log("F3");
+
+	a = 9;
+	c = a & ::ab;if ( c != 1 ) log("F4");
+	c = a ^ ::ab;if ( c != 10 ) log("F5");
+	a = 8;
+	c = a | ::ab;if ( c != 11 ) log("F6");
+
+	::ag = 8;
+	::bg = 3;
+	c = ::ag % ::bg;if ( c != 2 ) log("F1");
+	c = ::ag << ::bg;if ( c != 64 ) log("F2");
+	c = ::ag >> ::bg;if ( c != 1 ) log("F3");
+
+	::ag = 9;
+	c = ::ag & ::bg;if ( c != 1 ) log("F4");
+	c = ::ag ^ ::bg;if ( c != 10 ) log("F5");
+	::ag = 8;
+	c = ::ag | ::bg;if ( c != 11 ) log("F6");
+	
+}
+
+
+

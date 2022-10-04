@@ -28,6 +28,8 @@ SOFTWARE.
 
 #include "discrete_src/str.h"
 
+
+
 int runTests( int number =0 );
 void setup();
 
@@ -126,7 +128,7 @@ int main( int argn, char* argv[] )
 	assert( sizeof(WRValue) == sizeof(void*)*2 );
 	assert( sizeof(float) == 4 );
 	assert( sizeof(unsigned char) == 1 );
-		   
+
 	if ( argn <= 1 )
 	{
 		return usage();
@@ -295,38 +297,41 @@ int runTests( int number )
 	WRstr code;
 	WRstr codeName;
 
-	WRValue userData;
-	WRValue subUserData;
+	
 	WRValue data2;
-	WRValue userval;
-	unsigned char userChar[10];
-	int usrInt[10];
-	float usrFloat[10];
+	data2.init();
+	
+	WRValue userData;
 	wr_makeUserData( &userData );
 
 
+	unsigned char userChar[10];
+	userChar[1] = 222;
 	wr_addUserCharArray( &userData, "ac", userChar, 10 );
+
+	int usrInt[10];
 	wr_addUserIntArray( &userData, "ai", usrInt, 10 );
+
+	float usrFloat[10];
 	wr_addUserFloatArray( &userData, "af", usrFloat, 10 );
 
+	WRValue userval;
 	wr_makeInt( &userval, 1 );
 
 	wr_addUserValue( &userData, "value", &userval );
 
+
 	wr_makeInt( &data2, 777 );
+
+	WRValue subUserData;
+	subUserData.init();
+
 	wr_makeUserData( &subUserData );
 	wr_addUserValue( &subUserData, "data2", &data2 );
 	wr_addUserCharArray( &subUserData, "data3", userChar, 10 );
-	userChar[1] = 222;
 
 
 	wr_addUserValue( &userData, "subUser", &subUserData );
-
-/*
-	user.ac[10]
-	user.ai[10]
-	user.af[10]
-*/
 	
 	FILE* tfile = fopen( "test_files.txt", "r" );
 	char buf[256];
@@ -419,10 +424,10 @@ int runTests( int number )
 
 	wr_destroyState( w );
 
-	//wr_destroyValue( &userData );
-	//wr_destroyValue( &charArray );
-	//wr_destroyValue( &intArray );
-	//wr_destroyValue( &floatArray );
+//	wr_destroyValue( &userData );
+//	wr_destroyValue( &charArray );
+//	wr_destroyValue( &intArray );
+//	wr_destroyValue( &floatArray );
 
 	fclose( tfile );
 	return err;

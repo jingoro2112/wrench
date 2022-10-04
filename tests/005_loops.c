@@ -114,6 +114,30 @@ lt6!
 1
 ~*/
 
+tle();
+function tle()
+{
+}
+
+prime(0);
+prime(10);
+prime(30);
+prime(3000);
+
+function prime2()
+{
+	return true;
+}
+
+function prime(n)
+{
+	count = 0;
+	for (i = 2; i <= n; ++i)
+		if (prime2())
+			++count;
+	return count;
+}
+
 for( i=0; i<10; ++i)
 {
 	

@@ -176,7 +176,7 @@ const WROperation c_operations[] =
 	{ "@i",   3, O_CoerceToInt,         true,  WR_OPER_PRE, O_LAST },
 	{ "@f",   3, O_CoerceToFloat,       true,  WR_OPER_PRE, O_LAST },
 	{ "@[]",  2, O_Index,               true,  WR_OPER_POST, O_LAST },
-
+	
 	{ 0, 0, O_LAST, false, WR_OPER_PRE, O_LAST },
 };
 const int c_highestPrecedence = 17; // one higher than the highest entry above, things that happen absolutely LAST
@@ -199,7 +199,7 @@ struct WRNamespaceLookup
 {
 	uint32_t hash; // hash of symbol
 	WRarray<int> references; // where this symbol is referenced (loaded) in the bytecode
-
+	
 	WRNamespaceLookup() { reset(0); }
 	void reset( uint32_t h )
 	{
@@ -225,6 +225,7 @@ struct WRBytecode
 
 	WRarray<WRNamespaceLookup> localSpace;
 	WRarray<WRNamespaceLookup> functionSpace;
+	WRarray<WRNamespaceLookup> unitObjectSpace;
 
 	void invalidateOpcodeCache() { opcodes.clear(); }
 	
@@ -244,6 +245,7 @@ struct WRExpressionContext
 	WRstr prefix;
 	WRstr token;
 	WRValue value;
+	WRstr literalString;
 	const WROperation* operation;
 	
 	int stackPosition;
@@ -273,6 +275,7 @@ struct WRExpressionContext
 		token.clear();
 		value.init();
 		bytecode.clear();
+		operation = 0;
 
 		return this;
 	}
@@ -366,18 +369,23 @@ struct WRExpression
 //------------------------------------------------------------------------------
 struct WRUnitContext
 {
-	uint32_t hash;
-	int arguments;
-	int offsetInBytecode;
-	
-	WRBytecode bytecode;
+	uint32_t hash; // hashed name of this unit
+	int arguments; // how many arguments it expects
+	int offsetInBytecode; // where in the bytecode it resides
 
+	int16_t offsetOfLocalHashMap;
+	
+	// the code that runs when it loads
+	// the locals it has
+	WRBytecode bytecode;
+	
 	WRUnitContext() { reset(); }
 	void reset()
 	{
 		hash = 0;
 		arguments = 0;
 		offsetInBytecode = 0;
+		offsetOfLocalHashMap = 0;
 	}
 };
 
@@ -392,6 +400,9 @@ private:
 	bool isReserved( const char* token );
 	bool isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix );
 	bool getToken( WRExpressionContext& ex, const char* expect =0 );
+
+	static bool CheckSkipLoad( WROpcode opcode, WRBytecode& bytecode, int a, int o );
+	static bool CheckFastLoad( WROpcode opcode, WRBytecode& bytecode, int a, int o );
 	static bool IsLiteralLoadOpcode( unsigned char opcode );
 	static bool CheckCompareReplace( WROpcode LS, WROpcode GS, WROpcode ILS, WROpcode IGS, WRBytecode& bytecode, unsigned int a, unsigned int o );
 	
@@ -424,7 +435,7 @@ private:
 
 	void appendBytecode( WRBytecode& bytecode, WRBytecode& addMe );
 	
-	void pushLiteral( WRBytecode& bytecode, WRValue& value );
+	void pushLiteral( WRBytecode& bytecode, WRExpressionContext& context );
 	void addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly =false );
 	void addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token );
 	void addFunctionToHashSpace( WRBytecode& result, WRstr& token );
@@ -433,14 +444,16 @@ private:
 	void resolveExpressionEx( WRExpression& expression, int o, int p );
 
 	bool operatorFound( WRstr& token, WRarray<WRExpressionContext>& context, int depth );
-	char parseExpression( WRExpression& expression );
+	bool parseCallFunction( WRExpression& expression, WRstr functionName, int depth, bool parseArguments );
+	char parseExpression( WRExpression& expression);
 	bool parseUnit();
 	bool parseWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseDoWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseForLoop( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseIf( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseStatement( int unitIndex, char end, bool& returnCalled, WROpcode opcodeToReturn );
-	
+
+	void createLocalHashMap( WRUnitContext& unit, unsigned char** buf, int* size );
 	void link( unsigned char** out, int* outLen );
 	
 	const char* m_source;

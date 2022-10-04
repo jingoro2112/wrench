@@ -8,11 +8,19 @@
 -4
 ~*/
 
+math::floor();
+math::floor(1);
+math::floor(1,2);
+math::floor(1,2,3);
+
 f = math::floor();
+f = math::floor(1);
+f = math::floor(1,2);
+f = math::floor(1,2,3);
+
 log( math::floor(1.5) );
 log( math::floor(1) );
 
-math::abs();
 log( math::abs(-1.5) );
 log( math::abs(-30) );
 

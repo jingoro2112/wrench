@@ -1,4 +1,19 @@
-1.2.1 ---------------------------------------------------------------------------
+1.3.0 ---------------------------------------------------------------------------
+- added more compare optimizations
+- changed function calling to be lower overhead by making "no return" the default,
+  so now instead of always returning and then cancelling the return, the return
+  value is ignored unless it's actually going to be used
+  arduino compiles the interpreter (sans compiler) to 41k
+- added array initialization
+- added structures
+- added "new" instances
+- added inline initialization
+- added optimized LL/GG/LG/GL loading for uncoimmon binary operations without 
+  blowing the opcodes up the way add/sub/mul/div did. Those can be back-converted 
+  if necessary
+
+
+9/27/22 1.2.1 ---------------------------------------------------------------------------
 - added 0b prefix for parsing binary numbers
 - added catch for two label/literals in a row 
 - changed the 6x6 arrays to 4x4 so the operands could be left-shifted instead of

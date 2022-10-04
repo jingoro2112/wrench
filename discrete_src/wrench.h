@@ -33,25 +33,15 @@ label operator
 
 This Flag:
 
--- Has NO EFFECT on the compiler, code generated on either will work on
-   the other. 
+-- Has NO EFFECT on the compiler or the compiled object code
 
 -- Is MUCH faster (on the order of 40%!) on embedded "uncomplicated"
    systems ie- simple caching and flat memory speeds.
 
--- Has very no effect on PC-level "complicated" (loads of
-   cache levels/branch prediction/parallel microcode
-   piplining/hyperthreading/etc...) chips. The compiler generated
-   switch()-based interpreter is just as good.. I know, right!?
+-- Is a bit faster (more like 20%) on PC
   
--- increases interpreter size slightly (a k or two)
+-- increases interpreter size slightly (a K or two)
 
-Takeaway: !!PROFILE!! Turn this on and see what it does on your specific
-architecture
-
-NOTE: Error/Warnings are not checked when this flag is on (SPEED!), so best to
-test with it off and only turn it on once you're sure everything is
-working properly and it's time to turn on the afterburners.
 */
 #define WRENCH_JUMPTABLE_INTERPRETER
 /***********************************************************************/
@@ -98,9 +88,10 @@ longer function
 #define WRENCH_SPRINTF_OPERATIONS
 /***********************************************************************/
 
-#define WRENCH_VERSION 121
+#define WRENCH_VERSION 122
 
 #include <stdint.h>
+
 struct WRState;
 struct WRValue;
 struct WRContext;
@@ -182,6 +173,10 @@ int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const W
 // This method is exposed so functions can be called with an absolute
 // minmum of overhead
 int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const WRValue* argv, const int argn );
+
+// After wr_run(...) or wr_callFunction(...) has run, there is always a
+// return value (default 0) this command fetches it
+WRValue* wr_returnValueFromLastCall( WRState* w );
 
 // once wr_run() is called the returned context object can be used to
 // pre-fetch a function pointer. This reduces the overhead of calling
@@ -389,18 +384,21 @@ enum WRValueType
 	WR_REF = 0x02,
 	WR_EX = 0x3,
 };
+
 enum WRExType
 {
 	WR_EX_NONE = 0x0,
 	WR_EX_USR = 0x01,
-	WR_EX_ARRAY = 0x02,
-	WR_EX_REFARRAY = 0x03,
+	WR_EX_REFARRAY = 0x02,
+	
+	WR_EX_ARRAY = 0x04, // so they share bit 3
+	WR_EX_STRUCT = 0x05
 };
 
 
 //------------------------------------------------------------------------------
-class WRUserData;
-class WRStaticValueArray;
+class WRContainerData;
+class WRGCArray;
 struct WRValue
 {
 	// never reference the data members directly, they are unions and
@@ -436,7 +434,7 @@ struct WRValue
 			case WR_FLOAT: return (int)f;
 			default: return i;
 		}
-		*/
+*/
 	}
 	
 	float asFloat() const
@@ -471,7 +469,7 @@ struct WRValue
 	int* asIntArray( int* len =0 );
 	float* asFloatArray( int* len =0 );
 
-	void init() { p = 0; p2 = 0; } // call upon first create or when you're sure no memory is hanging from one
+	inline void init() { p = 0; p2 = 0; } // call upon first create or when you're sure no memory is hanging from one
 
 //private: // is what this SHOULD be.. but that's impractical since the
 		   // VM is not an object that can be friended. don't mess
@@ -483,7 +481,13 @@ struct WRValue
 	int arrayValueAsInt() const;
 	float arrayValueAsFloat() const;
 
-	inline ~WRValue() { if (xtype) { free(); } } // this will stay inline MOST of the time
+	inline ~WRValue()
+	{
+		if (xtype)
+		{
+			free(); 
+		}
+	} // this will stay inline MOST of the time
 
 	union // first 4 bytes (or 8 on a 64-bit system but.. what are you doing here?)
 	{
@@ -491,8 +495,8 @@ struct WRValue
 		float f;
 		const void* p;
 		WRValue* r;
-		WRStaticValueArray* va;
-		WRUserData* u;
+		WRGCArray* va;
+		WRContainerData* u;
 	};
 
 	union
@@ -509,7 +513,7 @@ struct WRValue
 		WRValue* frame;
 	};
 
-	inline WRValue& operator = (const WRValue& V) { p = V.p; p2 = V.p2; return *this; }
+	inline WRValue& operator= (const WRValue& V) { p = V.p; frame = V.frame; return *this; }
 };
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
@@ -521,6 +525,14 @@ struct WRValue
   #endif
  #endif
 #endif
+
+
+#if __arm__ || WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__
+#include <memory.h>
+#else
+#include <Arduino.h>
+#endif
+
 
 #ifndef WRENCH_COMBINED
 #include "utils.h"

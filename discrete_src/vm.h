@@ -25,7 +25,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 //------------------------------------------------------------------------------
-class WRUserData
+class WRContainerData
 {
 public:
 
@@ -62,24 +62,8 @@ public:
 	WRValue* get( const char* key ) { UDNode* N = m_index.getItem( wr_hashStr(key) ); return N ? N->val : 0; }
 	WRValue* get( const int32_t hash ) { UDNode* N = m_index.getItem(hash); return N ? N->val : 0; }
 
-	WRUserData( int sizeHint =0 ) : m_head(0), m_nodeOnlyHead(0), m_index(sizeHint) {}
-	~WRUserData()
-	{
-		while( m_head )
-		{
-			UDNode* next = m_head->next;
-			delete m_head->val;
-			delete m_head;
-			m_head = next;
-		}
-
-		while (m_nodeOnlyHead)
-		{
-			UDNode* next = m_nodeOnlyHead->next;
-			delete m_nodeOnlyHead;
-			m_nodeOnlyHead = next;
-		}
-	}
+	WRContainerData( int sizeHint =0 ) : m_head(0), m_nodeOnlyHead(0), m_index(sizeHint) {}
+	~WRContainerData();
 
 private:
 	struct UDNode
@@ -87,15 +71,14 @@ private:
 		WRValue* val;
 		UDNode* next;
 	};
-	UDNode* m_head;
-	UDNode* m_nodeOnlyHead;
+	UDNode* m_head; // values that might have been handed to this structure so it does not necessarily own (see below)
+	UDNode* m_nodeOnlyHead; // values created by this structure (so are destroyed with it)
 	WRHashTable<UDNode*> m_index;
 };
 
 //------------------------------------------------------------------------------
 struct WRFunction
 {
-	
 	char arguments;
 	char frameSpaceNeeded;
 	char frameBaseAdjustment;
@@ -116,14 +99,12 @@ struct WRCFunctionCallback
 
 //------------------------------------------------------------------------------
 class WRGCValueArray;
-enum WRStaticValueArrayType
+enum WRGCArrayType
 {
 	SV_VALUE = 0x00,
 	SV_CHAR = 0x01,
 	SV_INT = 0x02,
 	SV_FLOAT = 0x03,
-
-	SV_PRE_ALLOCATED = 0x10,
 };
 
 //------------------------------------------------------------------------------
@@ -137,9 +118,9 @@ struct WRContext
 	const unsigned char* bottom;
 	int32_t stopLocation;
 
-	WRStaticValueArray* svAllocated;
-	WRStaticValueArray* getSVA( int size, WRStaticValueArrayType type, WRValue* stackTop );
-	void gcArray( WRStaticValueArray* sva );
+	WRGCArray* svAllocated;
+	WRGCArray* getSVA( int size, WRGCArrayType type, WRValue* stackTop );
+	void gcArray( WRGCArray* sva );
 
 	WRState* w;
 
@@ -170,78 +151,167 @@ struct WRState
 };
 
 //------------------------------------------------------------------------------
-class WRStaticValueArray
+class WRGCArray
 {
 public:
 
-	WRStaticValueArray* m_next;
-	unsigned int m_size;
 	char m_type;
-	const void* m_data;
+	char m_preAllocated;
+	uint16_t m_mod;
+	uint32_t m_size;
+	WRGCArray* m_next;
+	const unsigned char* m_ROMHashTable;
+
+	union
+	{
+		const void* m_data;
+		int* m_Idata;
+		char* m_Cdata;
+		WRValue* m_Vdata;
+		float* m_Fdata;
+	};
 	
-	//------------------------------------------------------------------------------
-	WRStaticValueArray( const unsigned int size,
-						const WRStaticValueArrayType type,
-						const void* preAlloc =0 )
+	WRGCArray( const unsigned int size,
+			   const WRGCArrayType type,
+			   const void* preAlloc =0 )
 	{
 		m_type = (char)type;
+		m_next = 0;
 		m_size = size;
 		if ( preAlloc )
 		{
-			m_type |= (char)SV_PRE_ALLOCATED;
+			m_preAllocated = 1;
 			m_data = preAlloc;
 		}
 		else
 		{
-			switch( type )
+			m_preAllocated = 0;
+			switch( m_type )
 			{
-				case SV_VALUE: { m_data = new WRValue[size]; break; }
-				case SV_CHAR: { m_data = new char[size]; break; }
-				case SV_INT: { m_data = new int[size]; break; }
-				case SV_FLOAT: { m_data = new float[size]; break; }
-				default: m_data = 0;
+				case SV_VALUE: { m_Vdata = new WRValue[size]; break; }
+				case SV_CHAR: { m_Cdata = new char[size]; break; }
+				case SV_INT: { m_Idata = new int[size]; break; }
+				case SV_FLOAT: { m_Fdata = new float[size]; break; }
 			}
 		}
 	}
-	
-	//------------------------------------------------------------------------------
-	~WRStaticValueArray()
+
+	WRGCArray(WRGCArray& A)
 	{
-		if ( !(m_type & (char)SV_PRE_ALLOCATED) )
+		m_next = 0;
+		m_preAllocated = 1;
+		*this = A;
+	}
+
+	void clear()
+	{
+		if ( m_preAllocated )
 		{
-			switch( m_type & 0x3 )
-			{
-				case SV_VALUE: { delete[] (WRValue *)m_data; break; }
-				case SV_CHAR: { delete[] (char *)m_data; break; }
-				case SV_INT: { delete[] (int *)m_data; break; }
-				case SV_FLOAT: { delete[] (float *)m_data; break; }
-				default: break;
-			}
+			return;
 		}
+		
+		switch( m_type )
+		{
+			case SV_VALUE: { delete[] m_Vdata; break; }
+			case SV_CHAR: { delete[] m_Cdata; break; }
+			case SV_INT: { delete[] m_Idata; break; }
+			case SV_FLOAT: { delete[] m_Fdata; break; }
+		}
+
+		m_data = 0;
 	}
 	
-	//------------------------------------------------------------------------------
+	~WRGCArray() 
+	{
+		clear(); 
+	}
+	
 	void* operator[]( const unsigned int l ) { return get( l ); }
+
+	WRGCArray& operator= ( WRGCArray& A )
+	{
+		clear();
+
+		m_preAllocated = 0;
+
+		m_mod = A.m_mod;
+		m_size = A.m_size;
+		m_ROMHashTable = A.m_ROMHashTable;
+
+		if ( !m_next )
+		{
+			m_next = A.m_next;
+			A.m_next = this;
+		}
+
+		switch( (m_type = A.m_type) )
+		{
+			case SV_VALUE:
+			{
+				m_data = new WRValue[m_size];
+				for( unsigned int i=0; i<m_size; ++i )
+				{
+					((WRValue*)m_data)[i] = ((WRValue*)A.m_data)[i];
+				}
+				break;
+			}
+
+			case SV_CHAR:
+			{
+				m_Cdata = new char[m_size];
+				memcpy( (char*)m_data, (char*)A.m_data, m_size );
+				break;
+			}
+			case SV_INT:
+			{
+				m_Idata = new int[m_size];
+				memcpy( (char*)m_data, (char*)A.m_data, m_size*sizeof(int) );
+				break;
+			}
+
+			case SV_FLOAT:
+			{
+				m_Fdata = new float[m_size];
+				memcpy( (char*)m_data, (char*)A.m_data, m_size*sizeof(float) );
+				break;
+			}
+		}
 		
+		return *this;
+	}
+
+
+/*
+	void growValueType( const unsigned int newSize )
+	{
+		WRValue* _t = new WRValue[newSize];
+		memcpy( (unsigned char *)_t, (unsigned char *)m_data, m_size*sizeof(WRValue) );
+		memset( (unsigned char *)(_t + m_size*sizeof(WRValue)), 0, sizeof(WRValue) * (newSize - m_size) );
+		delete[] (WRValue*)m_data;
+		m_data = _t;
+	}
+*/
+
 	void* get( const unsigned int l ) const
 	{
 		int s = l < m_size ? l : m_size - 1;
 
-		switch( m_type & 0x3 )
+		switch( m_type )
 		{
-			case SV_VALUE: { return ((WRValue *)m_data) + s; }
-			case SV_CHAR: { return ((char *)m_data) + s; }
-			case SV_INT: { return ((int *)m_data) + s; }
-			case SV_FLOAT: { return ((float *)m_data) + s; }
+			case SV_VALUE: { return (void*)(m_Vdata + s); }
+			case SV_CHAR: { return (void*)(m_Cdata + s); }
+			case SV_INT: { return  (void*)(m_Idata + s); }
+			case SV_FLOAT: { return (void*)(m_Fdata + s); }
 			default: return 0;
 		}
 	}
 };
 
-#define GET_LIB_RETURN_VALUE_LOCATION( s, a ) ((s) - 1)
 #define INIT_AS_ARRAY    (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
 #define INIT_AS_USR      (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
 #define INIT_AS_REFARRAY (((uint32_t)WR_EX) | ((uint32_t)WR_EX_REFARRAY<<24))
+#define INIT_AS_STRUCT   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_STRUCT<<24))
+
 #define INIT_AS_REF      WR_REF
 #define INIT_AS_INT      WR_INT
 #define INIT_AS_FLOAT    WR_FLOAT
@@ -281,7 +351,7 @@ extern WRTargetFunc wr_ANDBinary[16];
 extern WRTargetFunc wr_ORBinary[16];
 extern WRTargetFunc wr_XORBinary[16];
 
-typedef void (*WRStateFunc)( WRContext* c, WRValue* to, WRValue* from );
+typedef void (*WRStateFunc)( WRContext* c, WRValue* to, WRValue* from, WRValue* target );
 extern WRStateFunc wr_index[16];
 
 typedef bool (*WRReturnFunc)( WRValue* to, WRValue* from );
@@ -304,8 +374,8 @@ typedef bool (*WRReturnSingleFunc)( WRValue* value );
 typedef bool (*WRValueCheckFunc)( WRValue* value );
 extern WRReturnSingleFunc wr_LogicalNot[4];
 
-typedef void (*WRUserHashFunc)( WRValue* value, WRValue* target, int32_t hash );
-extern WRUserHashFunc wr_UserHash[4];
+typedef void (*WRIndexHashFunc)( WRValue* value, WRValue* target, uint32_t hash );
+extern WRIndexHashFunc wr_IndexHash[4];
 
 
 #endif
