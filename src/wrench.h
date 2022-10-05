@@ -380,7 +380,7 @@ extern int32_t wr_Seed;
 //------------------------------------------------------------------------------
 enum WRValueType
 {
-	WR_INT =   0x00,
+	WR_INT = 0x00,
 	WR_FLOAT = 0x01,
 	WR_REF = 0x02,
 	WR_EX = 0x3,
@@ -388,12 +388,13 @@ enum WRValueType
 
 enum WRExType
 {
-	WR_EX_NONE = 0x0,
+	WR_EX_NONE = 0x00,
 	WR_EX_USR = 0x01,
-	WR_EX_REFARRAY = 0x02,
 	
-	WR_EX_ARRAY = 0x04, // so they share bit 3
-	WR_EX_STRUCT = 0x05
+	WR_EX_REFARRAY = 0x04,
+	WR_EX_ARRAY = 0x05,
+	WR_EX_STRUCT = 0x06,
+	WR_EX_HASH = 0x0C,
 };
 
 

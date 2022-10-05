@@ -3,7 +3,13 @@ good
 good
 ~*/
 
-a[500];
+
+aa[10];
+a[500] = { aa };
+
+if ( a._count != 501 ) log("bad size");
+if ( a[0]._count != 11 ) log("bad size2");
+
 for( i=0; i<500; ++i )
 {
 	allocArray();
@@ -115,4 +121,32 @@ function allocArray()
 			log( "oops_GG" );
 		}
 	}
+}
+
+
+grow[1] = 10;
+grow[2] = 11;
+grow[3] = 12;
+grow[4] = 13;
+grow[5] = 14;
+grow[6] = 15;
+if ( grow[6] != 15 ) log("badref0");
+if ( grow[5] != 14 ) log("badref1");
+if ( grow[4] != 13 ) log("badref2");
+if ( grow[3] != 12 ) log("badref3");
+if ( grow[2] != 11 ) log("badref4");
+
+
+a[10] = { 1, 2, 3 };
+
+leakCheck( a[0] );
+
+function leakCheck( value )
+{
+	::a = 10;
+	b[20]; // cause GC to run
+
+	value = 20;
+	if ( value != 20 ) log("B1");
+	if ( 20 != value ) log("B2");
 }

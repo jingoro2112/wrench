@@ -83,56 +83,103 @@ WRState::~WRState()
 }
 
 //------------------------------------------------------------------------------
+void WRContext::mark( WRValue* s )
+{
+	if ( s->xtype == WR_EX_REFARRAY && s->r->type&0x4 )
+	{
+		if ( !s->r->va->m_preAllocated )
+		{
+			mark( s->r );
+		}
+		return;
+	}
+
+	if ( s->va->m_preAllocated )
+	{
+		return;
+	}
+	
+	WRGCArray* sva = s->va;
+	
+	if ( (sva->m_type) == SV_VALUE )
+	{
+		// this is an array of values, check them for array-ness too
+
+		WRValue* top = sva->m_Vdata + sva->m_size;
+		for( WRValue* V = sva->m_Vdata; V<top; ++V )
+		{
+			if ( (V->xtype & 0x4) && !(V->va->m_preAllocated) && !(V->va->m_size & 0x40000000) )
+			{
+				mark( V );
+			}
+		}
+	}
+
+	sva->m_size |= 0x40000000;
+}
+
+//------------------------------------------------------------------------------
+void WRContext::gc( WRValue* stackTop )
+{
+	if ( !svAllocated )
+	{
+		return;
+	}
+	
+	// mark stack
+	for( WRValue* s=w->stack; s<stackTop; ++s)
+	{
+		// an array in the chain?
+		if ( (s->xtype & 0x4) && !(s->va->m_preAllocated) )
+		{
+			mark( s );
+		}
+	}
+
+	// mark context's global
+	for( int i=0; i<globals; ++i )
+	{
+		if ( (globalSpace[i].xtype & 0x4) && !(globalSpace[i].va->m_preAllocated) )
+		{
+			mark( globalSpace + i );
+		}
+	}
+
+	// sweep
+	WRGCArray* current = svAllocated;
+	WRGCArray* prev = 0;
+	while( current )
+	{
+		// if set, clear it
+		if ( current->m_size & 0x40000000 )
+		{
+			current->m_size &= ~0x40000000;
+			prev = current;
+			current = current->m_next;
+		}
+		// otherwise nuke it as unreferenced
+		else if ( prev == 0 )
+		{
+			svAllocated = current->m_next;
+			delete current;
+			current = svAllocated;
+		}
+		else
+		{
+			prev->m_next = current->m_next;
+			delete current;
+			current = prev->m_next;
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
 WRGCArray* WRContext::getSVA( int size, WRGCArrayType type, WRValue* stackTop )
 {
 	// gc before every alloc may seem a bit much but we want to be miserly
-	if ( svAllocated && stackTop )
+	if ( stackTop )
 	{
-		// mark stack
-		for( WRValue* s=w->stack; s<stackTop; ++s)
-		{
-			// an array in the chain?
-			if ( (s->xtype & 0x4) && !(s->va->m_preAllocated) )
-			{
-				gcArray( s->va );
-			}
-		}
-		
-		// mark context's global
-		for( int i=0; i<globals; ++i )
-		{
-			if ( (globalSpace[i].xtype & 0x4) && !(globalSpace[i].va->m_preAllocated) )
-			{
-				gcArray( globalSpace[i].va );
-			}
-		}
-
-		// sweep
-		WRGCArray* current = svAllocated;
-		WRGCArray* prev = 0;
-		while( current )
-		{
-			// if set, clear it
-			if ( current->m_size & 0x40000000 )
-			{
-				current->m_size &= ~0x40000000;
-				prev = current;
-				current = current->m_next;
-			}
-			// otherwise nuke it as unreferenced
-			else if ( prev == 0 )
-			{
-				svAllocated = current->m_next;
-				delete current;
-				current = svAllocated;
-			}
-			else
-			{
-				prev->m_next = current->m_next;
-				delete current;
-				current = prev->m_next;
-			}
-		}
+		gc( stackTop );
 	}
 
 	WRGCArray* ret = new WRGCArray( size, type );
@@ -140,31 +187,11 @@ WRGCArray* WRContext::getSVA( int size, WRGCArrayType type, WRValue* stackTop )
 	{
 		memset( (char*)ret->m_Cdata, 0, sizeof(WRValue) * size);
 	}
-	
+
 	ret->m_next = svAllocated;
 	svAllocated = ret;
-	
+
 	return ret;
-}
-
-//------------------------------------------------------------------------------
-void WRContext::gcArray( WRGCArray* sva )
-{
-	if ( (sva->m_type) == SV_VALUE )
-	{
-		// this is an array of values, check them for array-ness too
-		
-		WRValue* top = sva->m_Vdata + sva->m_size;
-		for( WRValue* V = sva->m_Vdata; V<top; ++V )
-		{
-			if ( (V->xtype & 0x4) && !(V->va->m_preAllocated) )
-			{
-				gcArray( V->va );
-			}
-		}
-	}
-
-	sva->m_size |= 0x40000000;
 }
 
 //------------------------------------------------------------------------------
@@ -308,9 +335,16 @@ char* WRValue::asString( char* string ) const
 			
 			case WR_EX_REFARRAY:
 			{
-				WRValue temp;
-				wr_arrayToValue(this, &temp);
-				return temp.asString(string);
+				if ( r->xtype & 0x4 )
+				{
+					WRValue temp;
+					wr_arrayToValue(this, &temp);
+					return temp.asString(string);
+				}
+				else
+				{
+					return r->asString(string);
+				}
 			}
 		}
 	}
@@ -418,6 +452,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 		&&Index,
 		&&IndexSkipLoad,
+		&&CountOf,
 
 		&&StackIndexHash,
 		&&GlobalIndexHash,
@@ -582,9 +617,11 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 		&&IndexLiteral8,
 		&&IndexLiteral16,
-		&&CreateIndex,
-		&&CreateIndexLiteral8,
-		&&CreateIndexLiteral16,
+
+		&&IndexLocalLiteral8,
+		&&IndexGlobalLiteral8,
+		&&IndexLocalLiteral16,
+		&&IndexGlobalLiteral16,
 
 		&&AssignAndPop,
 		&&AssignToGlobalAndPop,
@@ -804,8 +841,10 @@ literalZero:
 			{
 				int16_t len = (((int16_t)*pc)<<8) | (int16_t)*(pc + 1);
 				pc += 2;
+				
+				context->gc( stackTop );
 				stackTop->p2 = INIT_AS_ARRAY;
-				stackTop->va = context->getSVA( len, SV_CHAR, stackTop );
+				stackTop->va = context->getSVA( len, SV_CHAR, 0 );
 
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				memcpy( (unsigned char *)stackTop->va->m_data, pc, len );
@@ -841,10 +880,7 @@ literalZero:
 
 			CASE(ReserveGlobalFrame):
 			{
-				if ( context->globalSpace )
-				{
-					delete[] context->globalSpace;
-				}
+				delete[] context->globalSpace;
 				context->globals = *pc++;
 				context->globalSpace = new WRValue[ context->globals ];
 				for( int i=0; i<context->globals; ++i )
@@ -858,15 +894,15 @@ literalZero:
 
 			CASE(LoadFromLocal):
 			{
-				stackTop->p2 = INIT_AS_REF;
-				(stackTop++)->p = frameBase + *pc++;
+				stackTop->p = frameBase + *pc++;
+				(stackTop++)->p2 = INIT_AS_REF;
 				CONTINUE;
 			}
 
 			CASE(LoadFromGlobal):
 			{
-				stackTop->p2 = INIT_AS_REF;
-				(stackTop++)->p = globalSpace + *pc++;
+				stackTop->p = globalSpace + *pc++;
+				(stackTop++)->p2 = INIT_AS_REF;
 				CONTINUE;
 			}
 
@@ -904,9 +940,21 @@ indexHash:
 				tempValue = --stackTop;
 				tempValue2 = --stackTop;
 			}
+			
 			CASE(IndexSkipLoad):
 			{
 				wr_index[(tempValue->type<<2)|tempValue2->type]( context, tempValue, tempValue2, stackTop++ );
+				CONTINUE;
+			}
+			
+			CASE(CountOf):
+			{
+				tempValue = stackTop - 1;
+				while( tempValue->type == WR_REF )
+				{
+					tempValue = tempValue->r;
+				}
+				wr_countOfArrayElement( tempValue, stackTop - 1 );
 				CONTINUE;
 			}
 
@@ -1570,7 +1618,9 @@ callFunction:
 
 					stackTop->p2 = INIT_AS_STRUCT;
 					unsigned char count = *table++;
+
 					stackTop->va = context->getSVA( count, SV_VALUE, 0 );
+					
 					stackTop->va->m_ROMHashTable = table + 3;
 					stackTop->va->m_mod = (((int16_t)*(table+1)) << 8) + *(table+2);
 
@@ -1582,8 +1632,8 @@ callFunction:
 					{
 						memcpy( (char*)tempValue, stackTop + *table + 1, count*sizeof(WRValue) );
 					}
-						
-					++stackTop;
+
+					context->gc( ++stackTop );
 				}
 				else
 				{
@@ -1748,8 +1798,41 @@ targetFuncStoreLocalOp:
 				stackTop->i = *pc++;
 indexLiteral:
 				tempValue = stackTop - 1;
-				wr_index[(WR_INT*4)|tempValue->type]( context, stackTop, tempValue, tempValue );
+				wr_index[(WR_INT<<4)|tempValue->type]( context, stackTop, tempValue, tempValue );
 				CONTINUE;
+			}
+
+			
+			CASE(IndexLocalLiteral16):
+			{
+				tempValue = frameBase + *pc++;
+				(++stackTop)->i = (int32_t)(int16_t)((((int16_t)*(pc)) << 8) | ((int16_t)*(pc+1)));
+				pc += 2;
+				goto indexTempLiteralPostLoad;
+			}
+			
+			CASE(IndexLocalLiteral8):
+			{
+				tempValue = frameBase + *pc++;
+indexTempLiteral:
+				(++stackTop)->i = *pc++;
+indexTempLiteralPostLoad:
+				wr_index[(WR_INT<<4)|tempValue->type]( context, stackTop, tempValue, stackTop - 1 );
+				CONTINUE;
+			}
+			
+			CASE(IndexGlobalLiteral16):
+			{
+				tempValue = globalSpace + *pc++;
+				(++stackTop)->i = (int32_t)(int16_t)((((int16_t)*(pc)) << 8) | ((int16_t)*(pc+1)));
+				pc += 2;
+				goto indexTempLiteralPostLoad;
+			}
+
+			CASE(IndexGlobalLiteral8):
+			{
+				tempValue = globalSpace + *pc++;
+				goto indexTempLiteral;
 			}
 			
 			CASE(AssignToGlobalAndPop):
@@ -1768,34 +1851,6 @@ indexLiteral:
 				CONTINUE;
 			}
 
-			CASE(CreateIndex):
-			{
-				*stackTop = *(stackTop - 2);
-				tempValue = --stackTop;
-				tempValue2 = stackTop - 1;
-				wr_index[(tempValue->type<<2)|tempValue2->type]( context, tempValue, tempValue2, tempValue2 );
-				*tempValue2 = *(stackTop + 1);
-				CONTINUE;
-			}
-
-			CASE(CreateIndexLiteral8):
-			{
-				(stackTop + 1)->i = *pc++;
-				goto createIndexLiteral;
-			}
-
-			CASE(CreateIndexLiteral16):
-			{
-				(stackTop + 1)->i = (int32_t)(int16_t)((((int16_t)*(pc)) << 8) | ((int16_t)*(pc+1)));
-				pc += 2;
-createIndexLiteral:
-				tempValue = stackTop - 1;
-				*stackTop = *tempValue;
-				wr_index[(WR_INT*4)|tempValue->type]( context, stackTop + 1, tempValue, tempValue );
-				*(stackTop - 1) = *stackTop;
-				CONTINUE;
-			}
-
 			CASE(AssignToArrayAndPop):
 			{
 				tempValue = stackTop - 1; // value
@@ -1807,7 +1862,7 @@ createIndexLiteral:
 					stackTop->p2 = INIT_AS_REFARRAY;
 					ARRAY_ELEMENT_TO_P2( stackTop, (int32_t)(int16_t)((((int16_t)*(pc)) << 8) | ((int16_t)*(pc+1))) );
 
-					wr_assign[(stackTop->type<<2)|tempValue->type]( stackTop, tempValue );
+					wr_assign[(WR_EX<<2)|tempValue->type]( stackTop, tempValue );
 				}
 
 				pc += 2;

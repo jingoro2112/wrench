@@ -48,7 +48,7 @@ const char* c_reserved[] =
 	"while",
 	"new",
 	"struct",
-	"",
+	""
 };
 
 //#define _DUMP
@@ -441,6 +441,19 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 					}					
 					//else // bare '/' 
 				}
+			}
+			else if ( token[0] == '.'
+					  && m_source[m_pos] == '_'
+					  && m_pos + 6 < m_sourceLen
+					  && m_source[m_pos+1] == 'c'
+					  && m_source[m_pos+2] == 'o'
+					  && m_source[m_pos+3] == 'u'
+					  && m_source[m_pos+4] == 'n'
+					  && m_source[m_pos+5] == 't'
+					  && isspace(m_source[m_pos+6]) )
+			{
+				m_pos += 6;
+				token = "._count";
 			}
 			else if ( isdigit(token[0])
 					  || (token[0] == '.' && isdigit(m_source[m_pos])) )
@@ -2305,10 +2318,74 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 //------------------------------------------------------------------------------
 void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& addMe )
 {
-	if ( bytecode.all.size() > 0
-		 && addMe.opcodes.size() == 2
-		 && addMe.all.size() == 3
-		 && addMe.opcodes[1] == O_Index )
+	if ( bytecode.all.size() > 1
+		 && bytecode.opcodes.size() > 0
+		 && addMe.opcodes.size() == 1
+		 && addMe.all.size() > 2
+		 && addMe.opcodes[0] == O_IndexLiteral16
+		 && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal )
+	{
+		bytecode.all[bytecode.all.size()-2] = O_IndexLocalLiteral16;
+		for( unsigned int i=1; i<addMe.all.size(); ++i )
+		{
+			bytecode.all += addMe.all[i];	
+		}
+		bytecode.opcodes.shave(1);
+		bytecode.opcodes += O_IndexLocalLiteral16;
+		return;
+	}
+	else if ( bytecode.all.size() > 1
+			  && bytecode.opcodes.size() > 0
+			  && addMe.opcodes.size() == 1
+			  && addMe.all.size() > 2
+			  && addMe.opcodes[0] == O_IndexLiteral16
+			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal )
+	{
+		bytecode.all[bytecode.all.size()-2] = O_IndexGlobalLiteral16;
+		for( unsigned int i=1; i<addMe.all.size(); ++i )
+		{
+			bytecode.all += addMe.all[i];	
+		}
+		bytecode.opcodes.shave(1);
+		bytecode.opcodes += O_IndexGlobalLiteral16;
+		return;
+	}
+	else if ( bytecode.all.size() > 1
+			  && bytecode.opcodes.size() > 0
+			  && addMe.opcodes.size() == 1
+			  && addMe.all.size() > 1
+			  && addMe.opcodes[0] == O_IndexLiteral8
+			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal )
+	{
+		bytecode.all[bytecode.all.size()-2] = O_IndexLocalLiteral8;
+		for( unsigned int i=1; i<addMe.all.size(); ++i )
+		{
+			bytecode.all += addMe.all[i];	
+		}
+		bytecode.opcodes.shave(1);
+		bytecode.opcodes += O_IndexLocalLiteral8;
+		return;
+	}
+	else if ( bytecode.all.size() > 1
+			  && bytecode.opcodes.size() > 0
+			  && addMe.opcodes.size() == 1
+			  && addMe.all.size() > 1
+			  && addMe.opcodes[0] == O_IndexLiteral8
+			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal )
+	{
+		bytecode.all[bytecode.all.size()-2] = O_IndexGlobalLiteral8;
+		for( unsigned int i=1; i<addMe.all.size(); ++i )
+		{
+			bytecode.all += addMe.all[i];	
+		}
+		bytecode.opcodes.shave(1);
+		bytecode.opcodes += O_IndexGlobalLiteral8;
+		return;
+	}
+	else if ( bytecode.all.size() > 0
+			  && addMe.opcodes.size() == 2
+			  && addMe.all.size() == 3
+			  && addMe.opcodes[1] == O_Index )
 	{
 		if ( bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal
 			 && addMe.opcodes[0] == O_LoadFromLocal )
@@ -3258,36 +3335,6 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				m_err = WR_ERR_unexpected_token;
 				return 0;
 			}
-
-			int o = expression.context[ depth - 2 ].bytecode.opcodes.size() - 1;
-			int a = expression.context[ depth - 2 ].bytecode.all.size() - 1;
-			switch( expression.context[ depth - 2 ].bytecode.opcodes[o] )
-			{
-				case O_IndexLiteral8:
-				{
-					expression.context[ depth - 2 ].bytecode.all[a-1] = O_CreateIndexLiteral8;
-					break;
-				}
-				
-				case O_IndexLiteral16:
-				{
-					expression.context[ depth - 2 ].bytecode.all[a-2] = O_CreateIndexLiteral16;
-					break;
-				}
-				
-				case O_Index:
-				{
-					expression.context[ depth - 2 ].bytecode.all[a] = O_CreateIndex;
-					break;
-				}
-
-				default:
-				{
-					m_err = WR_ERR_compiler_panic;
-					return 0;
-				}
-			}
-
 
 			expression.context.remove( depth - 1, 1 ); // knock off the equate
 			depth--;

@@ -107,17 +107,36 @@ float* WRValue::asFloatArray( int* len )
 }
 
 //------------------------------------------------------------------------------
+void growValueArray( WRValue* v, int newSize )
+{
+	WRGCArray* newArray = new WRGCArray( newSize + 1, SV_VALUE );
+	
+	newArray->m_next = v->va->m_next;
+	v->va->m_next = newArray;
+	memcpy( newArray->m_Cdata, v->va->m_Cdata, sizeof(WRValue) * v->va->m_size );
+	memset( (char*)(newArray->m_Vdata + v->va->m_size), 0, (newArray->m_size - v->va->m_size) * sizeof(WRValue) );
+	v->va = newArray;
+}
+
+//------------------------------------------------------------------------------
 int WRValue::arrayValueAsInt() const
 {
-	unsigned int arrayElement = ARRAY_ELEMENT_FROM_P2(p2);
-	int s = arrayElement < r->va->m_size ? arrayElement : r->va->m_size - 1;
-
+	unsigned int s = ARRAY_ELEMENT_FROM_P2(p2);
 	switch( r->va->m_type )
 	{
-		case SV_VALUE: { return ((WRValue *)r->va->m_data)[s].asInt(); }
-		case SV_CHAR: { return ((unsigned char *)r->va->m_data)[s]; }
-		case SV_INT: { return ((int *)r->va->m_data)[s]; }
-		case SV_FLOAT: { return (int)((float *)r->va->m_data)[s]; }
+		case SV_VALUE:
+		{
+			if ( s >= r->va->m_size )
+			{
+				growValueArray( r, s + 1 );
+			}
+
+			return r->va->m_Vdata[s].asInt();
+		}
+		
+		case SV_CHAR: { return r->va->m_Cdata[(s >= r->va->m_size) ? 0 : s]; }
+		case SV_INT: { return r->va->m_Idata[(s >= r->va->m_size) ? 0 : s]; }
+		case SV_FLOAT: { return (int)r->va->m_Fdata[(s >= r->va->m_size) ? 0 : s]; }
 		default: return 0;
 	}
 }
@@ -125,15 +144,22 @@ int WRValue::arrayValueAsInt() const
 //------------------------------------------------------------------------------
 float WRValue::arrayValueAsFloat() const
 {
-	unsigned int arrayElement = ARRAY_ELEMENT_FROM_P2(p2);
-	int s = arrayElement < r->va->m_size ? arrayElement : r->va->m_size - 1;
-
+	unsigned int s = ARRAY_ELEMENT_FROM_P2(p2);
 	switch( r->va->m_type )
 	{
-		case SV_VALUE: { return ((WRValue *)r->va->m_data)[s].asFloat(); }
-		case SV_CHAR: { return ((unsigned char *)r->va->m_data)[s]; }
-		case SV_INT: { return (float)((int *)r->va->m_data)[s]; }
-		case SV_FLOAT: { return ((float *)r->va->m_data)[s]; }
+		case SV_VALUE:
+		{
+			if ( s >= r->va->m_size )
+			{
+				growValueArray( r, s + 1 );
+			}
+
+			return r->va->m_Vdata[s].asFloat();
+		}
+
+		case SV_CHAR: { return r->va->m_Cdata[(s >= r->va->m_size) ? 0 : s]; }
+		case SV_INT: { return (float)r->va->m_Idata[(s >= r->va->m_size) ? 0 : s]; }
+		case SV_FLOAT: { return r->va->m_Fdata[(s >= r->va->m_size) ? 0 : s]; }
 		default: return 0;
 	}
 }
@@ -149,35 +175,43 @@ static void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
 //------------------------------------------------------------------------------
 void wr_arrayToValue( const WRValue* array, WRValue* value )
 {
-	unsigned int index = ARRAY_ELEMENT_FROM_P2(array->p2);
-	
-	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
+	if ( !(array->r->xtype & 0x4) )
+	{
+		value->init();
+		return;
+	}
 
+	unsigned int s = ARRAY_ELEMENT_FROM_P2(array->p2);
+	
 	switch( array->r->va->m_type )
 	{
 		case SV_VALUE:
 		{
-			*value = ((WRValue *)array->r->va->m_data)[s];
+			if ( s >= array->r->va->m_size )
+			{
+				growValueArray( array->r, s + 1 );
+			}
+			*value = array->r->va->m_Vdata[s];
 			break;
 		}
 
 		case SV_CHAR:
 		{
-			value->i = ((unsigned char *)array->r->va->m_data)[s];
+			value->i = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Cdata[s];
 			value->p2 = INIT_AS_INT;
 			return;
 		}
 
 		case SV_INT:
 		{
-			value->i = ((int *)array->r->va->m_data)[s];
+			value->i = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Idata[s];
 			value->p2 = INIT_AS_INT;
 			return;
 		}
 
 		case SV_FLOAT:
 		{
-			value->f = ((float *)array->r->va->m_data)[s];
+			value->f = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Fdata[s];
 			value->p2 = INIT_AS_FLOAT;
 			return;
 		}
@@ -187,74 +221,126 @@ void wr_arrayToValue( const WRValue* array, WRValue* value )
 //------------------------------------------------------------------------------
 void wr_intValueToArray( const WRValue* array, int32_t I )
 {
-	unsigned int index = ARRAY_ELEMENT_FROM_P2(array->p2);
-
-	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
+	if ( !(array->r->xtype & 0x4) )
+	{
+		return;
+	}
+	
+	unsigned int s = ARRAY_ELEMENT_FROM_P2(array->p2);
 
 	switch( array->r->va->m_type )
 	{
 		case SV_VALUE:
 		{
-			WRValue* val = (WRValue *)array->r->va->m_data + s;
+			if ( s >= array->r->va->m_size )
+			{
+				growValueArray( array->r, s + 1 );
+			}
+			WRValue* val = array->r->va->m_Vdata + s;
 			val->i = I;
 			val->p2 = INIT_AS_INT;
 			break;
 		}
 
-		case SV_CHAR: {	((unsigned char *)array->r->va->m_data)[s] = I; break; }
-		case SV_INT: { ((int *)array->r->va->m_data)[s] = I; break; }
-		case SV_FLOAT: { ((float *)array->r->va->m_data)[s] = (float)I; break; }
+		case SV_CHAR:
+		{
+			if ( s < array->r->va->m_size )
+			{
+				array->r->va->m_Cdata[s] = I;
+			}
+			
+			break;
+		}
+		case SV_INT:
+		{
+			if ( s < array->r->va->m_size )
+			{
+				array->r->va->m_Idata[s] = I;
+			}
+			break;
+		}
+		case SV_FLOAT:
+		{
+			if ( s < array->r->va->m_size )
+			{
+				array->r->va->m_Fdata[s] = (float)I;
+			}
+			break;
+		}
 	}
 }
 
 //------------------------------------------------------------------------------
 void wr_floatValueToArray( const WRValue* array, float F )
 {
-	unsigned int index = ARRAY_ELEMENT_FROM_P2(array->p2);
-
-	int s = index < array->r->va->m_size ? index : array->r->va->m_size - 1;
+	if ( !(array->r->xtype & 0x4) )
+	{
+		return;
+	}
+				
+	unsigned int s = ARRAY_ELEMENT_FROM_P2(array->p2);
 
 	switch( array->r->va->m_type )
 	{
 		case SV_VALUE:
 		{
-			WRValue* val = (WRValue *)array->r->va->m_data + s;
+			if ( s >= array->r->va->m_size )
+			{
+				growValueArray( array->r, s + 1 );
+			}
+			WRValue* val = array->r->va->m_Vdata + s;
 			val->f = F;
 			val->p2 = INIT_AS_FLOAT;
 			break;
 		}
 
-		case SV_CHAR: {	((unsigned char *)array->r->va->m_data)[s] = (unsigned char)F; break; }
-		case SV_INT: { ((int *)array->r->va->m_data)[s] = (int)F; break; }
-		case SV_FLOAT: { ((float *)array->r->va->m_data)[s] = F; break; }
+		case SV_CHAR:
+		{
+			if ( s < array->r->va->m_size )
+			{
+				array->r->va->m_Cdata[s] = (unsigned char)F;
+			}
+
+			break;
+		}
+		case SV_INT:
+		{
+			if ( s < array->r->va->m_size )
+			{
+				array->r->va->m_Idata[s] = (int)F;
+			}
+			break;
+		}
+		case SV_FLOAT:
+		{
+			if ( s < array->r->va->m_size )
+			{
+				array->r->va->m_Fdata[s] = F;
+			}
+			break;
+		}
 	}
 }
 
-//==============================================================================
-static void doAssign_E_E( WRValue* to, WRValue* from )
+//------------------------------------------------------------------------------
+void wr_countOfArrayElement( WRValue* array, WRValue* target )
 {
-	if ( from->xtype == WR_EX_REFARRAY )
+	if ( array->xtype & 0x4 )
 	{
-		WRValue element;
-		wr_arrayToValue( from, &element );
-		wr_assign[(WR_EX<<2)+element.type](to, &element);
-	}
-	else if ( to->xtype == WR_EX_REFARRAY )
-	{
-		if ( to->r->va->m_type == SV_VALUE )
+		if ( array->xtype == WR_EX_REFARRAY )
 		{
-			((WRValue*)to->r->va->m_data)[ARRAY_ELEMENT_FROM_P2(to->p2)] = *from;
+			wr_arrayToValue( array, target );
+			wr_countOfArrayElement( target, target );
 		}
 		else
 		{
-			*to = *from;
+			target->i = array->va->m_size;
+			target->p2 = INIT_AS_INT;
 		}
 	}
-	else
-	{
-		*to = *from;
-	}
 }
+
+//------------------------------------------------------------------------------
 static void doAssign_X_E( WRValue* to, WRValue* from )
 {
 	if ( from->xtype == WR_EX_REFARRAY )
@@ -265,8 +351,7 @@ static void doAssign_X_E( WRValue* to, WRValue* from )
 	}
 	else
 	{
-		to->p2 = from->p2;
-		to->va = new WRGCArray(*from->va);
+		*to = *from;
 	}
 }
 static void doAssign_E_F( WRValue* to, WRValue* from )
@@ -291,10 +376,42 @@ static void doAssign_E_I( WRValue* to, WRValue* from )
 		*to = *from;
 	}
 }
-static void doAssign_R_E( WRValue* to, WRValue* from ) { wr_assign[(to->r->type << 2)|WR_EX](to->r, from); }
-static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }static void doAssign_E_R( WRValue* to, WRValue* from ) { wr_assign[(WR_EX << 2) | from->r->type](to, from->r); }
-static void doAssign_R_X( WRValue* to, WRValue* from ) { *to->r = *from; }
-static void doAssign_X_R( WRValue* to, WRValue* from ) { *to = *from->r; }
+static void doAssign_E_E( WRValue* to, WRValue* from )
+{
+	if ( from->xtype == WR_EX_REFARRAY )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_assign[(WR_EX<<2)+element.type](to, &element);
+	}
+	else if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))
+	{
+		if ( to->r->va->m_type == SV_VALUE )
+		{
+			unsigned int index = ARRAY_ELEMENT_FROM_P2(to->p2);
+			
+			if ( index > to->r->va->m_size )
+			{
+				growValueArray( to->r, index + 1 );
+			}
+
+			to->r->va->m_Vdata[index] = *from;
+		}
+		else
+		{
+			*to = *from;
+		}
+	}
+	else
+	{
+		*to = *from;
+	}
+}
+static void doAssign_R_E( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_EX](to->r, from); }
+static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
+static void doAssign_E_R( WRValue* to, WRValue* from ) { wr_assign[(WR_EX<<2)|from->r->type](to, from->r); }
+static void doAssign_R_X( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->type](to->r, from); }
+static void doAssign_X_R( WRValue* to, WRValue* from ) { wr_assign[(to->type<<2)|from->r->type](to, from->r); }
 static void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
 WRVoidFunc wr_assign[16] = 
 {
@@ -309,7 +426,7 @@ WRVoidFunc wr_assign[16] =
 #define X_ASSIGN( NAME, OPERATION ) \
 static void NAME##Assign_R_E( WRValue* to, WRValue* from ) \
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -319,7 +436,7 @@ static void NAME##Assign_R_E( WRValue* to, WRValue* from ) \
 }\
 static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -332,7 +449,7 @@ static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 }\
 static void NAME##Assign_E_F( WRValue* to, WRValue* from )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -345,7 +462,7 @@ static void NAME##Assign_E_F( WRValue* to, WRValue* from )\
 }\
 static void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -356,7 +473,7 @@ static void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
 }\
 static void NAME##Assign_I_E( WRValue* to, WRValue* from )\
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -366,7 +483,7 @@ static void NAME##Assign_I_E( WRValue* to, WRValue* from )\
 }\
 static void NAME##Assign_F_E( WRValue* to, WRValue* from )\
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -376,7 +493,7 @@ static void NAME##Assign_F_E( WRValue* to, WRValue* from )\
 }\
 static void NAME##Assign_E_R( WRValue* to, WRValue* from )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))\
 	{\
 		WRValue temp = *from->r;\
 		NAME##Assign[(WR_EX<<2)|temp.type]( to, &temp );\
@@ -410,7 +527,7 @@ X_ASSIGN( wr_Divide, / );
 #define X_INT_ASSIGN( NAME, OPERATION ) \
 static void NAME##Assign_E_R( WRValue* to, WRValue* from )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))\
 	{\
 		WRValue temp = *from->r;\
 		NAME##Assign[(WR_EX<<2)+temp.type]( to, &temp );\
@@ -419,7 +536,7 @@ static void NAME##Assign_E_R( WRValue* to, WRValue* from )\
 }\
 static void NAME##Assign_R_E( WRValue* to, WRValue* from ) \
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -429,7 +546,7 @@ static void NAME##Assign_R_E( WRValue* to, WRValue* from ) \
 }\
 static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -442,7 +559,7 @@ static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 }\
 static void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -453,7 +570,7 @@ static void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
 }\
 static void NAME##Assign_I_E( WRValue* to, WRValue* from )\
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -486,7 +603,7 @@ X_INT_ASSIGN( wr_LeftShift, << );
 #define X_BINARY( NAME, OPERATION ) \
 static void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -495,7 +612,7 @@ static void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -504,7 +621,7 @@ static void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -513,7 +630,7 @@ static void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_E_F( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -522,7 +639,7 @@ static void NAME##Binary_E_F( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_E_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY && from->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4) && (to->r->xtype&0x4))\
 	{\
 		WRValue element1;\
 		wr_arrayToValue( to, &element1 );\
@@ -533,7 +650,7 @@ static void NAME##Binary_E_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_I_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -542,7 +659,7 @@ static void NAME##Binary_I_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_F_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -578,7 +695,7 @@ static void doTargetFuncBlank( WRValue* to, WRValue* from, WRValue* target ) {}
 #define X_INT_BINARY( NAME, OPERATION ) \
 static void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -587,7 +704,7 @@ static void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -596,7 +713,7 @@ static void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -605,7 +722,7 @@ static void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_E_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY && from->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4) && (to->r->xtype&0x4) )\
 	{\
 		WRValue element1;\
 		wr_arrayToValue( to, &element1 );\
@@ -616,7 +733,7 @@ static void NAME##Binary_E_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_I_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -647,7 +764,7 @@ X_INT_BINARY( wr_XOR, ^ );
 #define X_COMPARE( NAME, OPERATION ) \
 static bool NAME##_E_E( WRValue* to, WRValue* from )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY && from->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && from->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4) && (from->r->xtype&0x4))\
 	{\
 		WRValue element1;\
 		wr_arrayToValue( to, &element1 );\
@@ -659,7 +776,7 @@ return false;\
 }\
 static bool NAME##_R_E( WRValue* to, WRValue* from )\
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -669,7 +786,7 @@ return false;\
 }\
 static bool NAME##_E_R( WRValue* to, WRValue* from )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -679,7 +796,7 @@ return false;\
 }\
 static bool NAME##_E_I( WRValue* to, WRValue* from )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -689,7 +806,7 @@ return false;\
 }\
 static bool NAME##_E_F( WRValue* to, WRValue* from )\
 {\
-	if ( to->xtype == WR_EX_REFARRAY )\
+	if ( to->xtype == WR_EX_REFARRAY && (to->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -699,7 +816,7 @@ return false;\
 }\
 static bool NAME##_I_E( WRValue* to, WRValue* from )\
 {\
-	if ( from->xtype == WR_EX_REFARRAY )\
+	if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -709,7 +826,7 @@ static bool NAME##_I_E( WRValue* to, WRValue* from )\
 }\
 static bool NAME##_F_E( WRValue* to, WRValue* from )\
 {\
-   if ( from->xtype == WR_EX_REFARRAY )\
+   if ( from->xtype == WR_EX_REFARRAY && (from->r->xtype&0x4))\
    {\
 	   WRValue element;\
 	   wr_arrayToValue( from, &element );\
@@ -740,90 +857,41 @@ X_COMPARE( wr_CompareLT, < );
 X_COMPARE( wr_LogicalAND, && );
 X_COMPARE( wr_LogicalOR, || );
 
-static void doIndex_I_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) 
-{
-	wr_index[(WR_INT<<2)|value->r->type](c, index, value->r, target);
-
-/*
-	// indexing with an int into a ref, is it an array?
-	if ( value->r->xtype != WR_EX_ARRAY )
-	{
-		// nope, make it one of this size and return a ref
-		value->r->va = c->getSVA( index->i+1, SV_VALUE, value );
-		value->r->p2 = INIT_AS_ARRAY;
-
-		target->r = value->r;
-		ARRAY_ELEMENT_TO_P2( target, index->i );
-	}
-	else
-	{
-		// yes it is, index it
-		if ( (value->r->va->m_type) == SV_VALUE )
-		{
-			// value is easy, return a ref to the value
-			target->r = value->r->va->m_Vdata + index->i;
-			target->p2 = INIT_AS_REF;
-		}
-		else
-		{
-			// this is a native array, value remains a reference to an array, but set the
-			// element to point to the indexed value
-			target->p2 = INIT_AS_REFARRAY;
-
-			ARRAY_ELEMENT_TO_P2( target, index->i );
-		}
-	}
-*/
-}
-
 static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
-	// all we know is the value is not an array, so make it one
-	value->va = c->getSVA( index->i+1, SV_VALUE, target );
-	value->p2 = INIT_AS_ARRAY;
+	c->gc( target );
 
+	// all we know is the value is not an array, so make it one
 	target->r = value;
 	target->p2 = INIT_AS_REFARRAY;
 	ARRAY_ELEMENT_TO_P2( target, index->i );
+
+	value->p2 = INIT_AS_ARRAY;
+	value->va = c->getSVA( index->i+1, SV_VALUE, 0 );//target - 1 );//true );
+	memset( (char*)value->va->m_Cdata, 0, sizeof(WRValue) * value->va->m_size );
 }
 static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
 	if ( value->xtype != WR_EX_ARRAY )
 	{
+		c->gc( target );
+
 		// nope, make it one of this size and return a ref
-		value->va = c->getSVA( index->i+1, SV_VALUE, target );
 		value->p2 = INIT_AS_ARRAY;
-	}
-	else if ( (value->va->m_type) == SV_VALUE )
-	{
-		target->p2 = INIT_AS_REF;
-		target->r = value->va->m_Vdata + index->i;
-		return;
+		value->va = c->getSVA( index->i+1, SV_VALUE, 0 );//target - 1 );//true );
+		memset( (char*)value->va->m_Cdata, 0, sizeof(WRValue) * value->va->m_size );
+
 	}
 
 	target->r = value;
 	target->p2 = INIT_AS_REFARRAY;
 	ARRAY_ELEMENT_TO_P2( target, index->i );
 }
-static void doIndex_R_I( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	wr_index[(index->r->type<<2)|WR_INT](c, index->r, value, target);
-}
-static void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target);
-}
-static void doIndex_R_F( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	wr_index[(index->r->type<<2)|WR_FLOAT](c, index->r, value, target);
-}
-static void doIndex_R_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	if ( value->xtype == WR_EX_ARRAY )
-	{
-		wr_index[(index->r->type<<2)|WR_EX](c, index->r, value, target);
-	}
-}
+static void doIndex_I_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(WR_INT<<2)|value->r->type](c, index, value->r, target); }
+static void doIndex_R_I( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_INT](c, index->r, value, target); }
+static void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target); }
+static void doIndex_R_F( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_FLOAT](c, index->r, value, target); }
+static void doIndex_R_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { if (value->xtype == WR_EX_ARRAY) { wr_index[(index->r->type<<2)|WR_EX](c, index->r, value, target); } }
 
 static void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) {}
 
@@ -839,24 +907,27 @@ WRStateFunc wr_index[16] =
 #define X_UNARY_PRE( NAME, OPERATION ) \
 static void NAME##_E( WRValue* value )\
 {\
-	if ( value->xtype == WR_EX_REFARRAY )\
+	if ( value->xtype == WR_EX_REFARRAY && (value->r->xtype&0x4))\
 	{\
-		unsigned int index = ARRAY_ELEMENT_FROM_P2(value->p2);\
-		int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;\
-\
+		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);\
 		switch( value->r->va->m_type )\
 		{\
 			case SV_VALUE:\
 			{\
+				if ( s >= value->r->va->m_size )\
+				{\
+					growValueArray( value->r, s + 1 );\
+				}\
+\
 				WRValue* val = (WRValue *)value->r->va->m_data + s;\
 				NAME[ val->type ]( val );\
 				*value = *val;\
 				return;\
 			}\
 \
-			case SV_CHAR: {	value->i = OPERATION ((char *)value->r->va->m_data)[s]; value->p2 = INIT_AS_INT; return; }\
-			case SV_INT: { value->i = OPERATION ((int *)value->r->va->m_data)[s]; value->p2 = INIT_AS_INT; return; }\
-			case SV_FLOAT: { value->f = OPERATION ((float *)value->r->va->m_data)[s]; value->p2 = INIT_AS_FLOAT; return; }\
+			case SV_CHAR: {	value->i = (s >= value->r->va->m_size) ? 0 : OPERATION value->r->va->m_Cdata[s]; value->p2 = INIT_AS_INT; return; }\
+			case SV_INT: { value->i = (s >= value->r->va->m_size) ? 0 : OPERATION value->r->va->m_Idata[s]; value->p2 = INIT_AS_INT; return; }\
+			case SV_FLOAT: { value->f = (s >= value->r->va->m_size) ? 0 : OPERATION value->r->va->m_Fdata[s]; value->p2 = INIT_AS_FLOAT; return; }\
 		}\
 	}\
 }\
@@ -900,16 +971,18 @@ WRUnaryFunc wr_bitwiseNOT[4] =
 #define X_UNARY_POST( NAME, OPERATION ) \
 static void NAME##_E( WRValue* value, WRValue* stack )\
 {\
-	if ( value->xtype == WR_EX_REFARRAY )\
+	if ( value->xtype == WR_EX_REFARRAY && (value->r->xtype&0x4))\
 	{\
-		unsigned int index = ARRAY_ELEMENT_FROM_P2(value->p2);\
-		int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;\
-\
+		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);\
 		switch( value->r->va->m_type )\
 		{\
 			case SV_VALUE:\
 			{\
-				WRValue* val = (WRValue *)value->r->va->m_data + s;\
+				if ( s >= value->r->va->m_size )\
+				{\
+					growValueArray( value->r, s + 1 );\
+				}\
+				WRValue* val = value->r->va->m_Vdata + s;\
 				NAME[ val->type ]( val, stack );\
 				break;\
 			}\
@@ -917,24 +990,21 @@ static void NAME##_E( WRValue* value, WRValue* stack )\
 			case SV_CHAR:\
 			{\
 				stack->p2 = INIT_AS_INT;\
-				char c = (((char*)value->r->va->m_data)[s]) OPERATION;\
-				stack->i = c;\
+				stack->i = (s >= value->r->va->m_size) ? 0 : value->r->va->m_Cdata[s] OPERATION;\
 				break;\
 			}\
 \
 			case SV_INT:\
 			{\
 				stack->p2 = INIT_AS_INT;\
-				int i = (((int*)value->r->va->m_data)[s]) OPERATION;\
-				stack->i = i;\
+				stack->i = (s >= value->r->va->m_size) ? 0 : value->r->va->m_Idata[s] OPERATION;\
 				break;\
 			}\
 \
 			case SV_FLOAT:\
 			{\
 				stack->p2 = INIT_AS_FLOAT;\
-				float f = (((float*)value->r->va->m_data)[s]) OPERATION;\
-				stack->f = f;\
+				stack->f = (s >= value->r->va->m_size) ? 0 : value->r->va->m_Fdata[s] OPERATION;\
 				break;\
 			}\
 		}\
@@ -955,9 +1025,24 @@ X_UNARY_POST( wr_postdec, -- );
 //------------------------------------------------------------------------------
 static void doIndexHash_X( WRValue* value, WRValue* target, uint32_t hash ) { }
 static void doIndexHash_R( WRValue* value, WRValue* target, uint32_t hash ) { wr_IndexHash[ value->r->type ]( value->r, target, hash ); }
-static void doIndexHash_U( WRValue* value, WRValue* target, uint32_t hash )
+static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
 {
-	if ( value->xtype == WR_EX_USR )
+	if (value->xtype == WR_EX_REFARRAY && (value->r->xtype&0x4))
+	{
+
+		if ( value->r->va->m_type == SV_VALUE )
+		{
+			unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
+			if ( s >= value->r->va->m_size )
+			{
+				growValueArray( value->r, s + 1 );
+			}
+
+			WRValue* val = value->r->va->m_Vdata + s;
+			wr_IndexHash[ val->type ]( val, target, hash );
+		}
+	}
+	else if ( value->xtype == WR_EX_USR )
 	{
 		target->p2 = INIT_AS_REF;
 		if ( !(target->r = value->u->get(hash)) )
@@ -983,10 +1068,14 @@ static void doIndexHash_U( WRValue* value, WRValue* target, uint32_t hash )
 			target->init();
 		}
 	}
+	else if ( value->xtype == WR_EX_HASH )
+	{
+		
+	}
 }
 WRIndexHashFunc wr_IndexHash[4] = 
 {
-	doIndexHash_X,  doIndexHash_X,  doIndexHash_R,  doIndexHash_U
+	doIndexHash_X,  doIndexHash_X,  doIndexHash_R,  doIndexHash_E
 };
 
 //------------------------------------------------------------------------------
@@ -995,7 +1084,7 @@ static bool doLogicalNot_F( WRValue* value ) { return value->f == 0; }
 static bool doLogicalNot_R( WRValue* value ) { return wr_LogicalNot[ value->r->type ]( value->r ); }
 static bool doLogicalNot_E( WRValue* value )
 {
-	if ( value->xtype == WR_EX_REFARRAY )
+	if ( value->xtype == WR_EX_REFARRAY && (value->r->xtype&0x4))
 	{
 		WRValue element;
 		wr_arrayToValue( value, &element );
@@ -1013,16 +1102,20 @@ WRReturnSingleFunc wr_LogicalNot[4] =
 static void doNegate_I( WRValue* value ) { value->i = -value->i; }
 static void doNegate_E( WRValue* value )
 {
-	if ( value->xtype == WR_EX_REFARRAY )
+	if ( value->xtype == WR_EX_REFARRAY && (value->r->xtype&0x4))
 	{
-		unsigned int index = ARRAY_ELEMENT_FROM_P2(value->p2);
-		int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
+		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
 
 		switch( value->r->va->m_type )
 		{
 			case SV_VALUE:
 			{
-				WRValue* val = (WRValue *)value->r->va->m_data + s;
+				if ( s >= value->r->va->m_size )
+				{
+					growValueArray( value->r, s + 1 );
+				}
+
+				WRValue* val = value->r->va->m_Vdata + s;
 				if ( val->type == WR_INT )
 				{
 					val->i = -val->i;
@@ -1039,24 +1132,21 @@ static void doNegate_E( WRValue* value )
 			case SV_CHAR:
 			{
 				value->p2 = INIT_AS_INT;
-				char c = ((((char*)value->r->va->m_data)[s]) = -(((char*)value->r->va->m_data)[s]));
-				value->i = c;
+				value->i = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Cdata[s] = -value->r->va->m_Cdata[s]);
 				break;
 			}
 
 			case SV_INT:
 			{
 				value->p2 = INIT_AS_INT;
-				int i = ((((int*)value->r->va->m_data)[s]) = -(((int*)value->r->va->m_data)[s]));
-				value->i = i;
+				value->i = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Idata[s] = -value->r->va->m_Idata[s]);
 				break;
 			}
 
 			case SV_FLOAT:
 			{
 				value->p2 = INIT_AS_FLOAT;
-				float f = ((((float*)value->r->va->m_data)[s]) = -(((float*)value->r->va->m_data)[s]));
-				value->f = f;
+				value->f = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Fdata[s] = -value->r->va->m_Fdata[s]);
 				break;
 			}
 		}
@@ -1079,16 +1169,19 @@ static void doBitwiseNot_I( WRValue* value ) { value->i = ~value->i; }
 static void doBitwiseNot_R( WRValue* value ) { wr_bitwiseNot[ value->r->type ]( value->r ); *value = *value->r; }
 static void doBitwiseNot_E( WRValue* value )
 {
-	if ( value->xtype == WR_EX_REFARRAY )
+	if ( value->xtype == WR_EX_REFARRAY && (value->r->xtype&0x4))
 	{
-		unsigned int index = ARRAY_ELEMENT_FROM_P2(value->p2);
-		
-		int s = index < value->r->va->m_size ? index : value->r->va->m_size - 1;
+		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
 
 		switch( value->r->va->m_type )
 		{
 			case SV_VALUE:
 			{
+				if ( s >= value->r->va->m_size )
+				{
+					growValueArray( value->r, s + 1 );
+				}
+
 				WRValue* val = (WRValue *)value->r->va->m_data + s;
 				if ( val->type == WR_INT )
 				{
@@ -1101,14 +1194,14 @@ static void doBitwiseNot_E( WRValue* value )
 			case SV_CHAR:
 			{
 				value->p2 = INIT_AS_INT;
-				value->i = (((((unsigned char*)value->r->va->m_data)[s]) = ~(((unsigned char*)value->r->va->m_data)[s])));
+				value->i = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Cdata[s] = ~value->r->va->m_Cdata[s]);
 				break;
 			}
 
 			case SV_INT:
 			{
 				value->p2 = INIT_AS_INT;
-				value->i = (((((int*)value->r->va->m_data)[s]) = ~(((int*)value->r->va->m_data)[s])));
+				value->i = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Idata[s] = ~value->r->va->m_Idata[s]);
 				break;
 			}
 

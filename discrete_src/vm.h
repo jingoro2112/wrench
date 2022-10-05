@@ -119,9 +119,11 @@ struct WRContext
 	int32_t stopLocation;
 
 	WRGCArray* svAllocated;
-	WRGCArray* getSVA( int size, WRGCArrayType type, WRValue* stackTop );
-	void gcArray( WRGCArray* sva );
 
+	void mark( WRValue* s );
+	void gc( WRValue* stackTop );
+	WRGCArray* getSVA( int size, WRGCArrayType type, WRValue* stackTop );
+	
 	WRState* w;
 
 	WR_LOAD_BLOCK_FUNC loader;
@@ -166,7 +168,7 @@ public:
 	{
 		const void* m_data;
 		int* m_Idata;
-		char* m_Cdata;
+		unsigned char* m_Cdata;
 		WRValue* m_Vdata;
 		float* m_Fdata;
 	};
@@ -189,7 +191,7 @@ public:
 			switch( m_type )
 			{
 				case SV_VALUE: { m_Vdata = new WRValue[size]; break; }
-				case SV_CHAR: { m_Cdata = new char[size]; break; }
+				case SV_CHAR: { m_Cdata = new unsigned char[size]; break; }
 				case SV_INT: { m_Idata = new int[size]; break; }
 				case SV_FLOAT: { m_Fdata = new float[size]; break; }
 			}
@@ -258,7 +260,7 @@ public:
 
 			case SV_CHAR:
 			{
-				m_Cdata = new char[m_size];
+				m_Cdata = new unsigned char[m_size];
 				memcpy( (char*)m_data, (char*)A.m_data, m_size );
 				break;
 			}
@@ -322,6 +324,8 @@ public:
 void wr_arrayToValue( const WRValue* array, WRValue* value );
 void wr_intValueToArray( const WRValue* array, int32_t I );
 void wr_floatValueToArray( const WRValue* array, float F );
+void wr_countOfArrayElement( WRValue* array, WRValue* target );
+
 
 typedef void (*WRVoidFunc)( WRValue* to, WRValue* from );
 extern WRVoidFunc wr_assign[16];
@@ -376,6 +380,5 @@ extern WRReturnSingleFunc wr_LogicalNot[4];
 
 typedef void (*WRIndexHashFunc)( WRValue* value, WRValue* target, uint32_t hash );
 extern WRIndexHashFunc wr_IndexHash[4];
-
 
 #endif

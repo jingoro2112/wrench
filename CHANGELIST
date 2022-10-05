@@ -11,7 +11,8 @@
 - added optimized LL/GG/LG/GL loading for uncoimmon binary operations without 
   blowing the opcodes up the way add/sub/mul/div did. Those can be back-converted 
   if necessary
-
+- optimized gc passes
+- added ._count meta
 
 9/27/22 1.2.1 ---------------------------------------------------------------------------
 - added 0b prefix for parsing binary numbers

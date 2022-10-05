@@ -362,8 +362,8 @@ public:
 
 private:
 	
-	Node* m_list;
 	int m_mod;
+	Node* m_list;
 };
 
 #endif

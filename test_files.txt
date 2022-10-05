@@ -8,4 +8,5 @@ tests/006_logic.c
 tests/007_arrays.c
 tests/008_userData.c
 tests/009_library.c
-tests/010_parsing.c
+tests/010_structs.c
+tests/011_dicts.c

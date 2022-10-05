@@ -45,7 +45,8 @@ enum WROpcode
 
 	O_Index,
 	O_IndexSkipLoad,
-
+	O_CountOf,
+	
 	O_StackIndexHash,
 	O_GlobalIndexHash,
 	O_LocalIndexHash,
@@ -209,9 +210,11 @@ enum WROpcode
 
 	O_IndexLiteral8,
 	O_IndexLiteral16,
-	O_CreateIndex,
-	O_CreateIndexLiteral8,
-	O_CreateIndexLiteral16,
+
+	O_IndexLocalLiteral8,
+	O_IndexGlobalLiteral8,
+	O_IndexLocalLiteral16,
+	O_IndexGlobalLiteral16,
 
 	O_AssignAndPop,
 	O_AssignToGlobalAndPop,
