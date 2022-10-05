@@ -6543,6 +6543,9 @@ const char* c_opcodeName[] =
 	"AssignToHashTableByOffset",
 
 	"Index",
+	"IndexSkipLoad",
+	"CountOf",
+
 	"StackIndexHash",
 	"GlobalIndexHash",
 	"LocalIndexHash",
@@ -6706,9 +6709,11 @@ const char* c_opcodeName[] =
 
 	"IndexLiteral8",
 	"IndexLiteral16",
-	"CreateIndex",
-	"CreateIndexLiteral8",
-	"CreateIndexLiteral16",
+
+	"IndexLocalLiteral8",
+	"IndexGlobalLiteral8",
+	"IndexLocalLiteral16",
+	"IndexGlobalLiteral16",
 
 	"AssignAndPop",
 	"AssignToGlobalAndPop",
