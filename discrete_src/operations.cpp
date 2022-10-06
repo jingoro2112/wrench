@@ -867,8 +867,7 @@ static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 	ARRAY_ELEMENT_TO_P2( target, index->i );
 
 	value->p2 = INIT_AS_ARRAY;
-	value->va = c->getSVA( index->i+1, SV_VALUE, 0 );//target - 1 );//true );
-	memset( (char*)value->va->m_Cdata, 0, sizeof(WRValue) * value->va->m_size );
+	value->va = c->getSVA( index->i+1, SV_VALUE, true );
 }
 static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
@@ -878,9 +877,7 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 
 		// nope, make it one of this size and return a ref
 		value->p2 = INIT_AS_ARRAY;
-		value->va = c->getSVA( index->i+1, SV_VALUE, 0 );//target - 1 );//true );
-		memset( (char*)value->va->m_Cdata, 0, sizeof(WRValue) * value->va->m_size );
-
+		value->va = c->getSVA( index->i+1, SV_VALUE, true );
 	}
 
 	target->r = value;

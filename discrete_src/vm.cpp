@@ -174,16 +174,10 @@ void WRContext::gc( WRValue* stackTop )
 }
 
 //------------------------------------------------------------------------------
-WRGCArray* WRContext::getSVA( int size, WRGCArrayType type, WRValue* stackTop )
+WRGCArray* WRContext::getSVA( int size, WRGCArrayType type, bool init )
 {
-	// gc before every alloc may seem a bit much but we want to be miserly
-	if ( stackTop )
-	{
-		gc( stackTop );
-	}
-
 	WRGCArray* ret = new WRGCArray( size, type );
-	if ( type == SV_VALUE && stackTop )
+	if ( init )
 	{
 		memset( (char*)ret->m_Cdata, 0, sizeof(WRValue) * size);
 	}
@@ -832,8 +826,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 			CASE(LiteralZero):
 			{
 literalZero:
-				stackTop->p = 0;
-				(stackTop++)->p2 = INIT_AS_INT;
+				(stackTop++)->init();
 				CONTINUE;
 			}
 
@@ -844,7 +837,7 @@ literalZero:
 				
 				context->gc( stackTop );
 				stackTop->p2 = INIT_AS_ARRAY;
-				stackTop->va = context->getSVA( len, SV_CHAR, 0 );
+				stackTop->va = context->getSVA( len, SV_CHAR, false );
 
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				memcpy( (unsigned char *)stackTop->va->m_data, pc, len );
@@ -1619,7 +1612,7 @@ callFunction:
 					stackTop->p2 = INIT_AS_STRUCT;
 					unsigned char count = *table++;
 
-					stackTop->va = context->getSVA( count, SV_VALUE, 0 );
+					stackTop->va = context->getSVA( count, SV_VALUE, false );
 					
 					stackTop->va->m_ROMHashTable = table + 3;
 					stackTop->va->m_mod = (((int16_t)*(table+1)) << 8) + *(table+2);
@@ -1665,9 +1658,9 @@ callFunction:
 				args = *pc++; // which have already been pushed
 
 				if ( (lib = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
-															 | (((int32_t)*(pc+1)) << 16)
-															 | (((int32_t)*(pc+2)) << 8)
-															 | ((int32_t)*(pc+3)) )) )
+															  | (((int32_t)*(pc+1)) << 16)
+															  | (((int32_t)*(pc+2)) << 8)
+															  | ((int32_t)*(pc+3)) )) )
 				{
 					lib( stackTop, args );
 				}

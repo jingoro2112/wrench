@@ -122,7 +122,7 @@ struct WRContext
 
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
-	WRGCArray* getSVA( int size, WRGCArrayType type, WRValue* stackTop );
+	WRGCArray* getSVA( int size, WRGCArrayType type, bool init );
 	
 	WRState* w;
 
