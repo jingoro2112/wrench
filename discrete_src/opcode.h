@@ -56,7 +56,6 @@ enum WROpcode
 	O_StackSwap,
 	O_SwapTwoToTop,
 
-	O_ReserveFrame,
 	O_ReserveGlobalFrame,
 
 	O_LoadFromLocal,

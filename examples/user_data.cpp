@@ -2,12 +2,12 @@
 #include <string.h>
 #include <stdio.h>
 
-void log( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+void print( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	char buf[1024];
 	for( int i=0; i<argn; ++i )
 	{
-		printf( "%s", wr_valueToString(argv[i], buf) );
+		printf( "%s", argv[i].asString(buf) );
 	}
 }
 
@@ -15,9 +15,9 @@ void log( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void
 const char* wrenchCode = 
 						"function someFunction( data )   "
 						"{                               "
-						"    log( data.val, \"\\n\" );   "
+						"    print( data.val, \"\\n\" );   "
 						"    data.ai[3] += data.val;     "
-						"    log( data.ai[3], \"\\n\" ); "
+						"    print( data.ai[3], \"\\n\" ); "
 						"}                               ";
 
 
@@ -36,7 +36,7 @@ int main( int argn, char** argv )
 
 	WRState* w = wr_newState(); // create the state
 
-	wr_registerFunction( w, "log", log ); // bind a function
+	wr_registerFunction( w, "print", print ); // bind a function
 
 	unsigned char* outBytes; // compiled code is alloc'ed
 	int outLen;
@@ -44,7 +44,7 @@ int main( int argn, char** argv )
 	int err = wr_compile( wrenchCode, strlen(wrenchCode), &outBytes, &outLen ); // compile it
 	if ( err == 0 )
 	{
-		WRContet* context = wr_run( w, outBytes ); // load and run the code!
+		WRContext* context = wr_run( w, outBytes ); // load and run the code!
 
 		usrInt[3] = 55;
 

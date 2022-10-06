@@ -43,7 +43,6 @@ const char* c_reserved[] =
 	"return",
 	"switch",
 	"true",
-	"unit",
 	"function",
 	"while",
 	"new",
@@ -4273,9 +4272,9 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	}
 
 	WRHashTable<unsigned char> offsets;
-	for( unsigned char i=0; i<unit.bytecode.localSpace.count(); ++i )
+	for( unsigned char i=unit.arguments; i<unit.bytecode.localSpace.count(); ++i )
 	{
-		offsets.set( unit.bytecode.localSpace[i].hash, i );
+		offsets.set( unit.bytecode.localSpace[i].hash, i - unit.arguments );
 	}
 	
 	*size = 2;
@@ -4374,7 +4373,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 						
 						if ( size )
 						{
-							buf[0] = (unsigned char)m_units[u2].bytecode.localSpace.count(); // number of entries
+							buf[0] = (unsigned char)(m_units[u2].bytecode.localSpace.count() - m_units[u2].arguments); // number of entries
 							buf[1] = m_units[u2].arguments;
 							m_units[u2].offsetOfLocalHashMap = code.size();
 							code.append( buf, size );
@@ -4600,7 +4599,6 @@ const char* c_opcodeName[] =
 	"StackSwap",
 	"SwapTwoToTop",
 
-	"ReserveFrame",
 	"ReserveGlobalFrame",
 
 	"LoadFromLocal",

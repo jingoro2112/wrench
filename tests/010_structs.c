@@ -36,8 +36,6 @@ long string
 713.398
 ~*/
 
-
-
 instance2 = new a
 {
 	123,
@@ -257,5 +255,4 @@ update_several_times( particles, 50 );
 
 log( particles[10].x );
 log( particles[499].y );
-
 

@@ -492,7 +492,7 @@ struct WRContext
 
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
-	WRGCArray* getSVA( int size, WRGCArrayType type, WRValue* stackTop );
+	WRGCArray* getSVA( int size, WRGCArrayType type, bool init );
 	
 	WRState* w;
 
@@ -810,7 +810,6 @@ enum WROpcode
 	O_StackSwap,
 	O_SwapTwoToTop,
 
-	O_ReserveFrame,
 	O_ReserveGlobalFrame,
 
 	O_LoadFromLocal,
@@ -1998,7 +1997,6 @@ const char* c_reserved[] =
 	"return",
 	"switch",
 	"true",
-	"unit",
 	"function",
 	"while",
 	"new",
@@ -6228,9 +6226,9 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	}
 
 	WRHashTable<unsigned char> offsets;
-	for( unsigned char i=0; i<unit.bytecode.localSpace.count(); ++i )
+	for( unsigned char i=unit.arguments; i<unit.bytecode.localSpace.count(); ++i )
 	{
-		offsets.set( unit.bytecode.localSpace[i].hash, i );
+		offsets.set( unit.bytecode.localSpace[i].hash, i - unit.arguments );
 	}
 	
 	*size = 2;
@@ -6329,7 +6327,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 						
 						if ( size )
 						{
-							buf[0] = (unsigned char)m_units[u2].bytecode.localSpace.count(); // number of entries
+							buf[0] = (unsigned char)(m_units[u2].bytecode.localSpace.count() - m_units[u2].arguments); // number of entries
 							buf[1] = m_units[u2].arguments;
 							m_units[u2].offsetOfLocalHashMap = code.size();
 							code.append( buf, size );
@@ -6555,7 +6553,6 @@ const char* c_opcodeName[] =
 	"StackSwap",
 	"SwapTwoToTop",
 
-	"ReserveFrame",
 	"ReserveGlobalFrame",
 
 	"LoadFromLocal",
@@ -6975,16 +6972,10 @@ void WRContext::gc( WRValue* stackTop )
 }
 
 //------------------------------------------------------------------------------
-WRGCArray* WRContext::getSVA( int size, WRGCArrayType type, WRValue* stackTop )
+WRGCArray* WRContext::getSVA( int size, WRGCArrayType type, bool init )
 {
-	// gc before every alloc may seem a bit much but we want to be miserly
-	if ( stackTop )
-	{
-		gc( stackTop );
-	}
-
 	WRGCArray* ret = new WRGCArray( size, type );
-	if ( type == SV_VALUE && stackTop )
+	if ( init )
 	{
 		memset( (char*)ret->m_Cdata, 0, sizeof(WRValue) * size);
 	}
@@ -7264,7 +7255,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&StackSwap,
 		&&SwapTwoToTop,
 
-		&&ReserveFrame,
 		&&ReserveGlobalFrame,
 
 		&&LoadFromLocal,
@@ -7633,8 +7623,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 			CASE(LiteralZero):
 			{
 literalZero:
-				stackTop->p = 0;
-				(stackTop++)->p2 = INIT_AS_INT;
+				(stackTop++)->init();
 				CONTINUE;
 			}
 
@@ -7645,7 +7634,7 @@ literalZero:
 				
 				context->gc( stackTop );
 				stackTop->p2 = INIT_AS_ARRAY;
-				stackTop->va = context->getSVA( len, SV_CHAR, 0 );
+				stackTop->va = context->getSVA( len, SV_CHAR, false );
 
 #ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				memcpy( (unsigned char *)stackTop->va->m_data, pc, len );
@@ -7667,18 +7656,6 @@ literalZero:
 				CONTINUE;
 			}
 			
-			CASE(ReserveFrame):
-			{
-				frameBase = stackTop;
-				for( int i=0; i<*pc; ++i )
-				{
-					(stackTop)->p = 0;
-					(++stackTop)->p2 = INIT_AS_INT;
-				}
-				++pc;
-				CONTINUE;
-			}
-
 			CASE(ReserveGlobalFrame):
 			{
 				delete[] context->globalSpace;
@@ -8325,7 +8302,7 @@ callFunction:
 					else
 					{
 						// un-specified arguments are set to IntZero
-						for( int a=args; a < function->arguments; ++a )
+						for( ; args < function->arguments; ++args )
 						{
 							stackTop->p = 0;
 							(stackTop++)->p2 = INIT_AS_INT;
@@ -8414,13 +8391,28 @@ callFunction:
 				
 				if ( table > context->bottom )
 				{
-					tempValue2 = (WRValue*)stackTop->p;
-					tempValue3 = (WRValue*)stackTop->frame;
+					// if unit was called with no arguments from global
+					// level there are not "free" stack entries to
+					// gnab, so create it here, but preserve the
+					// first value
 
-					stackTop->p2 = INIT_AS_STRUCT;
+					// NOTE: we are guaranteed to have at least one
+					// value if table > context->bottome
+
 					unsigned char count = *table++;
 
-					stackTop->va = context->getSVA( count, SV_VALUE, 0 );
+					tempValue2 = (WRValue*)(stackTop + *table)->p;
+					tempValue3 = (WRValue*)(stackTop + *table)->frame;
+
+					stackTop->p2 = INIT_AS_STRUCT;
+
+					// table : members in local space
+					// table + 1 : arguments + 1 (+1 to save the calculation below)
+					// table +2/3 : m_mod
+					// table + 4: [static hash table ]
+					
+
+					stackTop->va = context->getSVA( count, SV_VALUE, false );
 					
 					stackTop->va->m_ROMHashTable = table + 3;
 					stackTop->va->m_mod = (((int16_t)*(table+1)) << 8) + *(table+2);
@@ -8466,9 +8458,9 @@ callFunction:
 				args = *pc++; // which have already been pushed
 
 				if ( (lib = w->c_libFunctionRegistry.getItem( (((int32_t)*pc) << 24)
-															 | (((int32_t)*(pc+1)) << 16)
-															 | (((int32_t)*(pc+2)) << 8)
-															 | ((int32_t)*(pc+3)) )) )
+															  | (((int32_t)*(pc+1)) << 16)
+															  | (((int32_t)*(pc+2)) << 8)
+															  | ((int32_t)*(pc+3)) )) )
 				{
 					lib( stackTop, args );
 				}
@@ -9919,8 +9911,7 @@ static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 	ARRAY_ELEMENT_TO_P2( target, index->i );
 
 	value->p2 = INIT_AS_ARRAY;
-	value->va = c->getSVA( index->i+1, SV_VALUE, 0 );//target - 1 );//true );
-	memset( (char*)value->va->m_Cdata, 0, sizeof(WRValue) * value->va->m_size );
+	value->va = c->getSVA( index->i+1, SV_VALUE, true );
 }
 static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
@@ -9930,9 +9921,7 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 
 		// nope, make it one of this size and return a ref
 		value->p2 = INIT_AS_ARRAY;
-		value->va = c->getSVA( index->i+1, SV_VALUE, 0 );//target - 1 );//true );
-		memset( (char*)value->va->m_Cdata, 0, sizeof(WRValue) * value->va->m_size );
-
+		value->va = c->getSVA( index->i+1, SV_VALUE, true );
 	}
 
 	target->r = value;

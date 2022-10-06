@@ -457,7 +457,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&StackSwap,
 		&&SwapTwoToTop,
 
-		&&ReserveFrame,
 		&&ReserveGlobalFrame,
 
 		&&LoadFromLocal,
@@ -859,18 +858,6 @@ literalZero:
 				CONTINUE;
 			}
 			
-			CASE(ReserveFrame):
-			{
-				frameBase = stackTop;
-				for( int i=0; i<*pc; ++i )
-				{
-					(stackTop)->p = 0;
-					(++stackTop)->p2 = INIT_AS_INT;
-				}
-				++pc;
-				CONTINUE;
-			}
-
 			CASE(ReserveGlobalFrame):
 			{
 				delete[] context->globalSpace;
@@ -1517,7 +1504,7 @@ callFunction:
 					else
 					{
 						// un-specified arguments are set to IntZero
-						for( int a=args; a < function->arguments; ++a )
+						for( ; args < function->arguments; ++args )
 						{
 							stackTop->p = 0;
 							(stackTop++)->p2 = INIT_AS_INT;
@@ -1606,11 +1593,26 @@ callFunction:
 				
 				if ( table > context->bottom )
 				{
-					tempValue2 = (WRValue*)stackTop->p;
-					tempValue3 = (WRValue*)stackTop->frame;
+					// if unit was called with no arguments from global
+					// level there are not "free" stack entries to
+					// gnab, so create it here, but preserve the
+					// first value
+
+					// NOTE: we are guaranteed to have at least one
+					// value if table > context->bottome
+
+					unsigned char count = *table++;
+
+					tempValue2 = (WRValue*)(stackTop + *table)->p;
+					tempValue3 = (WRValue*)(stackTop + *table)->frame;
 
 					stackTop->p2 = INIT_AS_STRUCT;
-					unsigned char count = *table++;
+
+					// table : members in local space
+					// table + 1 : arguments + 1 (+1 to save the calculation below)
+					// table +2/3 : m_mod
+					// table + 4: [static hash table ]
+					
 
 					stackTop->va = context->getSVA( count, SV_VALUE, false );
 					
