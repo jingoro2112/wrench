@@ -199,21 +199,27 @@ void wr_arrayToValue( const WRValue* array, WRValue* value )
 		{
 			value->i = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Cdata[s];
 			value->p2 = INIT_AS_INT;
-			return;
+			break;
 		}
 
 		case SV_INT:
 		{
 			value->i = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Idata[s];
 			value->p2 = INIT_AS_INT;
-			return;
+			break;
 		}
 
 		case SV_FLOAT:
 		{
 			value->f = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Fdata[s];
 			value->p2 = INIT_AS_FLOAT;
-			return;
+			break;
+		}
+
+		default:
+		{
+			value->init();
+			break;
 		}
 	}
 }

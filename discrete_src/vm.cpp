@@ -687,7 +687,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	};
 #endif
 
-	register const unsigned char* pc;
+	const unsigned char* pc;
 	
 	WRValue* register0 = 0;
 	union

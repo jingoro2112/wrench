@@ -2,6 +2,11 @@
 - removed unnused opcode
 - fixed struct/param bug
 - broke out a few other .h files
+fixing: 
+- #2 Can't build due to possibly uninitialized value
+- #3 ISO C++ 17 does not allow register storage class specifier
+- objs_linux/ dir not part of repo by default
+
 
 10/6/22 1.3.0 -------------------------------------------------------------------------
 - added more compare optimizations
