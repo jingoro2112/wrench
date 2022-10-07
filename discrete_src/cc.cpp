@@ -683,18 +683,12 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 	{
 		if ( bytecode.opcodes[o] == O_LoadFromGlobal )
 		{
-			// LoadFromGlobal   a - 1
-			// [index]          a
-
 			bytecode.all[ a - 1 ] = GS;
 			bytecode.opcodes[o] = GS;
 			return true;
 		}
 		else if ( bytecode.opcodes[o] == O_LoadFromLocal )
 		{
-			// LoadFromGlobal   a - 1
-			// [index]          a
-
 			bytecode.all[ a - 1 ] = LS;
 			bytecode.opcodes[o] = LS;
 			return true;
@@ -705,14 +699,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 		if ( (bytecode.opcodes[o] == O_LiteralInt32 || bytecode.opcodes[o] == O_LiteralFloat)
 			 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
 		{
-			// LoadFromGlobal  a - 6
-			// [index]         a - 5
-			// LiteralInt32l   a - 4
-			// [i0]            a - 3
-			// [i1]            a - 2
-			// [i2]            a - 1
-			// [i3]            a
-
 			bytecode.all[ a - 6 ] = bytecode.all[ a ]; // store i3
 			bytecode.all[ a ] = bytecode.all[ a - 5 ]; // move index
 
@@ -723,14 +709,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 			bytecode.all[ a - 6 ] = bytecode.opcodes[o];
 			bytecode.all[ a - 1 ] = IGS;
 
-			// LiteralInt32l   a - 6
-			// [i0]            a - 5
-			// [i1]            a - 4
-			// [i2]            a - 3
-			// [i3]            a - 2
-			//  GS     a - 1
-			// [index]         a
-
 			bytecode.opcodes[o] = IGS; // reverse the logic
 
 			return true;
@@ -738,10 +716,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 		else if ( bytecode.opcodes[o] == O_LiteralZero
 				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
 		{
-			// LoadFromGlobal  a - 2
-			// [index]         a - 1
-			// LiteralZero     a 
-
 			bytecode.all[ a - 2 ] = O_LiteralZero;
 			bytecode.all[ a ] = bytecode.all[ a - 1];
 			bytecode.all[ a - 1 ] = IGS;
@@ -751,10 +725,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 		else if ( bytecode.opcodes[o] == O_LiteralZero
 				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
 		{
-			// LoadFromGlobal  a - 2
-			// [index]         a - 1
-			// LiteralZero     a 
-
 			bytecode.all[ a - 2 ] = O_LiteralZero;
 			bytecode.all[ a ] = bytecode.all[ a - 1];
 			bytecode.all[ a - 1 ] = IGS;
@@ -764,11 +734,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 		else if ( bytecode.opcodes[o] == O_LiteralInt8
 				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
 		{
-			// LoadFromGlobal  a - 3
-			// [index]         a - 2
-			// LiteralInt8     a - 1
-			// [value]
-
 			bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
 			bytecode.all[ a - 2 ] = bytecode.all[ a ];
 			bytecode.all[ a ] = bytecode.all[ a - 1 ];
@@ -781,12 +746,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 		else if ( bytecode.opcodes[o] == O_LiteralInt16
 				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
 		{
-			// LoadFromGlobal  a - 4
-			// [index]         a - 3
-			// LiteralInt8     a - 2
-			// [value0]        a - 1
-			// [value1]        a 
-
 			bytecode.all[ a - 2 ] = bytecode.all[ a ];
 
 			bytecode.all[ a - 4 ] = bytecode.all[ a - 3 ];
@@ -801,14 +760,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 		if ( (bytecode.opcodes[o] == O_LiteralInt32 || bytecode.opcodes[o] == O_LiteralFloat)
 			 && bytecode.opcodes[o-1] == O_LoadFromLocal )
 		{
-			// LoadFromGlobal  a - 6
-			// [index]         a - 5
-			// LiteralInt32l   a - 4
-			// [i0]            a - 3
-			// [i1]            a - 2
-			// [i2]            a - 1
-			// [i3]            a
-
 			bytecode.all[ a - 6 ] = bytecode.all[ a ]; // store i3
 			bytecode.all[ a ] = bytecode.all[ a - 5 ]; // move index
 
@@ -819,14 +770,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 			bytecode.all[ a - 6 ] = bytecode.opcodes[o];
 			bytecode.all[ a - 1 ] = ILS;
 
-			// LiteralInt32l   a - 6
-			// [i0]            a - 5
-			// [i1]            a - 4
-			// [i2]            a - 3
-			// [i3]            a - 2
-			//GS     a - 1
-			// [index]         a
-
 			bytecode.opcodes[o] = ILS; // reverse the logic
 
 			return true;
@@ -834,10 +777,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 		else if ( bytecode.opcodes[o] == O_LiteralZero
 				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
 		{
-			// LoadFromGlobal  a - 2
-			// [index]         a - 1
-			// LiteralZero     a 
-
 			bytecode.all[ a - 2 ] = O_LiteralZero;
 			bytecode.all[ a ] = bytecode.all[ a - 1];
 			bytecode.all[ a - 1 ] = ILS;
@@ -847,10 +786,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 		else if ( bytecode.opcodes[o] == O_LiteralZero
 				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
 		{
-			// LoadFromGlobal  a - 2
-			// [index]         a - 1
-			// LiteralZero     a 
-
 			bytecode.all[ a - 2 ] = O_LiteralZero;
 			bytecode.all[ a ] = bytecode.all[ a - 1];
 			bytecode.all[ a - 1 ] = ILS;
@@ -860,11 +795,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 		else if ( bytecode.opcodes[o] == O_LiteralInt8
 				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
 		{
-			// LoadFromGlobal  a - 3
-			// [index]         a - 2
-			// LiteralInt8     a - 1
-			// [value]
-
 			bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
 			bytecode.all[ a - 2 ] = bytecode.all[ a ];
 			bytecode.all[ a ] = bytecode.all[ a - 1 ];
@@ -877,12 +807,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 		else if ( bytecode.opcodes[o] == O_LiteralInt16
 				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
 		{
-			// LoadFromGlobal  a - 4
-			// [index]         a - 3
-			// LiteralInt8     a - 2
-			// [value0]        a - 1
-			// [value1]        a 
-
 			bytecode.all[ a - 2 ] = bytecode.all[ a ];
 
 			bytecode.all[ a - 4 ] = bytecode.all[ a - 3 ];
@@ -905,18 +829,13 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 	unsigned int o = bytecode.opcodes.size();
 	if ( o )
 	{
-		// some keyhole optimizations
+		// keyhole optimizations
 
 		--o;
 		unsigned int a = bytecode.all.size() - 1;
 
 		if ( opcode == O_CompareEQ && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
 		{
-			// LoadFromGlobal   a - 3
-			// [Lindex]         a - 2
-			// LoadFromGlobal   a - 1
-			// [Gindex]         a
-
 			bytecode.all[ a - 3 ] = O_LLCompareEQ;
 			bytecode.all[ a - 1 ] = bytecode.all[ a ];
 			bytecode.all.shave( 1 );
@@ -1076,11 +995,6 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			if ( bytecode.opcodes[o] == O_LoadFromGlobal
 				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
 			{
-				// LoadFromGlobal   a - 3
-				// [index]          a - 2
-				// LoadFromGlobal   a - 1
-				// [index]          a
-
 				bytecode.all[ a - 3 ] = O_GGBinaryAddition;
 				bytecode.all[ a - 1 ] = bytecode.all[ a ];
 
@@ -1125,11 +1039,6 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			if ( bytecode.opcodes[o] == O_LoadFromGlobal
 				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
 			{
-				// LoadFromGlobal   a - 3
-				// [index]          a - 2
-				// LoadFromGlobal   a - 1
-				// [index]          a
-
 				bytecode.all[ a - 3 ] = O_GGBinarySubtraction;
 				bytecode.all[ a - 1 ] = bytecode.all[ a ];
 
@@ -1173,14 +1082,8 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			if ( bytecode.opcodes[o] == O_LoadFromGlobal
 				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
 			{
-				// LoadFromGlobal   a - 3
-				// [index]          a - 2
-				// LoadFromGlobal   a - 1
-				// [index]          a
-
 				bytecode.all[ a - 3 ] = O_GGBinaryDivision;
 				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-
 				bytecode.all.shave(1);
 				bytecode.opcodes.shave(2);
 			}
@@ -1357,12 +1260,6 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			{
 				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
 				{
-					// LoadFromLocal   a - 4
-					// [index]         a - 3
-					// LoadFromLocal   a - 2
-					// [index]         a - 1
-					// [CompareLE]     a
-
 					bytecode.all[a-4] = O_LLCompareEQBZ;
 					bytecode.all[a-2] = bytecode.all[a-1];
 					bytecode.opcodes.shave(2);
@@ -1544,12 +1441,6 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			{	
 				if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromGlobal )
 				{
-					// an inc and run..
-
-					// LoadGlob a - 2
-					// [index]  a - 1
-					// PreInc   a
-
 					bytecode.all[ a - 2 ] = O_IncGlobal;
 										
 					bytecode.all.shave(1);
@@ -1579,10 +1470,6 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				}
 				else if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromLocal )
 				{
-					// LoadGlob a - 2
-					// [index]  a - 1
-					// PreInc   a
-
 					bytecode.all[ a - 2 ] = O_DecLocal;
 					bytecode.all.shave(1);
 					bytecode.opcodes.shave(1);
@@ -1605,125 +1492,52 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			{
 				if ( o > 0 )
 				{
-					// save three opcodes if its just an assignment to
-					// a variable that is not going to be used.. this is super common
 					if ( bytecode.opcodes[o-1] == O_LoadFromGlobal )
 					{
 						if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt8 )
 						{
-							// Lit8     a - 4
-							// [val]    a - 3
-							// LoadGlob a - 2
-							// [index]  a - 1
-							// Assign   a
-
 							bytecode.all[ a - 4 ] = O_LiteralInt8ToGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
-
-							// Lit8     a - 4
-							// [index]  a - 3
-							// [val]    a - 2
-							// [index]  a - 1 X
-							// Assign   a     X
-
 							bytecode.all.shave(2);
 							bytecode.opcodes.shave(2);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt16 )
 						{
-							// Lit16    a - 5
-							// [val]    a - 4
-							// [val]    a - 3
-							// LoadGLob a - 2
-							// [index]  a - 1
-							// Assign   a
-
 							bytecode.all[ a - 5 ] = O_LiteralInt16ToGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 1 ];
-
-							// Lit8     a - 5
-							// [index]  a - 4
-							// [val]    a - 3
-							// [val]    a - 2
-							// [index]  a - 1 X
-							// Assign   a     X
-
 							bytecode.all.shave(2);
 							bytecode.opcodes.shave(2);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt32 )
 						{
-							// Lit8     a - 7
-							// [val]    a - 6
-							// [val]    a - 5
-							// [val]    a - 4
-							// [val]    a - 3
-							// LoadGlob a - 2
-							// [index]  a - 1
-							// Assign   a
-
 							bytecode.all[ a - 7 ] = O_LiteralInt32ToGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
-
-							// Lit8     a - 4
-							// [index]  a - 3
-							// [val]    a - 2
-							// [index]  a - 1 X
-							// Assign   a     X
-
 							bytecode.all.shave(2);
 							bytecode.opcodes.shave(2);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
 						{
-							// Lit8     a - 7
-							// [Fval]    a - 6
-							// [Fval]    a - 5
-							// [Fval]    a - 4
-							// [Fval]    a - 3
-							// LoadGlob a - 2
-							// [index]  a - 1
-							// Assign   a
-
 							bytecode.all[ a - 7 ] = O_LiteralFloatToGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
-
-							// Lit8     a - 4
-							// [index]  a - 3
-							// [val]    a - 2
-							// [index]  a - 1 X
-							// Assign   a     X
-
 							bytecode.all.shave(2);
 							bytecode.opcodes.shave(2);
 						}
 						else if ( (o > 1) && bytecode.opcodes[o-2] == O_LiteralZero )
 						{
-							// LitZ     a - 3
-							// LoadGlob a - 2
-							// [index]  a - 1
-							// Assign   a
-
 							bytecode.all[ a - 3 ] = O_LiteralInt8ToGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all[ a - 1 ] = 0;
-
-							// Lit8     a - 3
-							// [index]  a - 2
-							// [0]    a - 1
-							// Assign   a     X
-
 							bytecode.all.shave(1);
 							bytecode.opcodes.shave(2);
 						}
@@ -1775,119 +1589,48 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 					{
 						if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt8 )
 						{
-							// Lit8     a - 4
-							// [val]    a - 3
-							// LoadLoc  a - 2
-							// [index]  a - 1
-							// Assign   a
-
 							bytecode.all[ a - 4 ] = O_LiteralInt8ToLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
-
-							// Lit8     a - 4
-							// [index]  a - 3
-							// [val]    a - 2
-							// [index]  a - 1 X
-							// Assign   a     X
-
 							bytecode.all.shave(2);
 							bytecode.opcodes.shave(2);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt16 )
 						{
-							// Lit16    a - 5
-							// [val]    a - 4
-							// [val]    a - 3
-							// LoadLoc  a - 2
-							// [index]  a - 1
-							// Assign   a
-
 							bytecode.all[ a - 5 ] = O_LiteralInt16ToLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 1 ];
-
-							// Lit8     a - 5
-							// [index]  a - 4
-							// [val]    a - 3
-							// [val]    a - 2
-							// [index]  a - 1 X
-							// Assign   a     X
-
 							bytecode.all.shave(2);
 							bytecode.opcodes.shave(2);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt32 )
 						{
-							// Lit8     a - 7
-							// [val]    a - 6
-							// [val]    a - 5
-							// [val]    a - 4
-							// [val]    a - 3
-							// LoadGlob a - 2
-							// [index]  a - 1
-							// Assign   a
-
 							bytecode.all[ a - 7 ] = O_LiteralInt32ToLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
-
-							// Lit8     a - 4
-							// [index]  a - 3
-							// [val]    a - 2
-							// [index]  a - 1 X
-							// Assign   a     X
-
 							bytecode.all.shave(2);
 							bytecode.opcodes.shave(2);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
 						{
-							// Lit8     a - 7
-							// [Fval]    a - 6
-							// [Fval]    a - 5
-							// [Fval]    a - 4
-							// [Fval]    a - 3
-							// LoadGlob a - 2
-							// [index]  a - 1
-							// Assign   a
-
 							bytecode.all[ a - 7 ] = O_LiteralFloatToLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
-
-							// Lit8     a - 4
-							// [index]  a - 3
-							// [val]    a - 2
-							// [index]  a - 1 X
-							// Assign   a     X
-
 							bytecode.all.shave(2);
 							bytecode.opcodes.shave(2);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralZero )
 						{
-							// LitZ     a - 3
-							// LoadGlob a - 2
-							// [index]  a - 1
-							// Assign   a
-
 							bytecode.all[ a - 3 ] = O_LiteralInt8ToLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all[ a - 1 ] = 0;
-
-							// Lit8     a - 3
-							// [index]  a - 2
-							// [0]    a - 1
-							// Assign   a     X
-
 							bytecode.all.shave(1);
 							bytecode.opcodes.shave(1);
 						}
@@ -2455,14 +2198,6 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 				 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
 				 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_LoadFromLocal )
 			{
-				// O_literalint32
-				// 0
-				// 1
-				// 2
-				// 3
-				// O_loadlocal
-				// index
-
 				int o = bytecode.all.size() - 7;
 
 				bytecode.all[o] = O_LocalIndexHash;
@@ -2474,26 +2209,11 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 
 				bytecode.opcodes.shave(2);
 				bytecode.all.shave(1);
-
-				// O_LocalIndexHash
-				// index
-				// 0
-				// 1
-				// 2
-				// 3
 			}
 			else if (bytecode.opcodes.size() > 1
 					 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
 					 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_LoadFromGlobal )
 			{
-				// O_literalint32
-				// 0
-				// 1
-				// 2
-				// 3
-				// O_LoadGlobal
-				// index
-
 				int o = bytecode.all.size() - 7;
 
 				bytecode.all[o] = O_GlobalIndexHash;
@@ -2505,31 +2225,11 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 
 				bytecode.opcodes.shave(2);
 				bytecode.all.shave(1);
-
-				// O_GlobalIndexHash
-				// index
-				// 0
-				// 1
-				// 2
-				// 3
 			}
 			else if (bytecode.opcodes.size() > 1
 					 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
 					 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_StackSwap )
 			{
-				// it arrived from a stack swap.. sort of.. the X.Y
-				// parses to Y operated by X which is opposite the
-				// actual operation, so ignore the stack-swap (which is
-				// supposed to reverse X and Y)
-
-				// O_literalint32
-				// 0
-				// 1
-				// 2
-				// 3
-				// O_StackSwap
-				// index
-
 				int a = bytecode.all.size() - 7;
 
 				bytecode.all[a] = O_StackIndexHash;
@@ -2537,38 +2237,6 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 				bytecode.opcodes.shave(2);
 				bytecode.all.shave(2);
 
-			
-/*
-
-6 literal
-5 0
-4 1
-3 2
-2 3
-1 swap
-0 i
-*/
-/*				
-				int a = bytecode.all.size() - 1;
-				unsigned char i = bytecode.all[a];
-
-				bytecode.all[a] = bytecode.all[a - 2];
-				bytecode.all[a - 1] = bytecode.all[a - 3];
-				bytecode.all[a - 2] = bytecode.all[a - 4];
-				bytecode.all[a - 3] = bytecode.all[a - 5];
-				bytecode.all[a - 4] = O_StackIndexHash;
-				bytecode.all[a - 5] = i;
-				bytecode.all[a - 6] = O_StackSwap;
-				
-				bytecode.opcodes.shave( 2 );
-*/
-
-				
-				// O_StackIndexHash
-				// 0
-				// 1
-				// 2
-				// 3
 			}
 			else
 			{
@@ -3171,7 +2839,6 @@ bool WRCompilationContext::operatorFound( WRstr& token, WRarray<WRExpressionCont
 //------------------------------------------------------------------------------
 bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr functionName, int depth, bool parseArguments )
 {
-//	WRstr functionName = expression.context[depth].token;
 	WRstr prefix = expression.context[depth].prefix;
 
 	expression.context[depth].reset();
@@ -3257,7 +2924,6 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 
 		pushData( expression.context[depth].bytecode, &argsPushed, 1 );
 		pushData( expression.context[depth].bytecode, "0123", 4 ); // TBD opcode plus index, OR hash if index was not found
-
 
 		// hash will copydown result same as lib, unless
 		// copy/pop which case does nothing
@@ -4567,269 +4233,264 @@ int wr_compile( const char* source, const int size, unsigned char** out, int* ou
 #ifdef DEBUG_OPCODE_NAMES
 const char* c_opcodeName[] = 
 {
-	"RegisterFunction",
-	"FunctionListSize",
+	"O_RegisterFunction",
+	"O_ReserveGlobalFrame",
+	"O_FunctionListSize",
 
-	"LiteralInt32",
-	"LiteralZero",
-	"LiteralFloat",
-	"LiteralString",
+	"O_LiteralInt32",
+	"O_LiteralZero",
+	"O_LiteralFloat",
+	"O_LiteralString",
 
-	"CallFunctionByHash",
+	"O_CallFunctionByHash",
+	"O_CallFunctionByHashAndPop",
+	"O_CallFunctionByIndex",
+	"O_PushIndexFunctionReturnValue",
 
-	"CallFunctionByIndex",
-	"PushIndexFunctionReturnValue",
+	"O_CallLibFunction",
+	"O_CallLibFunctionAndPop",
 
-	"CallLibFunction",
+	"O_NewHashTable",
+	"O_AssignToHashTableByOffset",
 
-	"NewHashTable",
-	"AssignToHashTableByOffset",
+	"O_PopOne",
+	"O_Return",
+	"O_Stop",
 
-	"Index",
-	"IndexSkipLoad",
-	"CountOf",
+	"O_Index",
+	"O_IndexSkipLoad",
+	"O_CountOf",
 
-	"StackIndexHash",
-	"GlobalIndexHash",
-	"LocalIndexHash",
+	"O_StackIndexHash",
+	"O_GlobalIndexHash",
+	"O_LocalIndexHash",
 
-	"Assign",
+	"O_StackSwap",
+	"O_SwapTwoToTop",
 
-	"StackSwap",
-	"SwapTwoToTop",
+	"O_LoadFromLocal",
+	"O_LoadFromGlobal",
 
-	"ReserveGlobalFrame",
+	"O_LLValues",
+	"O_LGValues",
+	"O_GLValues",
+	"O_GGValues",
 
-	"LoadFromLocal",
-	"LoadFromGlobal",
+	"O_BinaryRightShiftSkipLoad",
+	"O_BinaryLeftShiftSkipLoad",
+	"O_BinaryAndSkipLoad",
+	"O_BinaryOrSkipLoad",
+	"O_BinaryXORSkipLoad",
+	"O_BinaryModSkipLoad",
 
-	"PopOne",
-	"Return",
-	"Stop",
+	"O_BinaryMultiplication",
+	"O_BinarySubtraction",
+	"O_BinaryDivision",
+	"O_BinaryRightShift",
+	"O_BinaryLeftShift",
+	"O_BinaryMod",
+	"O_BinaryOr",
+	"O_BinaryXOR",
+	"O_BinaryAnd",
+	"O_BinaryAddition",
 
-	"LLValues",
-	"LGValues",
-	"GLValues",
-	"GGValues",
+	"O_BitwiseNOT",
 
-	"BinaryModSkipLoad",
-	"BinaryRightShiftSkipLoad",
-	"BinaryLeftShiftSkipLoad",
-	"BinaryAndSkipLoad",
-	"BinaryOrSkipLoad",
-	"BinaryXORSkipLoad",
+	"O_CoerceToInt",
+	"O_CoerceToFloat",
 
-	"BinaryAddition",
-	"BinarySubtraction",
-	"BinaryMultiplication",
-	"BinaryDivision",
-	"BinaryRightShift",
-	"BinaryLeftShift",
-	"BinaryMod",
-	"BinaryAnd",
-	"BinaryOr",
-	"BinaryXOR",
+	"O_RelativeJump",
+	"O_RelativeJump8",
 
-	"BitwiseNOT",
+	"O_BZ",
+	"O_BZ8",
 
-	"CoerceToInt",
-	"CoerceToFloat",
+	"O_LogicalAnd",
+	"O_LogicalOr",
+	"O_CompareLE",
+	"O_CompareGE",
+	"O_CompareGT",
+	"O_CompareLT",
+	"O_CompareEQ",
+	"O_CompareNE",
 
-	"RelativeJump",
+	"O_GGCompareEQ", 
+	"O_GGCompareNE", 
+	"O_GGCompareGT",
+	"O_GGCompareLT",
+	
+	"O_LLCompareGT",
+	"O_LLCompareLT",
+	"O_LLCompareEQ", 
+	"O_LLCompareNE",
 
-	"BZ",
+	"O_GSCompareEQ", 
+	"O_LSCompareEQ", 
+	"O_GSCompareNE", 
+	"O_LSCompareNE", 
+	"O_GSCompareGE",
+	"O_LSCompareGE",
+	"O_GSCompareLE",
+	"O_LSCompareLE",
+	"O_GSCompareGT",
+	"O_LSCompareGT",
+	"O_GSCompareLT",
+	"O_LSCompareLT",
 
-	"CompareEQ", 
-	"CompareNE", 
-	"CompareGE",
-	"CompareLE",
-	"CompareGT",
-	"CompareLT",
+	"O_GSCompareEQBZ", 
+	"O_LSCompareEQBZ", 
+	"O_GSCompareNEBZ", 
+	"O_LSCompareNEBZ", 
+	"O_GSCompareGEBZ",
+	"O_LSCompareGEBZ",
+	"O_GSCompareLEBZ",
+	"O_LSCompareLEBZ",
+	"O_GSCompareGTBZ",
+	"O_LSCompareGTBZ",
+	"O_GSCompareLTBZ",
+	"O_LSCompareLTBZ",
 
-	"GGCompareEQ", 
-	"GGCompareNE", 
-	"GGCompareGT",
-	"GGCompareLT",
-	"LLCompareEQ", 
-	"LLCompareNE", 
-	"LLCompareGT",
-	"LLCompareLT",
+	"O_GSCompareEQBZ8",
+	"O_LSCompareEQBZ8",
+	"O_GSCompareNEBZ8",
+	"O_LSCompareNEBZ8",
+	"O_GSCompareGEBZ8",
+	"O_LSCompareGEBZ8",
+	"O_GSCompareLEBZ8",
+	"O_LSCompareLEBZ8",
+	"O_GSCompareGTBZ8",
+	"O_LSCompareGTBZ8",
+	"O_GSCompareLTBZ8",
+	"O_LSCompareLTBZ8",
 
-	"GSCompareEQ", 
-	"LSCompareEQ", 
-	"GSCompareNE", 
-	"LSCompareNE", 
-	"GSCompareGE",
-	"LSCompareGE",
-	"GSCompareLE",
-	"LSCompareLE",
-	"GSCompareGT",
-	"LSCompareGT",
-	"GSCompareLT",
-	"LSCompareLT",
+	"O_LLCompareLTBZ",
+	"O_LLCompareGTBZ",
+	"O_LLCompareEQBZ",
+	"O_LLCompareNEBZ",
+	"O_GGCompareLTBZ",
+	"O_GGCompareGTBZ",
+	"O_GGCompareEQBZ",
+	"O_GGCompareNEBZ",
 
-	"GSCompareEQBZ", 
-	"LSCompareEQBZ", 
-	"GSCompareNEBZ", 
-	"LSCompareNEBZ", 
-	"GSCompareGEBZ",
-	"LSCompareGEBZ",
-	"GSCompareLEBZ",
-	"LSCompareLEBZ",
-	"GSCompareGTBZ",
-	"LSCompareGTBZ",
-	"GSCompareLTBZ",
-	"LSCompareLTBZ",
+	"O_LLCompareLTBZ8",
+	"O_LLCompareGTBZ8",
+	"O_LLCompareEQBZ8",
+	"O_LLCompareNEBZ8",
+	"O_GGCompareLTBZ8",
+	"O_GGCompareGTBZ8",
+	"O_GGCompareEQBZ8",
+	"O_GGCompareNEBZ8",
 
-	"GSCompareEQBZ8",
-	"LSCompareEQBZ8",
-	"GSCompareNEBZ8",
-	"LSCompareNEBZ8",
-	"GSCompareGEBZ8",
-	"LSCompareGEBZ8",
-	"GSCompareLEBZ8",
-	"LSCompareLEBZ8",
-	"GSCompareGTBZ8",
-	"LSCompareGTBZ8",
-	"GSCompareLTBZ8",
-	"LSCompareLTBZ8",
+	"O_PostIncrement",
+	"O_PostDecrement",
+	"O_PreIncrement",
+	"O_PreDecrement",
 
-	"LLCompareLTBZ",
-	"LLCompareGTBZ",
-	"LLCompareEQBZ",
-	"LLCompareNEBZ",
-	"GGCompareLTBZ",
-	"GGCompareGTBZ",
-	"GGCompareEQBZ",
-	"GGCompareNEBZ",
+	"O_PreIncrementAndPop",
+	"O_PreDecrementAndPop",
 
-	"LLCompareLTBZ8",
-	"LLCompareGTBZ8",
-	"LLCompareEQBZ8",
-	"LLCompareNEBZ8",
-	"GGCompareLTBZ8",
-	"GGCompareGTBZ8",
-	"GGCompareEQBZ8",
-	"GGCompareNEBZ8",
+	"O_IncGlobal",
+	"O_DecGlobal",
+	"O_IncLocal",
+	"O_DecLocal",
 
-	"PostIncrement",
-	"PostDecrement",
-	"PreIncrement",
-	"PreDecrement",
+	"O_Assign",
+	"O_AssignAndPop",
+	"O_AssignToGlobalAndPop",
+	"O_AssignToLocalAndPop",
+	"O_AssignToArrayAndPop",
 
-	"PreIncrementAndPop",
-	"PreDecrementAndPop",
-	"IncGlobal",
-	"DecGlobal",
-	"IncLocal",
-	"DecLocal",
+	"O_SubtractAssign",
+	"O_AddAssign",
+	"O_ModAssign",
+	"O_MultiplyAssign",
+	"O_DivideAssign",
+	"O_ORAssign",
+	"O_ANDAssign",
+	"O_XORAssign",
+	"O_RightShiftAssign",
+	"O_LeftShiftAssign",
 
-	"Negate",
+	"O_SubtractAssignAndPop",
+	"O_AddAssignAndPop",
+	"O_ModAssignAndPop",
+	"O_MultiplyAssignAndPop",
+	"O_DivideAssignAndPop",
+	"O_ORAssignAndPop",
+	"O_ANDAssignAndPop",
+	"O_XORAssignAndPop",
+	"O_RightShiftAssignAndPop",
+	"O_LeftShiftAssignAndPop",
 
-	"SubtractAssign",
-	"AddAssign",
-	"ModAssign",
-	"MultiplyAssign",
-	"DivideAssign",
-	"ORAssign",
-	"ANDAssign",
-	"XORAssign",
-	"RightShiftAssign",
-	"LeftShiftAssign",
+	"O_LogicalNot",
+	"O_Negate",
 
-	"LogicalAnd",
-	"LogicalOr",
-	"LogicalNot",
+	"O_LiteralInt8",
+	"O_LiteralInt16",
 
-	"RelativeJump8",
+	"O_IndexLiteral8",
+	"O_IndexLiteral16",
 
-	"LiteralInt8",
-	"LiteralInt16",
+	"O_IndexLocalLiteral8",
+	"O_IndexGlobalLiteral8",
+	"O_IndexLocalLiteral16",
+	"O_IndexGlobalLiteral16",
 
-	"CallFunctionByHashAndPop",
-	"CallLibFunctionAndPop",
+	"O_BinaryAdditionAndStoreGlobal",
+	"O_BinarySubtractionAndStoreGlobal",
+	"O_BinaryMultiplicationAndStoreGlobal",
+	"O_BinaryDivisionAndStoreGlobal",
 
-	"IndexLiteral8",
-	"IndexLiteral16",
+	"O_BinaryAdditionAndStoreLocal",
+	"O_BinarySubtractionAndStoreLocal",
+	"O_BinaryMultiplicationAndStoreLocal",
+	"O_BinaryDivisionAndStoreLocal",
 
-	"IndexLocalLiteral8",
-	"IndexGlobalLiteral8",
-	"IndexLocalLiteral16",
-	"IndexGlobalLiteral16",
+	"O_CompareBEQ",
+	"O_CompareBNE",
+	"O_CompareBGE",
+	"O_CompareBLE",
+	"O_CompareBGT",
+	"O_CompareBLT",
 
-	"AssignAndPop",
-	"AssignToGlobalAndPop",
-	"AssignToLocalAndPop",
-	"AssignToArrayAndPop",
+	"O_CompareBEQ8",
+	"O_CompareBNE8",
+	"O_CompareBGE8",
+	"O_CompareBLE8",
+	"O_CompareBGT8",
+	"O_CompareBLT8",
 
-	"BinaryAdditionAndStoreGlobal",
-	"BinarySubtractionAndStoreGlobal",
-	"BinaryMultiplicationAndStoreGlobal",
-	"BinaryDivisionAndStoreGlobal",
+	"O_BLA",
+	"O_BLA8",
+	"O_BLO",
+	"O_BLO8",
 
-	"BinaryAdditionAndStoreLocal",
-	"BinarySubtractionAndStoreLocal",
-	"BinaryMultiplicationAndStoreLocal",
-	"BinaryDivisionAndStoreLocal",
+	"O_LiteralInt8ToGlobal",
+	"O_LiteralInt16ToGlobal",
+	"O_LiteralInt32ToLocal",
+	"O_LiteralInt8ToLocal",
+	"O_LiteralInt16ToLocal",
+	"O_LiteralFloatToGlobal",
+	"O_LiteralFloatToLocal",
+	"O_LiteralInt32ToGlobal",
 
-	"BZ8",
+	"O_GGBinaryMultiplication",
+	"O_GLBinaryMultiplication",
+	"O_LLBinaryMultiplication",
 
-	"CompareBEQ",
-	"CompareBNE",
-	"CompareBGE",
-	"CompareBLE",
-	"CompareBGT",
-	"CompareBLT",
+	"O_GGBinaryAddition",
+	"O_GLBinaryAddition",
+	"O_LLBinaryAddition",
 
-	"CompareBEQ8",
-	"CompareBNE8",
-	"CompareBGE8",
-	"CompareBLE8",
-	"CompareBGT8",
-	"CompareBLT8",
+	"O_GGBinarySubtraction",
+	"O_GLBinarySubtraction",
+	"O_LGBinarySubtraction",
+	"O_LLBinarySubtraction",
 
-	"SubtractAssignAndPop",
-	"AddAssignAndPop",
-	"ModAssignAndPop",
-	"MultiplyAssignAndPop",
-	"DivideAssignAndPop",
-	"ORAssignAndPop",
-	"ANDAssignAndPop",
-	"XORAssignAndPop",
-	"RightShiftAssignAndPop",
-	"LeftShiftAssignAndPop",
-
-	"BLA",
-	"BLA8",
-	"BLO",
-	"BLO8",
-
-	"LiteralInt8ToGlobal",
-	"LiteralInt16ToGlobal",
-	"LiteralInt32ToLocal",
-	"LiteralInt8ToLocal",
-	"LiteralInt16ToLocal",
-	"LiteralFloatToGlobal",
-	"LiteralFloatToLocal",
-	"LiteralInt32ToGlobal",
-
-	"GGBinaryMultiplication",
-	"GLBinaryMultiplication",
-	"LLBinaryMultiplication",
-
-	"GGBinaryAddition",
-	"GLBinaryAddition",
-	"LLBinaryAddition",
-
-	"GGBinarySubtraction",
-	"GLBinarySubtraction",
-	"LGBinarySubtraction",
-	"LLBinarySubtraction",
-
-	"GGBinaryDivision",
-	"GLBinaryDivision",
-	"LGBinaryDivision",
-	"LLBinaryDivision",
+	"O_GGBinaryDivision",
+	"O_GLBinaryDivision",
+	"O_LGBinaryDivision",
+	"O_LLBinaryDivision",
 };
 #endif
 

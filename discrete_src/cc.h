@@ -117,8 +117,6 @@ enum WRExpressionType
 	EXTYPE_OPERATION,
 	EXTYPE_RESOLVED,
 	EXTYPE_BYTECODE_RESULT,
-
-	EXTYPE_LVALUE = 0x1000, // LValue can be ANDED with anything to indicate it is a reference
 };
 
 //------------------------------------------------------------------------------

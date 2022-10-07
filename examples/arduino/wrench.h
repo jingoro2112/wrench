@@ -89,7 +89,7 @@ longer function
 #define WRENCH_SPRINTF_OPERATIONS
 /***********************************************************************/
 
-#define WRENCH_VERSION 122
+#define WRENCH_VERSION 131
 
 #include <stdint.h>
 

@@ -27,6 +27,7 @@ SOFTWARE.
 enum WROpcode
 {
 	O_RegisterFunction = 0,
+	O_ReserveGlobalFrame,
 	O_FunctionListSize,
 	
 	O_LiteralInt32,
@@ -35,13 +36,19 @@ enum WROpcode
 	O_LiteralString,
 
 	O_CallFunctionByHash,
+	O_CallFunctionByHashAndPop,
 	O_CallFunctionByIndex,
 	O_PushIndexFunctionReturnValue,
 	
 	O_CallLibFunction,
+	O_CallLibFunctionAndPop,
 
 	O_NewHashTable,
 	O_AssignToHashTableByOffset,
+
+	O_PopOne,
+	O_Return,
+	O_Stop,
 
 	O_Index,
 	O_IndexSkipLoad,
@@ -51,42 +58,34 @@ enum WROpcode
 	O_GlobalIndexHash,
 	O_LocalIndexHash,
 	
-	O_Assign,
-
 	O_StackSwap,
 	O_SwapTwoToTop,
 
-	O_ReserveGlobalFrame,
-
 	O_LoadFromLocal,
 	O_LoadFromGlobal,
-
-	O_PopOne,
-	O_Return,
-	O_Stop,
 
 	O_LLValues,
 	O_LGValues,
 	O_GLValues,
 	O_GGValues,
 
-	O_BinaryModSkipLoad,
 	O_BinaryRightShiftSkipLoad,
 	O_BinaryLeftShiftSkipLoad,
 	O_BinaryAndSkipLoad,
 	O_BinaryOrSkipLoad,
 	O_BinaryXORSkipLoad,
+	O_BinaryModSkipLoad,
 	
-	O_BinaryAddition,
-	O_BinarySubtraction,
 	O_BinaryMultiplication,
+	O_BinarySubtraction,
 	O_BinaryDivision,
 	O_BinaryRightShift,
 	O_BinaryLeftShift,
 	O_BinaryMod,
-	O_BinaryAnd,
 	O_BinaryOr,
 	O_BinaryXOR,
+	O_BinaryAnd,
+	O_BinaryAddition,
 
 	O_BitwiseNOT,
 
@@ -94,24 +93,29 @@ enum WROpcode
 	O_CoerceToFloat,
 
 	O_RelativeJump,
+	O_RelativeJump8,
 	
 	O_BZ,
+	O_BZ8,
 
-	O_CompareEQ, 
-	O_CompareNE, 
-	O_CompareGE,
+	O_LogicalAnd,
+	O_LogicalOr,
 	O_CompareLE,
+	O_CompareGE,
 	O_CompareGT,
 	O_CompareLT,
+	O_CompareEQ,
+	O_CompareNE, 
 
 	O_GGCompareEQ, 
 	O_GGCompareNE, 
 	O_GGCompareGT,
 	O_GGCompareLT,
-	O_LLCompareEQ, 
-	O_LLCompareNE, 
+	
 	O_LLCompareGT,
 	O_LLCompareLT,
+	O_LLCompareEQ, 
+	O_LLCompareNE, 
 	
 	O_GSCompareEQ, 
 	O_LSCompareEQ, 
@@ -177,12 +181,17 @@ enum WROpcode
 
 	O_PreIncrementAndPop,
 	O_PreDecrementAndPop,
+	
 	O_IncGlobal,
 	O_DecGlobal,
 	O_IncLocal,
 	O_DecLocal,
 
-	O_Negate,
+	O_Assign,
+	O_AssignAndPop,
+	O_AssignToGlobalAndPop,
+	O_AssignToLocalAndPop,
+	O_AssignToArrayAndPop,
 
 	O_SubtractAssign,
 	O_AddAssign,
@@ -195,17 +204,22 @@ enum WROpcode
 	O_RightShiftAssign,
 	O_LeftShiftAssign,
 
-	O_LogicalAnd,
-	O_LogicalOr,
-	O_LogicalNot,
+	O_SubtractAssignAndPop,
+	O_AddAssignAndPop,
+	O_ModAssignAndPop,
+	O_MultiplyAssignAndPop,
+	O_DivideAssignAndPop,
+	O_ORAssignAndPop,
+	O_ANDAssignAndPop,
+	O_XORAssignAndPop,
+	O_RightShiftAssignAndPop,
+	O_LeftShiftAssignAndPop,
 
-	O_RelativeJump8,
-	
+	O_LogicalNot,
+	O_Negate,
+
 	O_LiteralInt8,
 	O_LiteralInt16,
-
-	O_CallFunctionByHashAndPop,
-	O_CallLibFunctionAndPop,
 
 	O_IndexLiteral8,
 	O_IndexLiteral16,
@@ -214,11 +228,6 @@ enum WROpcode
 	O_IndexGlobalLiteral8,
 	O_IndexLocalLiteral16,
 	O_IndexGlobalLiteral16,
-
-	O_AssignAndPop,
-	O_AssignToGlobalAndPop,
-	O_AssignToLocalAndPop,
-	O_AssignToArrayAndPop,
 
 	O_BinaryAdditionAndStoreGlobal,
 	O_BinarySubtractionAndStoreGlobal,
@@ -229,8 +238,6 @@ enum WROpcode
 	O_BinarySubtractionAndStoreLocal,
 	O_BinaryMultiplicationAndStoreLocal,
 	O_BinaryDivisionAndStoreLocal,
-
-	O_BZ8,
 
 	O_CompareBEQ,
 	O_CompareBNE,
@@ -245,17 +252,6 @@ enum WROpcode
 	O_CompareBLE8,
 	O_CompareBGT8,
 	O_CompareBLT8,
-
-	O_SubtractAssignAndPop,
-	O_AddAssignAndPop,
-	O_ModAssignAndPop,
-	O_MultiplyAssignAndPop,
-	O_DivideAssignAndPop,
-	O_ORAssignAndPop,
-	O_ANDAssignAndPop,
-	O_XORAssignAndPop,
-	O_RightShiftAssignAndPop,
-	O_LeftShiftAssignAndPop,
 
 	O_BLA,
 	O_BLA8,
