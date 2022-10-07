@@ -88,7 +88,7 @@ longer function
 #define WRENCH_SPRINTF_OPERATIONS
 /***********************************************************************/
 
-#define WRENCH_VERSION 122
+#define WRENCH_VERSION 131
 
 #include <stdint.h>
 
@@ -537,9 +537,11 @@ struct WRValue
 
 #ifndef WRENCH_COMBINED
 #include "utils.h"
+#include "container_data.h"
 #include "vm.h"
 #include "opcode.h"
 #include "str.h"
+#include "opcode_stream.h"
 #include "cc.h"
 #endif
 

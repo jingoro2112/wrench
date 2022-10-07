@@ -4365,7 +4365,6 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 
 					if ( m_units[u2].offsetOfLocalHashMap == 0 )
 					{
-						// worst-case hash table
 						int size;
 						unsigned char* buf = 0;
 

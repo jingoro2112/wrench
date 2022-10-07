@@ -1613,7 +1613,6 @@ callFunction:
 					// table +2/3 : m_mod
 					// table + 4: [static hash table ]
 					
-
 					stackTop->va = context->getSVA( count, SV_VALUE, false );
 					
 					stackTop->va->m_ROMHashTable = table + 3;

@@ -50,5 +50,11 @@
     <ClInclude Include="..\discrete_src\wrench.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\discrete_src\container_data.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\discrete_src\opcode_stream.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

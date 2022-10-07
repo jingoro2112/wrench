@@ -21,83 +21,9 @@ SOFTWARE.
 *******************************************************************************/
 #ifndef _CC_H
 #define _CC_H
-#ifndef WRENCH_WITHOUT_COMPILER
 /*------------------------------------------------------------------------------*/
 
-//-----------------------------------------------------------------------------
-class WROpcodeStream
-{
-public:
-	WROpcodeStream() { m_buf = 0; clear(); }
-	~WROpcodeStream() { clear(); }
-	WROpcodeStream& clear()
-	{
-		m_len = 0;
-		delete[] m_buf;
-		m_buf = 0;
-		m_bufLen = 0;
-		return *this;
-	}
-	
-	unsigned int size() const { return m_len; }
-
-	WROpcodeStream (const WROpcodeStream &other ) { m_buf = 0; *this = other; }
-	WROpcodeStream& operator = ( const WROpcodeStream& str )
-	{
-		clear();
-		if ( str.m_len )
-		{
-			*this += str;
-		}
-		return *this;
-	}
-
-	WROpcodeStream& operator += ( const WROpcodeStream& stream ) { return append(stream.m_buf, stream.m_len); }
-	WROpcodeStream& operator += ( const unsigned char data ) { return append(&data, 1); }
-	WROpcodeStream& append( const unsigned char* data, const int size )
-	{
-		if ( (size + m_len) >= m_bufLen )
-		{
-			unsigned char* buf = m_buf;
-			m_bufLen = size + m_len + 16;
-			m_buf = new unsigned char[ m_bufLen ];
-			if ( m_len )
-			{
-				memcpy( m_buf, buf, m_len );
-				delete[] buf;
-			}
-		}
-
-		memcpy( m_buf + m_len, data, size );
-		m_len += size;
-		return *this;
-
-	}
-		
-	unsigned char* p_str( int offset =0 ) { return m_buf + offset; }
-	operator const unsigned char*() const { return m_buf; }
-	unsigned char& operator[]( const int l ) { return *p_str(l); }
-
-	WROpcodeStream& shave( const unsigned int e )
-	{
-		m_len -= e;
-		return *this;
-	}
-
-	unsigned int release( unsigned char** toBuf )
-	{
-		unsigned int retLen = m_len;
-		*toBuf = m_buf;
-		m_buf = 0;
-		clear();
-		return retLen;
-	}
-	
-private:
-	unsigned char *m_buf;
-	unsigned int m_len;
-	unsigned int m_bufLen;
-};
+#ifndef WRENCH_WITHOUT_COMPILER
 
 //------------------------------------------------------------------------------
 enum WROperationType
@@ -176,7 +102,7 @@ const WROperation c_operations[] =
 	{ "@i",   3, O_CoerceToInt,         true,  WR_OPER_PRE, O_LAST },
 	{ "@f",   3, O_CoerceToFloat,       true,  WR_OPER_PRE, O_LAST },
 	{ "@[]",  2, O_Index,               true,  WR_OPER_POST, O_LAST },
-	{ "._count",2, O_CountOf,           true,  WR_OPER_POST, O_LAST },
+	{ "._count", 2, O_CountOf,           true,  WR_OPER_POST, O_LAST },
 	
 	{ 0, 0, O_LAST, false, WR_OPER_PRE, O_LAST },
 };
@@ -283,8 +209,9 @@ struct WRExpressionContext
 };
 
 //------------------------------------------------------------------------------
-struct WRExpression
+class WRExpression
 {
+public:
 	WRarray<WRExpressionContext> context;
 
 	WRBytecode bytecode;
@@ -422,7 +349,7 @@ private:
 		return buf;
 	}
 
-	friend struct WRExpression;
+	friend class WRExpression;
 	static void pushOpcode( WRBytecode& bytecode, WROpcode opcode );
 	static void pushData( WRBytecode& bytecode, const unsigned char* data, const int len ) { bytecode.all.append( data, len ); }
 	static void pushData( WRBytecode& bytecode, const char* data, const int len ) { bytecode.all.append( (unsigned char*)data, len ); }

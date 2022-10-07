@@ -24,57 +24,6 @@ SOFTWARE.
 #define _VM_H
 /*------------------------------------------------------------------------------*/
 
-//------------------------------------------------------------------------------
-class WRContainerData
-{
-public:
-
-	//------------------------------------------------------------------------------
-	void registerValue( const char* key, WRValue* value )
-	{
-		int32_t hash = wr_hashStr(key);
-		
-		UDNode* node = m_index.getItem( hash );
-		if ( !node )
-		{
-			node = new UDNode;
-			node->next = m_nodeOnlyHead;
-			m_nodeOnlyHead = node;
-			m_index.set( wr_hashStr(key), node );
-		}
-
-		node->val = value;
-	}
-	
-	//------------------------------------------------------------------------------
-	WRValue* addValue( const char* key )
-	{
-		UDNode* node = new UDNode;
-		node->val = new WRValue;
-		node->val->type = 0;
-		node->next = m_head;
-		m_head = node;
-		m_index.set( wr_hashStr(key), node );
-		return node->val;
-	}
-	
-	//------------------------------------------------------------------------------
-	WRValue* get( const char* key ) { UDNode* N = m_index.getItem( wr_hashStr(key) ); return N ? N->val : 0; }
-	WRValue* get( const int32_t hash ) { UDNode* N = m_index.getItem(hash); return N ? N->val : 0; }
-
-	WRContainerData( int sizeHint =0 ) : m_head(0), m_nodeOnlyHead(0), m_index(sizeHint) {}
-	~WRContainerData();
-
-private:
-	struct UDNode
-	{
-		WRValue* val;
-		UDNode* next;
-	};
-	UDNode* m_head; // values that might have been handed to this structure so it does not necessarily own (see below)
-	UDNode* m_nodeOnlyHead; // values created by this structure (so are destroyed with it)
-	WRHashTable<UDNode*> m_index;
-};
 
 //------------------------------------------------------------------------------
 struct WRFunction

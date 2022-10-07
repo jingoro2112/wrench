@@ -25,7 +25,6 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #ifndef WRENCH_WITHOUT_COMPILER
-#include <assert.h>
 
 //-----------------------------------------------------------------------------
 template <class T> class WRarray
@@ -389,9 +388,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
-
-#ifndef _VM_H
-#define _VM_H
+#ifndef _CONTAINER_DATA_H
+#define _CONTAINER_DATA_H
 /*------------------------------------------------------------------------------*/
 
 //------------------------------------------------------------------------------
@@ -403,7 +401,7 @@ public:
 	void registerValue( const char* key, WRValue* value )
 	{
 		int32_t hash = wr_hashStr(key);
-		
+
 		UDNode* node = m_index.getItem( hash );
 		if ( !node )
 		{
@@ -415,7 +413,7 @@ public:
 
 		node->val = value;
 	}
-	
+
 	//------------------------------------------------------------------------------
 	WRValue* addValue( const char* key )
 	{
@@ -427,7 +425,7 @@ public:
 		m_index.set( wr_hashStr(key), node );
 		return node->val;
 	}
-	
+
 	//------------------------------------------------------------------------------
 	WRValue* get( const char* key ) { UDNode* N = m_index.getItem( wr_hashStr(key) ); return N ? N->val : 0; }
 	WRValue* get( const int32_t hash ) { UDNode* N = m_index.getItem(hash); return N ? N->val : 0; }
@@ -445,6 +443,34 @@ private:
 	UDNode* m_nodeOnlyHead; // values created by this structure (so are destroyed with it)
 	WRHashTable<UDNode*> m_index;
 };
+
+#endif
+/*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#ifndef _VM_H
+#define _VM_H
+/*------------------------------------------------------------------------------*/
+
 
 //------------------------------------------------------------------------------
 struct WRFunction
@@ -1462,8 +1488,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
-#ifndef _CC_H
-#define _CC_H
+#ifndef _OPCODE_STREAM_H
+#define _OPCODE_STREAM_H
 #ifndef WRENCH_WITHOUT_COMPILER
 /*------------------------------------------------------------------------------*/
 
@@ -1481,7 +1507,7 @@ public:
 		m_bufLen = 0;
 		return *this;
 	}
-	
+
 	unsigned int size() const { return m_len; }
 
 	WROpcodeStream (const WROpcodeStream &other ) { m_buf = 0; *this = other; }
@@ -1516,7 +1542,7 @@ public:
 		return *this;
 
 	}
-		
+
 	unsigned char* p_str( int offset =0 ) { return m_buf + offset; }
 	operator const unsigned char*() const { return m_buf; }
 	unsigned char& operator[]( const int l ) { return *p_str(l); }
@@ -1535,12 +1561,41 @@ public:
 		clear();
 		return retLen;
 	}
-	
+
 private:
 	unsigned char *m_buf;
 	unsigned int m_len;
 	unsigned int m_bufLen;
 };
+
+#endif
+
+#endif/*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+#ifndef _CC_H
+#define _CC_H
+/*------------------------------------------------------------------------------*/
+
+#ifndef WRENCH_WITHOUT_COMPILER
 
 //------------------------------------------------------------------------------
 enum WROperationType
@@ -1619,7 +1674,7 @@ const WROperation c_operations[] =
 	{ "@i",   3, O_CoerceToInt,         true,  WR_OPER_PRE, O_LAST },
 	{ "@f",   3, O_CoerceToFloat,       true,  WR_OPER_PRE, O_LAST },
 	{ "@[]",  2, O_Index,               true,  WR_OPER_POST, O_LAST },
-	{ "._count",2, O_CountOf,           true,  WR_OPER_POST, O_LAST },
+	{ "._count", 2, O_CountOf,           true,  WR_OPER_POST, O_LAST },
 	
 	{ 0, 0, O_LAST, false, WR_OPER_PRE, O_LAST },
 };
@@ -1726,8 +1781,9 @@ struct WRExpressionContext
 };
 
 //------------------------------------------------------------------------------
-struct WRExpression
+class WRExpression
 {
+public:
 	WRarray<WRExpressionContext> context;
 
 	WRBytecode bytecode;
@@ -1865,7 +1921,7 @@ private:
 		return buf;
 	}
 
-	friend struct WRExpression;
+	friend class WRExpression;
 	static void pushOpcode( WRBytecode& bytecode, WROpcode opcode );
 	static void pushData( WRBytecode& bytecode, const unsigned char* data, const int len ) { bytecode.all.append( data, len ); }
 	static void pushData( WRBytecode& bytecode, const char* data, const int len ) { bytecode.all.append( (unsigned char*)data, len ); }
@@ -6319,7 +6375,6 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 
 					if ( m_units[u2].offsetOfLocalHashMap == 0 )
 					{
-						// worst-case hash table
 						int size;
 						unsigned char* buf = 0;
 
@@ -6341,7 +6396,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 						int index = base + N.references[r];
 
 						code[index] = (m_units[u2].offsetOfLocalHashMap>>8) & 0xFF;
-						code[index+2] = m_units[u2].offsetOfLocalHashMap & 0xFF;
+						code[index+1] = m_units[u2].offsetOfLocalHashMap & 0xFF;
 					}
 
 					break;
@@ -8398,9 +8453,11 @@ callFunction:
 
 					// NOTE: we are guaranteed to have at least one
 					// value if table > context->bottome
-					
-					tempValue2 = (WRValue*)stackTop->p;
-					tempValue3 = (WRValue*)stackTop->frame;
+
+					unsigned char count = *table++;
+
+					tempValue2 = (WRValue*)(stackTop + *table)->p;
+					tempValue3 = (WRValue*)(stackTop + *table)->frame;
 
 					stackTop->p2 = INIT_AS_STRUCT;
 
@@ -8409,8 +8466,6 @@ callFunction:
 					// table +2/3 : m_mod
 					// table + 4: [static hash table ]
 					
-					unsigned char count = *table++;
-
 					stackTop->va = context->getSVA( count, SV_VALUE, false );
 					
 					stackTop->va->m_ROMHashTable = table + 3;

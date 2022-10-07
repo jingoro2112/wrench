@@ -1,4 +1,9 @@
-1.3.0 ---------------------------------------------------------------------------
+1.3.1 -------------------------------------------------------------------------
+- removed unnused opcode
+- fixed struct/param bug
+- broke out a few other .h files
+
+10/6/22 1.3.0 -------------------------------------------------------------------------
 - added more compare optimizations
 - changed function calling to be lower overhead by making "no return" the default,
   so now instead of always returning and then cancelling the return, the return

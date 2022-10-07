@@ -538,9 +538,11 @@ struct WRValue
 
 #ifndef WRENCH_COMBINED
 #include "utils.h"
+#include "container_data.h"
 #include "vm.h"
 #include "opcode.h"
 #include "str.h"
+#include "opcode_stream.h"
 #include "cc.h"
 #endif
 

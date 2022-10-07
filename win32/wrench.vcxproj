@@ -19,7 +19,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\discrete_src\cc.h" />
+    <ClInclude Include="..\discrete_src\container_data.h" />
     <ClInclude Include="..\discrete_src\opcode.h" />
+    <ClInclude Include="..\discrete_src\opcode_stream.h" />
     <ClInclude Include="..\discrete_src\str.h" />
     <ClInclude Include="..\discrete_src\utils.h" />
     <ClInclude Include="..\discrete_src\vm.h" />
