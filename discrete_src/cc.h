@@ -367,7 +367,7 @@ private:
 	void addFunctionToHashSpace( WRBytecode& result, WRstr& token );
 	void loadExpressionContext( WRExpression& expression, int depth, int operation );
 	void resolveExpression( WRExpression& expression );
-	void resolveExpressionEx( WRExpression& expression, int o, int p );
+	unsigned int resolveExpressionEx( WRExpression& expression, int o, int p );
 
 	bool operatorFound( WRstr& token, WRarray<WRExpressionContext>& context, int depth );
 	bool parseCallFunction( WRExpression& expression, WRstr functionName, int depth, bool parseArguments );

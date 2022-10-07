@@ -2540,6 +2540,9 @@ void WRCompilationContext::resolveExpression( WRExpression& expression )
 		return;
 	}
 
+	unsigned int resolves = 1;
+	unsigned int startedWith = expression.context.count();
+
 	for( int p=0; p<c_highestPrecedence && expression.context.count() > 1; ++p )
 	{
 		// left to right operations
@@ -2552,7 +2555,7 @@ void WRCompilationContext::resolveExpression( WRExpression& expression )
 				continue;
 			}
 
-			resolveExpressionEx( expression, o, p );
+			resolves += resolveExpressionEx( expression, o, p );
 			if (m_err)
 			{
 				return;
@@ -2570,7 +2573,7 @@ void WRCompilationContext::resolveExpression( WRExpression& expression )
 				continue;
 			}
 
-			resolveExpressionEx( expression, o, p );
+			resolves += resolveExpressionEx( expression, o, p );
 			if (m_err)
 			{
 				return;
@@ -2578,15 +2581,24 @@ void WRCompilationContext::resolveExpression( WRExpression& expression )
 			o = expression.context.count();
 		}
 	}
+
+	if ( startedWith && (resolves != startedWith) )
+	{
+		m_err = WR_ERR_bad_expression;
+		return;
+	}
 }
 
 //------------------------------------------------------------------------------
-void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o, int p )
+unsigned int WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o, int p )
 {
+	unsigned int ret = 0;
 	switch( expression.context[o].operation->type )
 	{
 		case WR_OPER_PRE:
 		{
+			ret = 1;
+
 			if ( expression.context[o + 1].stackPosition == -1 )
 			{
 				loadExpressionContext( expression, o + 1, 0 ); // load argument
@@ -2599,7 +2611,6 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 			appendBytecode( expression.bytecode, expression.context[o].bytecode );  // apply operator
 			expression.context.remove( o, 1 ); // knock off operator
 			expression.pushToStack(o);
-
 			break;
 		}
 
@@ -2609,10 +2620,12 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 			// order, so don't go to any great lengths to shift the stack
 			// around for them
 
+			ret = 2;
+
 			if( o == 0 )
 			{
 				m_err = WR_ERR_bad_expression;
-				return;
+				return 0;
 			}
 
 			int second = o + 1; // push first
@@ -2680,10 +2693,12 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 
 		case WR_OPER_BINARY:
 		{
+			ret = 2;
+
 			if( o == 0 )
 			{
 				m_err = WR_ERR_bad_expression;
-				return;
+				return 0;
 			}
 
 			int second = o + 1; // push first
@@ -2784,10 +2799,12 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 
 		case WR_OPER_POST:
 		{
+			ret = 1;
+
 			if( o == 0 )
 			{
 				m_err = WR_ERR_bad_expression;
-				return;
+				return 0;
 			}
 
 			if ( expression.context[o - 1].stackPosition == -1 )
@@ -2806,6 +2823,7 @@ void WRCompilationContext::resolveExpressionEx( WRExpression& expression, int o,
 			break;
 		}
 	}
+	return ret;
 }
 
 //------------------------------------------------------------------------------

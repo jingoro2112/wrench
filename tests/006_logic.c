@@ -43,156 +43,156 @@ a||b
 // float <- int
 f = .5;
 i = 3;
-log( f += i ); // 3.5
-log( f );
-log( i );
+print( f += i ); // 3.5
+print( f );
+print( i );
 
 // int <- int
 i = 10;
 j = 3;
-log( i += j ); // 13
-log( i );
-log( j );
+print( i += j ); // 13
+print( i );
+print( j );
 
 // int <- float
 i = 10;
 f = .5;
-log( i += f ); // 10.5
-log( i );
-log( f );
+print( i += f ); // 10.5
+print( i );
+print( f );
 
 // float <- float
 g = 10.2;
 f = .5;
-log( g += f ); // 10.7
-log( g );
-log( f );
+print( g += f ); // 10.7
+print( g );
+print( f );
 
 if ( !1 )
 {
-	log("1");
+	print("1");
 }
 
 a = 1;
 if ( a )
 {
-	log("T");
+	print("T");
 }
 else
 {
-	log("F");
+	print("F");
 }
 
 if ( !a )
 {
-	log("T");
+	print("T");
 }
 else
 {
-	log("F");
+	print("F");
 }
 
 
 
 a = 10.5;
 
-if ( a > 10 ) log("T1");
-if ( a < 11 ) log("T2");
-if ( a >= 10.5 ) log("T3");
-if ( a >= 10 ) log("T4");
-if ( a < 10.6 ) log("T5");
-if ( a <= 10.5 ) log("T6");
-if ( a <= 11 ) log("T7");
-if ( a == 10.5 ) log("T8");
-if ( a != 1) log("T9");
+if ( a > 10 ) print("T1");
+if ( a < 11 ) print("T2");
+if ( a >= 10.5 ) print("T3");
+if ( a >= 10 ) print("T4");
+if ( a < 10.6 ) print("T5");
+if ( a <= 10.5 ) print("T6");
+if ( a <= 11 ) print("T7");
+if ( a == 10.5 ) print("T8");
+if ( a != 1) print("T9");
 
-if ( a <= 10 ) log("B1");
-if ( a >= 11 ) log("B2");
-if ( a < 10.5 ) log("B3");
-if ( a < 10 ) log("B4");
-if ( a >= 10.6 ) log("B5");
-if ( a > 10.5 ) log("B6");
-if ( a > 11 ) log("B7");
-if ( a != 10.5 ) log("B8");
-if ( a == 1) log("B9");
+if ( a <= 10 ) print("B1");
+if ( a >= 11 ) print("B2");
+if ( a < 10.5 ) print("B3");
+if ( a < 10 ) print("B4");
+if ( a >= 10.6 ) print("B5");
+if ( a > 10.5 ) print("B6");
+if ( a > 11 ) print("B7");
+if ( a != 10.5 ) print("B8");
+if ( a == 1) print("B9");
 
 
 a = 1000;
-if ( a > 9000 ) log("B10");
-if ( a >= 9000 ) log("B11");
-if ( a < 900 ) log("B12");
-if ( a <= 900 ) log("B13");
-if ( a == 900 ) log("B14");
-if ( a != 1000 ) log("B15");
-if ( 9000 < a ) log("B101");
-if ( 9000 <= a ) log("B111");
-if ( 900 > a ) log("B121");
-if ( 900 >= a ) log("B131");
-if ( 900 == a ) log("B141");
-if ( 1000 != a ) log("B151");
+if ( a > 9000 ) print("B10");
+if ( a >= 9000 ) print("B11");
+if ( a < 900 ) print("B12");
+if ( a <= 900 ) print("B13");
+if ( a == 900 ) print("B14");
+if ( a != 1000 ) print("B15");
+if ( 9000 < a ) print("B101");
+if ( 9000 <= a ) print("B111");
+if ( 900 > a ) print("B121");
+if ( 900 >= a ) print("B131");
+if ( 900 == a ) print("B141");
+if ( 1000 != a ) print("B151");
 
 
 a = 100000;
-if ( a > 900000 ) log("B14");
-if ( a >= 900000 ) log("B15");
-if ( a < 90000 ) log("B16");
-if ( a <= 90000 ) log("B17");
-if ( a == 90000 ) log("B18");
-if ( a != 100000 ) log("B19");
-if ( 900000 < a ) log("C10");
-if ( 900000 <= a ) log("C11");
-if ( 90000 > a ) log("C12");
-if ( 90000 >= a ) log("C13");
-if ( 90000 == a ) log("C14");
-if ( 100000 != a ) log("C15");
+if ( a > 900000 ) print("B14");
+if ( a >= 900000 ) print("B15");
+if ( a < 90000 ) print("B16");
+if ( a <= 90000 ) print("B17");
+if ( a == 90000 ) print("B18");
+if ( a != 100000 ) print("B19");
+if ( 900000 < a ) print("C10");
+if ( 900000 <= a ) print("C11");
+if ( 90000 > a ) print("C12");
+if ( 90000 >= a ) print("C13");
+if ( 90000 == a ) print("C14");
+if ( 100000 != a ) print("C15");
 
 
 b = 0;
-if ( a && b ) log("ab");
-if ( b && a ) log("ab");
-if ( a && b ) log("ab"); else log("ba");
-if ( b && a ) log("ab"); else log("ba");
-if ( a || b ) log("a||b");
-if ( b || a ) log("a||b");
+if ( a && b ) print("ab");
+if ( b && a ) print("ab");
+if ( a && b ) print("ab"); else print("ba");
+if ( b && a ) print("ab"); else print("ba");
+if ( a || b ) print("a||b");
+if ( b || a ) print("a||b");
 
 a = 0;
 b = 1;
-if ( a && b ) log("ab");
-if ( b && a ) log("ab");
-if ( a && b ) log("ab"); else log("ba");
-if ( b && a ) log("ab"); else log("ba");
-if ( a || b ) log("a||b");
-if ( b || a ) log("a||b");
+if ( a && b ) print("ab");
+if ( b && a ) print("ab");
+if ( a && b ) print("ab"); else print("ba");
+if ( b && a ) print("ab"); else print("ba");
+if ( a || b ) print("a||b");
+if ( b || a ) print("a||b");
 
 b = 0;
-if ( a && b ) log("ab");
-if ( b && a ) log("ab");
-if ( a && b ) log("ab"); else log("ba");
-if ( b && a ) log("ab"); else log("ba");
-if ( a || b ) log("a||b");
-if ( b || a ) log("a||b");
+if ( a && b ) print("ab");
+if ( b && a ) print("ab");
+if ( a && b ) print("ab"); else print("ba");
+if ( b && a ) print("ab"); else print("ba");
+if ( a || b ) print("a||b");
+if ( b || a ) print("a||b");
 
 a = 1;
 b = 1;
-if ( a && b ) log("ab");
-if ( b && a ) log("ab");
-if ( a && b ) log("ab"); else log("ba");
-if ( b && a ) log("ab"); else log("ba");
+if ( a && b ) print("ab");
+if ( b && a ) print("ab");
+if ( a && b ) print("ab"); else print("ba");
+if ( b && a ) print("ab"); else print("ba");
 
 a = 0;
-if ( a && b ) log("ab");
-if ( b && a ) log("ab");
+if ( a && b ) print("ab");
+if ( b && a ) print("ab");
 
 a = 1;
 b = 0;
-if ( a && b ) log("ab");
-if ( b && a ) log("ab");
+if ( a && b ) print("ab");
+if ( b && a ) print("ab");
 
 a = 0;
-if ( a || b ) log("a||b");
-if ( b || a ) log("a||b");
+if ( a || b ) print("a||b");
+if ( b || a ) print("a||b");
 
 a = 1;
 b = 0;
-if ( a || b ) log("a||b");
-if ( b || a ) log("a||b");
+if ( a || b ) print("a||b");
+if ( b || a ) print("a||b");

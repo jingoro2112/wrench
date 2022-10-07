@@ -53,7 +53,6 @@
 20
 ~*/
 
-
 tle(tle());
 a = tle();
 function tle
@@ -65,25 +64,25 @@ f(f(0));
 a = 5;
 
 ++::a;
-log( a );
+print( a );
 
 test();
 
 function test()
 {
 	b = 4000000;
-	log( b );
+	print( b );
 	b = 20;
-	log( b );
+	print( b );
 	b = 0;
-	log( b );
+	print( b );
 	b = 1.2;
-	log( b );
+	print( b );
 
 	b = 10;
-	log( b );
+	print( b );
 	++::a;
-	log( ::a );
+	print( ::a );
 	
 }
 
@@ -92,11 +91,11 @@ test();
 
 function test2(a)
 {
-	log( a );
+	print( a );
 	a = 20;
-	log( a );
+	print( a );
 	
-	log( ::a );
+	print( ::a );
 }
 
 test2();
@@ -105,10 +104,10 @@ test2(2,3);
 
 function test3(a,b)
 {
-	log( a );
-	log( b );
+	print( a );
+	print( b );
 	b = 30;
-	log( b );
+	print( b );
 }
 
 test3();
@@ -132,7 +131,7 @@ function test5()
 	return 5;
 }
 
-log( test5() );
+print( test5() );
 
 function test6()
 {
@@ -141,13 +140,13 @@ function test6()
 	d = 4;
 	return c;
 }
-log( test6() );
+print( test6() );
 
 function test7()
 {
 	return ::a;
 }
-log( test7() );
+print( test7() );
 
 
 function fibonacci( n )
@@ -158,7 +157,7 @@ function fibonacci( n )
 
 for ( i = 0; i <= 10; ++i)
 {
-	log( fibonacci(i) );
+	print( fibonacci(i) );
 }
 
 
@@ -171,9 +170,9 @@ function g_fa()
 {
 	::a = 20;
 }
-log(a);
-log(::a);
+print(a);
+print(::a);
 fa();
-log(a);
+print(a);
 g_fa();
-log(a);
+print(a);

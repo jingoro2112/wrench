@@ -18,13 +18,13 @@ f = math::floor(1);
 f = math::floor(1,2);
 f = math::floor(1,2,3);
 
-log( math::floor(1.5) );
-log( math::floor(1) );
+print( math::floor(1.5) );
+print( math::floor(1) );
 
-log( math::abs(-1.5) );
-log( math::abs(-30) );
+print( math::abs(-1.5) );
+print( math::abs(-30) );
 
-log( math::sqrt(25) );
-log( math::sqrt(72.25) );
+print( math::sqrt(25) );
+print( math::sqrt(72.25) );
 
-log( math::ceil(-4.1) );
+print( math::ceil(-4.1) );

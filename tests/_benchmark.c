@@ -1,4 +1,4 @@
-log("Starting ...\n");
+print("Starting ...\n");
 
 accum = 0;
 count = 0;
@@ -66,10 +66,10 @@ while (count < 1545)
 	
 	if (count % 300 == 0)
 	{
-		log(accum);
+		print(accum);
 	}
 
 	count = count + 1;
 }
 
-log(accum);
+print(accum);

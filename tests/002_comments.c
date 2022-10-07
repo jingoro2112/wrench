@@ -10,13 +10,13 @@ hello
  */
 // comment
 
-log( "hello" ); // eol comment
-log( /**/"hello"  /*  */ ); /*  *//*
+print( "hello" ); // eol comment
+print( /**/"hello"  /*  */ ); /*  *//*
 */
 
 a = 10 / 2;
-log( a );
+print( a );
 a = 10/	/*h*/2;
-log( a );
+print( a );
 a = 10/**//	/*h*/2;
-log( a );
+print( a );

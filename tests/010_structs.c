@@ -45,16 +45,16 @@ instance2 = new a
 	4 + 5,
 };
 
-log( instance2.p );
+print( instance2.p );
 
-log( instance2.a );
+print( instance2.a );
 
 instance3 = new a()
 {
 };
 
-log( instance3.p );
-log( instance3.a );
+print( instance3.p );
+print( instance3.a );
 
 
 instance4 = new a
@@ -62,8 +62,8 @@ instance4 = new a
 	321
 };
 
-log( instance4.p );
-log( instance4.h );
+print( instance4.p );
+print( instance4.h );
 
 
 
@@ -75,77 +75,77 @@ instance0 = new a();
 instance0 = new a();
 
 
-log( instance0.b );
-log( instance0.v );
+print( instance0.b );
+print( instance0.v );
 
 g = "hi2";
 instance0.p = g;
-log( instance0.p );
+print( instance0.p );
 instance0.p = "1";
 instance0.p = "2";
-log( instance0.p = "<<>>" );
+print( instance0.p = "<<>>" );
 instance0.p = "4";
-log( instance0.p );
+print( instance0.p );
 
 instance0.p = 20;
-log( instance0.p );
+print( instance0.p );
 instance0.p = "ok2";
-log( instance0.p );
+print( instance0.p );
 instance0.p = 1.5;
-log( instance0.p );
-log( instance0.b );
-log( instance0.b = instance0.p );
-log( instance0.b );
+print( instance0.p );
+print( instance0.b );
+print( instance0.b = instance0.p );
+print( instance0.b );
 instance0.p = "long string";
-log( instance0.b = instance0.p );
-log( instance0.b );
+print( instance0.b = instance0.p );
+print( instance0.b );
 
-log( 0b010 );
-log( 0b );
+print( 0b010 );
+print( 0b );
 
 
 j[30] = { 8, 9 };
-log( j[0] );
-log( j[1] );
+print( j[0] );
+print( j[1] );
 
 
 a = 10;
 b = 20;
 j[10] = { a, b + a, 45, 50, 77, 60 };
-log( j[0] );
-log( j[1] );
-log( j[2] );
-log( j[5] );
+print( j[0] );
+print( j[1] );
+print( j[2] );
+print( j[5] );
 
 
 in = new a;
 
 in.a = 8;
 in.b = 7;
-if ( in.a == in.b && 1 ) log("G1");
-if ( in.a != in.a && 1 ) log("G2");
-if ( in.a < in.b && 1 )  log("G3");
-if ( in.b > in.a && 1 )  log("G4");
-if ( in.b >= a && 1 ) log("G5");
-if ( in.a <= in.b && 1 ) log("G6");
+if ( in.a == in.b && 1 ) print("G1");
+if ( in.a != in.a && 1 ) print("G2");
+if ( in.a < in.b && 1 )  print("G3");
+if ( in.b > in.a && 1 )  print("G4");
+if ( in.b >= a && 1 ) print("G5");
+if ( in.a <= in.b && 1 ) print("G6");
 
 localIf();
 function localIf()
 {
 	::in.a = 8;
 	::in.b = 7;
-	if ( ::in.a == ::in.b && 1 ) log("L1");
-	if ( ::in.a != ::in.a && 1 ) log("L2");
+	if ( ::in.a == ::in.b && 1 ) print("L1");
+	if ( ::in.a != ::in.a && 1 ) print("L2");
 
 }
 
 if ( n != n )
 {
-	log( "null NOT okay" );
+	print( "null NOT okay" );
 }
 
 in.a = 2;
-log( in.a + in.a + in.a + in.a );
+print( in.a + in.a + in.a + in.a );
 
 
 struct Bob
@@ -170,14 +170,14 @@ instance2 = new a
 	4 + 5,
 };
 
-log( instance2.p );
-log( instance2.a );
+print( instance2.p );
+print( instance2.a );
 
 instance3 = new a
 {
 };
 
-log( instance3.p );
+print( instance3.p );
 
 
 instance4 = new a
@@ -185,8 +185,8 @@ instance4 = new a
 	321
 };
 
-log( instance4.p );
-log( instance4.h );
+print( instance4.p );
+print( instance4.h );
 
 
 function update_particle(p)
@@ -253,6 +253,6 @@ for ( i = 0; i < 500; ++i )
 update_several_timesI( particles, 50 );
 update_several_times( particles, 50 );
 
-log( particles[10].x );
-log( particles[499].y );
+print( particles[10].x );
+print( particles[499].y );
 

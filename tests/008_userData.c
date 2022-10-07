@@ -50,132 +50,132 @@ C
 //------------------------------------------------------------------------------
 function userCheck( data )
 {
-	log( data.subUser.data2 );
+	print( data.subUser.data2 );
 	data.subUser.data2 = 28;
-	log( 1 + data.subUser.data2++ + 10 - 2 * 3 ); // 33
+	print( 1 + data.subUser.data2++ + 10 - 2 * 3 ); // 33
 
-	log( data.subUser.data3[1] );
+	print( data.subUser.data3[1] );
 
-	log( data.value );
-	if ( data.value == 1 ) log("1");
-	if ( data.value != 1 ) log("1 FAIL");
-	if ( data.value != 2 ) log("2");
-	if ( data.value > 0 ) log("3");
-	if ( data.value > 1 ) log("3 FAIL");
-	if ( data.value < 2 ) log("4");
-	if ( data.value < 1 ) log("4 FAIL");
-	if ( data.value >= 1 ) log("5");
-	if ( data.value >= 2 ) log("5 FAIL");
-	if ( data.value <= 1 ) log("6");
-	if ( data.value <= 0 ) log("6 FAIL");
+	print( data.value );
+	if ( data.value == 1 ) print("1");
+	if ( data.value != 1 ) print("1 FAIL");
+	if ( data.value != 2 ) print("2");
+	if ( data.value > 0 ) print("3");
+	if ( data.value > 1 ) print("3 FAIL");
+	if ( data.value < 2 ) print("4");
+	if ( data.value < 1 ) print("4 FAIL");
+	if ( data.value >= 1 ) print("5");
+	if ( data.value >= 2 ) print("5 FAIL");
+	if ( data.value <= 1 ) print("6");
+	if ( data.value <= 0 ) print("6 FAIL");
 
-	if ( 1 ==data.value ) log("7");
-	if ( 1 != data.value ) log("7 FAIL");
-	if ( 2 != data.value ) log("8");
-	if ( 0 < data.value ) log("9");
-	if ( 1 < data.value ) log("9 FAIL");
-	if ( 2 > data.value ) log("A");
-	if ( 1 > data.value ) log("A FAIL");
-	if ( 1 <= data.value ) log("B");
-	if ( 2 <= data.value ) log("B FAIL");
-	if ( 1 >= data.value ) log("C");
-	if ( 0 >= data.value ) log("C FAIL");
+	if ( 1 ==data.value ) print("7");
+	if ( 1 != data.value ) print("7 FAIL");
+	if ( 2 != data.value ) print("8");
+	if ( 0 < data.value ) print("9");
+	if ( 1 < data.value ) print("9 FAIL");
+	if ( 2 > data.value ) print("A");
+	if ( 1 > data.value ) print("A FAIL");
+	if ( 1 <= data.value ) print("B");
+	if ( 2 <= data.value ) print("B FAIL");
+	if ( 1 >= data.value ) print("C");
+	if ( 0 >= data.value ) print("C FAIL");
 
 	
 	data.ac[9] = 100;
 	data.ac[8] = 90;
 
-	log( data.ac[8] = data.ac[9] ); // 100
-	log( data.ac[8] ); // 100
+	print( data.ac[8] = data.ac[9] ); // 100
+	print( data.ac[8] ); // 100
 	data.ac[8] = 90;
 
 	a = 5;
-	log( data.ac[8] += 5 ); // 95
-	log( data.ac[8] += a ); // 100
-	log( data.ac[8] ); // 100
-	log( data.ac[9] += data.ac[8] ); // 200
-	log( a += data.ac[9]); // 205
-	log( a ); // 205
+	print( data.ac[8] += 5 ); // 95
+	print( data.ac[8] += a ); // 100
+	print( data.ac[8] ); // 100
+	print( data.ac[9] += data.ac[8] ); // 200
+	print( a += data.ac[9]); // 205
+	print( a ); // 205
 
 	data.ac[9] = 100;
 	data.ac[8] = 90;
 	a = 5;
-	log( data.ac[8] -= 5 ); // 85
-	log( data.ac[8] -= a ); // 80
-	log( data.ac[8] ); // 80
-	log( data.ac[9] -= data.ac[8] ); // 20
+	print( data.ac[8] -= 5 ); // 85
+	print( data.ac[8] -= a ); // 80
+	print( data.ac[8] ); // 80
+	print( data.ac[9] -= data.ac[8] ); // 20
 	data.ac[9] = 1;
-	log( a -= data.ac[9]); // 4
+	print( a -= data.ac[9]); // 4
 
 	data.ac[9] = 2;
 	data.ac[8] = 3;
 	a = 4;
-	log( data.ac[8] *= 5 ); // 15
-	log( data.ac[8] *= a ); // 60
-	log( data.ac[8] ); // 60
-	log( data.ac[9] *= data.ac[8] ); // 120
+	print( data.ac[8] *= 5 ); // 15
+	print( data.ac[8] *= a ); // 60
+	print( data.ac[8] ); // 60
+	print( data.ac[9] *= data.ac[8] ); // 120
 	data.ac[9] = 6;
-	log( a *= data.ac[9]); // 24
+	print( a *= data.ac[9]); // 24
 
 	data.ac[9] = 10;
-	log( data.ac[9] %= 3 ); // 1
+	print( data.ac[9] %= 3 ); // 1
 
 	data.ac[9] = 10;
 	data.ac[8] = 3;
-	log( data.ac[9] %= data.ac[8] ); // 1
+	print( data.ac[9] %= data.ac[8] ); // 1
 
 	data.ac[9] = 10;
 	a = 3;
-	log( data.ac[9] %= a ); // 1
+	print( data.ac[9] %= a ); // 1
 
 	data.ac[9] = 3;
 	a = 10;
-	log( a %= data.ac[9] ); // 1
+	print( a %= data.ac[9] ); // 1
 
 	data.ac[4] = 1;
 	data.ac[5] = 3;
 	a = 5;
-	log( data.ac[4] + a ); // 6
-	log( a + data.ac[4] ); // 6
-	log( data.ac[4] + 4 ); // 5
-	log( 4 + data.ac[4] ); // 5
-	log( data.ac[4] + data.ac[5] ); // 4
+	print( data.ac[4] + a ); // 6
+	print( a + data.ac[4] ); // 6
+	print( data.ac[4] + 4 ); // 5
+	print( 4 + data.ac[4] ); // 5
+	print( data.ac[4] + data.ac[5] ); // 4
 
 
 	a = 3;
 	data.ac[4] = 10;
 	data.ac[2] = 3;
-	if ( data.ac[4] < a ) log( "bad1" );
-	if ( a > data.ac[4] ) log( "bad2" );
-	if ( data.ac[4] < 3 ) log( "bad3" );
-	if ( 3 > data.ac[4] ) log( "bad4" );
-	if ( data.ac[4] < data.ac[2] ) log( "bad5" );
-	if ( data.ac[2] > data.ac[4] ) log( "bad6" );
+	if ( data.ac[4] < a ) print( "bad1" );
+	if ( a > data.ac[4] ) print( "bad2" );
+	if ( data.ac[4] < 3 ) print( "bad3" );
+	if ( 3 > data.ac[4] ) print( "bad4" );
+	if ( data.ac[4] < data.ac[2] ) print( "bad5" );
+	if ( data.ac[2] > data.ac[4] ) print( "bad6" );
 
 	a = 10;
 	data.ac[4] = 10;
 	data.ac[2] = 10;
-	if ( data.ac[4] != a ) log( "bad7" );
-	if ( a != data.ac[4] ) log( "bad8" );
-	if ( data.ac[4] != 10 ) log( "bad9" );
-	if ( 10 != data.ac[4] ) log( "bad10" );
-	if ( data.ac[4] != data.ac[2] ) log( "bad11" );
-	if ( data.ac[2] != data.ac[4] ) log( "bad12" );
+	if ( data.ac[4] != a ) print( "bad7" );
+	if ( a != data.ac[4] ) print( "bad8" );
+	if ( data.ac[4] != 10 ) print( "bad9" );
+	if ( 10 != data.ac[4] ) print( "bad10" );
+	if ( data.ac[4] != data.ac[2] ) print( "bad11" );
+	if ( data.ac[2] != data.ac[4] ) print( "bad12" );
 
 	a = 11;
 	data.ac[4] = 12;
 	data.ac[2] = 10;
-	if ( data.ac[4] == a ) log( "bad13" );
-	if ( a == data.ac[4] ) log( "bad14" );
-	if ( data.ac[4] == 10 ) log( "bad15" );
-	if ( 10 == data.ac[4] ) log( "bad16" );
-	if ( data.ac[4] == data.ac[2] ) log( "bad17" );
-	if ( data.ac[2] == data.ac[4] ) log( "bad18" );
+	if ( data.ac[4] == a ) print( "bad13" );
+	if ( a == data.ac[4] ) print( "bad14" );
+	if ( data.ac[4] == 10 ) print( "bad15" );
+	if ( 10 == data.ac[4] ) print( "bad16" );
+	if ( data.ac[4] == data.ac[2] ) print( "bad17" );
+	if ( data.ac[2] == data.ac[4] ) print( "bad18" );
 
 	data.ac[4] = 0x10;
-	log( data.ac[4] |= 0x01 );
+	print( data.ac[4] |= 0x01 );
 	a = 0x01;
-	log( data.ac[4] &= a );
+	print( data.ac[4] &= a );
 	data.ac[5] = 0xFF;
-	log( data.ac[4] ^= data.ac[5] );
+	print( data.ac[4] ^= data.ac[5] );
 }

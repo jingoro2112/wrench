@@ -145,8 +145,8 @@ for( i=0; i<10; ++i)
 
 for( i=0,j=0; i<2; ++i,j-- )
 {
-	log(i);
-	log(j);
+	print(i);
+	print(j);
 }
 
 a = 10;
@@ -154,26 +154,26 @@ while( ++a < 14)
 {
 	if ( a < 12 )
 	{
-		log( "out 1" );
-		log( a );
+		print( "out 1" );
+		print( a );
 		continue;
 	}
 
-	log( "out 2" );
-	log( a );
+	print( "out 2" );
+	print( a );
 }
 
 a = 10;
 while( a < 20)
 {
-	log( "loop" );
-	log( a );
+	print( "loop" );
+	print( a );
 	++a;
 	a += 1;
 	a = a + 1;
 }
 
-log(f1());
+print(f1());
 
 unit f1()
 {
@@ -195,43 +195,43 @@ while( --a > 5 )
 		{
 			if ( a < 17 )
 			{
-				log( "b17" );
+				print( "b17" );
 				break;
 			}
 			else
 			{
-				log( "c17" );
+				print( "c17" );
 				continue;
 			}
 
-			log( "better not" );
+			print( "better not" );
 		}
 
 		if ( a < 14 )
 		{
-			log( "b14" );
+			print( "b14" );
 			break;
 		}
 
-		log( "c14" );
+		print( "c14" );
 	}
 
-	log( "c10" );
+	print( "c10" );
 }
 
-log( "out" );
+print( "out" );
 
 i = 5;
 do
 {
-	log( i );
+	print( i );
 	++i;
 } while ( i < 13 );
 
 do
 	--i;
 while( i >10 );
-log(i);
+print(i);
 
 i = 5;
 do
@@ -239,7 +239,7 @@ do
 	break;
 	++i;
 } while ( i < 13 );
-log(i);
+print(i);
 
 i = 5;
 do
@@ -249,26 +249,26 @@ do
 	{
 		i++;
 		break;
-		log( "nope" );
+		print( "nope" );
 	} while( i < 20 );
 	
-	log("yup");
+	print("yup");
 	continue;
-	log("nope2");
+	print("nope2");
 } while ( i < 13 );
-log(i);
+print(i);
 
 for( i=0; i<10; ++i )
-	log(i);
-log(i);
+	print(i);
+print(i);
 
 
 for( tristan = 1; tristan <= 7; tristan++ )
 {
-	log( tristan );
+	print( tristan );
 	if ( tristan <= 6 )
 	{
-		log( "lt6!");
+		print( "lt6!");
 	}
 }
 
@@ -281,7 +281,7 @@ for(;;)
 		break;
 	}
 }
-log(i);
+print(i);
 
 for( i=100;;)
 {
@@ -290,13 +290,13 @@ for( i=100;;)
 		break;
 	}
 }
-log(i);
+print(i);
 
 for(;i<120;)
 {
 	++i;
 }
-log(i);
+print(i);
 
 for(;;++i)
 {
@@ -305,23 +305,23 @@ for(;;++i)
 		break;
 	}
 }
-log(i);
+print(i);
 
 for( i=1, j=2, k=3; i<10; ++i, ++j, k = j + i )
 {
-	log(i);
-	log(j);
-	log(k);
+	print(i);
+	print(j);
+	print(k);
 }
 
 for( i=0; i<10; ++i )
-	log(i);
-log(i);
+	print(i);
+print(i);
 	
-log(i);
+print(i);
 
-log(f2());
-log(f3());
+print(f2());
+print(f3());
 
 unit f2()
 {

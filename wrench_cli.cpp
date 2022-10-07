@@ -182,6 +182,7 @@ int main( int argn, char* argv[] )
 		WRState* w = wr_newState();
 		wr_loadAllLibs(w);
 		wr_registerFunction( w, "log", log );
+		wr_registerFunction( w, "print", log );
 
 		wr_run( w, (const unsigned char *)bytes.c_str() );
 		if ( wr_getLastError( w ) )
@@ -378,7 +379,7 @@ int runTests( int number )
 				}
 				
 				WRstr logger;
-				wr_registerFunction( w, "log", emit, &logger );
+				wr_registerFunction( w, "print", emit, &logger );
 
 
 #ifdef WRENCH_PARTIAL_BYTECODE_LOADS

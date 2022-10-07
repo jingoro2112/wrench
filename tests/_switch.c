@@ -8,8 +8,8 @@ for( k = 0; k<3; ++k )
 {
 	switch( k )
 	{
-		default: log( "c" ); break;
-		case 1: log( "1c" ); break;
+		default: print( "c" ); break;
+		case 1: print( "1c" ); break;
 	}
 }
 
@@ -17,8 +17,8 @@ for( k = 0; k<3; ++k )
 {
 	switch( k )
 	{
-		case 1: log( "1b" ); break;
-		default: log( "d" ); break;
+		case 1: print( "1b" ); break;
+		default: print( "d" ); break;
 	}
 }
 
@@ -26,7 +26,7 @@ for( k = 0; k<3; ++k )
 {
 	switch( k )
 	{
-		default: log( "d" );
+		default: print( "d" );
 	}
 }
 
@@ -41,7 +41,7 @@ for( k = 0; k<3; ++k )
 {
 	switch( k )
 	{
-		case 1: log( "1a" );
+		case 1: print( "1a" );
 	}
 }
 
@@ -49,42 +49,42 @@ for( k = 0; k<3; ++k )
 {
 	switch( k )
 	{
-		case 1: log( "1" ); break;
+		case 1: print( "1" ); break;
 	}
 }
 
 switch( null )
 {
-	case 0: log("zero"); break;
-	case null: log("null"); break;
+	case 0: print("zero"); break;
+	case null: print("null"); break;
 }
 
 switch( 0 )
 {
-	case 0: log("zero"); break;
-	case null: log("null"); break;
+	case 0: print("zero"); break;
+	case null: print("null"); break;
 }
 
 for( i=0; i<6; i++ )
 {
 	switch( i )
 	{
-		case 0: log("zero"); break;
-		case 1: log("one"); break;
-		case 2: log("two"); break;
-		case 3: log("three"); break;
-		case 4: log("four"); break;
-		default: log("default"); break;
+		case 0: print("zero"); break;
+		case 1: print("one"); break;
+		case 2: print("two"); break;
+		case 3: print("three"); break;
+		case 4: print("four"); break;
+		default: print("default"); break;
 	}
 
 	switch( i )
 	{
-		case 0: { log("zero"); break; }
-		case 1: log("one"); break;
-		case 2: { log("two"); break; }
-		default: log("default"); break;
-		case 3: log("three"); break;
-		case 4: { log("four"); break; }
+		case 0: { print("zero"); break; }
+		case 1: print("one"); break;
+		case 2: { print("two"); break; }
+		default: print("default"); break;
+		case 3: print("three"); break;
+		case 4: { print("four"); break; }
 	}
 
 	switch( i )
@@ -102,7 +102,7 @@ for( i=0; i<6; i++ )
 							{
 								case 0:
 								{
-									log( "zero!" );
+									print( "zero!" );
 									break;
 								}
 							}
@@ -111,11 +111,11 @@ for( i=0; i<6; i++ )
 			}
 		}
 		
-		case 1: log("one"); break;
-		case 2: { log("two"); break; }
-		default: log("default"); break;
-		case 3: log("three"); break;
-		case 4: { log("four"); break; }
+		case 1: print("one"); break;
+		case 2: { print("two"); break; }
+		default: print("default"); break;
+		case 3: print("three"); break;
+		case 4: { print("four"); break; }
 	}
 
 }
@@ -125,14 +125,14 @@ for( k = 5000000000 ; k < 5000000009; ++k )
 {
 	switch( k )
 	{
-		case 5000000000: log( "0" ); break;
-		case 5000000001: log( "1" ); break;
-		case 5000000002: log( "2" ); break;
-		case 5000000003: log( "3" ); break;
-		case 5000000004: log( "4" ); break;
-		case 5000000006: log( "6" ); break;
-		case 5000000008: log( "8" ); break;
-		case 5000000009: log( "9" ); break;
-		default: log( "N" ); break;
+		case 5000000000: print( "0" ); break;
+		case 5000000001: print( "1" ); break;
+		case 5000000002: print( "2" ); break;
+		case 5000000003: print( "3" ); break;
+		case 5000000004: print( "4" ); break;
+		case 5000000006: print( "6" ); break;
+		case 5000000008: print( "8" ); break;
+		case 5000000009: print( "9" ); break;
+		default: print( "N" ); break;
 	}
 }

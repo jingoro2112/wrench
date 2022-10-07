@@ -7,8 +7,8 @@ good
 aa[10];
 a[500] = { aa };
 
-if ( a._count != 501 ) log("bad size");
-if ( a[0]._count != 11 ) log("bad size2");
+if ( a._count != 501 ) print("bad size");
+if ( a[0]._count != 11 ) print("bad size2");
 
 for( i=0; i<500; ++i )
 {
@@ -25,7 +25,7 @@ b[1] = 10;
 b[35000] = 20;
 if ( b[1] != 10 || b[35000] != 20 )
 {
-	log("bad");
+	print("bad");
 }
 
 
@@ -33,19 +33,19 @@ a[2] = 3;
 a[400] = 4;
 if ( a[2] != 3 )
 {
-	log("bad");
+	print("bad");
 }
 else
 {
-	log("good");
+	print("good");
 }
 if ( a[400] != 4 )
 {
-	log("bad");
+	print("bad");
 }
 else
 {
-	log("good");
+	print("good");
 }
 
 gi = 0;
@@ -58,11 +58,11 @@ function allocArray()
 	ab[401] = 41;
 	if ( ab[2] != 3 )
 	{
-		log("bad");
+		print("bad");
 	}
 	if ( ab[401] != 41 )
 	{
-		log("bad");
+		print("bad");
 	}
 
 	ac[50];
@@ -76,7 +76,7 @@ function allocArray()
 	{
 		if ( ac[i] != i+1 )
 		{
-			log( "oops" );
+			print( "oops" );
 		}
 	}
 
@@ -94,7 +94,7 @@ function allocArray()
 	{
 		if ( ac[i] != i+1 )
 		{
-			log( "oops_LL" );
+			print( "oops_LL" );
 		}
 	}
 
@@ -102,7 +102,7 @@ function allocArray()
 	{
 		if ( ::a[i] != i+1 )
 		{
-			log( "oops_GL" );
+			print( "oops_GL" );
 		}
 	}
 	
@@ -110,7 +110,7 @@ function allocArray()
 	{
 		if ( ac[::gi] != ::gi+1 )
 		{
-			log( "oops_LG" );
+			print( "oops_LG" );
 		}
 	}
 
@@ -118,7 +118,7 @@ function allocArray()
 	{
 		if ( ::a[::gi] != ::gi+1 )
 		{
-			log( "oops_GG" );
+			print( "oops_GG" );
 		}
 	}
 }
@@ -130,11 +130,11 @@ grow[3] = 12;
 grow[4] = 13;
 grow[5] = 14;
 grow[6] = 15;
-if ( grow[6] != 15 ) log("badref0");
-if ( grow[5] != 14 ) log("badref1");
-if ( grow[4] != 13 ) log("badref2");
-if ( grow[3] != 12 ) log("badref3");
-if ( grow[2] != 11 ) log("badref4");
+if ( grow[6] != 15 ) print("badref0");
+if ( grow[5] != 14 ) print("badref1");
+if ( grow[4] != 13 ) print("badref2");
+if ( grow[3] != 12 ) print("badref3");
+if ( grow[2] != 11 ) print("badref4");
 
 
 a[10] = { 1, 2, 3 };
@@ -147,6 +147,6 @@ function leakCheck( value )
 	b[20]; // cause GC to run
 
 	value = 20;
-	if ( value != 20 ) log("B1");
-	if ( 20 != value ) log("B2");
+	if ( value != 20 ) print("B1");
+	if ( 20 != value ) print("B2");
 }
