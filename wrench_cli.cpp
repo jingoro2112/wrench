@@ -119,7 +119,7 @@ static void log( WRState* s, const WRValue* argv, const int argn, WRValue& retVa
 	for( int i=0; i<argn; ++i )
 	{
 		char buf[256];
-		printf( "%s", argv[i].asString(buf) );
+		printf( "%s", argv[i].asString(buf, 256) );
 	}
 	printf( "\n" );
 }
@@ -283,7 +283,7 @@ static void emit( WRState* s, const WRValue* argv, const int argn, WRValue& retV
 	if ( argn >= 1 )
 	{
 		char buf[256];
-		((WRstr*)usr)->appendFormat( "%s\n", argv->asString(buf) );
+		((WRstr*)usr)->appendFormat( "%s\n", argv->asString(buf, 256) );
 	}
 }
 
@@ -452,7 +452,7 @@ void log2( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, voi
 	char buf[512];
 	for( int i=0; i<argn; ++i )
 	{
-		printf( "%s", argv[i].asString(buf) );
+		printf( "%s", argv[i].asString(buf, 512) );
 	}
 }
 
