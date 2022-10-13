@@ -293,7 +293,7 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 #include <stdio.h>
 #endif
 //------------------------------------------------------------------------------
-char* WRValue::asString( char* string ) const
+char* WRValue::asString( char* string, size_t len ) const
 {
 	if ( xtype )
 	{
@@ -306,15 +306,16 @@ char* WRValue::asString( char* string ) const
 			
 			case WR_EX_STRUCT:
 			{
-				strcpy( string, "struct" );
+				strncpy( string, "struct", len );
 				return string;
 			}
 			
 			case WR_EX_ARRAY:
 			{
 				unsigned int s = 0;
-					
-				for( ; s<va->m_size; ++s )
+
+				size_t size = va->m_size > len ? len : va->m_size;
+				for( ; s<size; ++s )
 				{
 					switch( va->m_type)
 					{
@@ -333,12 +334,17 @@ char* WRValue::asString( char* string ) const
 				{
 					WRValue temp;
 					wr_arrayToValue(this, &temp);
-					return temp.asString(string);
+					return temp.asString(string, len );
 				}
 				else
 				{
-					return r->asString(string);
+					return r->asString(string, len );
 				}
+			}
+			case WR_EX_NONE:
+			{
+				strncpy(string, "None", len );
+				break;
 			}
 		}
 	}
@@ -347,17 +353,17 @@ char* WRValue::asString( char* string ) const
 		switch( type )
 		{
 #ifdef WRENCH_SPRINTF_OPERATIONS
-			case WR_INT: { sprintf( string, "%d", i ); break; }
-			case WR_FLOAT: { sprintf( string, "%g", f ); break; }
+			case WR_INT: { snprintf( string, len, "%d", i ); break; }
+			case WR_FLOAT: { snprintf( string, len, "%g", f ); break; }
 #else
 			case WR_INT: 
 			case WR_FLOAT:
 			{
-				string[0] = 0;
+				strncpy(string, len, "");
 				break;
 			}
 #endif
-			case WR_REF: { return r->asString( string ); }
+			case WR_REF: { return r->asString( string, len ); }
 		}
 	}
 	

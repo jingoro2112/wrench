@@ -44,6 +44,7 @@ This Flag:
 -- increases interpreter size slightly (a K or two)
 
 */
+#include <cstddef>
 #define WRENCH_JUMPTABLE_INTERPRETER
 /***********************************************************************/
 
@@ -438,7 +439,7 @@ struct WRValue
 		}
 */
 	}
-	
+
 	float asFloat() const
 	{
 		if ( type == WR_FLOAT )
@@ -460,9 +461,9 @@ struct WRValue
 		return f;
 	}
 	
-	// string: must point to a buffer long enough to contain the string in
-	// the case value is an array of chars. the pointer will be passed back
-	char* asString( char* string ) const;
+        // string: must point to a buffer long enough to contain at least len bytes.
+        // the pointer will be passed back
+	char* asString( char* string, size_t len ) const;
 
 	//WRValueType getType() { return enumType == WR_REF ? r->getType() : enumType; }
 
