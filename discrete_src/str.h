@@ -22,6 +22,7 @@ SOFTWARE.
 #ifndef _STR_H
 #define _STR_H
 /* ------------------------------------------------------------------------- */
+
 #ifndef WRENCH_WITHOUT_COMPILER
 
 #if defined(_WIN32) && !defined(__MINGW32__)
@@ -57,7 +58,6 @@ public:
 
 	WRstr& clear() { m_len = 0; m_str[0] = 0; return *this; }
 	
-	static WRstr sprintf( const char* format, ... ) { WRstr T; va_list arg; va_start(arg, format); T.formatVA(format, arg); va_end(arg); return T; }
 	WRstr& format( const char* format, ... ) { va_list arg; va_start( arg, format ); clear(); appendFormatVA( format, arg ); va_end( arg ); return *this; }
 	WRstr& formatVA( const char* format, va_list arg ) { clear(); return appendFormatVA(format, arg); }
 	WRstr& appendFormat( const char* format, ... ) { va_list arg; va_start( arg, format ); appendFormatVA( format, arg ); va_end( arg ); return *this; }
@@ -104,6 +104,9 @@ public:
 #ifdef STR_FILE_OPERATIONS
 	inline bool fileToBuffer( const char* fileName, const bool appendToBuffer =false );
 	inline bool bufferToFile( const char* fileName, const bool append =false ) const;
+#else
+	bool fileToBuffer( const char* fileName, const bool appendToBuffer =false ) { return false; }
+	bool bufferToFile( const char* fileName, const bool append =false ) const { return false; }
 #endif
 
 	WRstr& set( const char* buf, const unsigned int len ) { m_len = 0; m_str[0] = 0; return insert( buf, len ); }

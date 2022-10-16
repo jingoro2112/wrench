@@ -57,7 +57,7 @@ uint32_t wr_hashStr( const char* dat )
 }
 
 //------------------------------------------------------------------------------
-void wr_std_rand( WRValue* stackTop, const int argn )
+void wr_std_rand( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -70,7 +70,7 @@ void wr_std_rand( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_std_srand( WRValue* stackTop, const int argn )
+void wr_std_srand( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -81,7 +81,7 @@ void wr_std_srand( WRValue* stackTop, const int argn )
 #include <math.h>
 
 //------------------------------------------------------------------------------
-void wr_math_sin( WRValue* stackTop, const int argn )
+void wr_math_sin( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -91,7 +91,7 @@ void wr_math_sin( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_cos( WRValue* stackTop, const int argn )
+void wr_math_cos( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -101,7 +101,7 @@ void wr_math_cos( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_tan( WRValue* stackTop, const int argn )
+void wr_math_tan( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -111,7 +111,7 @@ void wr_math_tan( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_sinh( WRValue* stackTop, const int argn )
+void wr_math_sinh( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -121,7 +121,7 @@ void wr_math_sinh( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_cosh( WRValue* stackTop, const int argn )
+void wr_math_cosh( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -131,7 +131,7 @@ void wr_math_cosh( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_tanh( WRValue* stackTop, const int argn )
+void wr_math_tanh( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -141,7 +141,7 @@ void wr_math_tanh( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_asin( WRValue* stackTop, const int argn )
+void wr_math_asin( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -151,7 +151,7 @@ void wr_math_asin( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_acos( WRValue* stackTop, const int argn )
+void wr_math_acos( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -161,7 +161,7 @@ void wr_math_acos( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_atan( WRValue* stackTop, const int argn )
+void wr_math_atan( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -171,7 +171,7 @@ void wr_math_atan( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_atan2( WRValue* stackTop, const int argn )
+void wr_math_atan2( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 2 )
 	{
@@ -181,7 +181,7 @@ void wr_math_atan2( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_log( WRValue* stackTop, const int argn )
+void wr_math_log( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -191,7 +191,7 @@ void wr_math_log( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_log10( WRValue* stackTop, const int argn )
+void wr_math_log10( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -201,7 +201,7 @@ void wr_math_log10( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_exp( WRValue* stackTop, const int argn )
+void wr_math_exp( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -211,7 +211,7 @@ void wr_math_exp( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_sqrt( WRValue* stackTop, const int argn )
+void wr_math_sqrt( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -221,7 +221,7 @@ void wr_math_sqrt( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_ceil( WRValue* stackTop, const int argn )
+void wr_math_ceil( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -231,7 +231,7 @@ void wr_math_ceil( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_floor( WRValue* stackTop, const int argn )
+void wr_math_floor( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -241,7 +241,7 @@ void wr_math_floor( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_abs( WRValue* stackTop, const int argn )
+void wr_math_abs( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -251,7 +251,7 @@ void wr_math_abs( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_pow( WRValue* stackTop, const int argn )
+void wr_math_pow( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 2 )
 	{
@@ -261,7 +261,7 @@ void wr_math_pow( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_fmod( WRValue* stackTop, const int argn )
+void wr_math_fmod( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 2 )
 	{
@@ -271,7 +271,7 @@ void wr_math_fmod( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_trunc( WRValue* stackTop, const int argn )
+void wr_math_trunc( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -281,7 +281,7 @@ void wr_math_trunc( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_ldexp( WRValue* stackTop, const int argn )
+void wr_math_ldexp( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 2 )
 	{
@@ -296,7 +296,7 @@ const float wr_toDegrees = (180.f / wr_PI);
 const float wr_toRadians = (1.f / wr_toDegrees);
 
 //------------------------------------------------------------------------------
-void wr_math_rad2deg( WRValue* stackTop, const int argn )
+void wr_math_rad2deg( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -306,7 +306,7 @@ void wr_math_rad2deg( WRValue* stackTop, const int argn )
 }
 
 //------------------------------------------------------------------------------
-void wr_math_deg2rad( WRValue* stackTop, const int argn )
+void wr_math_deg2rad( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
@@ -320,6 +320,8 @@ void wr_loadAllLibs( WRState* w )
 {
 	wr_loadMathLib( w );
 	wr_loadStdLib( w );
+	wr_loadFileLib( w );
+	wr_loadStringLib( w );
 }
 
 //------------------------------------------------------------------------------
@@ -350,7 +352,6 @@ void wr_loadMathLib( WRState* w )
 
 	wr_registerLibraryFunction( w, "math::deg2rad", wr_math_deg2rad );
 	wr_registerLibraryFunction( w, "math::rad2deg", wr_math_rad2deg );
-
 }
 
 //------------------------------------------------------------------------------

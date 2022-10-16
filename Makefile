@@ -22,6 +22,9 @@ OBJS = \
 	$(OBJDIR)/operations.o \
 	$(OBJDIR)/vm.o \
 	$(OBJDIR)/std.o \
+	$(OBJDIR)/dstring.o \
+	$(OBJDIR)/std_io.o \
+	$(OBJDIR)/std_string.o \
 
 clean:
 	-@rm -rf $(OBJDIR)
@@ -43,6 +46,9 @@ wrench: $(OBJS) wrench_cli.cpp
 $(OBJDIR)/cc.o: discrete_src/cc.cpp
 	$(CC) $@ $<
 
+$(OBJDIR)/dstring.o: discrete_src/dstring.cpp
+	$(CC) $@ $<
+
 $(OBJDIR)/operations.o: discrete_src/operations.cpp
 	$(CC) $@ $<
 
@@ -50,6 +56,12 @@ $(OBJDIR)/vm.o: discrete_src/vm.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/std.o: discrete_src/std.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/std_io.o: discrete_src/std_io.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/std_string.o: discrete_src/std_string.cpp
 	$(CC) $@ $<
 
 

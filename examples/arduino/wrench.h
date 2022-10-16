@@ -54,19 +54,6 @@ the code size at the cost of being able to only load/run bytecode
 //#define WRENCH_WITHOUT_COMPILER
 /***********************************************************************/
 
-/************************************************************************
-For efficiency The interpreter expects a pointer to a single contiguous
-block of read-only bytecode, and it will never call the loader again.
-
-This will compile in the bounds-checking and call the loader whenever
-it detects execution space outside of the current block. The loader
-must return a pointer to the requested offset in the bytecode and the
-size of the mapped block. (see WR_LOAD_BLOCK_FUNC)
-
-******** RETURN AT LEAST 20 BYTES or "bad things" happen ******
-
-*/
-//#define WRENCH_PARTIAL_BYTECODE_LOADS
 /***********************************************************************/
 
 /************************************************************************
@@ -76,7 +63,7 @@ this does NOT include global/array space which is allocated separately, just
 function calls. Unless you are using piles of local data AND recursing
 like crazy a modest size should be more than enough.
 
-On most systems this will consume 8 bytes per stack entry
+This will consume 8 bytes per stack entry on a 32-bit system, 16 on 64.
 */
 #define WRENCH_DEFAULT_STACK_SIZE 100
 /***********************************************************************/
@@ -89,9 +76,16 @@ longer function
 #define WRENCH_SPRINTF_OPERATIONS
 /***********************************************************************/
 
-#define WRENCH_VERSION 131
+/************************************************************************
+set this to try compiling sys/stat.h for fstat and file operations
+*/
+#define WRENCH_STD_FILE
+/***********************************************************************/
+
+#define WRENCH_VERSION 140
 
 #include <stdint.h>
+#include <stddef.h>
 
 struct WRState;
 struct WRValue;
@@ -107,31 +101,9 @@ WRState* wr_newState( int stackSize =WRENCH_DEFAULT_STACK_SIZE );
 void wr_destroyState( WRState* w );
 
 
-
 /***************************************************************/
 /**************************************************************/
 //                        Running Code
-
-// the interpreter calls this to get a block of bytecode
-//
-// if WRENCH_PARTIAL_BYTECODE_LOADS is NOT defined (default) this will be
-// called exactly one time and expect the entire code block to be
-// returned; it will not be checked again.
-//
-// if WRENCH_PARTIAL_BYTECODE_LOADS is defined, it expects at least 20 bytes
-// of code returned per call and will re-call any time code is
-// needed from outside the returned region.
-//
-//
-// NOTE: The returned memory IS USED IN PLACE. it is NOT copied to an
-// internal buffer so it must remain valid for the life of the execution
-//
-// offset: where in the bytecode stream wrench wants to load (always zero
-//         for non - WRENCH_PARTIAL_BYTECODE_LOADS)
-// block:  pointer to pointer where the block is mapped, this can be
-//         read-only and must remain valid for the life of the script!
-// usr:    opaque user-supplied pointer passed to each load call (optional)
-typedef unsigned int (*WR_LOAD_BLOCK_FUNC)( int offset, const unsigned char** block, void* usr );
 
 // compile source code and return a new'ed block of bytecode ready
 // for wr_run(), memory must be delete[]'ed
@@ -140,20 +112,14 @@ typedef unsigned int (*WR_LOAD_BLOCK_FUNC)( int offset, const unsigned char** bl
 //   human-readable string of what went wrong and where.
 int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg =0 );
 
-// run a block of code, either as a single block or with a loader that
-// will be called back. PLEASE SEE NOTES ABOVE REGARDING: WRENCH_PARTIAL_BYTECODE_LOADS
-
 // w:          state (see wr_newState)
-// block/size: location of bytecode
-// loader/usr: callback for loader and a void* pointer that will be
-//             passed to the loader opaquely (optional)
+// block:      location of bytecode
+
 // RETURNS:    a WRContext pointer to be passed to wr_callFunction
 //             'global' values are NOT SHARED between contexts
 WRContext* wr_run( WRState* w, const unsigned char* block );
-WRContext* wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr =0 );
 
-
-// after wr_run() this allows any function contained to be
+// after wr_run() this allows any function in the script to be
 // called with the given arguments, returning a single value
 //
 // contextId:    the context in which the function was loaded
@@ -161,6 +127,7 @@ WRContext* wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr =0 );
 // argv:         array of WRValues to call the function with (optional)
 // argn:         how many arguments argv contains (optional, but if
 //               zero then argv will be ignored)
+
 // RETURNS:      zero for no error or WRError code
 int wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv =0, const int argn =0 );
 
@@ -212,6 +179,7 @@ typedef void (*WR_C_CALLBACK)(WRState* w, const WRValue* argv, const int argn, W
 // int: WRValue.asInt();
 // float: WRValue.asFloat();
 // string: WRValue.asString();
+// binary: WRValue.asData( unsigned int* size ); 
 
 // w:        state to register with (will be available to all contexts)
 // name:     name of the function
@@ -236,7 +204,7 @@ int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, v
 // argn:     how many arguments this function was called with. no
 //           guarantees are made about matching a function signature,
 //           library calls validate if they care.
-typedef void (*WR_LIB_CALLBACK)( WRValue* stackTop, const int argn );
+typedef void (*WR_LIB_CALLBACK)( WRValue* stackTop, const int argn, WRContext* context );
 
 // w:         state to register with (will be available to all contexts)
 // signature: library signature must be in the form of <lib>::<name>
@@ -251,9 +219,9 @@ void wr_loadAllLibs( WRState* w ); // load all libraries in one call
 
 void wr_loadMathLib( WRState* w ); // provides most of the calls in math.h
 void wr_loadStdLib( WRState* w ); // standard functions like sprintf/rand/
-//void wr_loadStringLib( WRState* w );	// srsly? how much time
-                                        // you think I have to waste on
-                                        // features no one will ever use
+void wr_loadFileLib( WRState* w ); // file funcs
+void wr_loadStringLib( WRState* w ); // string functions
+
 
 /***************************************************************/
 /***************************************************************/
@@ -380,23 +348,26 @@ extern int32_t wr_Seed;
 //------------------------------------------------------------------------------
 enum WRValueType
 {
-	WR_INT = 0x00,
+	WR_INT =   0x00,
 	WR_FLOAT = 0x01,
-	WR_REF = 0x02,
-	WR_EX = 0x3,
+	WR_REF =   0x02,
+	WR_EX =    0x03,
 };
 
+//------------------------------------------------------------------------------
 enum WRExType
 {
 	WR_EX_NONE = 0x00,
-	WR_EX_USR = 0x01,
-	
-	WR_EX_REFARRAY = 0x04,
-	WR_EX_ARRAY = 0x05,
-	WR_EX_STRUCT = 0x06,
-	WR_EX_HASH = 0x0C,
+
+	WR_EX_USR        = 0x20,
+	WR_EX_REFARRAY   = 0x80,
+	WR_EX_ARRAY      = 0xA0,
+	WR_EX_STRUCT     = 0xC0,
+	WR_EX_HASH_TABLE = 0xE0,
 };
 
+#define IS_REFARRAY(X) (((X)&0xE0)==WR_EX_REFARRAY)
+#define IS_ARRAY(X) (((X)&0xE0)==WR_EX_ARRAY)
 
 //------------------------------------------------------------------------------
 class WRContainerData;
@@ -423,7 +394,7 @@ struct WRValue
 		}
 		if ( type == WR_EX )
 		{
-			return xtype == WR_EX_REFARRAY ? arrayValueAsInt() : 0;
+			return IS_REFARRAY(xtype) ? arrayValueAsInt() : 0;
 		}
 		return i;
 
@@ -432,7 +403,7 @@ struct WRValue
 		switch( type )
 		{
 			case WR_REF: return r->asInt();
-			case WR_EX: return xtype == WR_EX_REFARRAY ? arrayValueAsInt() : 0;
+			case WR_EX: IS_REFARRAY(return xtype) ? arrayValueAsInt() : 0;
 			case WR_FLOAT: return (int)f;
 			default: return i;
 		}
@@ -455,14 +426,18 @@ struct WRValue
 		}
 		if ( type == WR_EX )
 		{
-			return xtype == WR_EX_REFARRAY ? arrayValueAsFloat() : 0;
+			return IS_REFARRAY(xtype) ? arrayValueAsFloat() : 0;
 		}
 		return f;
 	}
 	
-	// string: must point to a buffer long enough to contain the string in
-	// the case value is an array of chars. the pointer will be passed back
-	char* asString( char* string ) const;
+	// string: must point to a buffer long enough to contain at least len bytes.
+	// the pointer will be passed back
+	char* asString( char* string, size_t len ) const;
+
+	// return a raw pointer to the data array if this IS one, otherwise
+	// return null
+	const unsigned char* asData( unsigned int* len ) const; 
 
 	//WRValueType getType() { return enumType == WR_REF ? r->getType() : enumType; }
 
@@ -483,6 +458,17 @@ struct WRValue
 	int arrayValueAsInt() const;
 	float arrayValueAsFloat() const;
 
+	uint32_t getHashEx() const;
+	uint32_t getHash() const
+	{
+		if ( type <= WR_FLOAT )
+		{
+			return ui;
+		}
+
+		return type == WR_REF ? r->getHashEx() : getHashEx();
+	}
+	
 	inline ~WRValue()
 	{
 		if (xtype)
@@ -494,6 +480,7 @@ struct WRValue
 	union // first 4 bytes (or 8 on a 64-bit system but.. what are you doing here?)
 	{
 		int32_t i;
+		uint32_t ui;
 		float f;
 		const void* p;
 		WRValue* r;
@@ -512,7 +499,11 @@ struct WRValue
 		};
 
 		uint32_t p2;
-		WRValue* frame;
+		union
+		{
+			WRValue* frame;
+			WRValue* r2;
+		};
 	};
 
 	inline WRValue& operator= (const WRValue& V) { p = V.p; frame = V.frame; return *this; }
@@ -521,10 +512,6 @@ struct WRValue
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
  #ifndef __GNUC__
   #undef WRENCH_JUMPTABLE_INTERPRETER
- #else
-  #ifdef WRENCH_PARTIAL_BYTECODE_LOADS
-   #error WRENCH_JUMPTABLE_INTERPRETER and WRENCH_PARTIAL_BYTECODE_LOADS are incompatible!
-  #endif
  #endif
 #endif
 

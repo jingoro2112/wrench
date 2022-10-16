@@ -54,6 +54,12 @@ hello world
 1
 ~*/
 
+if ( 'a' != 0x61 ) print("err a");
+if ( '\r' != 0x0d ) print("err a3");
+if ( '\n' != 0x0a ) print("err a4");
+if ( '' != 0 ) print("err a5");
+if ( 1 != 1 ) print("err one");
+
 c = --a + a-- + ++a + a--;
 
 a = 90;

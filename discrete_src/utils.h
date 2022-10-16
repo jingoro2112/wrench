@@ -234,6 +234,13 @@ const uint16_t c_primeTable[] =
 };
 */
 
+#include <stdarg.h>
+struct WRValue;
+int dsprintf( char* buf, const char* fmt, ... );
+int dsprintfEx( char *buf, const char *fmt, va_list list );
+int sprintfWRV( char *out, const char *fmt, WRValue* list, int num );
+
+
 //------------------------------------------------------------------------------
 template <class T> class WRHashTable
 {

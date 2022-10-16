@@ -29,6 +29,7 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 const char* c_reserved[] =
 {
+	"enum",
 	"break",
 	"case",
 	"continue",
@@ -47,6 +48,15 @@ const char* c_reserved[] =
 	"while",
 	"new",
 	"struct",
+	""
+};
+
+//------------------------------------------------------------------------------
+const char* c_macroTokens[] =
+{
+	"._hash",
+	"._count",
+	
 	""
 };
 
@@ -189,6 +199,24 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 
 		token = m_source[m_pos - 1];
 
+		for( int t=0; *c_macroTokens[t]; ++t )
+		{
+			int len = (int)strnlen( c_macroTokens[t], 20 );
+			int offset = m_pos - 1;
+			if ( ((offset + len) < m_sourceLen)
+				 && !strncmp(m_source + offset, c_macroTokens[t], len) )
+			{
+				if ( isalnum(m_source[offset+len]) )
+				{
+					continue;
+				}
+				
+				m_pos += len - 1;
+				token = c_macroTokens[t];
+				goto foundMacroToken;
+			}
+		}
+		
 		if ( token[0] == '-' )
 		{
 			if ( m_pos < m_sourceLen )
@@ -333,8 +361,9 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 					}
 				}
 			}
-			else if ( token[0] == '\"' )
+			else if ( token[0] == '\"' || token[0] == '\'' )
 			{
+				bool single = token[0] == '\'';
 				token.clear();
 
 				do
@@ -349,6 +378,21 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 					char c = m_source[m_pos];
 					if (c == '\"') // terminating character
 					{
+						if ( single )
+						{
+							m_err = WR_ERR_bad_expression;
+							return false;
+						}
+						++m_pos;
+						break;
+					}
+					else if ( c == '\'' )
+					{
+						if ( !single || (token.size() > 1) )
+						{
+							m_err = WR_ERR_bad_expression;
+							return false;
+						}
 						++m_pos;
 						break;
 					}
@@ -405,9 +449,18 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 
 				} while( ++m_pos < m_sourceLen );
 
-				value.p2 = 0;
-				value.type = (WRValueType)WR_COMPILER_LITERAL_STRING;
-				value.p = &token;
+				value.p2 = INIT_AS_INT;
+				if ( single )
+				{
+					value.ui = token.size() == 1 ? token[0] : 0;
+					token.clear();
+				}
+				else
+				{
+					value.p2 = INIT_AS_INT;
+					value.type = (WRValueType)WR_COMPILER_LITERAL_STRING;
+					value.p = &token;
+				}
 			}
 			else if ( token[0] == '/' ) // might be a comment
 			{
@@ -440,19 +493,6 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 					}					
 					//else // bare '/' 
 				}
-			}
-			else if ( token[0] == '.'
-					  && m_source[m_pos] == '_'
-					  && m_pos + 6 < m_sourceLen
-					  && m_source[m_pos+1] == 'c'
-					  && m_source[m_pos+2] == 'o'
-					  && m_source[m_pos+3] == 'u'
-					  && m_source[m_pos+4] == 'n'
-					  && m_source[m_pos+5] == 't'
-					  && isspace(m_source[m_pos+6]) )
-			{
-				m_pos += 6;
-				token = "._count";
 			}
 			else if ( isdigit(token[0])
 					  || (token[0] == '.' && isdigit(m_source[m_pos])) )
@@ -556,33 +596,38 @@ parseAsNumber:
 			}
 			else if ( isalpha(token[0]) || token[0] == '_' || token[0] == ':' ) // must be a label
 			{
-				m_LastParsedLabel = true;
-
-				for( ; m_pos < m_sourceLen ; ++m_pos )
+				if (token[0] != ':' || m_source[m_pos] == ':')
 				{
-					if ( !isalnum(m_source[m_pos]) && m_source[m_pos] != '_' && m_source[m_pos] != ':' )
+					m_LastParsedLabel = true;
+
+					for (; m_pos < m_sourceLen; ++m_pos)
 					{
-						break;
+						if (!isalnum(m_source[m_pos]) && m_source[m_pos] != '_' && m_source[m_pos] != ':')
+						{
+							break;
+						}
+
+						token += m_source[m_pos];
 					}
 
-					token += m_source[m_pos];
-				}
-
-				if ( token == "true" )
-				{
-					value.p2 = INIT_AS_INT;
-					value.i = 1;
-					token = "1";
-				}
-				else if ( token == "false" )
-				{
-					value.p2 = INIT_AS_INT;
-					value.i = 0;
-					token = "0";
+					if (token == "true")
+					{
+						value.p2 = INIT_AS_INT;
+						value.i = 1;
+						token = "1";
+					}
+					else if (token == "false")
+					{
+						value.p2 = INIT_AS_INT;
+						value.i = 0;
+						token = "0";
+					}
 				}
 			}
 		}
 
+foundMacroToken:
+	
 		ex.spaceAfter = (m_pos < m_sourceLen) && isspace(m_source[m_pos]);
 	}
 
@@ -2358,13 +2403,12 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 }
 
 //------------------------------------------------------------------------------
-void WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly )
+int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly )
 {
 	if ( m_unitTop == 0 )
 	{
 		assert( !addOnly );
-		addGlobalSpaceLoad( bytecode, token );
-		return;
+		return addGlobalSpaceLoad( bytecode, token );
 	}
 	
 	uint32_t hash = wr_hash( token, token.size() );
@@ -2388,7 +2432,7 @@ void WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token
 				pushOpcode(bytecode, O_LoadFromGlobal);
 				unsigned char c = j;
 				pushData(bytecode, &c, 1);
-				return;
+				return j;
 			}
 		}
 	}
@@ -2401,10 +2445,12 @@ void WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token
 		unsigned char c = i;
 		pushData( bytecode, &c, 1 );
 	}
+	
+	return i;
 }
 
 //------------------------------------------------------------------------------
-void WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token )
+int WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly )
 {
 	uint32_t hash;
 	WRstr t2;
@@ -2430,9 +2476,14 @@ void WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& toke
 	
 	m_units[0].bytecode.localSpace[i].hash = hash;
 
-	pushOpcode( bytecode, O_LoadFromGlobal );
-	unsigned char c = i;
-	pushData( bytecode, &c, 1 );
+	if ( !addOnly )
+	{
+		pushOpcode( bytecode, O_LoadFromGlobal );
+		unsigned char c = i;
+		pushData( bytecode, &c, 1 );
+	}
+
+	return i;
 }
 
 //------------------------------------------------------------------------------
@@ -2995,7 +3046,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 		}
 
 
-		if ( token == ";" || token == ")" || token == "}" || token == "," || token == "]" )
+		if ( token == ";" || token == ")" || token == "}" || token == "," || token == "]" || token == ":" )
 		{
 			end = token[0];
 			break;
@@ -3003,83 +3054,151 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 		if ( token == "{" )
 		{
-			// it's an initializer
-
-			if ( (depth < 2) || 
-					(expression.context[depth - 1].operation
-					&& expression.context[ depth - 1 ].operation->opcode != O_Assign) )
+			if ( depth == 0 )
 			{
-				m_err = WR_ERR_unexpected_token;
-				return 0;
+				if ( parseExpression(expression) != '}' )
+				{
+					m_err = WR_ERR_bad_expression;
+					return 0;
+				}
+
+				return ';';
 			}
-
-			if ( expression.context[ depth - 2 ].operation->opcode != O_Index )
+			else
 			{
-				m_err = WR_ERR_unexpected_token;
-				return 0;
-			}
+				// it's an initializer
 
-			expression.context.remove( depth - 1, 1 ); // knock off the equate
-			depth--;
+				if ( (depth < 2) || 
+					 (expression.context[depth - 1].operation
+					  && expression.context[ depth - 1 ].operation->opcode != O_Assign) )
+				{
+					m_err = WR_ERR_unexpected_token;
+					return 0;
+				}
 
-			WRstr& token2 = expression.context[depth].token;
-			WRValue& value2 = expression.context[depth].value;
+				if ( (depth < 2) 
+					 || (expression.context[depth - 2].operation
+						 && expression.context[ depth - 2 ].operation->opcode != O_Index) )
+				{
+					m_err = WR_ERR_unexpected_token;
+					return 0;
+				}
 
-			int16_t initializer = 0;
+				expression.context.remove( depth - 1, 1 ); // knock off the equate
+				depth--;
 
-			for(;;)
-			{
-				if ( !getToken(expression.context[depth]) )
+				WRstr t("@init");
+				for( int o=0; c_operations[o].token; o++ )
+				{
+					if ( t == c_operations[o].token )
+					{
+						expression.context[depth].operation = c_operations + o;
+						expression.context[depth].type = EXTYPE_OPERATION;
+						break;
+					}
+				}
+
+				WRstr& token2 = expression.context[depth].token;
+				WRValue& value2 = expression.context[depth].value;
+
+				uint16_t initializer = 0;
+
+				for(;;)
+				{
+					if ( !getToken(expression.context[depth]) )
+					{
+						m_err = WR_ERR_unexpected_EOF;
+						return 0;
+					}
+
+					if ( token2 == "}" )
+					{
+						break;
+					}
+
+					WRExpression nex( expression.bytecode.localSpace );
+					nex.context[0].token = token2;
+					nex.context[0].value = value2;
+					m_loadedToken = token2;
+					m_loadedValue = value2;
+
+					char end = parseExpression( nex );
+
+					unsigned char data[2];
+					pack16( initializer, data );
+
+					if ( end == '}' )
+					{
+						appendBytecode( expression.context[depth].bytecode, nex.bytecode );
+						pushOpcode( expression.context[depth].bytecode, O_AssignToArrayAndPop );
+						pushData( expression.context[depth].bytecode, data, 2 );
+						break;
+					}
+					else if ( end == ',' )
+					{
+						appendBytecode( expression.context[depth].bytecode, nex.bytecode );
+						pushOpcode( expression.context[depth].bytecode, O_AssignToArrayAndPop );
+						pushData( expression.context[depth].bytecode, data, 2 );
+					}
+					else if ( end == ':' )
+					{
+						if ( nex.bytecode.all.size() == 0 )
+						{
+							pushOpcode( expression.context[depth].bytecode, O_LiteralZero );
+						}
+						else
+						{
+							appendBytecode( expression.context[depth].bytecode, nex.bytecode );
+						}
+
+						WRExpression nex2( expression.bytecode.localSpace );
+						nex2.context[0].token = token2;
+						nex2.context[0].value = value2;
+						char end = parseExpression( nex2 );
+
+						if ( nex2.bytecode.all.size() == 0 )
+						{
+							pushOpcode( expression.context[depth].bytecode, O_LiteralZero );
+						}
+						else
+						{
+							appendBytecode( expression.context[depth].bytecode, nex2.bytecode );
+						}
+
+						pushOpcode( expression.context[depth].bytecode, O_AssignToHashTableAndPop );
+
+						if ( end == '}' )
+						{
+							break;
+						}
+						else if ( end != ',' )
+						{
+							m_err = WR_ERR_unexpected_token;
+							return 0;
+						}
+					}
+					else
+					{
+						m_err = WR_ERR_unexpected_token;
+						return 0;
+					}
+
+					++initializer;
+				}
+
+				if ( !getToken(expression.context[depth]) || token2 != ";" )
 				{
 					m_err = WR_ERR_unexpected_EOF;
 					return 0;
 				}
 
-				if ( token2 == "}" )
-				{
-					break;
-				}
-
-				WRExpression nex( expression.bytecode.localSpace );
-				nex.context[0].token = token2;
-				nex.context[0].value = value2;
 				m_loadedToken = token2;
 				m_loadedValue = value2;
 
-				char end = parseExpression( nex );
+				++depth;
 
-				appendBytecode( expression.context[depth-1].bytecode, nex.bytecode );
-				pushOpcode( expression.context[depth-1].bytecode, O_AssignToArrayAndPop );
-				unsigned char data[2];
-				pack16( initializer, data );
-				pushData( expression.context[depth-1].bytecode, data, 2 );
-
-				++initializer;
-
-				if ( end == '}' )
-				{
-					break;
-				}
-				else if ( end != ',' )
-				{
-					m_err = WR_ERR_unexpected_token;
-					return 0;
-				}
+				continue;
 			}
-
-			if ( !getToken(expression.context[depth]) || token2 != ";" )
-			{
-				m_err = WR_ERR_unexpected_EOF;
-				return 0;
-			}
-
-			m_loadedToken = token2;
-			m_loadedValue = value2;
-
-			// ++depth;  DO NOT DO THIS. let this operation fall off,
-			//           its code was added to the previous post operation
-			
-			continue;
 		}
 		
 		if ( operatorFound(token, expression.context, depth) )
@@ -3169,7 +3288,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				}
 			}
 
-			pushOpcode( expression.context[depth].bytecode, O_NewHashTable );
+			pushOpcode( expression.context[depth].bytecode, O_NewObjectTable );
 
 			expression.context[depth].bytecode.unitObjectSpace[i].references.append() = getBytecodePosition( expression.context[depth].bytecode );
 			expression.context[depth].bytecode.unitObjectSpace[i].hash = hash;
@@ -3191,7 +3310,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					if ( nex.bytecode.all.size() )
 					{
 						appendBytecode( expression.context[depth].bytecode, nex.bytecode );
-						pushOpcode( expression.context[depth].bytecode, O_AssignToHashTableByOffset );
+						pushOpcode( expression.context[depth].bytecode, O_AssignToObjectTableByOffset );
 						pushData( expression.context[depth].bytecode, &offset, 1 );
 					}
 
@@ -3301,10 +3420,22 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				return 0;
 			}
 			
-			expression.context[depth].bytecode = nex.bytecode;
-
 			WRstr t( "@[]" );
-			operatorFound( t, expression.context, depth );
+			if ( nex.bytecode.all.size() == 0 )
+			{
+				operatorFound( t, expression.context, depth );
+				expression.context[depth].bytecode.all.shave(1);
+				expression.context[depth].bytecode.opcodes.shave(1);
+				pushOpcode( expression.context[depth].bytecode, O_IndexLiteral8 );
+				unsigned char c = 0;
+				pushData( expression.context[depth].bytecode, &c, 1 );
+			}
+			else
+			{
+				expression.context[depth].bytecode = nex.bytecode;
+				operatorFound( t, expression.context, depth );
+			}
+
 
 			++depth;
 			continue;
@@ -3729,6 +3860,146 @@ bool WRCompilationContext::parseForLoop( bool& returnCalled, WROpcode opcodeToRe
 }
 
 //------------------------------------------------------------------------------
+bool WRCompilationContext::parseEnum( int unitIndex )
+{
+	WRExpressionContext ex;
+	WRstr& token = ex.token;
+	WRValue& value = ex.value;
+
+	if ( !getToken(ex, "{") )
+	{
+		m_err = WR_ERR_unexpected_token;
+		return false;
+	}
+
+	unsigned int index = 0;
+
+	for(;;)
+	{
+		if ( !getToken(ex) )
+		{
+			m_err = WR_ERR_unexpected_token;
+			return false;
+		}
+
+		if ( token == "}" )
+		{
+			break;
+		}
+		else if ( token == "," )
+		{
+			continue;
+		}
+
+		bool isGlobal;
+		WRstr prefix;
+		if ( !isValidLabel(token, isGlobal, prefix) || isGlobal )
+		{
+			m_err = WR_ERR_bad_label;
+			return false;
+		}
+
+		prefix = token;
+		
+		WRValue defaultValue;
+		defaultValue.init();
+		defaultValue.ui = index++;
+
+		if ( !getToken(ex) )
+		{
+			m_err = WR_ERR_unexpected_EOF;
+			return false;
+		}
+
+		if ( token == "=" )
+		{
+			if ( !getToken(ex) )
+			{
+				m_err = WR_ERR_bad_label;
+				return false;
+			}
+
+			if ( value.type == WR_REF )
+			{
+				m_err = WR_ERR_bad_label;
+				return false;
+			}
+
+			index = value.ui + 1;
+		}
+		else
+		{
+			m_loadedToken = token;
+			m_loadedValue = value;
+
+			value = defaultValue;
+		}
+
+		if ( value.type != WR_INT )
+		{
+			m_err = WR_ERR_bad_label;
+			return false;
+		}
+
+		unsigned char buf[6];
+		if ( unitIndex == 0 )
+		{
+			buf[1] = addGlobalSpaceLoad( m_units[unitIndex].bytecode, prefix, true );
+			if ( (value.i <= 127) && (value.i >= -128) )
+			{
+				buf[0] = O_LiteralInt8ToGlobal;
+				buf[2] = value.i;
+				pushData( m_units[unitIndex].bytecode, buf, 3 );
+			}
+			else if ( (value.i <= 32767) && (value.i >= -32768) )
+			{
+				buf[0] = O_LiteralInt16ToGlobal;
+				buf[2] = value.i >> 8;
+				buf[3] = value.i;
+				pushData( m_units[unitIndex].bytecode, buf, 4 );
+			}
+			else
+			{
+				buf[0] = O_LiteralInt32ToGlobal;
+				pack32( value.i, buf + 2 );
+				pushData( m_units[unitIndex].bytecode, buf, 6 );
+			}
+		}
+		else
+		{
+			buf[1] = addLocalSpaceLoad( m_units[unitIndex].bytecode, prefix, true );
+			if ( (value.i <= 127) && (value.i >= -128) )
+			{
+				buf[0] = O_LiteralInt8ToLocal;
+				buf[2] = value.i;
+				pushData( m_units[unitIndex].bytecode, buf, 3 );
+			}
+			else if ( (value.i <= 32767) && (value.i >= -32768) )
+			{
+				buf[0] = O_LiteralInt16ToLocal;
+				buf[2] = value.i >> 8;
+				buf[3] = value.i;
+				pushData( m_units[unitIndex].bytecode, buf, 4 );
+			}
+			else
+			{
+				buf[0] = O_LiteralInt32ToLocal;
+				pack32( value.i, buf + 2 );
+				pushData( m_units[unitIndex].bytecode, buf, 6 );
+			}
+		}
+	}
+
+	if ( getToken(ex) && token != ";" )
+	{
+		m_loadedToken = token;
+		m_loadedValue = value;
+	}
+
+	return true;
+}
+
+//------------------------------------------------------------------------------
 bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn )
 {
 	WRExpressionContext ex;
@@ -3888,6 +4159,13 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 		else if ( token == "for" )
 		{
 			if ( !parseForLoop(returnCalled, opcodeToReturn) )
+			{
+				return false;
+			}
+		}
+		else if ( token == "enum" )
+		{
+			if ( !parseEnum(unitIndex) )
 			{
 				return false;
 			}
@@ -4100,9 +4378,9 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 						// r+2345 = hash
 						// r+6
 
-						if ( code[index+5] == O_PopOne || code[index + 6] == O_NewHashTable)
+						if ( code[index+5] == O_PopOne || code[index + 6] == O_NewObjectTable)
 						{
-							code[index+3] = 3; // skip past the pop, or TO the newHashTable
+							code[index+3] = 3; // skip past the pop, or TO the NewObjectTable
 						}
 						else 
 						{
@@ -4251,264 +4529,267 @@ int wr_compile( const char* source, const int size, unsigned char** out, int* ou
 #ifdef DEBUG_OPCODE_NAMES
 const char* c_opcodeName[] = 
 {
-	"O_RegisterFunction",
-	"O_ReserveGlobalFrame",
-	"O_FunctionListSize",
+	"RegisterFunction",
+	"ReserveGlobalFrame",
+	"FunctionListSize",
 
-	"O_LiteralInt32",
-	"O_LiteralZero",
-	"O_LiteralFloat",
-	"O_LiteralString",
+	"LiteralInt32",
+	"LiteralZero",
+	"LiteralFloat",
+	"LiteralString",
 
-	"O_CallFunctionByHash",
-	"O_CallFunctionByHashAndPop",
-	"O_CallFunctionByIndex",
-	"O_PushIndexFunctionReturnValue",
+	"CallFunctionByHash",
+	"CallFunctionByHashAndPop",
+	"CallFunctionByIndex",
+	"PushIndexFunctionReturnValue",
 
-	"O_CallLibFunction",
-	"O_CallLibFunctionAndPop",
+	"CallLibFunction",
+	"CallLibFunctionAndPop",
 
-	"O_NewHashTable",
-	"O_AssignToHashTableByOffset",
+	"NewObjectTable",
+	"AssignToObjectTableByOffset",
 
-	"O_PopOne",
-	"O_Return",
-	"O_Stop",
+	"AssignToHashTableAndPop",
 
-	"O_Index",
-	"O_IndexSkipLoad",
-	"O_CountOf",
+	"PopOne",
+	"Return",
+	"Stop",
 
-	"O_StackIndexHash",
-	"O_GlobalIndexHash",
-	"O_LocalIndexHash",
+	"Index",
+	"IndexSkipLoad",
+	"CountOf",
+	"HashOf",
 
-	"O_StackSwap",
-	"O_SwapTwoToTop",
+	"StackIndexHash",
+	"GlobalIndexHash",
+	"LocalIndexHash",
 
-	"O_LoadFromLocal",
-	"O_LoadFromGlobal",
+	"StackSwap",
+	"SwapTwoToTop",
 
-	"O_LLValues",
-	"O_LGValues",
-	"O_GLValues",
-	"O_GGValues",
+	"LoadFromLocal",
+	"LoadFromGlobal",
 
-	"O_BinaryRightShiftSkipLoad",
-	"O_BinaryLeftShiftSkipLoad",
-	"O_BinaryAndSkipLoad",
-	"O_BinaryOrSkipLoad",
-	"O_BinaryXORSkipLoad",
-	"O_BinaryModSkipLoad",
+	"LLValues",
+	"LGValues",
+	"GLValues",
+	"GGValues",
 
-	"O_BinaryMultiplication",
-	"O_BinarySubtraction",
-	"O_BinaryDivision",
-	"O_BinaryRightShift",
-	"O_BinaryLeftShift",
-	"O_BinaryMod",
-	"O_BinaryOr",
-	"O_BinaryXOR",
-	"O_BinaryAnd",
-	"O_BinaryAddition",
+	"BinaryRightShiftSkipLoad",
+	"BinaryLeftShiftSkipLoad",
+	"BinaryAndSkipLoad",
+	"BinaryOrSkipLoad",
+	"BinaryXORSkipLoad",
+	"BinaryModSkipLoad",
 
-	"O_BitwiseNOT",
+	"BinaryMultiplication",
+	"BinarySubtraction",
+	"BinaryDivision",
+	"BinaryRightShift",
+	"BinaryLeftShift",
+	"BinaryMod",
+	"BinaryOr",
+	"BinaryXOR",
+	"BinaryAnd",
+	"BinaryAddition",
 
-	"O_CoerceToInt",
-	"O_CoerceToFloat",
+	"BitwiseNOT",
 
-	"O_RelativeJump",
-	"O_RelativeJump8",
+	"CoerceToInt",
+	"CoerceToFloat",
 
-	"O_BZ",
-	"O_BZ8",
+	"RelativeJump",
+	"RelativeJump8",
 
-	"O_LogicalAnd",
-	"O_LogicalOr",
-	"O_CompareLE",
-	"O_CompareGE",
-	"O_CompareGT",
-	"O_CompareLT",
-	"O_CompareEQ",
-	"O_CompareNE",
+	"BZ",
+	"BZ8",
 
-	"O_GGCompareEQ", 
-	"O_GGCompareNE", 
-	"O_GGCompareGT",
-	"O_GGCompareLT",
-	
-	"O_LLCompareGT",
-	"O_LLCompareLT",
-	"O_LLCompareEQ", 
-	"O_LLCompareNE",
+	"LogicalAnd",
+	"LogicalOr",
+	"CompareLE",
+	"CompareGE",
+	"CompareGT",
+	"CompareLT",
+	"CompareEQ",
+	"CompareNE", 
 
-	"O_GSCompareEQ", 
-	"O_LSCompareEQ", 
-	"O_GSCompareNE", 
-	"O_LSCompareNE", 
-	"O_GSCompareGE",
-	"O_LSCompareGE",
-	"O_GSCompareLE",
-	"O_LSCompareLE",
-	"O_GSCompareGT",
-	"O_LSCompareGT",
-	"O_GSCompareLT",
-	"O_LSCompareLT",
+	"GGCompareEQ", 
+	"GGCompareNE", 
+	"GGCompareGT",
+	"GGCompareLT",
 
-	"O_GSCompareEQBZ", 
-	"O_LSCompareEQBZ", 
-	"O_GSCompareNEBZ", 
-	"O_LSCompareNEBZ", 
-	"O_GSCompareGEBZ",
-	"O_LSCompareGEBZ",
-	"O_GSCompareLEBZ",
-	"O_LSCompareLEBZ",
-	"O_GSCompareGTBZ",
-	"O_LSCompareGTBZ",
-	"O_GSCompareLTBZ",
-	"O_LSCompareLTBZ",
+	"LLCompareGT",
+	"LLCompareLT",
+	"LLCompareEQ", 
+	"LLCompareNE", 
 
-	"O_GSCompareEQBZ8",
-	"O_LSCompareEQBZ8",
-	"O_GSCompareNEBZ8",
-	"O_LSCompareNEBZ8",
-	"O_GSCompareGEBZ8",
-	"O_LSCompareGEBZ8",
-	"O_GSCompareLEBZ8",
-	"O_LSCompareLEBZ8",
-	"O_GSCompareGTBZ8",
-	"O_LSCompareGTBZ8",
-	"O_GSCompareLTBZ8",
-	"O_LSCompareLTBZ8",
+	"GSCompareEQ", 
+	"LSCompareEQ", 
+	"GSCompareNE", 
+	"LSCompareNE", 
+	"GSCompareGE",
+	"LSCompareGE",
+	"GSCompareLE",
+	"LSCompareLE",
+	"GSCompareGT",
+	"LSCompareGT",
+	"GSCompareLT",
+	"LSCompareLT",
 
-	"O_LLCompareLTBZ",
-	"O_LLCompareGTBZ",
-	"O_LLCompareEQBZ",
-	"O_LLCompareNEBZ",
-	"O_GGCompareLTBZ",
-	"O_GGCompareGTBZ",
-	"O_GGCompareEQBZ",
-	"O_GGCompareNEBZ",
+	"GSCompareEQBZ", 
+	"LSCompareEQBZ", 
+	"GSCompareNEBZ", 
+	"LSCompareNEBZ", 
+	"GSCompareGEBZ",
+	"LSCompareGEBZ",
+	"GSCompareLEBZ",
+	"LSCompareLEBZ",
+	"GSCompareGTBZ",
+	"LSCompareGTBZ",
+	"GSCompareLTBZ",
+	"LSCompareLTBZ",
 
-	"O_LLCompareLTBZ8",
-	"O_LLCompareGTBZ8",
-	"O_LLCompareEQBZ8",
-	"O_LLCompareNEBZ8",
-	"O_GGCompareLTBZ8",
-	"O_GGCompareGTBZ8",
-	"O_GGCompareEQBZ8",
-	"O_GGCompareNEBZ8",
+	"GSCompareEQBZ8",
+	"LSCompareEQBZ8",
+	"GSCompareNEBZ8",
+	"LSCompareNEBZ8",
+	"GSCompareGEBZ8",
+	"LSCompareGEBZ8",
+	"GSCompareLEBZ8",
+	"LSCompareLEBZ8",
+	"GSCompareGTBZ8",
+	"LSCompareGTBZ8",
+	"GSCompareLTBZ8",
+	"LSCompareLTBZ8",
 
-	"O_PostIncrement",
-	"O_PostDecrement",
-	"O_PreIncrement",
-	"O_PreDecrement",
+	"LLCompareLTBZ",
+	"LLCompareGTBZ",
+	"LLCompareEQBZ",
+	"LLCompareNEBZ",
+	"GGCompareLTBZ",
+	"GGCompareGTBZ",
+	"GGCompareEQBZ",
+	"GGCompareNEBZ",
 
-	"O_PreIncrementAndPop",
-	"O_PreDecrementAndPop",
+	"LLCompareLTBZ8",
+	"LLCompareGTBZ8",
+	"LLCompareEQBZ8",
+	"LLCompareNEBZ8",
+	"GGCompareLTBZ8",
+	"GGCompareGTBZ8",
+	"GGCompareEQBZ8",
+	"GGCompareNEBZ8",
 
-	"O_IncGlobal",
-	"O_DecGlobal",
-	"O_IncLocal",
-	"O_DecLocal",
+	"PostIncrement",
+	"PostDecrement",
+	"PreIncrement",
+	"PreDecrement",
 
-	"O_Assign",
-	"O_AssignAndPop",
-	"O_AssignToGlobalAndPop",
-	"O_AssignToLocalAndPop",
-	"O_AssignToArrayAndPop",
+	"PreIncrementAndPop",
+	"PreDecrementAndPop",
 
-	"O_SubtractAssign",
-	"O_AddAssign",
-	"O_ModAssign",
-	"O_MultiplyAssign",
-	"O_DivideAssign",
-	"O_ORAssign",
-	"O_ANDAssign",
-	"O_XORAssign",
-	"O_RightShiftAssign",
-	"O_LeftShiftAssign",
+	"IncGlobal",
+	"DecGlobal",
+	"IncLocal",
+	"DecLocal",
 
-	"O_SubtractAssignAndPop",
-	"O_AddAssignAndPop",
-	"O_ModAssignAndPop",
-	"O_MultiplyAssignAndPop",
-	"O_DivideAssignAndPop",
-	"O_ORAssignAndPop",
-	"O_ANDAssignAndPop",
-	"O_XORAssignAndPop",
-	"O_RightShiftAssignAndPop",
-	"O_LeftShiftAssignAndPop",
+	"Assign",
+	"AssignAndPop",
+	"AssignToGlobalAndPop",
+	"AssignToLocalAndPop",
+	"AssignToArrayAndPop",
 
-	"O_LogicalNot",
-	"O_Negate",
+	"SubtractAssign",
+	"AddAssign",
+	"ModAssign",
+	"MultiplyAssign",
+	"DivideAssign",
+	"ORAssign",
+	"ANDAssign",
+	"XORAssign",
+	"RightShiftAssign",
+	"LeftShiftAssign",
 
-	"O_LiteralInt8",
-	"O_LiteralInt16",
+	"SubtractAssignAndPop",
+	"AddAssignAndPop",
+	"ModAssignAndPop",
+	"MultiplyAssignAndPop",
+	"DivideAssignAndPop",
+	"ORAssignAndPop",
+	"ANDAssignAndPop",
+	"XORAssignAndPop",
+	"RightShiftAssignAndPop",
+	"LeftShiftAssignAndPop",
 
-	"O_IndexLiteral8",
-	"O_IndexLiteral16",
+	"LogicalNot",
+	"Negate",
 
-	"O_IndexLocalLiteral8",
-	"O_IndexGlobalLiteral8",
-	"O_IndexLocalLiteral16",
-	"O_IndexGlobalLiteral16",
+	"LiteralInt8",
+	"LiteralInt16",
 
-	"O_BinaryAdditionAndStoreGlobal",
-	"O_BinarySubtractionAndStoreGlobal",
-	"O_BinaryMultiplicationAndStoreGlobal",
-	"O_BinaryDivisionAndStoreGlobal",
+	"IndexLiteral8",
+	"IndexLiteral16",
 
-	"O_BinaryAdditionAndStoreLocal",
-	"O_BinarySubtractionAndStoreLocal",
-	"O_BinaryMultiplicationAndStoreLocal",
-	"O_BinaryDivisionAndStoreLocal",
+	"IndexLocalLiteral8",
+	"IndexGlobalLiteral8",
+	"IndexLocalLiteral16",
+	"IndexGlobalLiteral16",
 
-	"O_CompareBEQ",
-	"O_CompareBNE",
-	"O_CompareBGE",
-	"O_CompareBLE",
-	"O_CompareBGT",
-	"O_CompareBLT",
+	"BinaryAdditionAndStoreGlobal",
+	"BinarySubtractionAndStoreGlobal",
+	"BinaryMultiplicationAndStoreGlobal",
+	"BinaryDivisionAndStoreGlobal",
 
-	"O_CompareBEQ8",
-	"O_CompareBNE8",
-	"O_CompareBGE8",
-	"O_CompareBLE8",
-	"O_CompareBGT8",
-	"O_CompareBLT8",
+	"BinaryAdditionAndStoreLocal",
+	"BinarySubtractionAndStoreLocal",
+	"BinaryMultiplicationAndStoreLocal",
+	"BinaryDivisionAndStoreLocal",
 
-	"O_BLA",
-	"O_BLA8",
-	"O_BLO",
-	"O_BLO8",
+	"CompareBEQ",
+	"CompareBNE",
+	"CompareBGE",
+	"CompareBLE",
+	"CompareBGT",
+	"CompareBLT",
 
-	"O_LiteralInt8ToGlobal",
-	"O_LiteralInt16ToGlobal",
-	"O_LiteralInt32ToLocal",
-	"O_LiteralInt8ToLocal",
-	"O_LiteralInt16ToLocal",
-	"O_LiteralFloatToGlobal",
-	"O_LiteralFloatToLocal",
-	"O_LiteralInt32ToGlobal",
+	"CompareBEQ8",
+	"CompareBNE8",
+	"CompareBGE8",
+	"CompareBLE8",
+	"CompareBGT8",
+	"CompareBLT8",
 
-	"O_GGBinaryMultiplication",
-	"O_GLBinaryMultiplication",
-	"O_LLBinaryMultiplication",
+	"BLA",
+	"BLA8",
+	"BLO",
+	"BLO8",
 
-	"O_GGBinaryAddition",
-	"O_GLBinaryAddition",
-	"O_LLBinaryAddition",
+	"LiteralInt8ToGlobal",
+	"LiteralInt16ToGlobal",
+	"LiteralInt32ToLocal",
+	"LiteralInt8ToLocal",
+	"LiteralInt16ToLocal",
+	"LiteralFloatToGlobal",
+	"LiteralFloatToLocal",
+	"LiteralInt32ToGlobal",
 
-	"O_GGBinarySubtraction",
-	"O_GLBinarySubtraction",
-	"O_LGBinarySubtraction",
-	"O_LLBinarySubtraction",
+	"GGBinaryMultiplication",
+	"GLBinaryMultiplication",
+	"LLBinaryMultiplication",
 
-	"O_GGBinaryDivision",
-	"O_GLBinaryDivision",
-	"O_LGBinaryDivision",
-	"O_LLBinaryDivision",
+	"GGBinaryAddition",
+	"GLBinaryAddition",
+	"LLBinaryAddition",
+
+	"GGBinarySubtraction",
+	"GLBinarySubtraction",
+	"LGBinarySubtraction",
+	"LLBinarySubtraction",
+
+	"GGBinaryDivision",
+	"GLBinaryDivision",
+	"LGBinaryDivision",
+	"LLBinaryDivision"
 };
 #endif
 

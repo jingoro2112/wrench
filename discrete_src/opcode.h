@@ -43,8 +43,10 @@ enum WROpcode
 	O_CallLibFunction,
 	O_CallLibFunctionAndPop,
 
-	O_NewHashTable,
-	O_AssignToHashTableByOffset,
+	O_NewObjectTable,
+	O_AssignToObjectTableByOffset,
+
+	O_AssignToHashTableAndPop,
 
 	O_PopOne,
 	O_Return,
@@ -53,6 +55,7 @@ enum WROpcode
 	O_Index,
 	O_IndexSkipLoad,
 	O_CountOf,
+	O_HashOf,
 	
 	O_StackIndexHash,
 	O_GlobalIndexHash,

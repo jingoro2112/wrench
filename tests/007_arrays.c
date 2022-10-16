@@ -1,14 +1,12 @@
-/*~
-good
-good
-~*/
+/*~ ~*/
 
 
 aa[10];
 a[500] = { aa };
 
-if ( a._count != 501 ) print("bad size");
 if ( a[0]._count != 11 ) print("bad size2");
+if ( a._count!= 501 ) print("bad size");
+
 
 for( i=0; i<500; ++i )
 {
@@ -18,51 +16,108 @@ for( i=0; i<500; ++i )
 {
 	allocArray();
 }
-
 
 b[40000];
 b[1] = 10;
 b[35000] = 20;
 if ( b[1] != 10 || b[35000] != 20 )
 {
-	print("bad");
+	print("bad b");
 }
 
+c[2000000];
+c[1] = 11;
+c[1913500] = 21;
+if ( c[1] != 11 || c[1913500] != 21 )
+{
+	print("bad c");
+}
 
-a[2] = 3;
-a[400] = 4;
+a = { 4, 2, 3, 4, 5 };
 if ( a[2] != 3 )
 {
-	print("bad");
+	print("bad a1");
 }
-else
+
+b[] = { 4, 2, 3, 4, 5 };
+if ( b[2] != 3 )
 {
-	print("good");
+	print("bad b1");
 }
+
+c[100] = { 4, 2, 3, 4, 5, };
+if ( c[2] != 3 )
+{
+	print("bad c1");
+}
+
+d[1] = { 4, 2, 3, 4, 5 };
+if ( d[2] != 3 )
+{
+	print("bad d1");
+}
+
+a[400] = 4;
 if ( a[400] != 4 )
 {
-	print("bad");
-}
-else
-{
-	print("good");
+	print("bad a2");
 }
 
 gi = 0;
 
+
+grow[1] = 10;
+grow[2] = 11;
+grow[3] = 12;
+grow[4] = 13;
+grow[5] = 14;
+grow[6] = 15;
+if ( grow[6] != 15 ) print("badref0");
+if ( grow[5] != 14 ) print("badref1");
+if ( grow[4] != 13 ) print("badref2");
+if ( grow[3] != 12 ) print("badref3");
+if ( grow[2] != 11 ) print("badref4");
+
+
+
 function allocArray()
 {
+
+	a = { 4, 2, 3, 4, 5 };
+	if ( a[2] != 3 )
+	{
+		print("F bad a1");
+	}
+
+	b[] = { 4, 2, 3, 4, 5 };
+	if ( b[2] != 3 )
+	{
+		print("F bad b1");
+	}
+
+	c[100] = { 4, 2, 3, 4, 5 };
+	if ( c[2] != 3 )
+	{
+		print("F bad c1");
+	}
+
+	d[1] = { 4, 2, 3, 4, 5 };
+	if ( d[2] != 3 )
+	{
+		print("F bad d1");
+	}
+	
 	ab[500];
 	i = 2;
-	ab[2] = 3;
-	ab[401] = 41;
+	ab = { 0, 2, 3 };
 	if ( ab[2] != 3 )
 	{
-		print("bad");
+		print("bad ab2");
 	}
+	ab[401] = 41;
 	if ( ab[401] != 41 )
 	{
-		print("bad");
+		print("bad ab41");
 	}
 
 	ac[50];
@@ -123,22 +178,7 @@ function allocArray()
 	}
 }
 
-
-grow[1] = 10;
-grow[2] = 11;
-grow[3] = 12;
-grow[4] = 13;
-grow[5] = 14;
-grow[6] = 15;
-if ( grow[6] != 15 ) print("badref0");
-if ( grow[5] != 14 ) print("badref1");
-if ( grow[4] != 13 ) print("badref2");
-if ( grow[3] != 12 ) print("badref3");
-if ( grow[2] != 11 ) print("badref4");
-
-
 a[10] = { 1, 2, 3 };
-
 leakCheck( a[0] );
 
 function leakCheck( value )

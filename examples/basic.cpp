@@ -7,18 +7,18 @@ void print( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, vo
 	char buf[1024];
 	for( int i=0; i<argn; ++i )
 	{
-		printf( "%s", argv[i].asString(buf) );
+		printf( "%s", argv[i].asString(buf, 1024) );
 	}
 }
 
 
 const char* wrenchCode = 
-"print( \"Hello World!\\n\" ); "
-"for( i=0; i<10; i++ )       "
-"{                           "
-"    print( i );               "
-"}                           "
-"print(\"\\n\");               ";
+"print( \"Hello World!\\n\" );"
+"for( i=0; i<10; i++ )        "
+"{                            "
+"    print( i );              "
+"}                            "
+"print(\"\\n\");              ";
 
 
 

@@ -39,9 +39,6 @@ WRContext::~WRContext()
 	delete[] globalSpace;
 	delete[] localFunctions;
 
-	loader = 0;
-	usr = 0;
-
 	while( svAllocated )
 	{
 		WRGCArray* next = svAllocated->m_next;
@@ -83,9 +80,86 @@ WRState::~WRState()
 }
 
 //------------------------------------------------------------------------------
+void* WRGCArray::growHash( uint32_t hash )
+{
+	int t = 0;
+	for( ; c_primeTable[t]; ++t )
+	{
+		if ( c_primeTable[t] == m_mod )
+		{
+			++t;
+			break;
+		}
+	}
+
+	// otherwise there was a collision, expand the table
+	for(;;)
+	{
+		int newMod = c_primeTable[t];
+		if (newMod == 0)
+		{
+			// could not grow large enough to avoid collision, give up.
+			return m_Vdata + (hash % m_mod);
+		}
+
+		uint32_t* proposed = new uint32_t[newMod];
+		memset( proposed, 0, newMod*sizeof(uint32_t) );
+
+		proposed[ hash % newMod ] = hash;
+
+		int h = 0;
+		for( ; h<m_mod; ++h )
+		{
+			if (m_hashTable[h] == 0)
+			{
+				continue;
+			}
+
+			int newEntry = m_hashTable[h] % newMod;
+			if ( proposed[newEntry] == 0 )
+			{
+				proposed[newEntry] = m_hashTable[h];
+			}
+			else
+			{
+				delete[] proposed;
+				++t;
+				break;
+			}
+		}
+
+		if ( h < m_mod )
+		{
+			continue;
+		}
+
+		WRValue* newValues = new WRValue[ newMod ];
+		memset( (char*)newValues, 0, newMod*sizeof(WRValue) );
+
+		for( int v=0; v<m_mod; ++v )
+		{
+			WRValue* V1 = newValues + (m_hashTable[v] % newMod);
+			WRValue* V2 = m_Vdata + (m_hashTable[v] % m_mod);
+			V1->p2 = V2->p2;
+			V2->p2 = INIT_AS_INT;
+			V1->p = V2->p;
+		}
+
+		m_mod = newMod;
+		m_size = m_mod;
+		delete[] m_Vdata;
+		delete[] m_hashTable;
+		m_hashTable = proposed;
+		m_Vdata = newValues;
+
+		return m_Vdata + (hash % m_mod);
+	}
+}
+
+//------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
 {
-	if ( s->xtype == WR_EX_REFARRAY && s->r->type&0x4 )
+	if ( IS_REFARRAY(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
 	{
 		if ( !s->r->va->m_preAllocated )
 		{
@@ -101,14 +175,14 @@ void WRContext::mark( WRValue* s )
 	
 	WRGCArray* sva = s->va;
 	
-	if ( (sva->m_type) == SV_VALUE )
+	if ( IS_SVA_VALUE_TYPE(sva) )
 	{
 		// this is an array of values, check them for array-ness too
 
 		WRValue* top = sva->m_Vdata + sva->m_size;
 		for( WRValue* V = sva->m_Vdata; V<top; ++V )
 		{
-			if ( (V->xtype & 0x4) && !(V->va->m_preAllocated) && !(V->va->m_size & 0x40000000) )
+			if ( IS_EXARRAY_TYPE(V->xtype) && !(V->va->m_preAllocated) && !(V->va->m_size & 0x40000000) )
 			{
 				mark( V );
 			}
@@ -130,7 +204,7 @@ void WRContext::gc( WRValue* stackTop )
 	for( WRValue* s=w->stack; s<stackTop; ++s)
 	{
 		// an array in the chain?
-		if ( (s->xtype & 0x4) && !(s->va->m_preAllocated) )
+		if ( IS_EXARRAY_TYPE(s->xtype) && !(s->va->m_preAllocated) )
 		{
 			mark( s );
 		}
@@ -139,7 +213,7 @@ void WRContext::gc( WRValue* stackTop )
 	// mark context's global
 	for( int i=0; i<globals; ++i )
 	{
-		if ( (globalSpace[i].xtype & 0x4) && !(globalSpace[i].va->m_preAllocated) )
+		if ( IS_EXARRAY_TYPE(globalSpace[i].xtype) && !(globalSpace[i].va->m_preAllocated) )
 		{
 			mark( globalSpace + i );
 		}
@@ -208,11 +282,14 @@ WRError wr_getLastError( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_runEx( WRState* w, WRContext* C )
+WRContext* wr_run( WRState* w, const unsigned char* block )
 {
+	WRContext* C = new WRContext( w );
 	C->next = w->contextList;
-	w->contextList = C;
+	C->bottom = block;
 	
+	w->contextList = C;
+
 	if ( wr_callFunction(w, C, (int32_t)0) )
 	{
 		wr_destroyContext( w, C );
@@ -220,24 +297,6 @@ WRContext* wr_runEx( WRState* w, WRContext* C )
 	}
 
 	return C;
-}
-
-//------------------------------------------------------------------------------
-WRContext* wr_run( WRState* w, const unsigned char* block )
-{
-	WRContext* C = new WRContext( w );
-	C->loader = wr_loadSingleBlock;
-	C->usr = (void*)block;
-	return wr_runEx( w, C );
-}
-
-//------------------------------------------------------------------------------
-WRContext* wr_run( WRState* w, WR_LOAD_BLOCK_FUNC loader, void* usr )
-{
-	WRContext* C = new WRContext( w );
-	C->loader = loader;
-	C->usr = usr;
-	return wr_runEx( w, C );
 }
 
 //------------------------------------------------------------------------------
@@ -330,20 +389,21 @@ char* WRValue::asString( char* string, size_t len ) const
 			
 			case WR_EX_REFARRAY:
 			{
-				if ( r->xtype & 0x4 )
+				if ( IS_EXARRAY_TYPE(r->xtype) )
 				{
 					WRValue temp;
 					wr_arrayToValue(this, &temp);
-					return temp.asString(string, len );
+					return temp.asString(string, len);
 				}
 				else
 				{
-					return r->asString(string, len );
+					return r->asString(string, len);
 				}
 			}
+
 			case WR_EX_NONE:
 			{
-				strncpy(string, "None", len );
+				strncpy( string, "None", len );
 				break;
 			}
 		}
@@ -359,7 +419,7 @@ char* WRValue::asString( char* string, size_t len ) const
 			case WR_INT: 
 			case WR_FLOAT:
 			{
-				strncpy(string, len, "");
+				string[0] = 0;
 				break;
 			}
 #endif
@@ -368,6 +428,27 @@ char* WRValue::asString( char* string, size_t len ) const
 	}
 	
 	return string;
+}
+
+//------------------------------------------------------------------------------
+const unsigned char* WRValue::asData( unsigned int* len ) const
+{
+	if ( type == WR_REF )
+	{
+		return r->asData( len );
+	}
+
+	if ( (xtype != WR_EX_ARRAY) || (va->m_type != SV_CHAR) )
+	{
+		return 0;
+	}
+
+	if ( len )
+	{
+		*len = va->m_size;
+	}
+
+	return va->m_Cdata;
 }
 
 //------------------------------------------------------------------------------
@@ -382,8 +463,6 @@ int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const W
 	WRFunction* function = 0;
 	if ( hash )
 	{
-		// if a function name is provided it is meant to be called
-		// directly. Set that up with a return vector of "stop"
 		if ( context->stopLocation == 0 )
 		{
 			return w->err = WR_ERR_run_must_be_called_by_itself_first;
@@ -419,7 +498,7 @@ WRFunction* wr_getFunction( WRContext* context, const char* functionName )
 #endif
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
-#define CONTINUE { goto *opcodeJumptable[*pc++]; PER_INSTRUCTION; }
+#define CONTINUE { PER_INSTRUCTION; goto *opcodeJumptable[*pc++];  }
 #define CASE(LABEL) LABEL
 #else
 #define CONTINUE { PER_INSTRUCTION; continue; }
@@ -449,8 +528,9 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&CallLibFunction,
 		&&CallLibFunctionAndPop,
 
-		&&NewHashTable,
-		&&AssignToHashTableByOffset,
+		&&NewObjectTable,
+		&&AssignToObjectTableByOffset,
+		&&AssignToHashTableAndPop,
 
 		&&PopOne,
 		&&Return,
@@ -459,6 +539,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&Index,
 		&&IndexSkipLoad,
 		&&CountOf,
+		&&HashOf,
 
 		&&StackIndexHash,
 		&&GlobalIndexHash,
@@ -717,23 +798,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 	w->err = WR_ERR_None;
 
-#ifndef WRENCH_PARTIAL_BYTECODE_LOADS
-	if ( !(pc = context->bottom) )
-	{
-		context->loader( 0, &pc, context->usr );
-		context->bottom = pc;
-	}
-#else
-	// cache these values they are used a lot
-	WR_LOAD_BLOCK_FUNC loader = context->loader;
-	void* usr = context->usr;
-	const unsigned char* top = 0;
-	pc = 0;
-	int absoluteBottom = 0; // pointer to where in the codebase our bottom actually points to
-#endif
-
-	// make room on the bottom for the return value of this script
-
 	if ( function )
 	{
 		stackTop->p = 0;
@@ -744,15 +808,11 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 			*stackTop++ = argv[args];
 		}
 		
-#ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 		pc = context->bottom + context->stopLocation;
-#else
-		unsigned int size = loader( absoluteBottom = context->stopLocation, &pc, usr );
-		top = pc + (size - 6);
-		context->bottom = pc;
-#endif
 		goto callFunction;
 	}
+
+	pc = context->bottom;
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 
@@ -762,16 +822,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 	for(;;)
 	{
-		
-#ifdef WRENCH_PARTIAL_BYTECODE_LOADS
-		if ( pc >= top )
-		{
-			unsigned int size = loader( absoluteBottom += (pc - context->bottom), &pc, usr );
-			top = pc + (size - 6);
-			context->bottom = pc;
-		}
-#endif
-
 		switch( *pc++)
 		{
 #endif
@@ -783,14 +833,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 				context->localFunctions[ index ].arguments = (unsigned char)(i>>8);
 				context->localFunctions[ index ].frameSpaceNeeded = (unsigned char)(i>>16);
 				context->localFunctions[ index ].hash = (stackTop - 2)->i;
-
-#ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				context->localFunctions[ index ].offset = (stackTop - 1)->i + context->bottom; // absolute
-#else
-				context->localFunctions[ index ].offset = 0; // make sure the offset is clear
-				context->localFunctions[ index ].offsetI = (stackTop - 1)->i; // relative
-#endif
-
 				context->localFunctions[ index ].frameBaseAdjustment = 1
 																	   + context->localFunctions[ index ].frameSpaceNeeded
 																	   + context->localFunctions[ index ].arguments;
@@ -846,29 +889,16 @@ literalZero:
 
 			CASE(LiteralString):
 			{
-				int16_t len = (((int16_t)*pc)<<8) | (int16_t)*(pc + 1);
+				uint16_t len = (((uint16_t)*pc)<<8) | (uint16_t)*(pc + 1);
 				pc += 2;
 				
 				context->gc( stackTop );
 				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = context->getSVA( len, SV_CHAR, false );
 
-#ifndef WRENCH_PARTIAL_BYTECODE_LOADS
 				memcpy( (unsigned char *)stackTop->va->m_data, pc, len );
 				pc += len;
-#else
-				for( int c=0; c<len; ++c )
-				{
-					if ( pc >= top )
-					{
-						unsigned int size = loader( absoluteBottom += (pc - context->bottom), &pc, usr );
-						top = pc + (size - 6);
-						context->bottom = pc;
-					}
-
-					((unsigned char *)stackTop->va->m_data)[c] = *pc++;
-				}
-#endif
+				
 				++stackTop;
 				CONTINUE;
 			}
@@ -964,20 +994,8 @@ callFunction:
 				register0 = stackTop++; // return vector
 				register0->frame = frameBase;
 
-#ifndef WRENCH_PARTIAL_BYTECODE_LOADS
-
 				register0->p = pc;
 				pc = function->offset;
-#else
-				// relative position in the code to return to
-				register0->i = absoluteBottom + (pc - context->bottom);
-
-				pc = context->bottom + (function->offsetI - absoluteBottom);
-				if ( pc < (top - absoluteBottom) )
-				{
-					top = 0; // trigger reload at top of loop
-				}
-#endif
 
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - function->frameBaseAdjustment;
@@ -1014,7 +1032,7 @@ callFunction:
 															  | (((int32_t)*(pc+2)) << 8)
 															  | ((int32_t)*(pc+3)) )) )
 				{
-					lib( stackTop, args );
+					lib( stackTop, args, context );
 				}
 
 				stackTop -= (args - 1);
@@ -1033,7 +1051,7 @@ callFunction:
 															  | (((int32_t)*(pc+2)) << 8)
 															  | ((int32_t)*(pc+3)) )) )
 				{
-					lib( stackTop, args );
+					lib( stackTop, args, context );
 				}
 
 				stackTop -= args;
@@ -1041,7 +1059,7 @@ callFunction:
 				CONTINUE;
 			}
 
-			CASE(NewHashTable):
+			CASE(NewObjectTable):
 			{
 				const unsigned char* table = context->bottom + (int32_t)((((int16_t)*pc)<<8) + *(pc+1));
 				pc += 2;
@@ -1058,8 +1076,8 @@ callFunction:
 
 					unsigned char count = *table++;
 
-					register1 = (WRValue*)(stackTop + *table)->p;
-					register2 = (WRValue*)(stackTop + *table)->frame;
+					register1 = (stackTop + *table)->r;
+					register2 = (stackTop + *table)->r2;
 
 					stackTop->p2 = INIT_AS_STRUCT;
 
@@ -1074,8 +1092,8 @@ callFunction:
 					stackTop->va->m_mod = (((int16_t)*(table+1)) << 8) + *(table+2);
 
 					register0 = (WRValue*)(stackTop->va->m_data);
-					register0->p = register1;
-					(register0++)->frame = register2;
+					register0->r = register1;
+					(register0++)->r2 = register2;
 
 					if ( --count > 0 )
 					{
@@ -1092,7 +1110,7 @@ callFunction:
 				CONTINUE;
 			}
 
-			CASE(AssignToHashTableByOffset):
+			CASE(AssignToObjectTableByOffset):
 			{
 				register0 = --stackTop;
 				register1 = (stackTop - 1);
@@ -1109,6 +1127,15 @@ callFunction:
 				CONTINUE;
 			}
 
+			CASE(AssignToHashTableAndPop):
+			{
+				register0 = --stackTop; // value
+				register1 = --stackTop; // index
+				
+				wr_assignToHashTable( context, register1, register0, stackTop - 1 );
+				CONTINUE;
+			}
+
 			CASE(PopOne):
 			{
 				--stackTop;
@@ -1119,17 +1146,8 @@ callFunction:
 			{
 				register0 = stackTop - 2;
 
-#ifndef WRENCH_PARTIAL_BYTECODE_LOADS
-
 				pc = (unsigned char*)register0->p; // grab return PC
 
-#else
-				pc = context->bottom + ((stackTop - 2)->i - absoluteBottom);
-				if ( pc < (top - absoluteBottom) )
-				{
-					top = 0; // trigger reload at top of loop
-				}
-#endif
 				stackTop = frameBase;
 				frameBase = register0->frame;
 				CONTINUE;
@@ -1161,6 +1179,14 @@ callFunction:
 					register0 = register0->r;
 				}
 				wr_countOfArrayElement( register0, stackTop - 1 );
+				CONTINUE;
+			}
+
+			CASE(HashOf):
+			{
+				register0 = stackTop - 1;
+				register0->ui = register0->getHash();
+				register0->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
 
@@ -1197,14 +1223,14 @@ indexHash:
 			{
 				register0 = stackTop - 1;
 				register1 = stackTop - *pc++;
-				register2 = register0->frame;
-				const void* p = register0->p;
+				register2 = register0->r2;
+				WRValue* r = register0->r;
 
-				register0->frame = register1->frame;
-				register0->p = register1->p;
+				register0->r2 = register1->r2;
+				register0->r = register1->r;
 
-				register1->p = p;
-				register1->frame = register2;
+				register1->r = r;
+				register1->r2 = register2;
 
 				CONTINUE;
 			} 
@@ -1720,12 +1746,6 @@ binaryTableOp:
 				voidFunc[(register0->type<<2)|register1->type]( register0, register1 );
 				CONTINUE;
 			}
-
-
-
-
-
-
 			
 			CASE(SubtractAssignAndPop): { voidFunc = wr_SubtractAssign; goto binaryTableOpAndPop; }
 			CASE(AddAssignAndPop): { voidFunc = wr_AddAssign; goto binaryTableOpAndPop; }
@@ -1807,6 +1827,7 @@ indexLiteral:
 				register0 = frameBase + *pc++;
 indexTempLiteral:
 				(++stackTop)->i = *pc++;
+				stackTop->p2 = INIT_AS_INT;
 indexTempLiteralPostLoad:
 				wr_index[(WR_INT<<4)|register0->type]( context, stackTop, register0, stackTop - 1 );
 				CONTINUE;
@@ -1838,27 +1859,28 @@ indexTempLiteralPostLoad:
 			{
 				register0 = frameBase + *pc++;
 				register1 = --stackTop;
+
+doAssignToLocalAndPop:
 				wr_assign[(register0->type<<2)|register1->type]( register0, register1 );
 				CONTINUE;
 			}
 
 			CASE(AssignToArrayAndPop):
 			{
-				register0 = stackTop - 1; // value
-				register1 = stackTop - 2; // array
-				
-				if ( register1->r->xtype == WR_EX_ARRAY )
+				stackTop->p2 = INIT_AS_INT; // index
+				stackTop->i = (int32_t)(uint16_t)((((uint16_t)*(pc)) << 8) | ((uint16_t)*(pc+1)));
+				pc += 2;
+				register1 = stackTop - 1; // value
+				register0 = stackTop - 2; // array
+				if ( register0->xtype == WR_EX_REFARRAY )
 				{
-					stackTop->r = register1->r;
-					stackTop->p2 = INIT_AS_REFARRAY;
-					ARRAY_ELEMENT_TO_P2( stackTop, (int32_t)(int16_t)((((int16_t)*(pc)) << 8) | ((int16_t)*(pc+1))) );
-
-					wr_assign[(WR_EX<<2)|register0->type]( stackTop, register0 );
+					register0 = register0->r;
 				}
 
-				pc += 2;
-				--stackTop;
-				CONTINUE;
+				wr_index[(WR_INT<<2)|register0->type]( context, stackTop, register0, stackTop + 1 );
+				register0 = stackTop-- + 1;
+
+				goto doAssignToLocalAndPop;
 			}
 
 			CASE(LiteralInt8):
@@ -2163,7 +2185,7 @@ WRContainerData::~WRContainerData()
 	{
 		UDNode* next = m_head->next;
 
-		if ( m_head->val->xtype & 0x4 )
+		if ( IS_EXARRAY_TYPE(m_head->val->xtype) )
 		{
 			delete m_head->val->va;
 		}

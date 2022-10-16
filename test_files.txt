@@ -10,3 +10,5 @@ tests/008_userData.c
 tests/009_library.c
 tests/010_structs.c
 tests/011_dicts.c
+tests/012_enums.c
+tests/013_files.c

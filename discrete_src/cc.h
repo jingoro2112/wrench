@@ -102,7 +102,10 @@ const WROperation c_operations[] =
 	{ "@i",   3, O_CoerceToInt,         true,  WR_OPER_PRE, O_LAST },
 	{ "@f",   3, O_CoerceToFloat,       true,  WR_OPER_PRE, O_LAST },
 	{ "@[]",  2, O_Index,               true,  WR_OPER_POST, O_LAST },
+	{ "@init", 2, O_Index,              true,  WR_OPER_POST, O_LAST },
+
 	{ "._count", 2, O_CountOf,           true,  WR_OPER_POST, O_LAST },
+	{ "._hash", 2, O_HashOf,           true,  WR_OPER_POST, O_LAST },
 	
 	{ 0, 0, O_LAST, false, WR_OPER_PRE, O_LAST },
 };
@@ -362,8 +365,8 @@ private:
 	void appendBytecode( WRBytecode& bytecode, WRBytecode& addMe );
 	
 	void pushLiteral( WRBytecode& bytecode, WRExpressionContext& context );
-	void addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly =false );
-	void addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token );
+	int addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly =false );
+	int addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly =false );
 	void addFunctionToHashSpace( WRBytecode& result, WRstr& token );
 	void loadExpressionContext( WRExpression& expression, int depth, int operation );
 	void resolveExpression( WRExpression& expression );
@@ -376,6 +379,7 @@ private:
 	bool parseWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseDoWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseForLoop( bool& returnCalled, WROpcode opcodeToReturn );
+	bool parseEnum( int unitIndex );
 	bool parseIf( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseStatement( int unitIndex, char end, bool& returnCalled, WROpcode opcodeToReturn );
 

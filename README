@@ -1,31 +1,34 @@
-wrench: a full-featured interpreter that uses a bare
-minimum of ram and program space.
+             wrench
 
-How little? The wrench interpreter compiles to around 40k on Arduino, and
+A full-featured interpreter that uses a bare minimum of ram and program space.
+
+How little? The wrench interpreter compiles to ~45k on a CortexM0, and
 uses less than 1k of ram to operate.
 
-wrench: 
+Highlights:
 
-- Is weakly typed, supporting native 32-bit int, float and string.
+- Weakly typed, supporting native 32-bit int, float and string.
   Code is easy to write and intuitive.
 
-- Lightning-fast, 30-40% faster than lua. 
+- Fast, 30-80% faster than lua depending on benchmark
 
-- Produces very compact bytecode, and is endian-neutral; compile
+- Produces very compact endian-neutral bytecode compile
   anywhere-run-anywhere.
 
-- Can execute directy from ROM, no local copy of the 
-  code is made, and a single state supports multiple contexts.
+- Executes from ROM, no local copy of the code is made
 
-- Supports dynamic run-time loading of code that might be located
-  off-chip (like an I2C EEPROM)
+- Multiple concurrent contexts suypported.
+
+- Code is easy to write, imagine c/c++ with the typenames removed
+  and that's pretty much it.
 
 - Supports everything a good interpreter should: if/then/else/do/while/for/functions/operators/etc..
-  wrench code looks just like c with the types removed.
 
 - Can operate directly on native data/arrays, no thunking required.
 
 - Can call back and forth to native code with minimal overhead
+
+- Easy to extend and write super-low-overhead library calls for
 
 - Memory is garbage-collected but only for dynamic arrays. Unless
   you are allocating/de-allocating arrays the gc _never_ runs.
@@ -37,50 +40,55 @@ wrench:
 - Easy to integrate, here is a complete example:
 
 
------ Step 1: while the entire source is included, it is wrapped up in two 
+----- Step 1: The entire source tree is included, but is wrapped up in two 
               files, src/wrench.h and src/wrench.cpp simply include these in 
               your build and you have everything.
 
 ----- Step 2: Here is a complete source-code example:
 
-#include <stdio.h>
+#include <wrench.h>
 #include <string.h>
-#include "wrench.h" // or wherever you located it
+#include <stdio.h>
 
-void log( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+void print( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
-	// simple/naive logging solution
-	char buf[512];
+	char buf[1024];
 	for( int i=0; i<argn; ++i )
 	{
-		printf( "%s", wr_valueToString(argv[i], buf) );
+		printf( "%s", argv[i].asString(buf,1024) );
 	}
 }
 
+
 const char* wrenchCode = 
-"log( \"Hello World!\\n\" ); " // hi!
-"for( i=0; i<10; i++ )       " // do.. SOMETHING interesting..
-"{                           "
-"    log( i );               "
-"}                           ";
- 
+                         "print( \"Hello World!\\n\" );"
+                         "for( i=0; i<10; i++ )        "
+                         "{                            "
+                         "    print( i );              "
+                         "}                            "
+                         "print(\"\\n\");              ";
+
+
+
 int main( int argn, char** argv )
 {
 	WRState* w = wr_newState(); // create the state
 
-	wr_registerFunction( w, "log", log ); // bind a function
+	wr_registerFunction( w, "print", print ); // bind a function
 
 	unsigned char* outBytes; // compiled code is alloc'ed
 	int outLen;
-	
-	int err = wr_compile( wrenchCode, strlen(wrenchCode), &outBytes, &outLen );                     
+
+	int err = wr_compile( wrenchCode, strlen(wrenchCode), &outBytes, &outLen ); // compile it
 	if ( err == 0 )
 	{
-		wr_run( w, outBytes, outLen ); // load and run the code!
+		wr_run( w, outBytes ); // load and run the code!
 		delete[] outBytes; // clean up 
 	}
 
 	wr_destroyState( w );
+
+	return 0;
 }
 
 

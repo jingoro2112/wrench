@@ -29,7 +29,6 @@ SOFTWARE.
 #include "discrete_src/str.h"
 
 
-
 int runTests( int number =0 );
 void setup();
 
@@ -79,6 +78,9 @@ const char* sourceOrder[]=
 	"/vm.cpp",
 	"/operations.cpp",
 	"/std.cpp",
+	"/std_io.cpp",
+	"/std_string.cpp",
+	"/dstring.cpp",
 	""
 };
 
@@ -381,13 +383,7 @@ int runTests( int number )
 				WRstr logger;
 				wr_registerFunction( w, "print", emit, &logger );
 
-
-#ifdef WRENCH_PARTIAL_BYTECODE_LOADS
-				WRContext* context = wr_run( w, cliTestLoader, out );
-//				WRContext* context = wr_run( w, out );
-#else
 				WRContext* context = wr_run( w, out );
-#endif
 
 				if ( !wr_getLastError(w) )
 				{

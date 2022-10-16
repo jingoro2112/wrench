@@ -6,7 +6,7 @@ void print( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, vo
 	char buf[512];
 	for( int i=0; i<argn; ++i )
 	{
-		Serial.print( argv[i].asString(buf) );
+		Serial.print( argv[i].asString(buf, 512) );
 	}
 }
 
