@@ -8,11 +8,11 @@ if ( a[0]._count != 11 ) print("bad size2");
 if ( a._count!= 501 ) print("bad size");
 
 
-for( i=0; i<500; ++i )
+for( gi=0; gi<500; ++gi )
 {
 	allocArray();
 }
-for( i=0; i<500; ++i )
+for( gi=0; gi<500; ++gi )
 {
 	allocArray();
 }
@@ -63,7 +63,7 @@ if ( a[400] != 4 )
 	print("bad a2");
 }
 
-gi = 0;
+ggi = 0;
 
 
 grow[1] = 10;
@@ -83,26 +83,26 @@ if ( grow[2] != 11 ) print("badref4");
 function allocArray()
 {
 
-	a = { 4, 2, 3, 4, 5 };
-	if ( a[2] != 3 )
+	_a = { 4, 2, 3, 4, 5 };
+	if ( _a[2] != 3 )
 	{
 		print("F bad a1");
 	}
 
-	b[] = { 4, 2, 3, 4, 5 };
-	if ( b[2] != 3 )
+	_b[] = { 4, 2, 3, 4, 5 };
+	if ( _b[2] != 3 )
 	{
 		print("F bad b1");
 	}
 
-	c[100] = { 4, 2, 3, 4, 5 };
-	if ( c[2] != 3 )
+	_c[100] = { 4, 2, 3, 4, 5 };
+	if ( _c[2] != 3 )
 	{
 		print("F bad c1");
 	}
 
-	d[1] = { 4, 2, 3, 4, 5 };
-	if ( d[2] != 3 )
+	_d[1] = { 4, 2, 3, 4, 5 };
+	if ( _d[2] != 3 )
 	{
 		print("F bad d1");
 	}
@@ -161,17 +161,17 @@ function allocArray()
 		}
 	}
 	
-	for( ::gi=0; ::gi<50; ++::gi )
+	for( ::ggi=0; ::ggi<50; ++::ggi )
 	{
-		if ( ac[::gi] != ::gi+1 )
+		if ( ac[::ggi] != ::ggi+1 )
 		{
 			print( "oops_LG" );
 		}
 	}
 
-	for( ::gi=0; ::gi<50; ++::gi )
+	for( ::ggi=0; ::ggi<50; ++::ggi )
 	{
-		if ( ::a[::gi] != ::gi+1 )
+		if ( ::a[::ggi] != ::ggi+1 )
 		{
 			print( "oops_GG" );
 		}

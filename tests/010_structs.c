@@ -1,71 +1,30 @@
-/*~
-123
-bob
-23
-0
-321
-2
-hello
-0
-hi2
-<<>>
-4
-20
-ok2
-1.5
-hello
-1.5
-1.5
-long string
-long string
-2
-0
-8
-9
-10
-30
-45
-60
-8
-321
-2
-23
-321
-2
-122.3
-713.398
-~*/
+/*~ ~*/
 
 instance2 = new a
 {
 	123,
 	42,
+	0,
 	"bob",
-	in.a,
 	4 + 5,
 };
 
-print( instance2.p );
-
-print( instance2.a );
+if ( instance2.a != "bob" ) print("err 2");
+if ( instance2.p != 123 ) print("err 1");
 
 instance3 = new a()
 {
 };
 
-print( instance3.p );
-print( instance3.a );
-
+if ( instance3.p != 23 ) print( "err 3" );
 
 instance4 = new a
 {
 	321
 };
 
-print( instance4.p );
-print( instance4.h );
-
-
+if ( instance4.p != 321 ) print ("err 4" );
+if ( instance4.h != 2 ) print( "err 5" );
 
 
 instance0 = new a();
@@ -75,48 +34,48 @@ instance0 = new a();
 instance0 = new a();
 
 
-print( instance0.b );
-print( instance0.v );
+if ( instance0.b != "hello" ) print( "err 6" );
 
 g = "hi2";
 instance0.p = g;
-print( instance0.p );
+if ( instance0.p != "hi2" ) print("err 7");
 instance0.p = "1";
 instance0.p = "2";
-print( instance0.p = "<<>>" );
+if ( (instance0.p = "<<>>") != "<<>>" )  print("err 8");
 instance0.p = "4";
-print( instance0.p );
+if ( instance0.p != "4" )  print("err 9");
+
 
 instance0.p = 20;
-print( instance0.p );
+if ( instance0.p != 20 )  print("err 10");
 instance0.p = "ok2";
-print( instance0.p );
+if ( instance0.p != "ok2" )  print("err 11");
 instance0.p = 1.5;
-print( instance0.p );
-print( instance0.b );
-print( instance0.b = instance0.p );
-print( instance0.b );
-instance0.p = "long string";
-print( instance0.b = instance0.p );
-print( instance0.b );
 
-print( 0b010 );
-print( 0b );
+if ( instance0.p != 1.5 ) print("err 12");
+if ( instance0.b != "hello" ) print("err 13");
+
+if ((instance0.b = instance0.p) != 1.5) print("err 14");
+if ( instance0.b != 1.5)  print("err 15");
+
+instance0.p = "long string";
+if ( (instance0.b = instance0.p) != "long string" ) print("err 15");
+if ( instance0.b != "long string") print("err 16");
+
 
 
 j[30] = { 8, 9 };
-print( j[0] );
-print( j[1] );
+if ( j[0] != 8 ) print("err 17");
+if ( j[1] != 9 ) print("err 18");
 
 
-a = 10;
-b = 20;
-j[10] = { a, b + a, 45, 50, 77, 60 };
-print( j[0] );
-print( j[1] );
-print( j[2] );
-print( j[5] );
-
+aa = 10;
+bb = 20;
+j[10] = { aa, bb + aa, 45, 50, 77, 60 };
+if ( j[0] != 10 )print("err 19");
+if ( j[1] != 30 )print("err 20");
+if ( j[2] != 45 )print("err 21");
+if ( j[5] != 60 )print("err 22");
 
 in = new a;
 
@@ -126,7 +85,7 @@ if ( in.a == in.b && 1 ) print("G1");
 if ( in.a != in.a && 1 ) print("G2");
 if ( in.a < in.b && 1 )  print("G3");
 if ( in.b > in.a && 1 )  print("G4");
-if ( in.b >= a && 1 ) print("G5");
+if ( in.b >= aa && 1 ) print("G5");
 if ( in.a <= in.b && 1 ) print("G6");
 
 localIf();
@@ -145,7 +104,8 @@ if ( n != n )
 }
 
 in.a = 2;
-print( in.a + in.a + in.a + in.a );
+
+if ( in.a + in.a + in.a + in.a != 8 ) print("err 23");
 
 
 struct Bob
@@ -170,14 +130,14 @@ instance2 = new a
 	4 + 5,
 };
 
-print( instance2.p );
-print( instance2.a );
+if ( instance2.p != 321 ) print("err 24");
+if ( instance2.a != 2 ) print("err 25");
 
 instance3 = new a
 {
 };
 
-print( instance3.p );
+if ( instance3.p != 23 ) print("err 26");
 
 
 instance4 = new a
@@ -185,8 +145,8 @@ instance4 = new a
 	321
 };
 
-print( instance4.p );
-print( instance4.h );
+if ( instance4.p != 321) print("err 27");
+if ( instance4.h != 2 ) print("err 28");
 
 
 function update_particle(p)
@@ -253,6 +213,6 @@ for ( i = 0; i < 500; ++i )
 update_several_timesI( particles, 50 );
 update_several_times( particles, 50 );
 
-print( particles[10].x );
-print( particles[499].y );
+if ( particles[10].x != 122.299881 ) print("err 29");
+if ( particles[499].y != 713.397705 ) print("err 30");
 

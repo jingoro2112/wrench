@@ -23,93 +23,43 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-WRValue* WRValue::asValueArray( int* len )
+void* WRValue::array( unsigned int* len, char* arrayType ) const
 {
 	if ( type == WR_REF )
 	{
-		return r->asValueArray(len);
+		return r->array( len, arrayType );
 	}
 
-	if ( (xtype != WR_EX_ARRAY) || ((va->m_type) != SV_VALUE) )
+	if ( xtype != WR_EX_ARRAY )
 	{
 		return 0;
 	}
 
-	if ( len )
+	if (arrayType )
 	{
-		*len = (int)va->m_size;
+		*arrayType = va->m_type;
 	}
 
-	return va->m_Vdata;
+	if ( len )
+	{
+		*len = va->m_size;
+	}
+
+	return va->m_data;
 }
 
 //------------------------------------------------------------------------------
-unsigned char* WRValue::asCharArray( int* len )
+char* WRValue::c_str( unsigned int* len ) const
 {
-	if ( type == WR_REF )
-	{
-		return r->asCharArray(len);
-	}
-
-	if ( (xtype != WR_EX_ARRAY) || ((va->m_type) != SV_CHAR) )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-
-	return (unsigned char*)va->m_data;
-}
-
-//------------------------------------------------------------------------------
-int* WRValue::asIntArray( int* len )
-{
-	if ( type == WR_REF )
-	{
-		return r->asIntArray(len);
-	}
-
-	if ( (xtype != WR_EX_ARRAY) || ((va->m_type) != SV_INT) )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-
-	return (int*)va->m_data;
-}
-
-//------------------------------------------------------------------------------
-float* WRValue::asFloatArray( int* len )
-{
-	if ( type == WR_REF )
-	{
-		return r->asFloatArray(len);
-	}
-
-	if ( (xtype != WR_EX_ARRAY) || ((va->m_type) != SV_FLOAT) )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-
-	return (float*)va->m_data;
+	char arrayType;
+	void* ret = array( len, &arrayType );
+	return (arrayType == SV_CHAR) ? (char*)ret : 0;
 }
 
 //------------------------------------------------------------------------------
 void growValueArray( WRValue* v, int newSize )
 {
-	WRGCArray* newArray = new WRGCArray( newSize, (WRGCArrayType)v->va->m_type );
+	WRGCObject* newArray = new WRGCObject( newSize, (WRGCObjectType)v->va->m_type );
 	
 	newArray->m_next = v->va->m_next;
 	v->va->m_next = newArray;
@@ -868,7 +818,7 @@ X_INT_BINARY( wr_AND, & );
 X_INT_BINARY( wr_OR, | );
 X_INT_BINARY( wr_XOR, ^ );
 
-static bool wr_CompareArrays( WRGCArray* a, WRGCArray* b )
+static bool wr_CompareArrays( WRGCObject* a, WRGCObject* b )
 {
 	if ( (a->m_size == b->m_size) && (a->m_type == b->m_type) )
 	{
@@ -1282,7 +1232,7 @@ X_UNARY_POST( wr_postdec, -- );
 
 
 //------------------------------------------------------------------------------
-static void doIndexHash_X( WRValue* value, WRValue* target, uint32_t hash ) { }
+static void doIndexHash_X( WRValue* value, WRValue* target, uint32_t hash ) { target->init(); }
 static void doIndexHash_R( WRValue* value, WRValue* target, uint32_t hash ) { wr_IndexHash[ value->r->type ]( value->r, target, hash ); }
 static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
 {

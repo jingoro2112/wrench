@@ -68,20 +68,12 @@ This will consume 8 bytes per stack entry on a 32-bit system, 16 on 64.
 /***********************************************************************/
 
 /************************************************************************
-.asString() uses sprintf from stdio. If you don't want to
-include or use that library then undefine this and that method will no
-longer function
-*/
-#define WRENCH_SPRINTF_OPERATIONS
-/***********************************************************************/
-
-/************************************************************************
 set this to try compiling sys/stat.h for fstat and file operations
 */
 #define WRENCH_STD_FILE
 /***********************************************************************/
 
-#define WRENCH_VERSION 140
+#define WRENCH_VERSION 150
 
 #include <stdint.h>
 #include <stddef.h>
@@ -175,10 +167,14 @@ typedef void (*WR_C_CALLBACK)(WRState* w, const WRValue* argv, const int argn, W
 // IMPORTANT: The values passed may be references (keepin' it real) so
 // always use the getters inside the WRValue class:
 
-// int: WRValue.asInt();
-// float: WRValue.asFloat();
-// string: WRValue.asString();
-// binary: WRValue.asData( unsigned int* size ); 
+// int:    .asInt();
+// float:  .asFloat();
+// binary: .array( unsigned int* size, char* type );
+// string: .c_str( unsigned int* len );
+
+// this will do its pest to represent the value as a string to the
+// supplied buffer, len is maximum size allowed
+// string: .asString(char* string, size_t len )
 
 // w:        state to register with (will be available to all contexts)
 // name:     name of the function
@@ -318,6 +314,10 @@ enum WRError
 	WR_ERR_usr_data_template_not_found,
 	WR_ERR_usr_data_refernce_not_found,
 
+	WR_ERR_bad_goto_label,
+	WR_ERR_bad_goto_location,
+	WR_ERR_goto_target_not_found,
+
 	WR_warning_enums_follow,
 
 	WR_WARN_c_function_not_found,
@@ -370,65 +370,14 @@ enum WRExType
 
 //------------------------------------------------------------------------------
 class WRContainerData;
-class WRGCArray;
+class WRGCObject;
 struct WRValue
 {
 	// never reference the data members directly, they are unions and
 	// bad things will happen. Always access them with one of these
 	// methods
-	int asInt() const
-	{
-		// this should be faster than a switch by checking the most common cases first
-		if ( type == WR_INT )
-		{
-			return i;
-		}
-		if ( type == WR_REF )
-		{
-			return r->asInt();
-		}
-		if ( type == WR_FLOAT )
-		{
-			return (int)f;
-		}
-		if ( type == WR_EX )
-		{
-			return IS_REFARRAY(xtype) ? arrayValueAsInt() : 0;
-		}
-		return i;
-
-		// but the switch looks like this:
-/* 
-		switch( type )
-		{
-			case WR_REF: return r->asInt();
-			case WR_EX: IS_REFARRAY(return xtype) ? arrayValueAsInt() : 0;
-			case WR_FLOAT: return (int)f;
-			default: return i;
-		}
-*/
-	}
-	
-	float asFloat() const
-	{
-		if ( type == WR_FLOAT )
-		{
-			return f;
-		}
-		if ( type == WR_REF )
-		{
-			return r->asFloat();
-		}
-		if ( type == WR_INT )
-		{
-			return (float)i;
-		}
-		if ( type == WR_EX )
-		{
-			return IS_REFARRAY(xtype) ? arrayValueAsFloat() : 0;
-		}
-		return f;
-	}
+	int asInt() const;
+	float asFloat() const;
 	
 	// string: must point to a buffer long enough to contain at least len bytes.
 	// the pointer will be passed back
@@ -436,22 +385,20 @@ struct WRValue
 
 	// return a raw pointer to the data array if this IS one, otherwise
 	// return null
-	const unsigned char* asData( unsigned int* len ) const; 
+	void* array( unsigned int* len, char* arrayType =0 ) const; 
+	char* c_str( unsigned int* len =0 ) const; 
 
 	//WRValueType getType() { return enumType == WR_REF ? r->getType() : enumType; }
 
-	WRValue* asValueArray( int* len =0 );
-	unsigned char* asCharArray( int* len =0 );
-	int* asIntArray( int* len =0 );
-	float* asFloatArray( int* len =0 );
+//	WRValue* valueArray( int* len =0 );
+//	char* charArray( int* len =0 );
+//	int* intArray( int* len =0 );
+//	float* floatArray( int* len =0 );
 
 	inline void init() { p = 0; p2 = 0; } // call upon first create or when you're sure no memory is hanging from one
 
 //private: // is what this SHOULD be.. but that's impractical since the
-		   // VM is not an object that can be friended. don't mess
-		   // around here unless you really feel comfortable with the
-		   // internal workings of wrench.. in fact.. same goes for
-		   // above here :)
+		   // VM is not an object that can be friended.
 		   
 	void free(); // treat this object as if it owns any memory allocated on u or va pointer
 	int arrayValueAsInt() const;
@@ -470,7 +417,7 @@ struct WRValue
 	
 	inline ~WRValue()
 	{
-		if (xtype)
+		if ( xtype )
 		{
 			free(); 
 		}
@@ -483,7 +430,7 @@ struct WRValue
 		float f;
 		const void* p;
 		WRValue* r;
-		WRGCArray* va;
+		WRGCObject* va;
 		WRContainerData* u;
 	};
 
@@ -492,7 +439,7 @@ struct WRValue
 		struct
 		{
 			uint8_t type; // carries the type
-			uint8_t padL;
+			uint8_t padL; // pad carries an array pointer (up to 2megs using bottom 4 bits of xtype)
 			uint8_t padH;
 			uint8_t xtype; // carries the extra type (if it exists)
 		};
@@ -524,6 +471,7 @@ struct WRValue
 
 #ifndef WRENCH_COMBINED
 #include "utils.h"
+#include "gc_object.h"
 #include "container_data.h"
 #include "vm.h"
 #include "opcode.h"

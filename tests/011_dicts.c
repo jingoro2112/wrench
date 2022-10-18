@@ -36,6 +36,8 @@ table[6] = "9";
 table[6] = "9";
 table[6] = "10";
 if ( table[6] != "10" ) print( "bad 6" );
+
+
 table[7] = "10";
 table[8] = "10";
 table[9] = "10";
@@ -43,7 +45,11 @@ table["a"] = "10";
 table["b"] = "10";
 table["c"] = "10";
 table["d"] = "10";
+if ( table[4] != "4" ) { print( "bad 4d" ); print(table[4]); }
+goto j;
+j:
 table["e"] = "10";
+if ( table[4] != "4" ) { print( "bad 4d" ); print(table[4]); }
 table["f"] = "10";
 table["g"] = "10";
 table["h"] = "10";
@@ -58,7 +64,7 @@ if ( table.m != "10" ) print( "bad m" );
 if ( table["1"] != 1 ) print( "bad 1a" );
 if ( table["2"] != 2 ) print( "bad 2b" );
 if ( table[3] != "3" ) print( "bad 3c" );
-if ( table[4] != "4" ) print( "bad 4d" );
+if ( table[4] != "4" ) { print( "bad 4d" ); print(table[4]); }
 if ( table[5] != 0 ) print( "bad 5e" );
 
 if ( table["7"] != "11" ) print( "bad 71" );

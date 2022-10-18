@@ -1,3 +1,8 @@
+1.5.0 -------------------------------------------------------------------------
+- adding goto. sometimes it's just the right solution
+- added optimized int/float to string so no more dependency on std/sprintf
+- added optimized sprintf for string library
+
 10/15/22 1.4.0 -------------------------------------------------------------------------
 - removed unnused opcode
 - fixed struct/param bug

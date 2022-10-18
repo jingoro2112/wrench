@@ -68,6 +68,7 @@ void blobToHeader( WRstr const& blob, WRstr const& variableName, WRstr& header )
 const char* sourceOrder[]=
 {
 	"/utils.h",
+	"/gc_object.h",
 	"/container_data.h",
 	"/vm.h",
 	"/opcode.h",
@@ -80,7 +81,7 @@ const char* sourceOrder[]=
 	"/std.cpp",
 	"/std_io.cpp",
 	"/std_string.cpp",
-	"/dstring.cpp",
+	"/std_math.cpp",
 	""
 };
 

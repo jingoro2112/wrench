@@ -235,13 +235,6 @@ const uint16_t c_primeTable[] =
 };
 */
 
-#include <stdarg.h>
-struct WRValue;
-int dsprintf( char* buf, const char* fmt, ... );
-int dsprintfEx( char *buf, const char *fmt, va_list list );
-int sprintfWRV( char *out, const char *fmt, WRValue* list, int num );
-
-
 //------------------------------------------------------------------------------
 template <class T> class WRHashTable
 {
@@ -373,8 +366,344 @@ private:
 	Node* m_list;
 };
 
+//------------------------------------------------------------------------------
+enum WRGCObjectType
+{
+	SV_CHAR = 0x02,
+	SV_INT = 0x04,
+	SV_FLOAT = 0x06,
+
+	SV_VALUE = 0x01,
+	SV_HASH_TABLE = 0x03,
+};
+
+#define INIT_AS_ARRAY      (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
+#define INIT_AS_USR        (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
+#define INIT_AS_REFARRAY   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_REFARRAY<<24))
+#define INIT_AS_STRUCT     (((uint32_t)WR_EX) | ((uint32_t)WR_EX_STRUCT<<24))
+#define INIT_AS_HASH_TABLE (((uint32_t)WR_EX) | ((uint32_t)WR_EX_HASH_TABLE<<24))
+
+#define INIT_AS_REF      WR_REF
+#define INIT_AS_INT      WR_INT
+#define INIT_AS_FLOAT    WR_FLOAT
+
+#define IS_EXARRAY_TYPE(P) ((P)&0x80)
+
+#define ARRAY_ELEMENT_FROM_P2(P) (((P)&0x00FFFF00) >> 8)
+#define ARRAY_ELEMENT_TO_P2(P,E) { (P)->padL = (E); (P)->padH  = ((E)>>8); (P)->xtype |= (((E)>>16)&0x1F); }
+
+
 #endif
 /*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+#ifndef _GC_ARRAY_H
+#define _GC_ARRAY_H
+
+#include "wrench.h"
+
+#include <assert.h>
+
+//------------------------------------------------------------------------------
+class WRGCObject
+{
+public:
+
+	char m_type;
+	char m_preAllocated;
+	uint16_t m_mod;
+	uint32_t m_size;
+
+	union
+	{
+		uint32_t* m_hashTable;
+		const unsigned char* m_ROMHashTable;
+	};
+
+	WRGCObject* m_next; // for gc
+
+	union
+	{
+		const void* m_constData;
+		void* m_data;
+		int* m_Idata;
+		unsigned char* m_Cdata;
+		WRValue* m_Vdata;
+		float* m_Fdata;
+	};
+
+	~WRGCObject() { clear(); }
+
+	//------------------------------------------------------------------------------
+	void* growHash( const uint32_t hash )
+	{
+		// there was a collision with the passed hash, grow until the
+		// collision dissapears
+		
+		int t = 0;
+		for( ; c_primeTable[t]; ++t )
+		{
+			if ( c_primeTable[t] == m_mod )
+			{
+				++t;
+				break;
+			}
+		}
+
+		for(;;)
+		{
+			int newMod = c_primeTable[t];
+			if ( newMod == 0 )
+			{
+				// could not grow large enough to avoid collision, give up.
+				return m_Vdata + (hash % m_mod);
+			}
+
+			uint32_t* proposed = new uint32_t[newMod];
+			memset( proposed, 0, newMod*sizeof(uint32_t) );
+
+			proposed[ hash % newMod ] = hash;
+
+			int h = 0;
+			for( ; h<m_mod; ++h )
+			{
+				if ( m_hashTable[h] == 0 )
+				{
+					continue;
+				}
+
+				int newEntry = m_hashTable[h] % newMod;
+				if ( proposed[newEntry] == 0 )
+				{
+					proposed[newEntry] = m_hashTable[h];
+				}
+				else
+				{
+					delete[] proposed;
+					++t;
+					break;
+				}
+			}
+
+			if ( h < m_mod )
+			{
+				continue;
+			}
+
+			WRValue* newValues = new WRValue[ newMod ];
+			memset( (char*)newValues, 0, newMod*sizeof(WRValue) );
+
+			for( int v=0; v<m_mod; ++v )
+			{
+				if (!m_hashTable[v])
+				{
+					continue;
+				}
+				
+				WRValue* V1 = newValues + (m_hashTable[v] % newMod);
+				WRValue* V2 = m_Vdata + (m_hashTable[v] % m_mod);
+				V1->p2 = V2->p2;
+				V2->p2 = INIT_AS_INT;
+				V1->p = V2->p;
+			}
+
+			m_mod = newMod;
+			m_size = m_mod;
+			delete[] m_Vdata;
+			delete[] m_hashTable;
+			m_hashTable = proposed;
+			m_Vdata = newValues;
+
+			return m_Vdata + (hash % m_mod);
+		}
+	}
+	
+	//------------------------------------------------------------------------------
+	WRGCObject( const unsigned int size,
+				const WRGCObjectType type,
+				const void* preAlloc =0 )
+	{
+		m_type = (char)type;
+		m_next = 0;
+		m_size = size;
+		if ( preAlloc )
+		{
+			m_preAllocated = 1;
+			m_constData = preAlloc;
+		}
+		else
+		{
+			m_preAllocated = 0;
+			switch( m_type )
+			{
+				case SV_VALUE: { m_Vdata = new WRValue[size]; break; }
+				case SV_CHAR: { m_Cdata = new unsigned char[size+1]; m_Cdata[size]=0; break; }
+				case SV_INT: { m_Idata = new int[size]; break; }
+				case SV_FLOAT: { m_Fdata = new float[size]; break; }
+				case SV_HASH_TABLE:
+				{
+					m_mod = c_primeTable[0];
+					m_hashTable = new uint32_t[m_mod];
+					memset( m_hashTable, 0, m_mod*sizeof(uint32_t) );
+					m_size = m_mod;
+					m_Vdata = new WRValue[m_size];
+					memset( (char*)m_Vdata, 0, m_size*sizeof(WRValue) );
+					break;
+				}
+			}
+		}
+	}
+
+	//------------------------------------------------------------------------------
+	void clear()
+	{
+		if ( m_preAllocated )
+		{
+			return;
+		}
+
+		switch( m_type )
+		{
+			case SV_HASH_TABLE: delete[] m_hashTable; m_hashTable = 0; // intentionally fall through:
+			case SV_VALUE: delete[] m_Vdata; break; 
+
+			case SV_CHAR: { delete[] m_Cdata; break; }
+			case SV_INT: { delete[] m_Idata; break; }
+			case SV_FLOAT: { delete[] m_Fdata; break; }
+		}
+
+		m_data = 0;
+	}
+
+	//------------------------------------------------------------------------------
+	WRGCObject& operator= ( WRGCObject& A )
+	{
+		clear();
+
+		m_preAllocated = 0;
+
+		m_mod = A.m_mod;
+		m_size = A.m_size;
+		m_ROMHashTable = A.m_ROMHashTable;
+
+		if ( !m_next )
+		{
+			m_next = A.m_next;
+			A.m_next = this;
+		}
+
+		switch( (m_type = A.m_type) )
+		{
+			case SV_HASH_TABLE:
+			case SV_VALUE:
+			{
+				m_data = new WRValue[m_size];
+				m_hashTable = new uint32_t[m_mod];
+				memcpy( m_hashTable, A.m_hashTable, m_mod*sizeof(uint32_t) );
+				for( unsigned int i=0; i<m_size; ++i )
+				{
+					((WRValue*)m_data)[i] = ((WRValue*)A.m_data)[i];
+				}
+				break;
+			}
+
+			case SV_CHAR:
+			{
+				m_Cdata = new unsigned char[m_size+1];
+				m_Cdata[m_size] = 0;
+				memcpy( (char*)m_data, (char*)A.m_data, m_size );
+				break;
+			}
+			case SV_INT:
+			{
+				m_Idata = new int[m_size];
+				memcpy( (char*)m_data, (char*)A.m_data, m_size*sizeof(int) );
+				break;
+			}
+
+			case SV_FLOAT:
+			{
+				m_Fdata = new float[m_size];
+				memcpy( (char*)m_data, (char*)A.m_data, m_size*sizeof(float) );
+				break;
+			}
+		}
+
+		return *this;
+	}
+
+	void* operator[]( const unsigned int l ) { return get(l); }
+
+	//------------------------------------------------------------------------------
+	void* get( const uint32_t l )
+	{
+		int s = l < m_size ? l : m_size - 1;
+
+		switch( m_type )
+		{
+			case SV_VALUE: { return (void*)(m_Vdata + s); }
+			case SV_CHAR: { return (void*)(m_Cdata + s); }
+			case SV_INT: { return  (void*)(m_Idata + s); }
+			case SV_FLOAT: { return (void*)(m_Fdata + s); }
+
+			case SV_HASH_TABLE:
+			{
+
+				
+				// zero remains "null hash" by scrambling. Which means
+				// a hash of "0x55555555" will break the system. If you
+				// are reading this comment then I'm sorry, the only
+				// way out is to re-architect so this hash is not
+				// generated by your program
+				assert( l != 0x55555555 );
+
+
+				
+				uint32_t hash = l ^ 0x55555555; 
+				uint32_t index = hash % m_mod;
+
+				if (m_hashTable[index] == hash) // its us
+				{
+					return (void*)(m_Vdata + index);
+				}
+				else if ( m_hashTable[index] == 0 ) // empty? claim it
+				{
+					m_hashTable[index] = hash;
+					return (void*)(m_Vdata + index);
+				}
+				else
+				{
+					return growHash( hash ); // not empty and not us, there was a collision
+				}
+			}
+
+			default: return 0;
+		}
+	}
+
+private:
+	WRGCObject(WRGCObject& A);
+};
+
+#endif/*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -478,7 +807,6 @@ SOFTWARE.
 #define _VM_H
 /*------------------------------------------------------------------------------*/
 
-
 //------------------------------------------------------------------------------
 struct WRFunction
 {
@@ -502,15 +830,6 @@ struct WRCFunctionCallback
 
 //------------------------------------------------------------------------------
 class WRGCValueArray;
-enum WRGCArrayType
-{
-	SV_CHAR = 0x02,
-	SV_INT = 0x04,
-	SV_FLOAT = 0x06,
-
-	SV_VALUE = 0x01,
-	SV_HASH_TABLE = 0x03,
-};
 
 #define IS_SVA_VALUE_TYPE(V) ((V)->m_type & 0x1)
 
@@ -525,11 +844,11 @@ struct WRContext
 	const unsigned char* bottom;
 	int32_t stopLocation;
 
-	WRGCArray* svAllocated;
+	WRGCObject* svAllocated;
 
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
-	WRGCArray* getSVA( int size, WRGCArrayType type, bool init );
+	WRGCObject* getSVA( int size, WRGCObjectType type, bool init );
 	
 	WRState* w;
 
@@ -556,202 +875,6 @@ struct WRState
 	~WRState();
 };
 
-//------------------------------------------------------------------------------
-class WRGCArray
-{
-public:
-
-	char m_type;
-	char m_preAllocated;
-	uint16_t m_mod;
-	uint32_t m_size;
-
-	union
-	{
-		uint32_t* m_hashTable;
-		const unsigned char* m_ROMHashTable;
-	};
-
-	WRGCArray* m_next; // for gc
-
-	union
-	{
-		const void* m_data;
-		int* m_Idata;
-		unsigned char* m_Cdata;
-		WRValue* m_Vdata;
-		float* m_Fdata;
-	};
-
-	WRGCArray( const unsigned int size,
-			   const WRGCArrayType type,
-			   const void* preAlloc =0 )
-	{
-		m_type = (char)type;
-		m_next = 0;
-		m_size = size;
-		if ( preAlloc )
-		{
-			m_preAllocated = 1;
-			m_data = preAlloc;
-		}
-		else
-		{
-			m_preAllocated = 0;
-			switch( m_type )
-			{
-				case SV_VALUE: { m_Vdata = new WRValue[size]; break; }
-				case SV_CHAR: { m_Cdata = new unsigned char[size]; break; }
-				case SV_INT: { m_Idata = new int[size]; break; }
-				case SV_FLOAT: { m_Fdata = new float[size]; break; }
-				case SV_HASH_TABLE:
-				{
-					m_mod = c_primeTable[0];
-					m_hashTable = new uint32_t[m_mod];
-					memset( m_hashTable, 0, m_mod*sizeof(uint32_t) );
-					m_size = m_mod;
-					m_Vdata = new WRValue[m_size];
-					memset( (char*)m_Vdata, 0, m_size*sizeof(WRValue) );
-					break;
-				}
-			}
-		}
-	}
-
-	void clear()
-	{
-		if ( m_preAllocated )
-		{
-			return;
-		}
-		
-		switch( m_type )
-		{
-			case SV_HASH_TABLE: delete[] m_hashTable; m_hashTable = 0;
-			case SV_VALUE: delete[] m_Vdata; break; 
-						   
-			case SV_CHAR: { delete[] m_Cdata; break; }
-			case SV_INT: { delete[] m_Idata; break; }
-			case SV_FLOAT: { delete[] m_Fdata; break; }
-		}
-
-		m_data = 0;
-	}
-	
-	~WRGCArray() 
-	{
-		clear(); 
-	}
-	
-	void* operator[]( const unsigned int l ) { return get( l ); }
-
-	WRGCArray& operator= ( WRGCArray& A )
-	{
-		clear();
-
-		m_preAllocated = 0;
-
-		m_mod = A.m_mod;
-		m_size = A.m_size;
-		m_ROMHashTable = A.m_ROMHashTable;
-		
-		if ( !m_next )
-		{
-			m_next = A.m_next;
-			A.m_next = this;
-		}
-
-		switch( (m_type = A.m_type) )
-		{
-			case SV_HASH_TABLE:
-			case SV_VALUE:
-			{
-				m_data = new WRValue[m_size];
-				m_hashTable = new uint32_t[m_mod];
-				memcpy( m_hashTable, A.m_hashTable, m_mod*sizeof(uint32_t) );
-				for( unsigned int i=0; i<m_size; ++i )
-				{
-					((WRValue*)m_data)[i] = ((WRValue*)A.m_data)[i];
-				}
-				break;
-			}
-
-			case SV_CHAR:
-			{
-				m_Cdata = new unsigned char[m_size];
-				memcpy( (char*)m_data, (char*)A.m_data, m_size );
-				break;
-			}
-			case SV_INT:
-			{
-				m_Idata = new int[m_size];
-				memcpy( (char*)m_data, (char*)A.m_data, m_size*sizeof(int) );
-				break;
-			}
-
-			case SV_FLOAT:
-			{
-				m_Fdata = new float[m_size];
-				memcpy( (char*)m_data, (char*)A.m_data, m_size*sizeof(float) );
-				break;
-			}
-		}
-		
-		return *this;
-	}
-
-	void* growHash( const uint32_t l );
-	void* get( const uint32_t l )
-	{
-		int s = l < m_size ? l : m_size - 1;
-
-		switch( m_type )
-		{
-			case SV_VALUE: { return (void*)(m_Vdata + s); }
-			case SV_CHAR: { return (void*)(m_Cdata + s); }
-			case SV_INT: { return  (void*)(m_Idata + s); }
-			case SV_FLOAT: { return (void*)(m_Fdata + s); }
-
-			case SV_HASH_TABLE:
-			{
-				uint32_t index = l % m_mod;
-
-				if (m_hashTable[index] == 0)
-				{
-					m_hashTable[index] = l;
-					return (void*)(m_Vdata + index);
-				}
-				else if (m_hashTable[index] == l)
-				{
-					return (void*)(m_Vdata + index);
-				}
-
-				return growHash(l);
-			}
-
-			default: return 0;
-		}
-	}
-
-private:
-	WRGCArray(WRGCArray& A);
-
-};
-
-#define INIT_AS_ARRAY    (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
-#define INIT_AS_USR      (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
-#define INIT_AS_REFARRAY (((uint32_t)WR_EX) | ((uint32_t)WR_EX_REFARRAY<<24))
-#define INIT_AS_STRUCT   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_STRUCT<<24))
-#define INIT_AS_HASH_TABLE (((uint32_t)WR_EX) | ((uint32_t)WR_EX_HASH_TABLE<<24))
-
-#define INIT_AS_REF      WR_REF
-#define INIT_AS_INT      WR_INT
-#define INIT_AS_FLOAT    WR_FLOAT
-
-#define IS_EXARRAY_TYPE(P) ((P)&0x80)
-
-#define ARRAY_ELEMENT_FROM_P2(P) (((P)&0x00FFFF00) >> 8)
-#define ARRAY_ELEMENT_TO_P2(P,E) { (P)->padL = (E); (P)->padH  = ((E)>>8); (P)->xtype |= (((E)>>16)&0x1F); }
 
 void wr_arrayToValue( const WRValue* array, WRValue* value );
 void wr_intValueToArray( const WRValue* array, int32_t I );
@@ -871,6 +994,7 @@ enum WROpcode
 	O_AssignToHashTableAndPop,
 
 	O_PopOne,
+	O_ReturnZero,
 	O_Return,
 	O_Stop,
 
@@ -1720,8 +1844,8 @@ const WROperation c_operations[] =
 	{ "@[]",  2, O_Index,               true,  WR_OPER_POST, O_LAST },
 	{ "@init", 2, O_Index,              true,  WR_OPER_POST, O_LAST },
 
-	{ "._count", 2, O_CountOf,           true,  WR_OPER_POST, O_LAST },
-	{ "._hash", 2, O_HashOf,           true,  WR_OPER_POST, O_LAST },
+	{ "._count", 2, O_CountOf,          true,  WR_OPER_POST, O_LAST },
+	{ "._hash", 2, O_HashOf,            true,  WR_OPER_POST, O_LAST },
 	
 	{ 0, 0, O_LAST, false, WR_OPER_PRE, O_LAST },
 };
@@ -1757,8 +1881,16 @@ struct BytecodeJumpOffset
 {
 	int offset;
 	WRarray<int> references;
+	uint32_t gotoHash;
 	
-	BytecodeJumpOffset() : offset(0) {}
+	BytecodeJumpOffset() : offset(0), gotoHash(0) {}
+};
+
+//------------------------------------------------------------------------------
+struct GotoSource
+{
+	uint32_t hash;
+	int offset;
 };
 
 //------------------------------------------------------------------------------
@@ -1774,6 +1906,7 @@ struct WRBytecode
 	void invalidateOpcodeCache() { opcodes.clear(); }
 	
 	WRarray<BytecodeJumpOffset> jumpOffsetTargets;
+	WRarray<GotoSource> gotoSource;
 	
 	void clear() { all.clear(); opcodes.clear(); localSpace.clear(); jumpOffsetTargets.clear(); }
 };
@@ -2104,6 +2237,7 @@ const char* c_reserved[] =
 	"while",
 	"new",
 	"struct",
+	"goto",
 	""
 };
 
@@ -2935,7 +3069,14 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 		--o;
 		unsigned int a = bytecode.all.size() - 1;
 
-		if ( opcode == O_CompareEQ && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		if ( opcode == O_Return
+			 && bytecode.opcodes[o] == O_LiteralZero )
+		{
+			bytecode.all[a] = O_ReturnZero;
+			bytecode.opcodes[o] = O_ReturnZero;
+			return;
+		}
+		else if ( opcode == O_CompareEQ && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
 		{
 			bytecode.all[ a - 3 ] = O_LLCompareEQ;
 			bytecode.all[ a - 1 ] = bytecode.all[ a ];
@@ -3851,8 +3992,6 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 }
 
 //------------------------------------------------------------------------------
-// add a point to jump TO and return a list that should be filled with
-// opcode + where to jump FROM
 int WRCompilationContext::addRelativeJumpTarget( WRBytecode& bytecode )
 {
 	bytecode.jumpOffsetTargets.append().references.clear();
@@ -4165,6 +4304,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 		 && bytecode.opcodes.size() > 0
 		 && addMe.opcodes.size() == 1
 		 && addMe.all.size() > 2
+		 && addMe.gotoSource.count() == 0
 		 && addMe.opcodes[0] == O_IndexLiteral16
 		 && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal )
 	{
@@ -4181,6 +4321,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 			  && bytecode.opcodes.size() > 0
 			  && addMe.opcodes.size() == 1
 			  && addMe.all.size() > 2
+			  && addMe.gotoSource.count() == 0
 			  && addMe.opcodes[0] == O_IndexLiteral16
 			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal )
 	{
@@ -4197,6 +4338,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 			  && bytecode.opcodes.size() > 0
 			  && addMe.opcodes.size() == 1
 			  && addMe.all.size() > 1
+			  && addMe.gotoSource.count() == 0
 			  && addMe.opcodes[0] == O_IndexLiteral8
 			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal )
 	{
@@ -4213,6 +4355,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 			  && bytecode.opcodes.size() > 0
 			  && addMe.opcodes.size() == 1
 			  && addMe.all.size() > 1
+			  && addMe.gotoSource.count() == 0
 			  && addMe.opcodes[0] == O_IndexLiteral8
 			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal )
 	{
@@ -4227,6 +4370,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 	}
 	else if ( bytecode.all.size() > 0
 			  && addMe.opcodes.size() == 2
+			  && addMe.gotoSource.count() == 0
 			  && addMe.all.size() == 3
 			  && addMe.opcodes[1] == O_Index )
 	{
@@ -4403,6 +4547,14 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 		}
 	}
 
+	// add the goto targets, making sure to offset it into the new block properly
+	for( unsigned int u=0; u<addMe.gotoSource.count(); ++u )
+	{
+		GotoSource* G = &bytecode.gotoSource.append();
+		G->hash = addMe.gotoSource[u].hash;
+		G->offset = addMe.gotoSource[u].offset + bytecode.all.size();
+	}
+
 	bytecode.all += addMe.all;
 	bytecode.opcodes += addMe.opcodes;
 }
@@ -4466,9 +4618,9 @@ int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token,
 		assert( !addOnly );
 		return addGlobalSpaceLoad( bytecode, token );
 	}
-	
-	uint32_t hash = wr_hash( token, token.size() );
 
+	uint32_t hash = wr_hashStr(token);
+	
 	unsigned int i=0;
 		
 	for( ; i<bytecode.localSpace.count(); ++i )
@@ -4481,9 +4633,25 @@ int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token,
 
 	if ( i >= bytecode.localSpace.count() && !addOnly )
 	{
+		WRstr t2;
+		if (token[0] == ':' && token[1] == ':')
+		{
+			t2 = token;
+		}
+		else
+		{
+			t2.format("::%s", token.c_str());
+		}
+
+		uint32_t ghash = wr_hashStr(t2);
+
+		// was NOT found locally which is possible for a "global" if
+		// the argument list names it, now check global with the global
+		// hash
+
 		for (unsigned int j = 0; j < m_units[0].bytecode.localSpace.count(); ++j)
 		{
-			if (m_units[0].bytecode.localSpace[j].hash == hash)
+			if (m_units[0].bytecode.localSpace[j].hash == ghash)
 			{
 				pushOpcode(bytecode, O_LoadFromGlobal);
 				unsigned char c = j;
@@ -6253,6 +6421,60 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 
 			addRelativeJumpSource( m_units[unitIndex].bytecode, O_RelativeJump, *m_continueTargets.tail() );
 		}
+		else if ( token == "goto" )
+		{
+			if ( !getToken(ex) ) // if we run out of tokens that's fine as long as we were not waiting for a }
+			{
+				m_err = WR_ERR_unexpected_EOF;
+				return false;
+			}
+
+			bool isGlobal;
+			WRstr prefix;
+			if ( !isValidLabel(token, isGlobal, prefix) || isGlobal )
+			{
+				m_err = WR_ERR_bad_goto_label;
+				return false;
+			}
+
+			GotoSource& G = m_units[unitIndex].bytecode.gotoSource.append();
+			G.hash = wr_hashStr( token );
+			G.offset = m_units[unitIndex].bytecode.all.size();
+			pushData( m_units[unitIndex].bytecode, "\0\0\0", 3 );
+
+			if ( !getToken(ex, ";"))
+			{
+				m_err = WR_ERR_unexpected_token;
+				return false;
+			}
+		}
+		else if ( token[token.size() - 1] == ':' )
+		{
+			WRstr substr = token;
+			substr.shave(1);
+			bool isGlobal;
+			WRstr prefix;
+
+			if ( !isValidLabel(substr, isGlobal, prefix) || isGlobal )
+			{
+				m_err = WR_ERR_unexpected_token;
+				return false;
+			}
+			
+			uint32_t hash = wr_hashStr( substr );
+			for( unsigned int i=0; i<m_units[unitIndex].bytecode.jumpOffsetTargets.count(); ++i )
+			{
+				if ( m_units[unitIndex].bytecode.jumpOffsetTargets[i].gotoHash == hash )
+				{
+					m_err = WR_ERR_bad_goto_label;
+					return false;
+				}
+			}
+
+			int index = addRelativeJumpTarget( m_units[unitIndex].bytecode );
+			m_units[unitIndex].bytecode.jumpOffsetTargets[index].gotoHash = hash;
+			m_units[unitIndex].bytecode.jumpOffsetTargets[index].offset = m_units[unitIndex].bytecode.all.size() + 1;
+		}
 		else
 		{
 			WRExpression nex( m_units[unitIndex].bytecode.localSpace);
@@ -6357,14 +6579,46 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 #ifdef _DUMP
 		streamDump( m_units[u].bytecode.all );
 #endif
+
 		if ( u > 0 ) // for the non-zero unit fill location into the jump table
 		{
 			int32_t offset = code.size();
 			pack32( offset, code.p_str(m_units[u].offsetInBytecode) );
 		}
 
-		int base = code.size();
+		// fill in relative jumps for the gotos
+		for( unsigned int g=0; g<m_units[u].bytecode.gotoSource.count(); ++g )
+		{
+			unsigned int j=0;
+			for( ; j<m_units[u].bytecode.jumpOffsetTargets.count(); j++ )
+			{
+				if ( m_units[u].bytecode.jumpOffsetTargets[j].gotoHash == m_units[u].bytecode.gotoSource[g].hash )
+				{
+					int diff = m_units[u].bytecode.jumpOffsetTargets[j].offset - m_units[u].bytecode.gotoSource[g].offset;
+					diff -= 2;
+					if ( (diff < 128) && (diff > -129) )
+					{
+						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset ) = (unsigned char)O_RelativeJump8;
+						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset + 1 ) = diff;
+					}
+					else
+					{
+						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset ) = (unsigned char)O_RelativeJump;
+						pack16( diff, m_units[u].bytecode.all.p_str(m_units[u].bytecode.gotoSource[g].offset + 1) );
+					}
 
+					break;
+				}
+			}
+
+			if ( j >= m_units[u].bytecode.jumpOffsetTargets.count() )
+			{
+				m_err = WR_ERR_goto_target_not_found;
+				return;
+			}
+		}
+
+		int base = code.size();
 		code.append( m_units[u].bytecode.all, m_units[u].bytecode.all.size() );
 
 		// load new's
@@ -6608,6 +6862,7 @@ const char* c_opcodeName[] =
 	"AssignToHashTableAndPop",
 
 	"PopOne",
+	"ReturnZero",
 	"Return",
 	"Stop",
 
@@ -6900,7 +7155,7 @@ WRContext::~WRContext()
 
 	while( svAllocated )
 	{
-		WRGCArray* next = svAllocated->m_next;
+		WRGCObject* next = svAllocated->m_next;
 		delete svAllocated;
 		svAllocated = next;
 	}
@@ -6939,83 +7194,6 @@ WRState::~WRState()
 }
 
 //------------------------------------------------------------------------------
-void* WRGCArray::growHash( uint32_t hash )
-{
-	int t = 0;
-	for( ; c_primeTable[t]; ++t )
-	{
-		if ( c_primeTable[t] == m_mod )
-		{
-			++t;
-			break;
-		}
-	}
-
-	// otherwise there was a collision, expand the table
-	for(;;)
-	{
-		int newMod = c_primeTable[t];
-		if (newMod == 0)
-		{
-			// could not grow large enough to avoid collision, give up.
-			return m_Vdata + (hash % m_mod);
-		}
-
-		uint32_t* proposed = new uint32_t[newMod];
-		memset( proposed, 0, newMod*sizeof(uint32_t) );
-
-		proposed[ hash % newMod ] = hash;
-
-		int h = 0;
-		for( ; h<m_mod; ++h )
-		{
-			if (m_hashTable[h] == 0)
-			{
-				continue;
-			}
-
-			int newEntry = m_hashTable[h] % newMod;
-			if ( proposed[newEntry] == 0 )
-			{
-				proposed[newEntry] = m_hashTable[h];
-			}
-			else
-			{
-				delete[] proposed;
-				++t;
-				break;
-			}
-		}
-
-		if ( h < m_mod )
-		{
-			continue;
-		}
-
-		WRValue* newValues = new WRValue[ newMod ];
-		memset( (char*)newValues, 0, newMod*sizeof(WRValue) );
-
-		for( int v=0; v<m_mod; ++v )
-		{
-			WRValue* V1 = newValues + (m_hashTable[v] % newMod);
-			WRValue* V2 = m_Vdata + (m_hashTable[v] % m_mod);
-			V1->p2 = V2->p2;
-			V2->p2 = INIT_AS_INT;
-			V1->p = V2->p;
-		}
-
-		m_mod = newMod;
-		m_size = m_mod;
-		delete[] m_Vdata;
-		delete[] m_hashTable;
-		m_hashTable = proposed;
-		m_Vdata = newValues;
-
-		return m_Vdata + (hash % m_mod);
-	}
-}
-
-//------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
 {
 	if ( IS_REFARRAY(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
@@ -7032,7 +7210,7 @@ void WRContext::mark( WRValue* s )
 		return;
 	}
 	
-	WRGCArray* sva = s->va;
+	WRGCObject* sva = s->va;
 	
 	if ( IS_SVA_VALUE_TYPE(sva) )
 	{
@@ -7079,8 +7257,8 @@ void WRContext::gc( WRValue* stackTop )
 	}
 
 	// sweep
-	WRGCArray* current = svAllocated;
-	WRGCArray* prev = 0;
+	WRGCObject* current = svAllocated;
+	WRGCObject* prev = 0;
 	while( current )
 	{
 		// if set, clear it
@@ -7107,9 +7285,9 @@ void WRContext::gc( WRValue* stackTop )
 }
 
 //------------------------------------------------------------------------------
-WRGCArray* WRContext::getSVA( int size, WRGCArrayType type, bool init )
+WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 {
-	WRGCArray* ret = new WRGCArray( size, type );
+	WRGCObject* ret = new WRGCObject( size, type );
 	if ( init )
 	{
 		memset( (char*)ret->m_Cdata, 0, sizeof(WRValue) * size);
@@ -7207,9 +7385,139 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 	w->c_libFunctionRegistry.set( wr_hashStr(signature), function );
 }
 
-#ifdef WRENCH_SPRINTF_OPERATIONS
-#include <stdio.h>
-#endif
+//------------------------------------------------------------------------------
+int WRValue::asInt() const
+{
+	// this should be faster than a switch by checking the most common cases first
+	if ( type == WR_INT )
+	{
+		return i;
+	}
+	if ( type == WR_REF )
+	{
+		return r->asInt();
+	}
+	if ( type == WR_FLOAT )
+	{
+		return (int)f;
+	}
+	if ( type == WR_EX )
+	{
+		return IS_REFARRAY(xtype) ? arrayValueAsInt() : 0;
+	}
+	return i;
+}
+
+//------------------------------------------------------------------------------
+float WRValue::asFloat() const
+{
+	if ( type == WR_FLOAT )
+	{
+		return f;
+	}
+	if ( type == WR_REF )
+	{
+		return r->asFloat();
+	}
+	if ( type == WR_INT )
+	{
+		return (float)i;
+	}
+	if ( type == WR_EX )
+	{
+		return IS_REFARRAY(xtype) ? arrayValueAsFloat() : 0;
+	}
+	return f;
+}
+
+//------------------------------------------------------------------------------
+int wr_itoa( int i, char* string, size_t len )
+{
+	char buf[14];
+	size_t pos = 0;
+	int val;
+	if ( i < 0 )
+	{
+		string[pos++] = '-';
+		val = -i;
+	}
+	else
+	{
+		val = i;
+	}
+
+	int digit = 0;
+	do
+	{
+		buf[digit++] = (val % 10) + '0';
+	} while( val /= 10 );
+
+	--digit;
+
+	for( ; digit>=0 && pos < len; --digit )
+	{
+		string[pos++] = buf[digit];
+	}
+	string[pos] = 0;
+	return pos;
+}
+
+//------------------------------------------------------------------------------
+void wr_ftoa( float f, char* buf, int len )
+{
+	int pos = 0;
+
+	// sign stuff
+	if (f < 0)
+	{
+		f = -f;
+		buf[pos++] = '-';
+	}
+
+	if ( pos > len )
+	{
+		buf[0] = 0;
+		return;
+	}
+
+	// round value according the precision
+	f += 5.f / (float)10e6;
+
+	// integer part...
+	int intPart = (int)f;
+	f -= intPart;
+
+	if ( intPart )
+	{
+		pos += wr_itoa( intPart, buf + pos, len - pos );
+	}
+	else
+	{
+		buf[pos++] = '0';
+	}
+
+	// decimal part place decimal point
+	buf[pos++] = '.';
+	
+	// convert
+	for( int p=0; pos < len && p<5; ++p )
+	{
+		f *= 10.0;
+		char c = (char)f;
+		buf[pos++] = '0' + c;
+		f -= c;
+	}
+
+	for( --pos; buf[pos] == '0' && buf[pos] != '.' ; --pos );
+
+	if ( buf[pos] != '.' )
+	{
+		++pos;
+	}
+	
+	buf[pos] = 0;
+}
+
 //------------------------------------------------------------------------------
 char* WRValue::asString( char* string, size_t len ) const
 {
@@ -7271,43 +7579,23 @@ char* WRValue::asString( char* string, size_t len ) const
 	{
 		switch( type )
 		{
-#ifdef WRENCH_SPRINTF_OPERATIONS
-			case WR_INT: { snprintf( string, len, "%d", i ); break; }
-			case WR_FLOAT: { snprintf( string, len, "%g", f ); break; }
-#else
-			case WR_INT: 
 			case WR_FLOAT:
 			{
-				string[0] = 0;
+				wr_ftoa( f, string, len );
 				break;
 			}
-#endif
+
+			case WR_INT:
+			{
+				wr_itoa( i, string, len );
+				break;
+			}
+
 			case WR_REF: { return r->asString( string, len ); }
 		}
 	}
 	
 	return string;
-}
-
-//------------------------------------------------------------------------------
-const unsigned char* WRValue::asData( unsigned int* len ) const
-{
-	if ( type == WR_REF )
-	{
-		return r->asData( len );
-	}
-
-	if ( (xtype != WR_EX_ARRAY) || (va->m_type != SV_CHAR) )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = va->m_size;
-	}
-
-	return va->m_Cdata;
 }
 
 //------------------------------------------------------------------------------
@@ -7392,6 +7680,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&AssignToHashTableAndPop,
 
 		&&PopOne,
+		&&ReturnZero,
 		&&Return,
 		&&Stop,
 
@@ -7751,10 +8040,9 @@ literalZero:
 				uint16_t len = (((uint16_t)*pc)<<8) | (uint16_t)*(pc + 1);
 				pc += 2;
 				
-				context->gc( stackTop );
+				context->gc( stackTop  );
 				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = context->getSVA( len, SV_CHAR, false );
-
 				memcpy( (unsigned char *)stackTop->va->m_data, pc, len );
 				pc += len;
 				
@@ -7959,7 +8247,7 @@ callFunction:
 						memcpy( (char*)register0, stackTop + *table + 1, count*sizeof(WRValue) );
 					}
 
-					context->gc( ++stackTop );
+					context->gc(++stackTop); // dop this here to take care of any memory the 'new' allocated
 				}
 				else
 				{
@@ -7973,7 +8261,7 @@ callFunction:
 			{
 				register0 = --stackTop;
 				register1 = (stackTop - 1);
-				if ( *pc < register1->va->m_size )
+				if ( !IS_EXARRAY_TYPE(register1->xtype) || *pc < register1->va->m_size )
 				{
 					register1 = register1->va->m_Vdata + *pc++;
 					wr_assign[register1->type<<2|register0->type]( register1, register0 );
@@ -8001,6 +8289,10 @@ callFunction:
 				CONTINUE;
 			}
 
+			CASE(ReturnZero):
+			{
+				(stackTop++)->init();
+			}
 			CASE(Return):
 			{
 				register0 = stackTop - 2;
@@ -9080,7 +9372,7 @@ void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned ch
 {
 	WRValue* val = userData->u->addValue( name );
 	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRGCArray( len, SV_CHAR, data );
+	val->va = new WRGCObject( len, SV_CHAR, data );
 }
 
 //------------------------------------------------------------------------------
@@ -9088,7 +9380,7 @@ void wr_addUserIntArray( WRValue* userData, const char* name, const int* data, c
 {
 	WRValue* val = userData->u->addValue( name );
 	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRGCArray( len, SV_INT, data );
+	val->va = new WRGCObject( len, SV_INT, data );
 }
 
 //------------------------------------------------------------------------------
@@ -9096,7 +9388,7 @@ void wr_addUserFloatArray( WRValue* userData, const char* name, const float* dat
 {
 	WRValue* val = userData->u->addValue( name );
 	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRGCArray( len, SV_FLOAT, data );
+	val->va = new WRGCObject( len, SV_FLOAT, data );
 }
 
 //------------------------------------------------------------------------------
@@ -9133,93 +9425,43 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-WRValue* WRValue::asValueArray( int* len )
+void* WRValue::array( unsigned int* len, char* arrayType ) const
 {
 	if ( type == WR_REF )
 	{
-		return r->asValueArray(len);
+		return r->array( len, arrayType );
 	}
 
-	if ( (xtype != WR_EX_ARRAY) || ((va->m_type) != SV_VALUE) )
+	if ( xtype != WR_EX_ARRAY )
 	{
 		return 0;
 	}
 
-	if ( len )
+	if (arrayType )
 	{
-		*len = (int)va->m_size;
+		*arrayType = va->m_type;
 	}
 
-	return va->m_Vdata;
+	if ( len )
+	{
+		*len = va->m_size;
+	}
+
+	return va->m_data;
 }
 
 //------------------------------------------------------------------------------
-unsigned char* WRValue::asCharArray( int* len )
+char* WRValue::c_str( unsigned int* len ) const
 {
-	if ( type == WR_REF )
-	{
-		return r->asCharArray(len);
-	}
-
-	if ( (xtype != WR_EX_ARRAY) || ((va->m_type) != SV_CHAR) )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-
-	return (unsigned char*)va->m_data;
-}
-
-//------------------------------------------------------------------------------
-int* WRValue::asIntArray( int* len )
-{
-	if ( type == WR_REF )
-	{
-		return r->asIntArray(len);
-	}
-
-	if ( (xtype != WR_EX_ARRAY) || ((va->m_type) != SV_INT) )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-
-	return (int*)va->m_data;
-}
-
-//------------------------------------------------------------------------------
-float* WRValue::asFloatArray( int* len )
-{
-	if ( type == WR_REF )
-	{
-		return r->asFloatArray(len);
-	}
-
-	if ( (xtype != WR_EX_ARRAY) || ((va->m_type) != SV_FLOAT) )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = (int)va->m_size;
-	}
-
-	return (float*)va->m_data;
+	char arrayType;
+	void* ret = array( len, &arrayType );
+	return (arrayType == SV_CHAR) ? (char*)ret : 0;
 }
 
 //------------------------------------------------------------------------------
 void growValueArray( WRValue* v, int newSize )
 {
-	WRGCArray* newArray = new WRGCArray( newSize, (WRGCArrayType)v->va->m_type );
+	WRGCObject* newArray = new WRGCObject( newSize, (WRGCObjectType)v->va->m_type );
 	
 	newArray->m_next = v->va->m_next;
 	v->va->m_next = newArray;
@@ -9978,7 +10220,7 @@ X_INT_BINARY( wr_AND, & );
 X_INT_BINARY( wr_OR, | );
 X_INT_BINARY( wr_XOR, ^ );
 
-static bool wr_CompareArrays( WRGCArray* a, WRGCArray* b )
+static bool wr_CompareArrays( WRGCObject* a, WRGCObject* b )
 {
 	if ( (a->m_size == b->m_size) && (a->m_type == b->m_type) )
 	{
@@ -10392,7 +10634,7 @@ X_UNARY_POST( wr_postdec, -- );
 
 
 //------------------------------------------------------------------------------
-static void doIndexHash_X( WRValue* value, WRValue* target, uint32_t hash ) { }
+static void doIndexHash_X( WRValue* value, WRValue* target, uint32_t hash ) { target->init(); }
 static void doIndexHash_R( WRValue* value, WRValue* target, uint32_t hash ) { wr_IndexHash[ value->r->type ]( value->r, target, hash ); }
 static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
 {
@@ -10668,6 +10910,518 @@ void wr_std_srand( WRValue* stackTop, const int argn, WRContext* c )
 	}
 }
 
+//------------------------------------------------------------------------------
+void wr_loadStdLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "std::rand", wr_std_rand );
+	wr_registerLibraryFunction( w, "std::srand", wr_std_srand );
+}
+
+//------------------------------------------------------------------------------
+void wr_loadAllLibs( WRState* w )
+{
+	wr_loadMathLib( w );
+	wr_loadStdLib( w );
+	wr_loadFileLib( w );
+	wr_loadStringLib( w );
+}
+
+#include "wrench.h"
+
+#ifdef WRENCH_STD_FILE
+#include <stdio.h>
+#include <sys/stat.h>
+#endif
+
+//------------------------------------------------------------------------------
+void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+#ifdef WRENCH_STD_FILE
+	if ( argn == 1 )
+	{
+		char buf[256];
+		WRValue* arg = stackTop - 1;
+		arg->asString( buf, 256 );
+
+#ifdef _WIN32
+		struct _stat sbuf;
+		int ret = _stat( buf, &sbuf );
+#else
+		struct stat sbuf;
+		int ret = stat( buf, &sbuf );
+#endif
+
+		if ( ret == 0 )
+		{
+			FILE *infil = fopen( buf, "rb" );
+			if ( infil )
+			{
+				stackTop->p2 = INIT_AS_ARRAY;
+				stackTop->va = c->getSVA( (int)sbuf.st_size, SV_CHAR, false );
+				if ( fread( stackTop->va->m_Cdata, sbuf.st_size, 1, infil ) != 1 )
+				{
+					stackTop->init();
+					return;
+				}
+			}
+
+			fclose( infil );
+		}
+	}
+#endif
+}
+
+//------------------------------------------------------------------------------
+void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+#ifdef WRENCH_STD_FILE
+	if ( argn == 2 )
+	{
+		WRValue* arg1 = stackTop - 2;
+		unsigned int len;
+		char type;
+		char* data = (char*)((stackTop - 1)->array(&len, &type));
+		if ( !data || type != SV_CHAR )
+		{
+			return;
+		}
+		
+		char buf[256];
+		arg1->asString( buf, 256 );
+
+		FILE *outfil = fopen( buf, "wb" );
+		if ( !outfil )
+		{
+			return;
+		}
+
+		stackTop->i = (int)fwrite( data, len, 1, outfil );
+		fclose( outfil );
+	}
+#endif
+}
+
+//------------------------------------------------------------------------------
+void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+#ifdef WRENCH_STD_FILE
+	char buf[256];
+	int pos = 0;
+	for (;;)
+	{
+		int in = fgetc( stdin );
+
+		if ( in == EOF || in == '\n' || in == '\r' || pos >= 256 )   //@review: this isn't right - need to check for cr and lf
+		{ 
+			stackTop->p2 = INIT_AS_ARRAY;
+			stackTop->va = c->getSVA( pos, SV_CHAR, false );
+			memcpy( stackTop->va->m_Cdata, buf, pos );
+			break;
+		}
+
+		buf[pos++] = in;
+	}
+#endif
+}
+
+//------------------------------------------------------------------------------
+void wr_loadFileLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "file::read", wr_read_file );
+	wr_registerLibraryFunction( w, "file::write", wr_write_file );
+
+	wr_registerLibraryFunction( w, "io::getline", wr_getline );
+}
+
+#include "wrench.h"
+
+#include <string.h>
+
+//------------------------------------------------------------------------------
+int wr_strlenEx( WRValue* val )
+{
+	if ( val->type == WR_REF )
+	{
+		return wr_strlenEx( val->r );
+	}
+
+	return (val->xtype == WR_EX_ARRAY && val->va->m_type == SV_CHAR) ? val->va->m_size :  0;
+}
+
+//------------------------------------------------------------------------------
+void wr_strlen( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->p2 = INIT_AS_INT;
+	stackTop->i = argn == 1 ? wr_strlenEx( stackTop - 1 ) : 0;
+}
+
+//------------------------------------------------------------------------------
+void wr_substr( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+	unsigned int size;
+	const char* str;
+	WRValue* args = stackTop - argn;
+
+	if ( argn < 1 || !(str = args[0].c_str(&size)) )
+	{
+		return;
+	}
+
+	unsigned int start = 0;
+	unsigned int count = size;
+	if ( argn > 1 )
+	{
+		start = args[1].asInt();
+		start = (start > size) ? size : start;
+		count = size - start;
+	}
+
+	if ( argn > 2 )
+	{
+		count = args[2].asInt();
+		if ( (start + count) > size )
+		{
+			count = size - start;
+		}
+	}
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->va = c->getSVA( count, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, str + start, count );
+}
+
+//------------------------------------------------------------------------------
+int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn )
+{
+	enum
+	{
+		zeroPad         = 1<<0,
+		negativeJustify = 1<<1,
+		secondPass      = 1<<2,
+		negativeSign    = 1<<3,
+		parsingSigned   = 1<<4,
+		altRep			= 1<<5,
+	};
+
+	char* out = outbuf;
+	int listPtr = 0;
+
+resetState:
+
+	char padChar = ' ';
+	unsigned char columns = 0;
+	char flags = 0;
+
+	for(;;)
+	{
+		char c = *fmt;
+		fmt++;
+
+		if ( !c )
+		{
+			*out = 0;
+			break;
+		}
+
+		if ( !(secondPass & flags) )
+		{
+			if ( c != '%' ) // literal
+			{
+				*out++ = c;
+			}
+			else // possibly % format specifier
+			{
+				flags |= secondPass;
+			}
+		}
+		else if ( c >= '0' && c <= '9' ) // width
+		{
+			columns *= 10;
+			columns += c - '0';
+			if ( !columns ) // leading zero
+			{
+				flags |= zeroPad;
+				padChar = '0';
+			}
+		}
+		else if ( c == '#' )
+		{
+			flags |= altRep;
+		}
+		else if ( c == '-' ) // left-justify
+		{
+			flags |= negativeJustify;
+		}
+		else if ( c == 'c' ) // character
+		{
+			if ( listPtr < argn )
+			{
+				*out++ = (char)(args[listPtr++].i);
+			}
+			goto resetState;
+		}
+		else if ( c == '%' ) // literal %
+		{
+			*out++ = c;
+			goto resetState;
+		}
+		else // string or integer
+		{
+			char buf[20]; // buffer for integer
+
+			const char *ptr; // pointer to first char of integer
+
+			if ( c == 's' ) // string
+			{
+				buf[0] = 0;
+				if ( listPtr < argn )
+				{
+					ptr = args[listPtr].c_str();
+					if ( !ptr )
+					{
+						return 0;
+					}
+					++listPtr;
+				}
+				else
+				{
+					ptr = buf;
+				}
+
+				padChar = ' '; // in case some joker uses a 0 in their column spec
+
+copyToString:
+
+				// get the string length so it can be formatted, don't
+				// copy it, just count it
+				unsigned char len = 0;
+				for ( ; *ptr; ptr++ )
+				{
+					len++;
+				}
+				
+				ptr -= len;
+				
+				// Right-justify
+				if ( !(flags & negativeJustify) )
+				{
+					for ( ; columns > len; columns-- )
+					{
+						*out++ = padChar;
+					}
+				}
+				
+				if ( flags & negativeSign )
+				{
+					*out++ = '-';
+				}
+
+				if ( flags & altRep || c == 'p' )
+				{
+					*out++ = '0';
+					*out++ = 'x';
+				}
+
+				for (unsigned char l = 0; l < len; ++l )
+				{
+					*out++ = *ptr++;
+				}
+
+				// Left-justify
+				for ( ; columns > len; columns-- )
+				{
+					*out++ = ' ';
+				}
+
+				goto resetState;
+			}
+			else
+			{
+				unsigned char base;
+				unsigned char width;
+				unsigned int val;
+
+				if ( c == 'd' || c == 'i' )
+				{
+					flags |= parsingSigned;
+					goto parseDecimal;
+				}
+				else if ( c == 'u' ) // decimal
+				{
+parseDecimal:
+					base  = 10;
+					width = 10;
+					goto convertBase;
+				}
+				else if ( c == 'b' ) // binary
+				{
+					base  = 2;
+					width = 16;
+					goto convertBase;
+				}
+				else if ( c == 'o' ) // octal
+				{
+					base  = 8;
+					width = 5;
+					goto convertBase;
+				}
+				else if ( c == 'x' || c == 'X' || c == 'p' ) // hexadecimal or pointer (pointer is treated as 'X')
+				{
+					base = 16;
+					width = 4;
+convertBase:
+					if ( listPtr < argn )
+					{
+						val = args[listPtr++].i;
+					}
+					else
+					{
+						val = 0;
+					}
+
+					if ( (flags & parsingSigned) && (val & 0x80000000) )
+					{
+						flags |= negativeSign;
+						val = -(int)val;
+					}
+
+					// Convert to given base, filling buffer backwards from least to most significant
+					char* p = buf + width;
+					*p = 0;
+					ptr = p; // keep track of one past left-most non-zero digit
+					do
+					{
+						char d = val % base;
+						val /= base;
+
+						if ( d )
+						{
+							ptr = p;
+						}
+
+						d += '0';
+						if ( d > '9' ) // handle bases higher than 10
+						{
+							d += 'A' - ('9' + 1);
+							if ( c == 'x' ) // lowercase
+							{
+								d += 'a' - 'A';
+							}
+						}
+
+						*--p = d;
+
+					} while ( p != buf );
+
+					ptr--; // was one past char we want
+
+					goto copyToString;
+				}
+				else // invalid format specifier
+				{
+					goto resetState;
+				}
+			}
+		}
+	}
+
+	return out - outbuf;
+}
+
+//------------------------------------------------------------------------------
+void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+#ifdef WRENCH_STD_FILE
+	if( argn < 1 )
+	{
+		return;
+	}
+	WRValue* args = stackTop - argn;
+
+	const char *fmt = (const char*)args[0].va->m_Cdata;
+	if ( !fmt )
+	{
+		return;
+	}
+	
+	char outbuf[512];
+	stackTop->i = wr_sprintfEx( outbuf, fmt, args + 1, argn - 1 );
+
+	printf( "%s", outbuf );
+#endif
+}
+
+//------------------------------------------------------------------------------
+void wr_sprintf( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+	if ( argn < 2 )
+	{
+		return;
+	}
+
+	WRValue* args = stackTop - argn;
+	if ( args[1].xtype != WR_EX_ARRAY || args[1].va->m_type != SV_CHAR
+		 || args[0].type != WR_REF )
+	{
+		return;
+	}
+
+	const char *fmt = (const char*)args[1].va->m_Cdata;
+	if ( !fmt )
+	{
+		return;
+	}
+
+	char outbuf[512];
+	stackTop->i = wr_sprintfEx( outbuf, fmt, args + 2, argn - 2 );
+
+	args[0].r->p2 = INIT_AS_ARRAY;
+	args[0].r->va = c->getSVA( stackTop->i, SV_CHAR, false );
+	memcpy( args[0].r->va->m_Cdata, outbuf, stackTop->i );
+}
+
+
+//------------------------------------------------------------------------------
+void wr_loadStringLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "str::strlen", wr_strlen );
+	wr_registerLibraryFunction( w, "str::substr", wr_substr );
+	wr_registerLibraryFunction( w, "str::sprintf", wr_sprintf );
+	wr_registerLibraryFunction( w, "str::printf", wr_printf );
+}
+
+/*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
 #include <math.h>
 
 //------------------------------------------------------------------------------
@@ -10905,14 +11659,6 @@ void wr_math_deg2rad( WRValue* stackTop, const int argn, WRContext* c )
 	}
 }
 
-//------------------------------------------------------------------------------
-void wr_loadAllLibs( WRState* w )
-{
-	wr_loadMathLib( w );
-	wr_loadStdLib( w );
-	wr_loadFileLib( w );
-	wr_loadStringLib( w );
-}
 
 //------------------------------------------------------------------------------
 void wr_loadMathLib( WRState* w )
@@ -10944,648 +11690,3 @@ void wr_loadMathLib( WRState* w )
 	wr_registerLibraryFunction( w, "math::rad2deg", wr_math_rad2deg );
 }
 
-//------------------------------------------------------------------------------
-void wr_loadStdLib( WRState* w )
-{
-	wr_registerLibraryFunction( w, "std::rand", wr_std_rand );
-	wr_registerLibraryFunction( w, "std::srand", wr_std_srand );
-}
-#include "wrench.h"
-
-#ifdef WRENCH_STD_FILE
-#include <stdio.h>
-#include <sys/stat.h>
-#endif
-
-//------------------------------------------------------------------------------
-void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
-{
-	stackTop->init();
-
-#ifdef WRENCH_STD_FILE
-	if ( argn == 1 )
-	{
-		char buf[256];
-		WRValue* arg = stackTop - 1;
-		arg->asString( buf, 256 );
-
-#ifdef _WIN32
-		struct _stat sbuf;
-		int ret = _stat( buf, &sbuf );
-#else
-		struct stat sbuf;
-		int ret = stat( buf, &sbuf );
-#endif
-
-		if ( ret == 0 )
-		{
-			FILE *infil = fopen( buf, "rb" );
-			if ( infil )
-			{
-				stackTop->p2 = INIT_AS_ARRAY;
-				stackTop->va = c->getSVA( (int)sbuf.st_size, SV_CHAR, false );
-				if ( fread( stackTop->va->m_Cdata, sbuf.st_size, 1, infil ) != 1 )
-				{
-					stackTop->init();
-					return;
-				}
-			}
-
-			fclose( infil );
-		}
-	}
-#endif
-}
-
-//------------------------------------------------------------------------------
-void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
-{
-	stackTop->init();
-#ifdef WRENCH_STD_FILE
-	if ( argn == 2 )
-	{
-		WRValue* arg1 = stackTop - 2;
-		unsigned int len;
-		const unsigned char* data = (stackTop - 1)->asData( &len );
-		if ( !data )
-		{
-			return;
-		}
-		
-		char buf[256];
-		arg1->asString( buf, 256 );
-
-		FILE *outfil = fopen( buf, "wb" );
-		if ( !outfil )
-		{
-			return;
-		}
-
-		stackTop->i = (int)fwrite( data, len, 1, outfil );
-		fclose( outfil );
-	}
-#endif
-}
-
-//------------------------------------------------------------------------------
-void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
-{
-	char buf[256];
-	int pos = 0;
-	for (;;)
-	{
-		int in = fgetc( stdin );
-
-		if ( in == EOF || in == '\n' || in == '\r' || pos >= 256 )   //@review: this isn't right - need to check for cr and lf
-		{ 
-			stackTop->p2 = INIT_AS_ARRAY;
-			stackTop->va = c->getSVA( pos, SV_CHAR, false );
-			memcpy( stackTop->va->m_Cdata, buf, pos );
-			break;
-		}
-
-		buf[pos++] = in;
-	}
-}
-
-/*
-//------------------------------------------------------------------------------
-void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
-{
-	stackTop->init();
-	char buf[256];
-	int pos = 0;
-	
-	for (;;)
-	{
-		int c = fgetc( stdin );
-
-		if ( c == EOF || c == '\n' || c == '\r' || (pos >= 256) )   //@review: this isn't right - need to check for cr and lf
-		{ 
-			stackTop->p2 = INIT_AS_ARRAY;
-			stackTop->va = c->getSVA( pos, SV_CHAR, false );
-			memcpy( stackTop->va->m_Cdata, buf, pos );
-			break;
-		}
-
-		buf[pos++] = c;
-	}
-}
-*/
-
-//------------------------------------------------------------------------------
-void wr_loadFileLib( WRState* w )
-{
-	wr_registerLibraryFunction( w, "file::read", wr_read_file );
-	wr_registerLibraryFunction( w, "file::write", wr_write_file );
-
-	wr_registerLibraryFunction( w, "io::getline", wr_getline );
-//	wr_registerLibraryFunction( w, "io::readline", wr_readline );
-}
-
-#include "wrench.h"
-
-#include <string.h>
-
-//------------------------------------------------------------------------------
-int wr_strlenEx( WRValue* val )
-{
-	if ( val->type == WR_REF )
-	{
-		return wr_strlenEx( val->r );
-	}
-
-	return (val->xtype == WR_EX_ARRAY && val->va->m_type == SV_CHAR) ? val->va->m_size :  0;
-}
-
-//------------------------------------------------------------------------------
-void wr_strlen( WRValue* stackTop, const int argn, WRContext* c )
-{
-	stackTop->p2 = INIT_AS_INT;
-	stackTop->i = argn == 1 ? wr_strlenEx( stackTop - 1 ) : 0;
-}
-
-//------------------------------------------------------------------------------
-void wr_loadStringLib( WRState* w )
-{
-	wr_registerLibraryFunction( w, "str::strlen", wr_strlen );
-}
-
-/*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*******************************************************************************/
-
-#include "wrench.h"
-
-//------------------------------------------------------------------------------
-int dsprintf( char* buf, const char* fmt, ... )
-{
-	va_list list;
-	va_start( list, fmt );
-
-	int ret = dsprintfEx( buf, fmt, list );
-	va_end( list );
-	return ret;
-}
-
-//------------------------------------------------------------------------------
-enum
-{
-	zeroPad         = 1<<0,
-	negativeJustify = 1<<1,
-	secondPass      = 1<<2,
-	negativeSign    = 1<<3,
-	parsingSigned   = 1<<4,
-	altRep			= 1<<5,
-};
-
-//------------------------------------------------------------------------------
-int sprintfWRV( char *out, const char *fmt, WRValue* list, int num )
-{
-resetState:
-	char buf[256];
-
-	char* startPos = out;
-
-	char flags  = 0;
-	char padChar = ' ';
-	int listPtr = 0;
-	unsigned char columns = 0;
-
-	for(;;)
-	{
-		char c = *fmt;
-		fmt++;
-
-		if ( !c )
-		{
-			*out = 0;
-			break;
-		}
-
-		if ( !(secondPass & flags) )
-		{
-			if ( c != '%' ) // literal
-			{
-				*out++ = c;
-			}
-			else // possibly % format specifier
-			{
-				flags |= secondPass;
-			}
-		}
-		else if ( c >= '0' && c <= '9' ) // width
-		{
-			columns *= 10;
-			columns += c - '0';
-			if ( !columns ) // leading zero
-			{
-				flags |= zeroPad;
-				padChar = '0';
-			}
-		}
-		else if ( c == '#' )
-		{
-			flags |= altRep;
-		}
-		else if ( c == '-' ) // left-justify
-		{
-			flags |= negativeJustify;
-		}
-		else if ( c == 'c' ) // character
-		{
-			if ( listPtr < num )
-			{
-				*out++ = (char)(list[listPtr++].i);
-			}
-			goto resetState;
-		}
-		else if ( c == '%' ) // literal %
-		{
-			*out++ = c;
-			goto resetState;
-		}
-		else // string or integer
-		{
-			const char *ptr; // pointer to first char of integer
-
-			if ( c == 's' ) // string
-			{
-				buf[0] = 0;
-				if ( listPtr < num )
-				{
-					ptr = (char *)list[listPtr].asCharArray();
-					if ( !ptr )
-					{
-						ptr = buf;
-						list[listPtr].asString(buf, 256);
-					}
-					++listPtr;
-				}
-				else
-				{
-					ptr = buf;
-				}
-
-				padChar = ' '; // in case some joker uses a 0 in their column spec
-
-copyToString:
-
-				// get the string length so it can be formatted, don't
-				// copy it, just count it
-				unsigned char len = 0;
-				for ( ; *ptr; ptr++ )
-				{
-					len++;
-				}
-				ptr -= len;
-
-				// Right-justify
-				if ( !(flags & negativeJustify) )
-				{
-					for ( ; columns > len; columns-- )
-					{
-						*out++ = padChar;
-					}
-				}
-
-				if ( flags & negativeSign )
-				{
-					*out++ = '-';
-				}
-
-				// Copy string (%S uses pgm read, all others use normal
-				// read)
-				if ( flags & altRep || c == 'p' )
-				{
-					*out++ = '0';
-					*out++ = 'x';
-				}
-
-				while ( (c = *ptr++) )
-				{
-					*out++ = c;
-				}
-				// Left-justify
-				for ( ; columns > len; columns-- )
-				{
-					*out++ = ' ';
-				}
-
-				goto resetState;
-			}
-			else
-			{
-				unsigned char base;
-				unsigned char width;
-				unsigned short val;
-
-				if ( c == 'd' || c == 'i' )
-				{
-					flags |= parsingSigned;
-					goto parseDecimal;
-				}
-				else if ( c == 'u' ) // decimal
-				{
-parseDecimal:
-					base  = 10;
-					width = 5;
-					goto convertBase;
-				}
-				else if ( c == 'b' ) // binary
-				{
-					base  = 2;
-					width = 16;
-					goto convertBase;
-				}
-				else if ( c == 'o' ) // octal
-				{
-					base  = 8;
-					width = 5;
-					goto convertBase;
-				}
-				else if ( c == 'x' || c == 'X' || c == 'p' ) // hexadecimal or pointer (pointer is treated as 'X')
-				{
-					base = 16;
-					width = 4;
-convertBase:
-					if ( listPtr < num )
-					{
-						val = list[listPtr++].ui;
-					}
-					else
-					{
-						val = 0;
-					}
-
-					if ( (flags & parsingSigned) && (val & 0x8000) )
-					{
-						flags |= negativeSign;
-						val = -val;
-					}
-
-					// Convert to given base, filling buffer backwards from least to most significant
-					char* p = buf + width;
-					*p = 0;
-					ptr = p; // keep track of one past left-most non-zero digit
-					do
-					{
-						char d = val % base;
-						val /= base;
-
-						if ( d )
-						{
-							ptr = p;
-						}
-
-						d += '0';
-						if ( d > '9' ) // handle bases higher than 10
-						{
-							d += 'A' - ('9' + 1);
-							if ( c == 'x' ) // lowercase
-							{
-								d += 'a' - 'A';
-							}
-						}
-
-						*--p = d;
-
-					} while ( p != buf );
-
-					ptr--; // was one past char we want
-
-					goto copyToString;
-				}
-				else // invalid format specifier
-				{
-					goto resetState;
-				}
-			}
-		}
-	}
-
-	return out - startPos;
-}
-
-//------------------------------------------------------------------------------
-int dsprintfEx( char *out, const char *fmt, va_list list )
-{
-resetState:
-
-	char* startPos = out;
-
-	char flags  = 0;
-	char padChar = ' ';
-	unsigned char columns = 0;
-
-	for(;;)
-	{
-		char c = *fmt;
-		fmt++;
-
-		if ( !c )
-		{
-			*out = 0;
-			break;
-		}
-
-		if ( !(secondPass & flags) )
-		{
-			if ( c != '%' ) // literal
-			{
-				*out++ = c;
-			}
-			else // possibly % format specifier
-			{
-				flags |= secondPass;
-			}
-		}
-		else if ( c >= '0' && c <= '9' ) // width
-		{
-			columns *= 10;
-			columns += c - '0';
-			if ( !columns ) // leading zero
-			{
-				flags |= zeroPad;
-				padChar = '0';
-			}
-		}
-		else if ( c == '#' )
-		{
-			flags |= altRep;
-		}
-		else if ( c == '-' ) // left-justify
-		{
-			flags |= negativeJustify;
-		}
-		else if ( c == 'c' ) // character
-		{
-			*out++ = va_arg( list, unsigned int );
-			goto resetState;
-		}
-		else if ( c == '%' ) // literal %
-		{
-			*out++ = c;
-			goto resetState;
-		}
-		else // string or integer
-		{
-			char buf [16+1]; // buffer for integer
-
-			const char *ptr; // pointer to first char of integer
-
-			if ( c == 's' ) // string
-			{
-				ptr = va_arg( list, char* );
-
-				padChar = ' '; // in case some joker uses a 0 in their column spec
-
-copyToString:
-
-				// get the string length so it can be formatted, don't
-				// copy it, just count it
-				unsigned char len = 0;
-				for ( ; *ptr; ptr++ )
-				{
-					len++;
-				}
-				ptr -= len;
-
-				// Right-justify
-				if ( !(flags & negativeJustify) )
-				{
-					for ( ; columns > len; columns-- )
-					{
-						*out++ = padChar;
-					}
-				}
-
-				if ( flags & negativeSign )
-				{
-					*out++ = '-';
-				}
-
-				// Copy string (%S uses pgm read, all others use normal
-				// read)
-				if ( flags & altRep || c == 'p' )
-				{
-					*out++ = '0';
-					*out++ = 'x';
-				}
-
-				while ( (c = *ptr++) )
-				{
-					*out++ = c;
-				}
-				// Left-justify
-				for ( ; columns > len; columns-- )
-				{
-					*out++ = ' ';
-				}
-
-				goto resetState;
-			}
-			else
-			{
-				unsigned char base;
-				unsigned char width;
-				unsigned short val;
-
-				if ( c == 'd' || c == 'i' )
-				{
-					flags |= parsingSigned;
-					goto parseDecimal;
-				}
-				else if ( c == 'u' ) // decimal
-				{
-parseDecimal:
-					base  = 10;
-					width = 5;
-					goto convertBase;
-				}
-				else if ( c == 'b' ) // binary
-				{
-					base  = 2;
-					width = 16;
-					goto convertBase;
-				}
-				else if ( c == 'o' ) // octal
-				{
-					base  = 8;
-					width = 5;
-					goto convertBase;
-				}
-				else if ( c == 'x' || c == 'X' || c == 'p' ) // hexadecimal or pointer (pointer is treated as 'X')
-				{
-					base = 16;
-					width = 4;
-convertBase:
-					val = va_arg( list, unsigned int );
-
-					if ( (flags & parsingSigned) && (val & 0x8000) )
-					{
-						flags |= negativeSign;
-						val = -val;
-					}
-
-					// Convert to given base, filling buffer backwards from least to most significant
-					char* p = buf + width;
-					*p = 0;
-					ptr = p; // keep track of one past left-most non-zero digit
-					do
-					{
-						char d = val % base;
-						val /= base;
-
-						if ( d )
-						{
-							ptr = p;
-						}
-
-						d += '0';
-						if ( d > '9' ) // handle bases higher than 10
-						{
-							d += 'A' - ('9' + 1);
-							if ( c == 'x' ) // lowercase
-							{
-								d += 'a' - 'A';
-							}
-						}
-
-						*--p = d;
-
-					} while ( p != buf );
-
-					ptr--; // was one past char we want
-
-					goto copyToString;
-				}
-				else // invalid format specifier
-				{
-					//					*out++ = '?'; // seems frivilous, even cursory testing finds formatting errors
-					goto resetState;
-				}
-			}
-		}
-	}
-
-	return out - startPos;
-}

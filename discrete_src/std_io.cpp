@@ -54,8 +54,9 @@ void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		WRValue* arg1 = stackTop - 2;
 		unsigned int len;
-		const unsigned char* data = (stackTop - 1)->asData( &len );
-		if ( !data )
+		char type;
+		char* data = (char*)((stackTop - 1)->array(&len, &type));
+		if ( !data || type != SV_CHAR )
 		{
 			return;
 		}
@@ -78,6 +79,8 @@ void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->init();
+#ifdef WRENCH_STD_FILE
 	char buf[256];
 	int pos = 0;
 	for (;;)
@@ -94,32 +97,8 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 
 		buf[pos++] = in;
 	}
+#endif
 }
-
-/*
-//------------------------------------------------------------------------------
-void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
-{
-	stackTop->init();
-	char buf[256];
-	int pos = 0;
-	
-	for (;;)
-	{
-		int c = fgetc( stdin );
-
-		if ( c == EOF || c == '\n' || c == '\r' || (pos >= 256) )   //@review: this isn't right - need to check for cr and lf
-		{ 
-			stackTop->p2 = INIT_AS_ARRAY;
-			stackTop->va = c->getSVA( pos, SV_CHAR, false );
-			memcpy( stackTop->va->m_Cdata, buf, pos );
-			break;
-		}
-
-		buf[pos++] = c;
-	}
-}
-*/
 
 //------------------------------------------------------------------------------
 void wr_loadFileLib( WRState* w )
@@ -128,6 +107,5 @@ void wr_loadFileLib( WRState* w )
 	wr_registerLibraryFunction( w, "file::write", wr_write_file );
 
 	wr_registerLibraryFunction( w, "io::getline", wr_getline );
-//	wr_registerLibraryFunction( w, "io::readline", wr_readline );
 }
 

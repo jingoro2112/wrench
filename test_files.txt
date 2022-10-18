@@ -1,6 +1,6 @@
 tests/000_
 tests/001_operations.c
-tests/002_comments.c
+tests/002_parsing.c
 tests/003_if.c
 tests/004_functions.c
 tests/005_loops.c

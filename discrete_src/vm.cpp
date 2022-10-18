@@ -41,7 +41,7 @@ WRContext::~WRContext()
 
 	while( svAllocated )
 	{
-		WRGCArray* next = svAllocated->m_next;
+		WRGCObject* next = svAllocated->m_next;
 		delete svAllocated;
 		svAllocated = next;
 	}
@@ -80,83 +80,6 @@ WRState::~WRState()
 }
 
 //------------------------------------------------------------------------------
-void* WRGCArray::growHash( uint32_t hash )
-{
-	int t = 0;
-	for( ; c_primeTable[t]; ++t )
-	{
-		if ( c_primeTable[t] == m_mod )
-		{
-			++t;
-			break;
-		}
-	}
-
-	// otherwise there was a collision, expand the table
-	for(;;)
-	{
-		int newMod = c_primeTable[t];
-		if (newMod == 0)
-		{
-			// could not grow large enough to avoid collision, give up.
-			return m_Vdata + (hash % m_mod);
-		}
-
-		uint32_t* proposed = new uint32_t[newMod];
-		memset( proposed, 0, newMod*sizeof(uint32_t) );
-
-		proposed[ hash % newMod ] = hash;
-
-		int h = 0;
-		for( ; h<m_mod; ++h )
-		{
-			if (m_hashTable[h] == 0)
-			{
-				continue;
-			}
-
-			int newEntry = m_hashTable[h] % newMod;
-			if ( proposed[newEntry] == 0 )
-			{
-				proposed[newEntry] = m_hashTable[h];
-			}
-			else
-			{
-				delete[] proposed;
-				++t;
-				break;
-			}
-		}
-
-		if ( h < m_mod )
-		{
-			continue;
-		}
-
-		WRValue* newValues = new WRValue[ newMod ];
-		memset( (char*)newValues, 0, newMod*sizeof(WRValue) );
-
-		for( int v=0; v<m_mod; ++v )
-		{
-			WRValue* V1 = newValues + (m_hashTable[v] % newMod);
-			WRValue* V2 = m_Vdata + (m_hashTable[v] % m_mod);
-			V1->p2 = V2->p2;
-			V2->p2 = INIT_AS_INT;
-			V1->p = V2->p;
-		}
-
-		m_mod = newMod;
-		m_size = m_mod;
-		delete[] m_Vdata;
-		delete[] m_hashTable;
-		m_hashTable = proposed;
-		m_Vdata = newValues;
-
-		return m_Vdata + (hash % m_mod);
-	}
-}
-
-//------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
 {
 	if ( IS_REFARRAY(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
@@ -173,7 +96,7 @@ void WRContext::mark( WRValue* s )
 		return;
 	}
 	
-	WRGCArray* sva = s->va;
+	WRGCObject* sva = s->va;
 	
 	if ( IS_SVA_VALUE_TYPE(sva) )
 	{
@@ -220,8 +143,8 @@ void WRContext::gc( WRValue* stackTop )
 	}
 
 	// sweep
-	WRGCArray* current = svAllocated;
-	WRGCArray* prev = 0;
+	WRGCObject* current = svAllocated;
+	WRGCObject* prev = 0;
 	while( current )
 	{
 		// if set, clear it
@@ -248,9 +171,9 @@ void WRContext::gc( WRValue* stackTop )
 }
 
 //------------------------------------------------------------------------------
-WRGCArray* WRContext::getSVA( int size, WRGCArrayType type, bool init )
+WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 {
-	WRGCArray* ret = new WRGCArray( size, type );
+	WRGCObject* ret = new WRGCObject( size, type );
 	if ( init )
 	{
 		memset( (char*)ret->m_Cdata, 0, sizeof(WRValue) * size);
@@ -348,9 +271,139 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 	w->c_libFunctionRegistry.set( wr_hashStr(signature), function );
 }
 
-#ifdef WRENCH_SPRINTF_OPERATIONS
-#include <stdio.h>
-#endif
+//------------------------------------------------------------------------------
+int WRValue::asInt() const
+{
+	// this should be faster than a switch by checking the most common cases first
+	if ( type == WR_INT )
+	{
+		return i;
+	}
+	if ( type == WR_REF )
+	{
+		return r->asInt();
+	}
+	if ( type == WR_FLOAT )
+	{
+		return (int)f;
+	}
+	if ( type == WR_EX )
+	{
+		return IS_REFARRAY(xtype) ? arrayValueAsInt() : 0;
+	}
+	return i;
+}
+
+//------------------------------------------------------------------------------
+float WRValue::asFloat() const
+{
+	if ( type == WR_FLOAT )
+	{
+		return f;
+	}
+	if ( type == WR_REF )
+	{
+		return r->asFloat();
+	}
+	if ( type == WR_INT )
+	{
+		return (float)i;
+	}
+	if ( type == WR_EX )
+	{
+		return IS_REFARRAY(xtype) ? arrayValueAsFloat() : 0;
+	}
+	return f;
+}
+
+//------------------------------------------------------------------------------
+int wr_itoa( int i, char* string, size_t len )
+{
+	char buf[14];
+	size_t pos = 0;
+	int val;
+	if ( i < 0 )
+	{
+		string[pos++] = '-';
+		val = -i;
+	}
+	else
+	{
+		val = i;
+	}
+
+	int digit = 0;
+	do
+	{
+		buf[digit++] = (val % 10) + '0';
+	} while( val /= 10 );
+
+	--digit;
+
+	for( ; digit>=0 && pos < len; --digit )
+	{
+		string[pos++] = buf[digit];
+	}
+	string[pos] = 0;
+	return pos;
+}
+
+//------------------------------------------------------------------------------
+void wr_ftoa( float f, char* buf, int len )
+{
+	int pos = 0;
+
+	// sign stuff
+	if (f < 0)
+	{
+		f = -f;
+		buf[pos++] = '-';
+	}
+
+	if ( pos > len )
+	{
+		buf[0] = 0;
+		return;
+	}
+
+	// round value according the precision
+	f += 5.f / (float)10e6;
+
+	// integer part...
+	int intPart = (int)f;
+	f -= intPart;
+
+	if ( intPart )
+	{
+		pos += wr_itoa( intPart, buf + pos, len - pos );
+	}
+	else
+	{
+		buf[pos++] = '0';
+	}
+
+	// decimal part place decimal point
+	buf[pos++] = '.';
+	
+	// convert
+	for( int p=0; pos < len && p<5; ++p )
+	{
+		f *= 10.0;
+		char c = (char)f;
+		buf[pos++] = '0' + c;
+		f -= c;
+	}
+
+	for( --pos; buf[pos] == '0' && buf[pos] != '.' ; --pos );
+
+	if ( buf[pos] != '.' )
+	{
+		++pos;
+	}
+	
+	buf[pos] = 0;
+}
+
 //------------------------------------------------------------------------------
 char* WRValue::asString( char* string, size_t len ) const
 {
@@ -412,43 +465,23 @@ char* WRValue::asString( char* string, size_t len ) const
 	{
 		switch( type )
 		{
-#ifdef WRENCH_SPRINTF_OPERATIONS
-			case WR_INT: { snprintf( string, len, "%d", i ); break; }
-			case WR_FLOAT: { snprintf( string, len, "%g", f ); break; }
-#else
-			case WR_INT: 
 			case WR_FLOAT:
 			{
-				string[0] = 0;
+				wr_ftoa( f, string, len );
 				break;
 			}
-#endif
+
+			case WR_INT:
+			{
+				wr_itoa( i, string, len );
+				break;
+			}
+
 			case WR_REF: { return r->asString( string, len ); }
 		}
 	}
 	
 	return string;
-}
-
-//------------------------------------------------------------------------------
-const unsigned char* WRValue::asData( unsigned int* len ) const
-{
-	if ( type == WR_REF )
-	{
-		return r->asData( len );
-	}
-
-	if ( (xtype != WR_EX_ARRAY) || (va->m_type != SV_CHAR) )
-	{
-		return 0;
-	}
-
-	if ( len )
-	{
-		*len = va->m_size;
-	}
-
-	return va->m_Cdata;
 }
 
 //------------------------------------------------------------------------------
@@ -533,6 +566,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&AssignToHashTableAndPop,
 
 		&&PopOne,
+		&&ReturnZero,
 		&&Return,
 		&&Stop,
 
@@ -892,10 +926,9 @@ literalZero:
 				uint16_t len = (((uint16_t)*pc)<<8) | (uint16_t)*(pc + 1);
 				pc += 2;
 				
-				context->gc( stackTop );
+				context->gc( stackTop  );
 				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = context->getSVA( len, SV_CHAR, false );
-
 				memcpy( (unsigned char *)stackTop->va->m_data, pc, len );
 				pc += len;
 				
@@ -1100,7 +1133,7 @@ callFunction:
 						memcpy( (char*)register0, stackTop + *table + 1, count*sizeof(WRValue) );
 					}
 
-					context->gc( ++stackTop );
+					context->gc(++stackTop); // dop this here to take care of any memory the 'new' allocated
 				}
 				else
 				{
@@ -1114,7 +1147,7 @@ callFunction:
 			{
 				register0 = --stackTop;
 				register1 = (stackTop - 1);
-				if ( *pc < register1->va->m_size )
+				if ( !IS_EXARRAY_TYPE(register1->xtype) || *pc < register1->va->m_size )
 				{
 					register1 = register1->va->m_Vdata + *pc++;
 					wr_assign[register1->type<<2|register0->type]( register1, register0 );
@@ -1142,6 +1175,10 @@ callFunction:
 				CONTINUE;
 			}
 
+			CASE(ReturnZero):
+			{
+				(stackTop++)->init();
+			}
 			CASE(Return):
 			{
 				register0 = stackTop - 2;
@@ -2221,7 +2258,7 @@ void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned ch
 {
 	WRValue* val = userData->u->addValue( name );
 	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRGCArray( len, SV_CHAR, data );
+	val->va = new WRGCObject( len, SV_CHAR, data );
 }
 
 //------------------------------------------------------------------------------
@@ -2229,7 +2266,7 @@ void wr_addUserIntArray( WRValue* userData, const char* name, const int* data, c
 {
 	WRValue* val = userData->u->addValue( name );
 	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRGCArray( len, SV_INT, data );
+	val->va = new WRGCObject( len, SV_INT, data );
 }
 
 //------------------------------------------------------------------------------
@@ -2237,7 +2274,7 @@ void wr_addUserFloatArray( WRValue* userData, const char* name, const float* dat
 {
 	WRValue* val = userData->u->addValue( name );
 	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRGCArray( len, SV_FLOAT, data );
+	val->va = new WRGCObject( len, SV_FLOAT, data );
 }
 
 //------------------------------------------------------------------------------

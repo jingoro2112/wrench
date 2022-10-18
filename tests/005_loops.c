@@ -1,4 +1,8 @@
 /*~
+hi
+hi
+hi
+out
 0
 0
 1
@@ -113,6 +117,27 @@ lt6!
 1
 1
 ~*/
+
+goto label;
+
+
+print("nope");
+
+label:
+a += 1;
+print("hi");
+
+if ( a > 2 )
+{
+	goto out;
+}
+
+goto label;
+out:
+
+print("out");
+
+
 
 tle();
 function tle()

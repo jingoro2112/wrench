@@ -15,6 +15,7 @@
     <ClCompile Include="..\discrete_src\operations.cpp" />
     <ClCompile Include="..\discrete_src\std.cpp" />
     <ClCompile Include="..\discrete_src\std_io.cpp" />
+    <ClCompile Include="..\discrete_src\std_math.cpp" />
     <ClCompile Include="..\discrete_src\std_string.cpp" />
     <ClCompile Include="..\discrete_src\vm.cpp" />
     <ClCompile Include="..\wrench_cli.cpp" />
@@ -22,6 +23,7 @@
   <ItemGroup>
     <ClInclude Include="..\discrete_src\cc.h" />
     <ClInclude Include="..\discrete_src\container_data.h" />
+    <ClInclude Include="..\discrete_src\gc_object.h" />
     <ClInclude Include="..\discrete_src\opcode.h" />
     <ClInclude Include="..\discrete_src\opcode_stream.h" />
     <ClInclude Include="..\discrete_src\str.h" />

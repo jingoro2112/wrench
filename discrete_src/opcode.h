@@ -49,6 +49,7 @@ enum WROpcode
 	O_AssignToHashTableAndPop,
 
 	O_PopOne,
+	O_ReturnZero,
 	O_Return,
 	O_Stop,
 

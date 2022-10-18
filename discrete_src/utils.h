@@ -234,13 +234,6 @@ const uint16_t c_primeTable[] =
 };
 */
 
-#include <stdarg.h>
-struct WRValue;
-int dsprintf( char* buf, const char* fmt, ... );
-int dsprintfEx( char *buf, const char *fmt, va_list list );
-int sprintfWRV( char *out, const char *fmt, WRValue* list, int num );
-
-
 //------------------------------------------------------------------------------
 template <class T> class WRHashTable
 {
@@ -371,5 +364,32 @@ private:
 	int m_mod;
 	Node* m_list;
 };
+
+//------------------------------------------------------------------------------
+enum WRGCObjectType
+{
+	SV_CHAR = 0x02,
+	SV_INT = 0x04,
+	SV_FLOAT = 0x06,
+
+	SV_VALUE = 0x01,
+	SV_HASH_TABLE = 0x03,
+};
+
+#define INIT_AS_ARRAY      (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
+#define INIT_AS_USR        (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
+#define INIT_AS_REFARRAY   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_REFARRAY<<24))
+#define INIT_AS_STRUCT     (((uint32_t)WR_EX) | ((uint32_t)WR_EX_STRUCT<<24))
+#define INIT_AS_HASH_TABLE (((uint32_t)WR_EX) | ((uint32_t)WR_EX_HASH_TABLE<<24))
+
+#define INIT_AS_REF      WR_REF
+#define INIT_AS_INT      WR_INT
+#define INIT_AS_FLOAT    WR_FLOAT
+
+#define IS_EXARRAY_TYPE(P) ((P)&0x80)
+
+#define ARRAY_ELEMENT_FROM_P2(P) (((P)&0x00FFFF00) >> 8)
+#define ARRAY_ELEMENT_TO_P2(P,E) { (P)->padL = (E); (P)->padH  = ((E)>>8); (P)->xtype |= (((E)>>16)&0x1F); }
+
 
 #endif

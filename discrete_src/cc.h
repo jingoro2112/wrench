@@ -104,8 +104,8 @@ const WROperation c_operations[] =
 	{ "@[]",  2, O_Index,               true,  WR_OPER_POST, O_LAST },
 	{ "@init", 2, O_Index,              true,  WR_OPER_POST, O_LAST },
 
-	{ "._count", 2, O_CountOf,           true,  WR_OPER_POST, O_LAST },
-	{ "._hash", 2, O_HashOf,           true,  WR_OPER_POST, O_LAST },
+	{ "._count", 2, O_CountOf,          true,  WR_OPER_POST, O_LAST },
+	{ "._hash", 2, O_HashOf,            true,  WR_OPER_POST, O_LAST },
 	
 	{ 0, 0, O_LAST, false, WR_OPER_PRE, O_LAST },
 };
@@ -141,8 +141,16 @@ struct BytecodeJumpOffset
 {
 	int offset;
 	WRarray<int> references;
+	uint32_t gotoHash;
 	
-	BytecodeJumpOffset() : offset(0) {}
+	BytecodeJumpOffset() : offset(0), gotoHash(0) {}
+};
+
+//------------------------------------------------------------------------------
+struct GotoSource
+{
+	uint32_t hash;
+	int offset;
 };
 
 //------------------------------------------------------------------------------
@@ -158,6 +166,7 @@ struct WRBytecode
 	void invalidateOpcodeCache() { opcodes.clear(); }
 	
 	WRarray<BytecodeJumpOffset> jumpOffsetTargets;
+	WRarray<GotoSource> gotoSource;
 	
 	void clear() { all.clear(); opcodes.clear(); localSpace.clear(); jumpOffsetTargets.clear(); }
 };

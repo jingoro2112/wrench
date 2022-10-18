@@ -48,6 +48,7 @@ const char* c_reserved[] =
 	"while",
 	"new",
 	"struct",
+	"goto",
 	""
 };
 
@@ -879,7 +880,14 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 		--o;
 		unsigned int a = bytecode.all.size() - 1;
 
-		if ( opcode == O_CompareEQ && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		if ( opcode == O_Return
+			 && bytecode.opcodes[o] == O_LiteralZero )
+		{
+			bytecode.all[a] = O_ReturnZero;
+			bytecode.opcodes[o] = O_ReturnZero;
+			return;
+		}
+		else if ( opcode == O_CompareEQ && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
 		{
 			bytecode.all[ a - 3 ] = O_LLCompareEQ;
 			bytecode.all[ a - 1 ] = bytecode.all[ a ];
@@ -1795,8 +1803,6 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 }
 
 //------------------------------------------------------------------------------
-// add a point to jump TO and return a list that should be filled with
-// opcode + where to jump FROM
 int WRCompilationContext::addRelativeJumpTarget( WRBytecode& bytecode )
 {
 	bytecode.jumpOffsetTargets.append().references.clear();
@@ -2109,6 +2115,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 		 && bytecode.opcodes.size() > 0
 		 && addMe.opcodes.size() == 1
 		 && addMe.all.size() > 2
+		 && addMe.gotoSource.count() == 0
 		 && addMe.opcodes[0] == O_IndexLiteral16
 		 && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal )
 	{
@@ -2125,6 +2132,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 			  && bytecode.opcodes.size() > 0
 			  && addMe.opcodes.size() == 1
 			  && addMe.all.size() > 2
+			  && addMe.gotoSource.count() == 0
 			  && addMe.opcodes[0] == O_IndexLiteral16
 			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal )
 	{
@@ -2141,6 +2149,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 			  && bytecode.opcodes.size() > 0
 			  && addMe.opcodes.size() == 1
 			  && addMe.all.size() > 1
+			  && addMe.gotoSource.count() == 0
 			  && addMe.opcodes[0] == O_IndexLiteral8
 			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal )
 	{
@@ -2157,6 +2166,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 			  && bytecode.opcodes.size() > 0
 			  && addMe.opcodes.size() == 1
 			  && addMe.all.size() > 1
+			  && addMe.gotoSource.count() == 0
 			  && addMe.opcodes[0] == O_IndexLiteral8
 			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal )
 	{
@@ -2171,6 +2181,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 	}
 	else if ( bytecode.all.size() > 0
 			  && addMe.opcodes.size() == 2
+			  && addMe.gotoSource.count() == 0
 			  && addMe.all.size() == 3
 			  && addMe.opcodes[1] == O_Index )
 	{
@@ -2347,6 +2358,14 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 		}
 	}
 
+	// add the goto targets, making sure to offset it into the new block properly
+	for( unsigned int u=0; u<addMe.gotoSource.count(); ++u )
+	{
+		GotoSource* G = &bytecode.gotoSource.append();
+		G->hash = addMe.gotoSource[u].hash;
+		G->offset = addMe.gotoSource[u].offset + bytecode.all.size();
+	}
+
 	bytecode.all += addMe.all;
 	bytecode.opcodes += addMe.opcodes;
 }
@@ -2410,9 +2429,9 @@ int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token,
 		assert( !addOnly );
 		return addGlobalSpaceLoad( bytecode, token );
 	}
-	
-	uint32_t hash = wr_hash( token, token.size() );
 
+	uint32_t hash = wr_hashStr(token);
+	
 	unsigned int i=0;
 		
 	for( ; i<bytecode.localSpace.count(); ++i )
@@ -2425,9 +2444,25 @@ int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token,
 
 	if ( i >= bytecode.localSpace.count() && !addOnly )
 	{
+		WRstr t2;
+		if (token[0] == ':' && token[1] == ':')
+		{
+			t2 = token;
+		}
+		else
+		{
+			t2.format("::%s", token.c_str());
+		}
+
+		uint32_t ghash = wr_hashStr(t2);
+
+		// was NOT found locally which is possible for a "global" if
+		// the argument list names it, now check global with the global
+		// hash
+
 		for (unsigned int j = 0; j < m_units[0].bytecode.localSpace.count(); ++j)
 		{
-			if (m_units[0].bytecode.localSpace[j].hash == hash)
+			if (m_units[0].bytecode.localSpace[j].hash == ghash)
 			{
 				pushOpcode(bytecode, O_LoadFromGlobal);
 				unsigned char c = j;
@@ -4197,6 +4232,60 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 
 			addRelativeJumpSource( m_units[unitIndex].bytecode, O_RelativeJump, *m_continueTargets.tail() );
 		}
+		else if ( token == "goto" )
+		{
+			if ( !getToken(ex) ) // if we run out of tokens that's fine as long as we were not waiting for a }
+			{
+				m_err = WR_ERR_unexpected_EOF;
+				return false;
+			}
+
+			bool isGlobal;
+			WRstr prefix;
+			if ( !isValidLabel(token, isGlobal, prefix) || isGlobal )
+			{
+				m_err = WR_ERR_bad_goto_label;
+				return false;
+			}
+
+			GotoSource& G = m_units[unitIndex].bytecode.gotoSource.append();
+			G.hash = wr_hashStr( token );
+			G.offset = m_units[unitIndex].bytecode.all.size();
+			pushData( m_units[unitIndex].bytecode, "\0\0\0", 3 );
+
+			if ( !getToken(ex, ";"))
+			{
+				m_err = WR_ERR_unexpected_token;
+				return false;
+			}
+		}
+		else if ( token[token.size() - 1] == ':' )
+		{
+			WRstr substr = token;
+			substr.shave(1);
+			bool isGlobal;
+			WRstr prefix;
+
+			if ( !isValidLabel(substr, isGlobal, prefix) || isGlobal )
+			{
+				m_err = WR_ERR_unexpected_token;
+				return false;
+			}
+			
+			uint32_t hash = wr_hashStr( substr );
+			for( unsigned int i=0; i<m_units[unitIndex].bytecode.jumpOffsetTargets.count(); ++i )
+			{
+				if ( m_units[unitIndex].bytecode.jumpOffsetTargets[i].gotoHash == hash )
+				{
+					m_err = WR_ERR_bad_goto_label;
+					return false;
+				}
+			}
+
+			int index = addRelativeJumpTarget( m_units[unitIndex].bytecode );
+			m_units[unitIndex].bytecode.jumpOffsetTargets[index].gotoHash = hash;
+			m_units[unitIndex].bytecode.jumpOffsetTargets[index].offset = m_units[unitIndex].bytecode.all.size() + 1;
+		}
 		else
 		{
 			WRExpression nex( m_units[unitIndex].bytecode.localSpace);
@@ -4301,14 +4390,46 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 #ifdef _DUMP
 		streamDump( m_units[u].bytecode.all );
 #endif
+
 		if ( u > 0 ) // for the non-zero unit fill location into the jump table
 		{
 			int32_t offset = code.size();
 			pack32( offset, code.p_str(m_units[u].offsetInBytecode) );
 		}
 
-		int base = code.size();
+		// fill in relative jumps for the gotos
+		for( unsigned int g=0; g<m_units[u].bytecode.gotoSource.count(); ++g )
+		{
+			unsigned int j=0;
+			for( ; j<m_units[u].bytecode.jumpOffsetTargets.count(); j++ )
+			{
+				if ( m_units[u].bytecode.jumpOffsetTargets[j].gotoHash == m_units[u].bytecode.gotoSource[g].hash )
+				{
+					int diff = m_units[u].bytecode.jumpOffsetTargets[j].offset - m_units[u].bytecode.gotoSource[g].offset;
+					diff -= 2;
+					if ( (diff < 128) && (diff > -129) )
+					{
+						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset ) = (unsigned char)O_RelativeJump8;
+						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset + 1 ) = diff;
+					}
+					else
+					{
+						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset ) = (unsigned char)O_RelativeJump;
+						pack16( diff, m_units[u].bytecode.all.p_str(m_units[u].bytecode.gotoSource[g].offset + 1) );
+					}
 
+					break;
+				}
+			}
+
+			if ( j >= m_units[u].bytecode.jumpOffsetTargets.count() )
+			{
+				m_err = WR_ERR_goto_target_not_found;
+				return;
+			}
+		}
+
+		int base = code.size();
 		code.append( m_units[u].bytecode.all, m_units[u].bytecode.all.size() );
 
 		// load new's
@@ -4552,6 +4673,7 @@ const char* c_opcodeName[] =
 	"AssignToHashTableAndPop",
 
 	"PopOne",
+	"ReturnZero",
 	"Return",
 	"Stop",
 

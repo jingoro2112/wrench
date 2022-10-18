@@ -49,15 +49,38 @@
 55
 10
 10
-10
+20
 20
 ~*/
+
+
+/*
+a = 10;
+test2(20);
+if ( a != 10 ) print("a fail");
+function test2(a)
+{
+	a = 30;
+}
+*/
+
+
+glob = 10;
+incGlob();
+function incGlob()
+{
+	glob++;
+}
+if ( glob != 11 ) print("g1");
+
 
 tle(tle());
 a = tle();
 function tle
 {
 }
+
+
 
 
 f(f(0));
