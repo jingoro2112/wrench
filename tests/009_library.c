@@ -140,3 +140,63 @@ str::sprintf( s, 				"%%-05X", 60000 );if ( s != "%-05X") print("bad 109");
 str::sprintf( s, 				"%%-07X", 60000 );if ( s != "%-07X") print("bad 110");
 str::sprintf( s, 				"%%-02X", 60000 );if ( s != "%-02X") print("bad 111");
 str::sprintf( s, 	"%s %-5d %05d", "test", 123, 123 );if ( s != "test 123   00123") print("bad 112");
+
+
+s0 = "";
+s1 = "1";
+s2 = "22";
+s3 = "1234";
+if ( str::strlen("1") != 1 ) print("strlen 1");
+if ( str::strlen("") != 0 ) print("strlen 2");
+if ( str::strlen("123") != 3 ) print("strlen 3");
+if ( str::strlen(s1) != 1 ) print("strlen 1a");
+if ( str::strlen(s0) != 0 ) print("strlen 2a");
+if ( str::strlen(s3) != 4 ) print("strlen 3a");
+
+if ( str::format( "%s", "hi" ) != "hi" ) print("format 1");
+
+if ( !str::isspace(' ') ) print("isspace 1");
+if ( !str::isspace('\t') ) print("isspace 2");
+if ( !str::isspace('\n') ) print("isspace 3");
+c0 = ' ';
+c1 = '\t';
+c2 = '\n';
+if ( !str::isspace(c0) ) print("isspace 1a");
+if ( !str::isspace(c1) ) print("isspace 2a");
+if ( !str::isspace(c2) ) print("isspace 3a");
+if ( str::isspace('_') ) print("isspace 1b");
+if ( str::isspace('\0') ) print("isspace 2b");
+if ( str::isspace('A') ) print("isspace 3b");
+
+if ( !str::isdigit('1') ) print("isdigit 1");
+if ( !str::isdigit('0') ) print("isdigit 2");
+if ( str::isdigit('x') ) print("isdigit 3");
+
+if ( str::isalpha('1') ) print("isalpha 1");
+if ( !str::isalpha('a') ) print("isalpha 2");
+if ( str::isalpha('_') ) print("isalpha 3");
+
+if ( str::mid("1", 1) != "" ) print("mid 1");
+if ( str::mid("22", 1) != "2" ) print("mid 2");
+if ( str::mid("22", 0) != "22" ) print("mid 3");
+if ( str::mid("1234", 0, 1) != "1" ) print("mid 4");
+if ( str::mid("1234", 1, 2) != "23" ) print("mid 5");
+if ( str::mid(s1, 1) != "" ) print("mid 1a");
+if ( str::mid(s2, 1) != "2" ) print("mid 2a");
+if ( str::mid(s2, 0) != "22" ) print("mid 3a");
+if ( str::mid(s3, 0, 1) != "1" ) print("mid 4a");
+if ( str::mid(s3, 1, 2) != "23" ) print("mid 5a");
+
+if ( str::tolower('A') != 'a' ) print("tolower 1");
+if ( str::tolower('a') != 'a' ) print("tolower 2");
+
+if ( str::toupper('a') != 'A' ) print("toupper 1");
+if ( str::toupper('A') != 'A' ) print("toupper 2");
+
+s = "#()*+,-/:;<=>?@\\^";
+if ( str::strchr("#()*+,-/:;<=>?@\\^", '') != 17 ) print("strchr 2");
+if ( str::strchr(s, '#') != 0 ) print("strchr 1");
+if ( str::strchr("#()*+,-/:;<=>?@\\^", '\\') != 15 ) print("strchr 3");
+if ( str::strchr("#()*+,-/:;<=>?@\\^", '^') != 16 ) print("strchr 4");
+if ( str::strchr("#()*+,-/:;<=>?@\\^", 'A') != -1 ) print("strchr 5");
+

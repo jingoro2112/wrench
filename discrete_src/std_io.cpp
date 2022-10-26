@@ -1,10 +1,5 @@
 #include "wrench.h"
 
-#ifdef WRENCH_STD_FILE
-#include <stdio.h>
-#include <sys/stat.h>
-#endif
-
 //------------------------------------------------------------------------------
 void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 {

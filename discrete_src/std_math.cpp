@@ -27,9 +27,9 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 void wr_math_sin( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = sinf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -37,9 +37,9 @@ void wr_math_sin( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_cos( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = cosf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -47,9 +47,9 @@ void wr_math_cos( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_tan( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = tanf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -57,9 +57,9 @@ void wr_math_tan( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_sinh( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = sinhf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -67,9 +67,9 @@ void wr_math_sinh( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_cosh( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = coshf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -77,9 +77,9 @@ void wr_math_cosh( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_tanh( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = tanhf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -87,9 +87,9 @@ void wr_math_tanh( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_asin( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = asinf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -97,9 +97,9 @@ void wr_math_asin( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_acos( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = acosf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -107,9 +107,9 @@ void wr_math_acos( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_atan( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = atanf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -117,9 +117,9 @@ void wr_math_atan( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_atan2( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 2 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = atan2f( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
 	}
 }
@@ -127,9 +127,9 @@ void wr_math_atan2( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_log( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = logf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -137,9 +137,9 @@ void wr_math_log( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_log10( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = log10f( (stackTop - 1)->asFloat() );
 	}
 }
@@ -147,9 +147,9 @@ void wr_math_log10( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_exp( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = expf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -157,9 +157,9 @@ void wr_math_exp( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_sqrt( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = sqrtf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -167,9 +167,9 @@ void wr_math_sqrt( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_ceil( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = ceilf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -177,9 +177,9 @@ void wr_math_ceil( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_floor( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = floorf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -187,9 +187,9 @@ void wr_math_floor( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_abs( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = (float)fabs( (stackTop - 1)->asFloat() );
 	}
 }
@@ -197,9 +197,9 @@ void wr_math_abs( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_pow( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 2 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = powf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
 	}
 }
@@ -207,9 +207,9 @@ void wr_math_pow( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_fmod( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 2 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = fmodf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
 	}
 }
@@ -217,9 +217,9 @@ void wr_math_fmod( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_trunc( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = truncf( (stackTop - 1)->asFloat() );
 	}
 }
@@ -227,9 +227,9 @@ void wr_math_trunc( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_ldexp( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 2 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = ldexpf( (stackTop - 1)->asFloat(), (stackTop - 2)->asInt() );
 	}
 }
@@ -242,9 +242,9 @@ const float wr_toRadians = (1.f / wr_toDegrees);
 //------------------------------------------------------------------------------
 void wr_math_rad2deg( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = wr_toDegrees * (stackTop - 1)->asFloat();
 	}
 }
@@ -252,9 +252,9 @@ void wr_math_rad2deg( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_math_deg2rad( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
-		stackTop->p2 = INIT_AS_FLOAT;
 		stackTop->f = wr_toRadians * (stackTop - 1)->asFloat();
 	}
 }

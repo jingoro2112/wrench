@@ -88,8 +88,7 @@ const char* sourceOrder[]=
 //------------------------------------------------------------------------------
 int usage()
 {
-	printf( "Wrench v%d\n"
-		   "usage: wrench <command> [options]\n"
+	printf( "usage: wrench <command> [options]\n"
 			"where command is:\n"
 			"\n"
 			"c [infile] [out as bytecode]   compile infile and output as raw bytecode\n"
@@ -109,22 +108,33 @@ int usage()
 			"rb [binary file to execute]    execute the file as if its bytecode\n"
 			"r  [source file to execute]    compile and execute execute the file\n"
 			"                               as if its source code\n"
-			"\n",
-			WRENCH_VERSION
+			"\n"
 		  );
 	
 	return -1;
 }
 
 //------------------------------------------------------------------------------
-static void log( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+static void printl( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
-		char buf[256];
-		printf( "%s", argv[i].asString(buf, 256) );
+		char outbuf[64000];
+		argv[i].asString( outbuf, 64000 );
+		printf( "%s", outbuf );
 	}
 	printf( "\n" );
+}
+
+//------------------------------------------------------------------------------
+static void print( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	for( int i=0; i<argn; ++i )
+	{
+		char outbuf[64000];
+		argv[i].asString( outbuf, 64000 );
+		printf( "%s", outbuf );
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -184,8 +194,8 @@ int main( int argn, char* argv[] )
 
 		WRState* w = wr_newState();
 		wr_loadAllLibs(w);
-		wr_registerFunction( w, "log", log );
-		wr_registerFunction( w, "print", log );
+		wr_registerFunction( w, "printl", printl );
+		wr_registerFunction( w, "print", print );
 
 		wr_run( w, (const unsigned char *)bytes.c_str() );
 		if ( wr_getLastError( w ) )
@@ -424,11 +434,6 @@ int runTests( int number )
 
 	wr_destroyState( w );
 
-//	wr_destroyValue( &userData );
-//	wr_destroyValue( &charArray );
-//	wr_destroyValue( &intArray );
-//	wr_destroyValue( &floatArray );
-
 	fclose( tfile );
 	return err;
 }
@@ -455,7 +460,7 @@ void log2( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, voi
 
 const char* wrenchCode = 
 
-						"log( \"Hello World!\\n\" ); "
+						"print( \"Hello World!\\n\" ); "
 						"for( i=0; i<10; i++ )       "
 						"{                           "
 						"    log( i );               "
@@ -469,7 +474,7 @@ void setup()
 
 	WRState* w = wr_newState(); // create the state
 
-	wr_registerFunction( w, "log", log ); // bind a function
+	wr_registerFunction( w, "print", print ); // bind a function
 
 	unsigned char* outBytes; // compiled code is alloc'ed
 	int outLen;

@@ -159,6 +159,8 @@ struct WRBytecode
 	WROpcodeStream all;
 	WROpcodeStream opcodes;
 
+	bool isStructSpace;
+
 	WRarray<WRNamespaceLookup> localSpace;
 	WRarray<WRNamespaceLookup> functionSpace;
 	WRarray<WRNamespaceLookup> unitObjectSpace;
@@ -168,7 +170,7 @@ struct WRBytecode
 	WRarray<BytecodeJumpOffset> jumpOffsetTargets;
 	WRarray<GotoSource> gotoSource;
 	
-	void clear() { all.clear(); opcodes.clear(); localSpace.clear(); jumpOffsetTargets.clear(); }
+	void clear() { all.clear(); opcodes.clear(); localSpace.clear(); jumpOffsetTargets.clear(); isStructSpace = false; }
 };
 
 //------------------------------------------------------------------------------
@@ -191,9 +193,10 @@ struct WRExpressionContext
 
 	WRExpressionContext() { reset(); }
 
-	void setLocalSpace( WRarray<WRNamespaceLookup>& localSpace )
+	void setLocalSpace( WRarray<WRNamespaceLookup>& localSpace, bool isStructSpace )
 	{
 		bytecode.localSpace.clear();
+		bytecode.isStructSpace = isStructSpace;
 		for( unsigned int l=0; l<localSpace.count(); ++l )
 		{
 			bytecode.localSpace.append().hash = localSpace[l].hash;
@@ -288,9 +291,10 @@ public:
 	void swapWithTop( int stackPosition, bool addOpcodes =true );
 	
 	WRExpression() { reset(); }
-	WRExpression( WRarray<WRNamespaceLookup>& localSpace )
+	WRExpression( WRarray<WRNamespaceLookup>& localSpace, bool isStructSpace )
 	{
 		reset();
+		bytecode.isStructSpace = isStructSpace;
 		for( unsigned int l=0; l<localSpace.count(); ++l )
 		{
 			bytecode.localSpace.append().hash = localSpace[l].hash;
@@ -383,8 +387,9 @@ private:
 
 	bool operatorFound( WRstr& token, WRarray<WRExpressionContext>& context, int depth );
 	bool parseCallFunction( WRExpression& expression, WRstr functionName, int depth, bool parseArguments );
+	bool pushObjectTable( WRExpressionContext& context, WRarray<WRNamespaceLookup>& localSpace, uint32_t hash );
 	char parseExpression( WRExpression& expression);
-	bool parseUnit();
+	bool parseUnit( bool isStruct );
 	bool parseWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseDoWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseForLoop( bool& returnCalled, WROpcode opcodeToReturn );

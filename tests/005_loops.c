@@ -200,7 +200,7 @@ while( a < 20)
 
 print(f1());
 
-unit f1()
+function f1()
 {
 	while( 1 )
 		while( 2 )
@@ -348,7 +348,7 @@ print(i);
 print(f2());
 print(f3());
 
-unit f2()
+function f2()
 {
 	for(;;)
 		for(;;)
@@ -358,7 +358,7 @@ unit f2()
 		}
 }
 
-unit f3()
+function f3()
 {
 	do {
 		do 

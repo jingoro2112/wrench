@@ -1,6 +1,4 @@
 /*~
-94
-90
 hello world
 0.1
 -0.1
@@ -54,11 +52,8 @@ hello world
 1
 ~*/
 
-if ( 'a' != 0x61 ) print("err a");
-if ( '\r' != 0x0d ) print("err a3");
-if ( '\n' != 0x0a ) print("err a4");
-if ( '' != 0 ) print("err a5");
-if ( 1 != 1 ) print("err one");
+a1 = b1 = c1 = 10;
+if ( a1 != 10 || b1 != 10 || c1 != 10 ) print("err 0");
 
 c = --a + a-- + ++a + a--;
 
@@ -67,12 +62,13 @@ a++;
 ++a;
 b = a++;
 c = ++a;
-print(a);
+if ( a != 94 ) print("err 1");
+
 a--;
 --a;
 b = a--;
 c = --a;
-print(a);
+if ( a != 90 ) print("err 2");
 
 print( "hello world" );
 
@@ -172,10 +168,12 @@ print( a );
 (int)a;
 print( a );
 
-// excercise keyhole optimizer loads
+// // excercise keyhole optimizer loads
+
 local();
 ag = 8;
 bg = 3;
+
 function local()
 {
 	a = 8;

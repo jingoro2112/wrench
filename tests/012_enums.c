@@ -12,7 +12,7 @@
 
 U();
 
-unit U()
+function U()
 {
 	enum
 	{

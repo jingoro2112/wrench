@@ -1,5 +1,36 @@
 /*~ ~*/
 
+// these should both be legal, null list length but legal
+
+z = 1;
+
+kwds2 = new KWT[]{};
+kwds3 = new KWT[]{{}};
+
+abs = "and";
+
+really = { 10, 20 };
+
+kwds = new KWT[]
+{
+	{"abs", 0},
+	{abs, z},
+	{"asc", 2,},
+	{"bye", really},
+};
+
+if ( kwds[0].s != "abs" || kwds[0].tok != 0 ) print("kwd 0");
+if ( kwds[1].s != "and" || kwds[1].tok != 1 ) print("kwd 1");
+if ( kwds[2].s != "asc" || kwds[2].tok != 2 ) print("kwd 2");
+if ( kwds[3].s != "bye" || kwds[3].tok[1] != 20 ) print("kwd 3");
+
+struct KWT
+{
+	s;
+	tok;
+};
+
+
 instance2 = new a
 {
 	123,
@@ -148,6 +179,15 @@ instance4 = new a
 if ( instance4.p != 321) print("err 27");
 if ( instance4.h != 2 ) print("err 28");
 
+struct particle
+{
+	x;
+	y;
+	z; // specifically does NOT get the 'global' z because this is a struct
+	vx;
+	vy;
+	vz;
+};
 
 function update_particle(p)
 {
@@ -185,16 +225,6 @@ function update_several_timesI( particles, count )
 	}
 }
 
-struct particle
-{
-	x;
-	y;
-	z;
-	vx;
-	vy;
-	vz;
-};
-
 particles[500];
 for ( i = 0; i < 500; ++i )
 {
@@ -215,4 +245,3 @@ update_several_times( particles, 50 );
 
 if ( particles[10].x != 122.299881 ) print("err 29");
 if ( particles[499].y != 713.397705 ) print("err 30");
-

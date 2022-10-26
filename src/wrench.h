@@ -30,19 +30,11 @@ switch() and jumptable (where each instruction jumps to the next one
 directly instead of going to the top and switch()-ing again)
 
 jumptable: only works on GCC/Clang type compilers, since it uses the &&
-label operator
-
-This Flag:
+label operator. This glag:
 
 -- Has NO EFFECT on the compiler or the compiled object code
-
--- Is MUCH faster (on the order of 40%!) on embedded "uncomplicated"
-   systems ie- simple caching and flat memory speeds.
-
--- Is a bit faster (more like 20%) on PC
-  
--- increases interpreter size slightly (a K or two)
-
+-- Is MUCH faster (20%)
+-- increases interpreter size 
 */
 #define WRENCH_JUMPTABLE_INTERPRETER
 /***********************************************************************/
@@ -54,6 +46,13 @@ the code size at the cost of being able to only load/run bytecode
 //#define WRENCH_WITHOUT_COMPILER
 /***********************************************************************/
 
+/***********************************************************************
+This causes wrench to compile into the absolutely smallest program size
+possible at the cost of some interpreter speed (due to the removal of
+unrolled loops, cache optimizations, and additional 'shared' code with
+some goto spaghetti) This flag also overrides WRENCH_JUMPTABLE_INTERPRETER
+*/
+//#define WRENCH_COMPACT
 /***********************************************************************/
 
 /************************************************************************
@@ -65,16 +64,14 @@ like crazy a modest size should be more than enough.
 
 This will consume 8 bytes per stack entry on a 32-bit system, 16 on 64.
 */
-#define WRENCH_DEFAULT_STACK_SIZE 100
+#define WRENCH_DEFAULT_STACK_SIZE 75
 /***********************************************************************/
 
 /************************************************************************
-set this to try compiling sys/stat.h for fstat and file operations
+set this to try compiling sys/stat.h for fstat and file operations.
 */
 #define WRENCH_STD_FILE
 /***********************************************************************/
-
-#define WRENCH_VERSION 150
 
 #include <stdint.h>
 #include <stddef.h>
@@ -359,11 +356,13 @@ enum WRExType
 {
 	WR_EX_NONE = 0x00,
 
-	WR_EX_USR        = 0x20,
-	WR_EX_REFARRAY   = 0x80,
-	WR_EX_ARRAY      = 0xA0,
-	WR_EX_STRUCT     = 0xC0,
-	WR_EX_HASH_TABLE = 0xE0,
+	WR_EX_USR        = 0x20,  // 0010
+	WR_EX_ITERATOR	 = 0x60,  // 0110
+	
+	WR_EX_REFARRAY   = 0x80,  // 1000
+	WR_EX_ARRAY      = 0xA0,  // 1010
+	WR_EX_STRUCT     = 0xC0,  // 1100
+	WR_EX_HASH_TABLE = 0xE0,  // 1110
 };
 
 #define IS_REFARRAY(X) (((X)&0xE0)==WR_EX_REFARRAY)
@@ -387,7 +386,7 @@ struct WRValue
 	// return a raw pointer to the data array if this IS one, otherwise
 	// return null
 	void* array( unsigned int* len, char* arrayType =0 ) const; 
-	char* c_str( unsigned int* len =0 ) const; 
+	const char* c_str( unsigned int* len =0 ) const; 
 
 	//WRValueType getType() { return enumType == WR_REF ? r->getType() : enumType; }
 
@@ -457,15 +456,20 @@ struct WRValue
 };
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
- #ifndef __GNUC__
-  #undef WRENCH_JUMPTABLE_INTERPRETER
+ #if defined(WRENCH_COMPACT) || WIN32 || _WIN32
+ #undef WRENCH_JUMPTABLE_INTERPRETER
  #endif
 #endif
 
 
 #if __arm__ || WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__
 #include <memory.h>
+#include <stdio.h>
+#include <sys/stat.h>
 #else
+#ifdef WRENCH_STD_FILE
+#undef WRENCH_STD_FILE
+#endif
 #include <Arduino.h>
 #endif
 

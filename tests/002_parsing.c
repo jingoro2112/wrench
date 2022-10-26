@@ -1,4 +1,5 @@
 /*~
+0
 1
 10
 100
@@ -10,7 +11,8 @@ hello
 ~*/
 
 
-
+// test floating/integer point string converter
+print( 0.0 );
 print( 1.0 );
 print( 10.0 );
 print( 100.0 );
@@ -18,11 +20,22 @@ print( 1.01 );
 print( 1.00001 );
 print( .00004 );
 
+if ( "\097" != "a" ) print("a ar");
+if ( '\0' != 0 ) print("zero char");
+if ( 'a' != 0x61 ) print("err a");
+if ( '\r' != 0x0d ) print("err a3");
+if ( '\n' != 0x0a ) print("err a4");
+if ( '' != 0 ) print("err a5");
+if ( 1 != 1 ) print("err one");
 
+
+// test crazy comment combinations
 
 /***//*
  */
 // comment
+
+gc_pause( 0xABCD );
 
 print( "hello" ); // eol comment
 print( /**/"hello"  /*  */ ); /*  *//*

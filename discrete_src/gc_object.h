@@ -31,6 +31,8 @@ class WRGCObject
 {
 public:
 
+	// the order here matters for data alignment
+	
 	char m_type;
 	char m_preAllocated;
 	uint16_t m_mod;
@@ -42,25 +44,28 @@ public:
 		const unsigned char* m_ROMHashTable;
 	};
 
-	WRGCObject* m_next; // for gc
-
 	union
 	{
 		const void* m_constData;
 		void* m_data;
 		int* m_Idata;
+		char* m_SCdata;
 		unsigned char* m_Cdata;
 		WRValue* m_Vdata;
 		float* m_Fdata;
 	};
 
+	WRGCObject* m_next; // for gc
+
+	// this object should occupy 1 + 1 + 2 + 4 + 4 + 4 + 4 = 20 bytes of memory
+	
 	~WRGCObject() { clear(); }
 
 	//------------------------------------------------------------------------------
 	void* growHash( const uint32_t hash )
 	{
 		// there was a collision with the passed hash, grow until the
-		// collision dissapears
+		// collision disappears
 		
 		int t = 0;
 		for( ; c_primeTable[t]; ++t )
@@ -117,7 +122,7 @@ public:
 
 			for( int v=0; v<m_mod; ++v )
 			{
-				if (!m_hashTable[v])
+				if ( !m_hashTable[v] )
 				{
 					continue;
 				}
@@ -271,7 +276,6 @@ public:
 			case SV_HASH_TABLE:
 			{
 
-				
 				// zero remains "null hash" by scrambling. Which means
 				// a hash of "0x55555555" will break the system. If you
 				// are reading this comment then I'm sorry, the only

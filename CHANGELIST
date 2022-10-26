@@ -1,7 +1,15 @@
-1.5.0 -------------------------------------------------------------------------
-- adding goto. sometimes it's just the right solution
+10/26/22 1.5.0 -------------------------------------------------------------------------
+- added goto. sometimes it's just the right solution
 - added optimized int/float to string so no more dependency on std/sprintf
 - added optimized sprintf for string library
+- added gc_pause( counts )  to pause the garbage collector 'x' counts when a large
+  number of allocations is about to happen. The gc is hyper-aggressive which works
+  great for small-memory embedded systems but slows down larger allocations
+- fixed parsing of \0 -style escape sequences in single and double-quotes
+- added struct array initting
+- tranlate "null" into 0 wherever it is encountered
+- added "compact" flag which will trade unrolled speed for very compact code,
+  reduces compiler-only build to 21k on arduino, now it fits into everything!
 
 10/15/22 1.4.0 -------------------------------------------------------------------------
 - removed unnused opcode

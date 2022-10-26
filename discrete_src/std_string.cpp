@@ -1,6 +1,7 @@
 #include "wrench.h"
 
 #include <string.h>
+#include <ctype.h>
 
 //------------------------------------------------------------------------------
 int wr_strlenEx( WRValue* val )
@@ -21,44 +22,13 @@ void wr_strlen( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
-void wr_substr( WRValue* stackTop, const int argn, WRContext* c )
-{
-	stackTop->init();
-	unsigned int size;
-	const char* str;
-	WRValue* args = stackTop - argn;
-
-	if ( argn < 1 || !(str = args[0].c_str(&size)) )
-	{
-		return;
-	}
-
-	unsigned int start = 0;
-	unsigned int count = size;
-	if ( argn > 1 )
-	{
-		start = args[1].asInt();
-		start = (start > size) ? size : start;
-		count = size - start;
-	}
-
-	if ( argn > 2 )
-	{
-		count = args[2].asInt();
-		if ( (start + count) > size )
-		{
-			count = size - start;
-		}
-	}
-
-	stackTop->p2 = INIT_AS_ARRAY;
-	stackTop->va = c->getSVA( count, SV_CHAR, false );
-	memcpy( stackTop->va->m_Cdata, str + start, count );
-}
-
-//------------------------------------------------------------------------------
 int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn )
 {
+	if ( !fmt )
+	{
+		return 0;
+	}
+	
 	enum
 	{
 		zeroPad         = 1<<0,
@@ -295,27 +265,38 @@ convertBase:
 }
 
 //------------------------------------------------------------------------------
+void wr_format( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	if( argn >= 1 )
+	{
+		WRValue* args = stackTop - argn;
+		char outbuf[512];
+		
+		int size = wr_sprintfEx( outbuf, args[0].c_str(), args + 1, argn - 1 );
+
+		stackTop->p2 = INIT_AS_ARRAY;
+		stackTop->va = c->getSVA( size, SV_CHAR, false );
+		memcpy( stackTop->va->m_Cdata, outbuf, size );
+	}
+}
+
+//------------------------------------------------------------------------------
 void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
 
 #ifdef WRENCH_STD_FILE
-	if( argn < 1 )
+	if( argn >= 1 )
 	{
-		return;
-	}
-	WRValue* args = stackTop - argn;
+		WRValue* args = stackTop - argn;
 
-	const char *fmt = (const char*)args[0].va->m_Cdata;
-	if ( !fmt )
-	{
-		return;
+		char outbuf[512];
+		stackTop->i = wr_sprintfEx( outbuf, args[0].c_str(), args + 1, argn - 1 );
+		
+		printf( "%s", outbuf );
 	}
-	
-	char outbuf[512];
-	stackTop->i = wr_sprintfEx( outbuf, fmt, args + 1, argn - 1 );
-
-	printf( "%s", outbuf );
 #endif
 }
 
@@ -323,39 +304,161 @@ void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
 void wr_sprintf( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
-	if ( argn < 2 )
-	{
-		return;
-	}
-
 	WRValue* args = stackTop - argn;
-	if ( args[1].xtype != WR_EX_ARRAY || args[1].va->m_type != SV_CHAR
-		 || args[0].type != WR_REF )
-	{
-		return;
-	}
-
-	const char *fmt = (const char*)args[1].va->m_Cdata;
-	if ( !fmt )
+	
+	if ( argn < 2
+		 || args[0].type != WR_REF
+		 || args[1].xtype != WR_EX_ARRAY
+		 || args[1].va->m_type != SV_CHAR )
 	{
 		return;
 	}
 
 	char outbuf[512];
-	stackTop->i = wr_sprintfEx( outbuf, fmt, args + 2, argn - 2 );
+	stackTop->i = wr_sprintfEx( outbuf, args[1].c_str(), args + 2, argn - 2 );
 
 	args[0].r->p2 = INIT_AS_ARRAY;
 	args[0].r->va = c->getSVA( stackTop->i, SV_CHAR, false );
 	memcpy( args[0].r->va->m_Cdata, outbuf, stackTop->i );
 }
 
+//------------------------------------------------------------------------------
+void wr_isspace( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->p2 = INIT_AS_INT;
+	if ( argn == 1 )
+	{
+		stackTop->i = (int)isspace( (char)(stackTop - 1)->asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_isalpha( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->p2 = INIT_AS_INT;
+	if ( argn == 1 )
+	{
+		stackTop->i = (int)isalpha( (char)(stackTop - 1)->asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_isdigit( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->p2 = INIT_AS_INT;
+	if ( argn == 1 )
+	{
+		stackTop->i = (int)isdigit( (char)(stackTop - 1)->asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_isalnum( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->p2 = INIT_AS_INT;
+	if ( argn == 1 )
+	{
+		stackTop->i = (int)isalnum( (char)(stackTop - 1)->asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_mid( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+	
+	if ( argn < 2 )
+	{
+		return;
+	}
+
+	WRValue* args = stackTop - argn;
+	unsigned int len;
+	const char* data = args[0].c_str( &len );
+
+	if( !data || len <= 0 )
+	{
+		return;
+	}
+	
+	unsigned int start = args[1].asInt();
+	stackTop->p2 = INIT_AS_ARRAY;
+
+	unsigned int chars = 0;
+	if ( start < len )
+	{
+		chars = (argn > 2) ? args[2].asInt() : len;
+		if ( chars > (len - start) )
+		{
+			chars = len - start;
+		}
+	}
+	
+	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data + start, chars );
+}
+
+//------------------------------------------------------------------------------
+void wr_strchr( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->p2 = INIT_AS_INT;
+	stackTop->i = -1;
+
+	if ( argn < 2 )
+	{
+		return;
+	}
+
+	WRValue* args = stackTop - argn;
+
+	const char* str = args[0].c_str();
+	if ( !str )
+	{
+		return;
+	}
+	
+	char ch = (char)args[1].asInt();
+	const char* found = strchr( str, ch );
+	if ( found )
+	{
+		stackTop->i = found - str;
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_tolower( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->p2 = INIT_AS_INT;
+	if ( argn == 1 )
+	{
+		stackTop->i = (int)tolower( (stackTop - 1)->asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_toupper( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->p2 = INIT_AS_INT;
+	if ( argn == 1 )
+	{
+		stackTop->i = (int)toupper( (stackTop - 1)->asInt() );
+	}
+}
 
 //------------------------------------------------------------------------------
 void wr_loadStringLib( WRState* w )
 {
 	wr_registerLibraryFunction( w, "str::strlen", wr_strlen );
-	wr_registerLibraryFunction( w, "str::substr", wr_substr );
 	wr_registerLibraryFunction( w, "str::sprintf", wr_sprintf );
 	wr_registerLibraryFunction( w, "str::printf", wr_printf );
+	wr_registerLibraryFunction( w, "str::format", wr_format );
+	wr_registerLibraryFunction( w, "str::isspace", wr_isspace );
+	wr_registerLibraryFunction( w, "str::isdigit", wr_isdigit );
+	wr_registerLibraryFunction( w, "str::isalpha", wr_isalpha );
+	wr_registerLibraryFunction( w, "str::mid", wr_mid );
+	wr_registerLibraryFunction( w, "str::strchr", wr_strchr );
+	wr_registerLibraryFunction( w, "str::tolower", wr_tolower );
+	wr_registerLibraryFunction( w, "str::toupper", wr_toupper );
 }
+
 

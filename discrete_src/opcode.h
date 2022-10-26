@@ -28,7 +28,6 @@ enum WROpcode
 {
 	O_RegisterFunction = 0,
 	O_ReserveGlobalFrame,
-	O_FunctionListSize,
 	
 	O_LiteralInt32,
 	O_LiteralZero,
@@ -289,6 +288,8 @@ enum WROpcode
 	O_LGBinaryDivision,
 	O_LLBinaryDivision,
 
+	O_GC_Command,
+	
 	// nmon-interpreted opcodes
 	O_HASH_PLACEHOLDER,
 	O_FUNCTION_CALL_PLACEHOLDER,

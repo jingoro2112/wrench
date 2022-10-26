@@ -24,6 +24,9 @@ SOFTWARE.
 #define _VM_H
 /*------------------------------------------------------------------------------*/
 
+int wr_itoa( int i, char* string, size_t len );
+int wr_ftoa( float f, char* string, size_t len );
+
 //------------------------------------------------------------------------------
 struct WRFunction
 {
@@ -59,10 +62,10 @@ struct WRContext
 	int globals;
 
 	const unsigned char* bottom;
-	int32_t stopLocation;
-
+	const unsigned char* stopLocation;
+	uint16_t gcPauseCount;
 	WRGCObject* svAllocated;
-
+	
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
 	WRGCObject* getSVA( int size, WRGCObjectType type, bool init );
@@ -115,6 +118,21 @@ extern WRVoidFunc wr_LeftShiftAssign[16];
 extern WRVoidFunc wr_postinc[4];
 extern WRVoidFunc wr_postdec[4];
 
+
+typedef int (*WRFuncIntCall)( int a, int b );
+typedef float (*WRFuncFloatCall)( float a, float b );
+typedef void (*WRTargetCallbackFunc)( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall I, WRFuncFloatCall F );
+typedef void (*WRFuncAssignFunc)( WRValue* to, WRValue* from, WRFuncIntCall I, WRFuncFloatCall F );
+extern WRFuncAssignFunc wr_FuncAssign[16];
+extern WRTargetCallbackFunc wr_funcBinary[16];
+
+typedef bool (*WRCompareFuncIntCall)( int a, int b );
+typedef bool (*WRCompareFuncFloatCall)( float a, float b );
+typedef bool (*WRBoolCallbackReturnFunc)( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall );
+extern WRBoolCallbackReturnFunc wr_Compare[16];
+
+
+
 typedef void (*WRTargetFunc)( WRValue* to, WRValue* from, WRValue* target );
 extern WRTargetFunc wr_AdditionBinary[16];
 extern WRTargetFunc wr_MultiplyBinary[16];
@@ -148,6 +166,7 @@ extern WRUnaryFunc wr_toFloat[4];
 extern WRUnaryFunc wr_bitwiseNot[4];
 
 typedef bool (*WRReturnSingleFunc)( WRValue* value );
+
 
 typedef bool (*WRValueCheckFunc)( WRValue* value );
 extern WRReturnSingleFunc wr_LogicalNot[4];

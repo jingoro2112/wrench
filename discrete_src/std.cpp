@@ -57,6 +57,91 @@ uint32_t wr_hashStr( const char* dat )
 }
 
 //------------------------------------------------------------------------------
+int wr_itoa( int i, char* string, size_t len )
+{
+	char buf[12];
+	size_t pos = 0;
+	int val;
+	if ( i < 0 )
+	{
+		string[pos++] = '-';
+		val = -i;
+	}
+	else
+	{
+		val = i;
+	}
+
+	int digit = 0;
+	do
+	{
+		buf[digit++] = (val % 10) + '0';
+	} while( val /= 10 );
+
+	--digit;
+
+	for( ; digit>=0 && pos < len; --digit )
+	{
+		string[pos++] = buf[digit];
+	}
+	string[pos] = 0;
+	return pos;
+}
+
+//------------------------------------------------------------------------------
+int wr_ftoa( float f, char* string, size_t len )
+{
+	size_t pos = 0;
+
+	// sign stuff
+	if (f < 0)
+	{
+		f = -f;
+		string[pos++] = '-';
+	}
+
+	if ( pos > len )
+	{
+		string[0] = 0;
+		return 0;
+	}
+
+	f += 5.f / (float)10e6; // round value to 5 places
+
+	int i = (int)f;
+
+	if ( i )
+	{
+		f -= i;
+		pos += wr_itoa( i, string + pos, len - pos );
+	}
+	else
+	{
+		string[pos++] = '0';
+	}
+
+	string[pos++] = '.';
+
+	for( int p=0; pos < len && p<5; ++p ) // convert non-integer to 5 digits of precision
+	{
+		f *= 10.0;
+		char c = (char)f;
+		string[pos++] = '0' + c;
+		f -= c;
+	}
+
+	for( --pos; pos > 0 && string[pos] == '0' && string[pos] != '.' ; --pos ); // knock off trailing zeros and decimal if appropriate
+
+	if ( string[pos] != '.' )
+	{
+		++pos;
+	}
+
+	string[pos] = 0;
+	return pos;
+}
+
+//------------------------------------------------------------------------------
 void wr_std_rand( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
