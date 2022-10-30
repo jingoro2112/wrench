@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8">
+  <title>wrench embedded interpreter</title>
+  <link rel='stylesheet' href='css-pro-layout.css'>
+  <link rel='stylesheet' href='remixicon.css'>
+  <link rel="stylesheet" href="./style.css">
+
+</head>
+<body>
+<!-- partial:index.partial.html -->
+
+
+<style>
+a:visited {
+  color: #007F7F;
+  background-color: transparent;
+  text-decoration: none;
+}
+
+a:hover {
+  color: #0F9F0F;
+  background-color: transparent;
+  text-decoration: underline;
+}
+
+a:active {
+  color: #3F3F1F;
+  background-color: transparent;
+  text-decoration: underline;
+}
+</style>
+
+<style type="text/css">
+pre code {
+  background-color: #eee;
+  border: 1px solid #999;
+  display: block;
+  padding: 20px;
+}
+
+	table, th, td {
+  border: 1px solid black;
+  border-collapse: collapse;
+}
+</style>
+
+
+<div class="layout has-sidebar fixed-sidebar fixed-header">
+
+
+
+
+  <aside id="sidebar" class="sidebar break-point-lg has-bg-image">
+
+    <div class="image-wrapper">
+      <img src="core.jpg" alt="sidebar background" />
+    </div>
+    <div class="sidebar-layout">
+      <div class="sidebar-header">
+        <span style="
+                text-transform: uppercase;
+                font-size: 15px;
+                letter-spacing: 3px;
+                font-weight: bold;
+              ">wrench
+
+<img src="small_icon_white.png"></span>
+      </div>
+      <div class="sidebar-content">
+        <nav class="menu open-current-submenu">
+          <ul>
+            <li class="menu-item">
+
+
+                <span class="menu-title"><a href="#intro">Intro</a></span>
+                <span class="menu-title"><a href="#integration">Integration</a></span>
+                <span class="menu-title"><a href="#language">Language Reference</a></span>
+                <span class="menu-title"><a href="#library">Lib Reference</a></span>
+                <span class="menu-title"><a href="#benchmarks">Benchmarks</a></span>
+                <span class="menu-title"><a href="#faq">FAQ</a></span>
+
+
+
+
+
+
+            </li>
+          </ul>
+        </nav>
+      </div>
+      <div class="sidebar-footer"><span><a href="https://opensource.org/licenses/MIT">MIT Licence</a></span></div>
+    </div>
+  </aside>
+  <div id="overlay" class="overlay"></div>
+  <div class="layout">
+
+    <main class="content">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<hr><h1><a id="intro"></a>1.0 Introduction</h1></hr>
+
+"The difficulty is that things almost always start with some guy
+doing something that at the time looks totally useless" <cr>- <small>James Burke</small>
+
+<h3><p>wrench solves the problem of needing an easy-to-understand
+scripting language that can fit into a very small space but
+retain full power, flexibility, and speed.</h3>
+
+<ul>
+<li><b>Embedable:</b>Fits into less than 32K of Flash, and runs with
+less than 1k of RAM 
+<li><p><b>Comprehensible:</b>c-like syntax, weakly typed, garbage
+collected
+
+<li><p><b>Fast:</b>Two to three times faster than other interpreters
+
+<li><p><b>Compact:</b>Bytecode images a small fraction of other
+interpreters
+<li><b>Easy To Integrate:</b>
+ <ul>
+  <li>two source files: <code>wrench.cpp and wrench.h</code>
+  <li>architecture neutral, compile anywhere run anywhere else
+  <li>c++98 clean and compliant, nothing fancy.
+  <li>no third-party libs, its all included.
+ </ul>
+
+<li><p><b>Bare-Metal:</b>Wrench can address native c/c++ data and arrays
+directly from script.
+</ul>
+
+<p><b>Short Version:</b>
+I didn't need a whole workshop with all the bells and whistles. I just
+needed a wrench. So I built one.
+
+
+
+
+
+<hr><h1><a name="integration"></a>2.0 Integration</h1></hr>
+
+Wrench [the project] is kept current on
+<a href="https://github.com/jingoro2112/wrench">GitHub, download it
+here.</a>
+
+<p>
+Now the easy part, wrench packages itself into two source files:
+
+I have to credit <a href="https://wren.io/">Wren</a> for this idea (at
+least that's where I saw it), it's brilliant and makes
+integration a breeze.
+<p>
+add:
+<pre><code>/src/wrench.h
+/src/wrench.cpp
+</pre></code>
+to your project and compile. That's it, here is a complete
+
+<h2>example</h2>
+<pre><code>#include "wrench.h"
+#include &ltstring.h&gt
+#include &ltstdio.h&gt
+
+void print( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	char buf[1024];
+	for( int i=0; i&ltargn; ++i )
+	{
+		printf( "%s", argv[i].asString(buf, 1024) );
+	}
+}
+
+const char* wrenchCode = 
+"print( \"Hello World!\\n\" );"
+"for( i=0; i&lt10; i++ )        "
+"{                            "
+"    print( i );              "
+"}                            "
+"print(\"\\n\");              ";
+
+
+int main( int argn, char** argv )
+{
+	WRState* w = wr_newState(); // create the state
+
+	wr_registerFunction( w, "print", print ); // bind a function
+
+	unsigned char* outBytes; // compiled code is alloc'ed
+	int outLen;
+
+	int err = wr_compile( wrenchCode, strlen(wrenchCode), &outBytes, &outLen ); // compile it
+	if ( err == 0 )
+	{
+		wr_run( w, outBytes ); // load and run the code!
+		delete[] outBytes; // clean up 
+	}
+
+	wr_destroyState( w );
+
+	return 0;
+}
+</code></pre>
+
+<h2>command line</h2>
+<p>
+A command-line utility is included, to compile it under linux just
+<code>make</code> in the root dir. For windows a visual studio project is included under
+<code>/win32</code>
+<p>
+For PC-ish stuff this is all you have to do, the full-blown wrench
+compiler and interpreter are fine as they are, but for an embedded
+target there are a few slight changes you might want to make:
+
+<p>
+In <code>src/wrench.h</code> you might want
+to tweak
+
+
+<h2>build flags</h2>
+
+<pre><code>#define WRENCH_WITHOUT_COMPILER
+</pre></code>
+
+
+<p>Build wrench without it's compiler. this will minimize
+the code size at the cost of being able to only load/run bytecode.
+For embedded projects the command line tool actually compiles to c
+header .h code for super-easy addition to the source.
+
+
+<pre><code>#define WRENCH_COMPACT
+</pre></code>
+
+<p>This causes wrench to compile into the absolutely smallest program size
+possible at the cost of some interpreter speed (due to the removal of
+unrolled loops, cache optimizations, and additional 'shared' code with
+some goto spaghetti)
+
+<p>To add functions to extend wrench, as well as calling into it are
+dead simple and super low overhead. Some examples are provided, but
+frankly if you actually got this far and are interested, the code in
+wrench.h is very clear and well commented, and there are quite a few
+examples.
+<p>[TODO]-- actually document this instead of phoning it in :P
+
+
+
+
+<hr><h1><a name="language"></a>3.0 Language Reference</h1></hr>
+
+
+
+Wrench is designed to be intuitive and c-like, the syntax should be
+very familiar.
+
+<p><b>variables</b>
+<p>no special declaration is required to introduce a variable:
+<code><pre>a = 10;
+b = 3.4;
+string = "some string";
+</code></pre>
+wrench natively handles signed-32, float-32, and strings. Variable
+names follow c-syntax for legality, the must start with a letter or
+'_' and can contain letters, numbers and more '_' characters.
+
+
+<p><b>operators</b>
+<p>all of these are supported, with their c-defined precedence:
+<pre><code>//binary:
+a + b;
+a - b;
+a / b;
+a * b;
+a | b; // or
+a & b; // and
+a ^ b; // xor
+a % b; // mod
+a &gt&gt b; // right-shift
+a &lt&lt b; // left-shift
+
+a += b;
+a -= b;
+a /= b;
+a *= b;
+a |= b;
+a &= b;
+a ^= b;
+a %= b;
+a &gt&gt= b;
+a &lt&lt= b;
+
+// pre and post:
+a++;
+a--
+++a;
+--a;
+
+// as well as the c logical operators:
+a == b
+a != b
+a &gt= b
+a &lt= b
+a || b
+a && b
+</code></pre>
+
+<p><b>comments</b>
+<code><pre>a = 10; // single-line c++ comments are supported
+/*
+     as well as block-comment style
+*/
+</code></pre>
+
+
+<p><b>arrays</b>
+<p>arrays can be declared with [] syntax, and can contain any legal
+type
+<code><pre>arrayOne[] = { 0, 1, 2 };
+arrayTwo[] = { "zero", 1, 3.55 };
+
+print( arrayOne[1] ); // will print "1"
+
+</code></pre>
+
+<p><b>for</b>
+
+<p>follows the standard c syntax:
+type
+<code><pre>for( a=0; a<10; ++a )
+{
+
+}
+</code></pre>
+
+<p><b>foreach</b>
+<p>wrench also supports "foreach" in two flavors, value only and
+key/value:
+
+<code><pre>somArray[] = {"zero", "one", "two" };
+for( v : somArray )
+{
+   // this loop will run 3 times, with v taking on "zero", "one" and "two"
+}
+
+for( k,v : somArray )
+{
+   // same as above but k will take on the value 0, 1 and 2
+}
+</code></pre>
+
+
+<p><b>while</b>
+<code><pre>while( condition )
+{
+}
+</code></pre>
+
+<p><b>do/while</b>
+<code><pre>do
+{
+} while( condition );
+</code></pre>
+
+<p><b>if</b>
+<code><pre>if( a == true )
+{
+} while( condition );
+</code></pre>
+
+<p><b>function</b>
+<p>Functions can be called with any number of arguments, extra arguments
+are ignored, un-specified arguments are set to zero (0)
+<code><pre>function f( arg )
+{
+   if ( arg > 10 )
+   {
+	  return true;
+   }
+   else
+   {
+	  return false;
+   }
+}
+
+first = f(20); // first will be 'true' or '1'
+second = f(); // second will be 'false' because 'arg' was not
+              // specified, so set to 0
+</code></pre>
+
+<p>If a variable is declared in a function, it will be local unless a
+global version is encountered first. Global scope can be forced with
+the '::' operator:
+<code><pre>g = 20;
+
+function foo()
+{
+   g = 30;
+   ::n = 40;
+}
+
+foo(); // after foo is called the global 'g' will be set to 30,
+       // and global variable 'n' will be set to 40
+</code></pre>
+
+<p><b>struct</b>
+<p>In wrench structs are actually functions that preserve their stack
+frames.
+<p>Another way to put it is structs are "called" so they are their own
+constructors, and all the variables they declare are preserved:
+<code><pre>struct S
+{
+   member1;
+   member2;
+};
+
+s = new S(); // s will be a struct with two uninitialized members (member1 and member2) 
+
+// members are dereferenced with '.' notation:
+s.member1 = 20;
+s.member2 = 50 + s.member1;
+// s.member2 is now 70
+</code></pre>
+
+A more complete example:
+<code><pre>struct S(arg1)
+{
+   member1 = arg1;
+   if ( arg1 > 20 )
+   {
+	  member2 = 0;
+   }
+   else
+   {
+	  member2 = 555;
+   }
+}
+
+instance = new S(40); // s.member1 will be 40, s.member2 will be 0
+</code></pre>
+
+<p>Structs can also be initialized when created:
+<code><pre>struct S
+{
+   a;
+   b;
+}
+
+bill = new S()
+{
+   a = 20,
+   b = "some string",
+};
+</code></pre>
+
+<p><b>constants</b>
+some constants that are compiler-defined:
+<code><pre>true == 1
+false == 0
+null == 0
+</code></pre>
+
+<p><b>enums</b>
+<p>enums are syntactic sugar, when invoked they introduce variables
+into the namespace with automatic initliazation
+<code><pre>enum
+{
+	n1,
+	n2,
+	n3
+}
+
+// n1 is 0, n2 is 1 and n3 is 2
+</code></pre>
+
+<p><b>hash tables</b>
+<p>wrench uses hash tables internally so this language feature kind of
+comes along "for free". Any valid value can be used as a key or value
+
+<code><pre>hashTable = { 1:"one", 2:"two", 3:3, "str":6 };
+print( hashTable[1] ); // "one"
+print( hashTable[2] ); // "two"
+print( hashTable[3] ); // 3
+print( hashTable["str"] ); // 6
+
+// and this also works:
+print( hashTable.str ); // 6
+</code></pre>
+
+<p><b>compiler-intrinsics</b>
+Some compiler directives are included for working with arrays and hash
+tables:
+
+<code><pre>hashTable = { 1:"one", 2:"two", 3:3, "str":6 };
+
+//  ._count
+print( hashTable._count ); // prints 4
+
+// ._exists
+hashTable._exists( 2 ); // returns 'true'
+hashTable._exists( 20 ); // returns 'false
+
+// ._remove
+hashTable._exists( 2 ); // returns 'true'
+hashTable._remove( 2 );
+hashTable._exists( 2 ); // now false
+</code></pre>
+
+
+
+<hr><h1><a name="library"></a>4.0 Library</h1></hr>
+library functions are provided as well. These functions are only
+available if loaded.
+
+
+<code><pre>math::sin( f );
+math::cos( f );
+math::tan( f );
+math::sinh( f );
+math::cosh( f );
+math::tanh( f );
+math::asin( f );
+math::acos( f );
+math::atan( f );
+math::atan2( x, y );
+math::log( f );
+math::ln( f );
+math::log10( f );
+math::exp( f );
+math::pow( a, b );
+math::fmod( a, b );
+math::trunc( f );
+math::sqrt( f );
+math::ceil( f );
+math::floor( f );
+math::abs( f );
+math::ldexp( a, b );
+math::deg2rad( f );
+math::rad2deg( f );
+
+str::strlen( str );
+str::sprintf( str, fmt, ... );
+str::printf( fmt, ... );
+str::format( fmt, ... );
+str::isspace( char );
+str::isdigit( char );
+str::isalpha( char );
+str::mid( str, start, len ); // return the middle of a string starting
+                             // at 'start' for 'len' chars
+str::strchr( str, char ); // returns -1 if not found
+str::tolower( str );
+str::toupper( str );
+
+file::read( name ); // returns an array representing the data
+file::write( name, data[] );
+
+io::getline(); // return a line of text input with fgetc(stdin)
+</code></pre>
+
+<hr><h1><a name="benchmarks"></a>5.0 Benchmarks</h1></hr>
+
+<h2>Benchmarks run on Xeon E5-2640</h2>
+
+<p><b>particles:</b> testing foreach() speed as well as struct member access
+speed
+<table>
+  <tr>
+    <th><center>Language</center></th>
+    <th><center>Source</center></th>
+    <th><center>Bytecode Size/% wrench</center></th>
+    <th><center>Time/ % wrench</center></th>
+  </tr>
+  <tr>
+    <td><center>wrench</center></tc>
+    <td><center><a href="perf/particles.w">particles.w</w></center></tc>
+    <td><center>518</center></tc>
+    <td><center>18s</center></tc>
+  </tr>
+  <tr>
+    <td><center>wrench [compact]</center></tc>
+    <td><center><a href="perf/particles.w">particles.w</w></center></tc>
+    <td><center>518</center></tc>
+    <td><center style="color:red">24.8s 37% slower</center></tc>
+  </tr>
+  <tr>
+    <td><center>lua</center></tc>
+    <td><center><a href="perf/particles.lua">particles.lua</w></center></tc>
+    <td><center style="color:red">970 87% larger</center></tc>
+    <td><center style="color:red">46s 155% slower</center></tc>
+  </tr>
+  <tr>
+    <td><center>squirrel</center></tc>
+    <td><center><a href="perf/particles.nut">particles.nut</w></center></tc>
+    <td><center style="color:red">3822 637% larger</center></tc>
+    <td><center style="color:red">41s 127% slower</center></tc>
+  </tr>
+</table>
+
+<p><b>primes:</b> testing function calls/recursion computation
+<table>
+  <tr>
+    <th><center>Language</center></th>
+    <th><center>Source</center></th>
+    <th><center>Bytecode Size/% wrench</center></th>
+    <th><center>Time/ % wrench</center></th>
+  </tr>
+  <tr>
+    <td><center>wrench</center></tc>
+    <td><center><a href="perf/primes.w">primes.w</w></center></tc>
+    <td><center>113</center></tc>
+    <td><center>10s</center></tc>
+  </tr>
+  <tr>
+    <td><center>wrench [compact]</center></tc>
+    <td><center><a href="perf/primes.w">primes.w</w></center></tc>
+    <td><center>113</center></tc>
+    <td><center style="color:red">16.5s 39% slower</center></tc>
+  </tr>
+  <tr>
+    <td><center>lua</center></tc>
+    <td><center><a href="perf/primes.lua">primes.lua</w></center></tc>
+    <td><center style="color:red">422 237% larger</center></tc>
+    <td><center style="color:red">18.2s 82% slower</center></tc>
+  </tr>
+  <tr>
+    <td><center>squirrel</center></tc>
+    <td><center><a href="perf/primes.nut">primes.nut</w></center></tc>
+    <td><center style="color:red">1782 1476% larger</center></tc>
+    <td><center style="color:red">27s 170% slower</center></tc>
+  </tr>
+</table>
+
+<p><b>recursive fibonacci geerator:</b> testing function call overhead and recursion
+<table>
+  <tr>
+    <th><center>Language</center></th>
+    <th><center>Source</center></th>
+    <th><center>Bytecode Size/% wrench</center></th>
+    <th><center>Time/ % wrench</center></th>
+  </tr>
+  <tr>
+    <td><center>wrench</center></tc>
+    <td><center><a href="perf/fibo.w">fibo.w</w></center></tc>
+    <td><center>74</center></tc>
+    <td><center>22s</center></tc>
+  </tr>
+  <tr>
+    <td><center>wrench [compact]</center></tc>
+    <td><center><a href="perf/fibo.w">fibo.w</w></center></tc>
+    <td><center>74</center></tc>
+    <td><center style="color:red">29s 31.8% slower</center></tc>
+  </tr>
+  <tr>
+    <td><center>lua</center></tc>
+    <td><center><a href="perf/fibo.lua">fibo.lua</w></center></tc>
+    <td><center style="color:red">288 289% larger</center></tc>
+    <td><center style="color:red">51.5s 131% slower</center></tc>
+  </tr>
+  <tr>
+    <td><center>squirrel</center></tc>
+    <td><center><a href="perf/fibo.nut">fibo.nut</w></center></tc>
+    <td><center style="color:red">1001 1252% larger</center></tc>
+    <td><center style="color:red">84s 281% slower</center></tc>
+  </tr>
+</table>
+
+
+<p><b>exponent call:</b> testing library call overhead
+<table>
+  <tr>
+    <th><center>Language</center></th>
+    <th><center>Source</center></th>
+    <th><center>Bytecode Size/% wrench</center></th>
+    <th><center>Time/ % wrench</center></th>
+  </tr>
+  <tr>
+    <td><center>wrench</center></tc>
+    <td><center><a href="perf/exp.w">exp.w</w></center></tc>
+    <td><center>87</center></tc>
+    <td><center>19s</center></tc>
+  </tr>
+  <tr>
+    <td><center>wrench [compact]</center></tc>
+    <td><center><a href="perf/exp.w">exp.w</w></center></tc>
+    <td><center>87</center></tc>
+    <td><center style="color:red">24.8s 30.5% slower</center></tc>
+  </tr>
+  <tr>
+    <td><center>lua</center></tc>
+    <td><center><a href="perf/exp.lua">exp.lua</w></center></tc>
+    <td><center style="color:red">288 231% larger</center></tc>
+    <td><center style="color:red">40.8s 131% slower</center></tc>
+  </tr>
+  <tr>
+    <td><center>squirrel</center></tc>
+    <td><center><a href="perf/exp.nut">exp.nut</w></center></tc>
+    <td><center style="color:red">1144 1214% larger</center></tc>
+    <td><center style="color:red">71s 273% slower</center></tc>
+  </tr>
+</table>
+ 
+
+<hr><h1><a name="faq"></a>6.0 FAQ</h1></hr>
+
+<p><b>... why? Aren't there enough interpreters out there? Surely one of
+them would have worked?</b><cr>
+Probably, but I couldn't find one! I tried squirrel, wren, tiny-c,
+pawn, even lua and a few others I can't think of. Most of them would
+compile and run for my embedded system (SAMD21 CortexM0) but they all
+blew chow when I actually tried to run scripts.
+<p>The problem? RAM.
+<p>They all needed a pile of it, hundreds of k in some cases. My chip
+has 32k total and I needed most of it for shift-buffer space!
+<p>wrench was motivated by a need for lightning-fast user-programmable scripts in a tight space
+
+<p><b>So use FORTH?</b><cr>
+Wrench is also motivated by the need for scripts that are approachable
+by novice-to-intermediate programmers. Asking them to become familiar
+with FORTH (or any of the many other expressive minimalistic langauges
+I've encountered) would sink the project.
+
+<p><b>You say wrench is fast, LuaJITs is faster?</b><cr>
+Yes, I know. If a JIT language solves your problem then of course use
+one! I am a big fan of c# personally. wrench is for when that's not an
+option.
+
+
+
+
+
+
+
+
+    </main>
+    <div class="overlay"></div>
+  </div>
+</div>
+
+</body>
+</html>

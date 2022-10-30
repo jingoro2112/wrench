@@ -83,8 +83,10 @@ public:
 			if ( newMod == 0 )
 			{
 				// could not grow large enough to avoid collision, give up.
-				return m_Vdata + (hash % m_mod);
+				return m_Vdata + ((hash % m_mod)<<1);
 			}
+
+			int newSize = newMod << 1;
 
 			uint32_t* proposed = new uint32_t[newMod];
 			memset( proposed, 0, newMod*sizeof(uint32_t) );
@@ -117,8 +119,8 @@ public:
 				continue;
 			}
 
-			WRValue* newValues = new WRValue[ newMod ];
-			memset( (char*)newValues, 0, newMod*sizeof(WRValue) );
+			WRValue* newValues = new WRValue[ newSize ];
+			memset( (char*)newValues, 0, newSize*sizeof(WRValue) );
 
 			for( int v=0; v<m_mod; ++v )
 			{
@@ -126,22 +128,32 @@ public:
 				{
 					continue;
 				}
+
 				
-				WRValue* V1 = newValues + (m_hashTable[v] % newMod);
-				WRValue* V2 = m_Vdata + (m_hashTable[v] % m_mod);
-				V1->p2 = V2->p2;
-				V2->p2 = INIT_AS_INT;
-				V1->p = V2->p;
+				WRValue* to = newValues + ((m_hashTable[v] % newMod)<<1);
+				WRValue* from = m_Vdata + ((m_hashTable[v] % m_mod)<<1);
+
+				// value
+				to->p2 = from->p2;
+				to->p = from->p;
+				from->p2 = INIT_AS_INT;
+
+				// key
+				++to;
+				++from;
+				to->p2 = from->p2;
+				to->p = from->p;
+				from->p2 = INIT_AS_INT;
 			}
 
 			m_mod = newMod;
-			m_size = m_mod;
+			m_size = newSize;
 			delete[] m_Vdata;
 			delete[] m_hashTable;
 			m_hashTable = proposed;
 			m_Vdata = newValues;
 
-			return m_Vdata + (hash % m_mod);
+			return m_Vdata + ((hash % m_mod)<<1);
 		}
 	}
 	
@@ -172,7 +184,7 @@ public:
 					m_mod = c_primeTable[0];
 					m_hashTable = new uint32_t[m_mod];
 					memset( m_hashTable, 0, m_mod*sizeof(uint32_t) );
-					m_size = m_mod;
+					m_size = m_mod<<1;
 					m_Vdata = new WRValue[m_size];
 					memset( (char*)m_Vdata, 0, m_size*sizeof(WRValue) );
 					break;
@@ -288,19 +300,19 @@ public:
 				uint32_t hash = l ^ 0x55555555; 
 				uint32_t index = hash % m_mod;
 
-				if (m_hashTable[index] == hash) // its us
+				if (m_hashTable[index] != hash) // its us
 				{
-					return (void*)(m_Vdata + index);
+					if ( m_hashTable[index] == 0 ) // empty? claim it
+					{
+						m_hashTable[index] = hash;
+					}
+					else
+					{
+						return growHash( hash ); // not empty and not us, there was a collision
+					}
 				}
-				else if ( m_hashTable[index] == 0 ) // empty? claim it
-				{
-					m_hashTable[index] = hash;
-					return (void*)(m_Vdata + index);
-				}
-				else
-				{
-					return growHash( hash ); // not empty and not us, there was a collision
-				}
+
+				return (void*)(m_Vdata + (index<<1));
 			}
 
 			default: return 0;

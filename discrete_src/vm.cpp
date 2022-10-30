@@ -436,6 +436,59 @@ WRFunction* wr_getFunction( WRContext* context, const char* functionName )
 	return context->localFunctionRegistry.getItem( wr_hashStr(functionName) );
 }
 
+//------------------------------------------------------------------------------
+inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
+{
+	if ( !IS_ITERATOR(iterator->xtype) )
+	{
+		return false;
+	}
+
+	uint32_t element = ARRAY_ELEMENT_FROM_P2( iterator->p2 );
+
+	if ( iterator->r->va->m_type == SV_HASH_TABLE )
+	{
+		for( ; element<iterator->r->va->m_mod && !iterator->r->va->m_hashTable[element]; ++element );
+
+		if ( element >= iterator->r->va->m_mod )
+		{
+			return false;
+		}
+		
+		ARRAY_ELEMENT_TO_P2( iterator->p2, (element + 1) );
+		
+		element <<= 1;
+		
+		value->p2 = INIT_AS_REF;
+		value->r = iterator->r->va->m_Vdata + element;
+		if ( key )
+		{
+			key->p2 = INIT_AS_REF;
+			key->r = iterator->r->va->m_Vdata + element + 1;
+		}
+	}
+	else
+	{
+		if ( element >= iterator->r->va->m_size )
+		{
+			return false;
+		}
+		
+		if ( key )
+		{
+			key->p2 = INIT_AS_INT;
+			key->i = element;
+		}
+		
+		value->p2 = INIT_AS_REF;
+		value->r = iterator->r->va->m_Vdata + element;
+
+		ARRAY_ELEMENT_TO_P2( iterator->p2, ++element );
+	}
+
+	return true;
+}
+
 #ifdef D_OPCODE
 #define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)*pc, c_opcodeName[*pc]);
 #else
@@ -483,14 +536,10 @@ bool CompareEQF( float a, float b ) { return a == b; }
 
 bool CompareBlankF( float a, float b ) { return false; }
 
-uint32_t READ_32_FROM_PC( const unsigned char* P )
+int32_t READ_32_FROM_PC( const unsigned char* P )
 {
 	return ( (((int32_t)*(P)) << 24) | (((int32_t)*((P)+1)) << 16) | (((int32_t)*((P)+2)) << 8) | ((int32_t)*((P)+3)) );
 }
-
-#else
-
-#define READ_32_FROM_PC(P) ((((int32_t)*(P)) << 24) | (((int32_t)*((P)+1)) << 16) | (((int32_t)*((P)+2)) << 8) | ((int32_t)*((P)+3))) 
 
 #endif
 
@@ -519,6 +568,8 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&NewObjectTable,
 		&&AssignToObjectTableByOffset,
 		&&AssignToHashTableAndPop,
+		&&RemoveFromHashTable,
+		&&HashEntryExists,
 
 		&&PopOne,
 		&&ReturnZero,
@@ -762,8 +813,19 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&LLBinaryDivision,
 
 		&&GC_Command,
+
+		&&GPushIterator,
+		&&LPushIterator,
+		&&GGNextKeyValueOrJump,
+		&&GLNextKeyValueOrJump,
+		&&LGNextKeyValueOrJump,
+		&&LLNextKeyValueOrJump,
+		&&GNextValueOrJump,
+		&&LNextValueOrJump,
+
 	};
 #endif
+
 
 	const unsigned char* pc;
 	
@@ -782,6 +844,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		// never used at the same time..save RAM!
 		WRValue* register2;
 		int args;
+		uint32_t hash;
 		WRVoidFunc* voidFunc;
 		WRReturnFunc* returnFunc;
 		WRTargetFunc* targetFunc;
@@ -1030,7 +1093,7 @@ callFunction:
 			{
 				args = *pc++; // which have already been pushed
 
-				if ( (lib = w->c_libFunctionRegistry.getItem( READ_32_FROM_PC(pc) )) )
+				if ( (lib = w->c_libFunctionRegistry.getItem(READ_32_FROM_PC(pc))) )
 				{
 					lib( stackTop, args, context );
 				}
@@ -1116,6 +1179,37 @@ callFunction:
 				
 				wr_assignToHashTable( context, register1, register0, stackTop - 1 );
 				CONTINUE;
+			}
+			
+			CASE(RemoveFromHashTable):
+			{
+				hash = (--stackTop)->getHash();
+				if ( (register0 = stackTop - 1)->type == WR_REF )
+				{
+					register0 = register0->r;
+				}
+
+				if ( register0->xtype == WR_EX_HASH_TABLE )
+				{
+					hash %= register0->va->m_mod;
+					register0->va->m_hashTable[ hash ] = 0;
+					hash <<= 1;
+					register0->va->m_Vdata[hash++].p2 = INIT_AS_INT;
+					register0->va->m_Vdata[hash].p2 = INIT_AS_INT;
+				}
+				
+				CONTINUE;	
+			}
+
+			CASE(HashEntryExists):
+			{
+				register0 = --stackTop;
+				register1 = (stackTop - 1);
+				register2 = (register1->type == WR_REF) ? register1->r : register1;
+				register1->i = ((register2->xtype == WR_EX_HASH_TABLE
+								 && register2->va->m_hashTable[register0->getHash() % register2->va->m_mod])) ? 1 : 0;
+				register1->p2 = INIT_AS_INT;
+				CONTINUE;	
 			}
 
 			CASE(PopOne):
@@ -1264,255 +1358,6 @@ indexHash:
 			CASE(GLValues): { register0 = globalSpace + *pc++; register1 = frameBase + *pc++; CONTINUE; }
 			CASE(GGValues):	{ register0 = globalSpace + *pc++; register1 = globalSpace + *pc++; CONTINUE; }
 
-#ifdef WRENCH_COMPACT
-							
-			CASE(BinaryRightShiftSkipLoad): { intCall = rightShiftI; goto targetFuncOpSkipLoad; }
-			CASE(BinaryLeftShiftSkipLoad): { intCall = leftShiftI; goto targetFuncOpSkipLoad; }
-			CASE(BinaryAndSkipLoad): { intCall = andI; goto targetFuncOpSkipLoad; }
-			CASE(BinaryOrSkipLoad): { intCall = orI; goto targetFuncOpSkipLoad; }
-			CASE(BinaryXORSkipLoad): { intCall = xorI; goto targetFuncOpSkipLoad; }
-			CASE(BinaryModSkipLoad):
-			{
-				intCall = modI;
-targetFuncOpSkipLoad:
-				wr_funcBinary[(register1->type<<2)|register0->type]( register1,
-																	 register0,
-																	 stackTop++,
-																	 intCall,
-																	 blankF );
-				CONTINUE;
-			}
-			
-			CASE(BinaryMultiplication): { floatCall = multiplicationF; intCall = multiplicationI; goto targetFuncOp; }
-			CASE(BinarySubtraction): { floatCall = subtractionF; intCall = subtractionI; goto targetFuncOp; } 
-			CASE(BinaryDivision): { floatCall = divisionF; intCall = divisionI; goto targetFuncOp; }
-			CASE(BinaryRightShift): { floatCall = blankF; intCall = rightShiftI; goto targetFuncOp; }
-			CASE(BinaryLeftShift): { floatCall = blankF; intCall = leftShiftI; goto targetFuncOp; }
-			CASE(BinaryMod): { floatCall = blankF; intCall = modI; goto targetFuncOp; }
-			CASE(BinaryOr): { floatCall = blankF; intCall = orI; goto targetFuncOp; }
-			CASE(BinaryXOR): { floatCall = blankF; intCall = xorI; goto targetFuncOp; }
-			CASE(BinaryAnd): { floatCall = blankF; intCall = andI; goto targetFuncOp; }
-			CASE(BinaryAddition):
-			{
-				floatCall = addF;
-				intCall = addI;
-targetFuncOp:
-				register1 = --stackTop;
-				register0 = stackTop - 1;
-				wr_funcBinary[(register1->type<<2)|register0->type]( register1,
-																	 register0,
-																	 register0,
-																	 intCall,
-																	 floatCall );
-				CONTINUE;
-			}
-
-
-			CASE(SubtractAssign): { floatCall = subtractionF; intCall = subtractionI; goto binaryTableOp; }
-			CASE(AddAssign): { floatCall = addF; intCall = addI; goto binaryTableOp; }
-			CASE(MultiplyAssign): { floatCall = multiplicationF; intCall = multiplicationI; goto binaryTableOp; }
-			CASE(DivideAssign): { floatCall = divisionF; intCall = divisionI; goto binaryTableOp; }
-			CASE(ModAssign): { intCall = modI; goto binaryTableOpBlankF; }
-			CASE(ORAssign): { intCall = orI; goto binaryTableOpBlankF; }
-			CASE(ANDAssign): { intCall = andI; goto binaryTableOpBlankF; }
-			CASE(XORAssign): { intCall = xorI; goto binaryTableOpBlankF; }
-			CASE(RightShiftAssign): { intCall = rightShiftI; goto binaryTableOpBlankF; }
-			CASE(LeftShiftAssign):
-			{
-				intCall = leftShiftI;
-binaryTableOpBlankF:	
-				floatCall = blankF; 
-binaryTableOp:	
-				register0 = --stackTop;
-				register1 = stackTop - 1;
-				goto binaryTableOpAndPopCall;
-			}
-
-			
-			CASE(Assign):
-			{
-				register0 = --stackTop;
-				register1 = stackTop - 1;
-				goto assignAndPopEx;
-			}
-			
-			CASE(SubtractAssignAndPop): { floatCall = subtractionF; intCall = subtractionI; goto binaryTableOpAndPop; }
-			CASE(AddAssignAndPop): { floatCall = addF; intCall = addI; goto binaryTableOpAndPop; }
-			CASE(MultiplyAssignAndPop): { floatCall = multiplicationF; intCall = multiplicationI; goto binaryTableOpAndPop; }
-			CASE(DivideAssignAndPop): { floatCall = divisionF; intCall = divisionI; goto binaryTableOpAndPop; }
-			CASE(ModAssignAndPop): { intCall = modI; goto binaryTableOpAndPopBlankF; }
-			CASE(ORAssignAndPop): { intCall = orI; goto binaryTableOpAndPopBlankF; }
-			CASE(ANDAssignAndPop): { intCall = andI; goto binaryTableOpAndPopBlankF; }
-			CASE(XORAssignAndPop): { intCall = xorI; goto binaryTableOpAndPopBlankF; }
-			CASE(RightShiftAssignAndPop): { intCall = rightShiftI; goto binaryTableOpAndPopBlankF; }
-			CASE(LeftShiftAssignAndPop): 
-			{
-				intCall = leftShiftI;
-				
-binaryTableOpAndPopBlankF:
-				floatCall = blankF;
-binaryTableOpAndPop:
-				register0 = --stackTop;
-				register1 = --stackTop;
-binaryTableOpAndPopCall:
-				wr_FuncAssign[(register0->type<<2)|register1->type]( register0, register1, intCall, floatCall );
-				CONTINUE;
-			}
-			
-			CASE(AssignAndPop):
-			{
-				register0 = --stackTop;
-				register1 = --stackTop;
-assignAndPopEx:
-				wr_assign[(register0->type<<2)|register1->type]( register0, register1 );
-				CONTINUE;
-			}
-						
-			CASE(BinaryAdditionAndStoreGlobal) : { floatCall = addF; intCall = addI; goto targetFuncStoreGlobalOp; }
-			CASE(BinarySubtractionAndStoreGlobal): { floatCall = subtractionF; intCall = subtractionI; goto targetFuncStoreGlobalOp; }
-			CASE(BinaryMultiplicationAndStoreGlobal): { floatCall = multiplicationF; intCall = multiplicationI; goto targetFuncStoreGlobalOp; }
-			CASE(BinaryDivisionAndStoreGlobal):
-			{
-				floatCall = divisionF;
-				intCall = divisionI;
-				
-targetFuncStoreGlobalOp:
-				register0 = --stackTop;
-				register1 = --stackTop;
-				wr_funcBinary[(register0->type<<2)|register1->type]( register0, register1, globalSpace + *pc++, intCall, floatCall );
-				CONTINUE;
-			}
-			
-			CASE(BinaryAdditionAndStoreLocal): { floatCall = addF; intCall = addI; goto targetFuncStoreLocalOp; }
-			CASE(BinarySubtractionAndStoreLocal): { floatCall = subtractionF; intCall = subtractionI; goto targetFuncStoreLocalOp; }
-			CASE(BinaryMultiplicationAndStoreLocal): { floatCall = multiplicationF; intCall = multiplicationI; goto targetFuncStoreLocalOp; }
-			CASE(BinaryDivisionAndStoreLocal):
-			{
-				floatCall = divisionF;
-				intCall = divisionI;
-				
-targetFuncStoreLocalOp:
-				register0 = --stackTop;
-				register1 = --stackTop;
-				wr_funcBinary[(register0->type<<2)|register1->type]( register0, register1, frameBase + *pc++, intCall, floatCall );
-				CONTINUE;
-			}
-			
-
-
-
-
-#else	
-
-
-		
-			CASE(BinaryRightShiftSkipLoad): { targetFunc = wr_RightShiftBinary; goto targetFuncOpSkipLoad; }
-			CASE(BinaryLeftShiftSkipLoad): { targetFunc = wr_LeftShiftBinary; goto targetFuncOpSkipLoad; }
-			CASE(BinaryAndSkipLoad): { targetFunc = wr_ANDBinary; goto targetFuncOpSkipLoad; }
-			CASE(BinaryOrSkipLoad): { targetFunc = wr_ORBinary; goto targetFuncOpSkipLoad; }
-			CASE(BinaryXORSkipLoad): { targetFunc = wr_XORBinary; goto targetFuncOpSkipLoad; }
-			CASE(BinaryModSkipLoad):
-			{
-				targetFunc = wr_ModBinary;
-targetFuncOpSkipLoad:
-				targetFunc[(register1->type<<2)|register0->type]( register1, register0, stackTop++ );
-				CONTINUE;
-			}
-			
-			
-			CASE(BinaryMultiplication): { targetFunc = wr_MultiplyBinary; goto targetFuncOp; }
-			CASE(BinarySubtraction): { targetFunc = wr_SubtractBinary; goto targetFuncOp; }
-			CASE(BinaryDivision): { targetFunc = wr_DivideBinary; goto targetFuncOp; }
-			CASE(BinaryRightShift): { targetFunc = wr_RightShiftBinary; goto targetFuncOp; }
-			CASE(BinaryLeftShift): { targetFunc = wr_LeftShiftBinary; goto targetFuncOp; }
-			CASE(BinaryMod): { targetFunc = wr_ModBinary; goto targetFuncOp; }
-			CASE(BinaryOr): { targetFunc = wr_ORBinary; goto targetFuncOp; }
-			CASE(BinaryXOR): { targetFunc = wr_XORBinary; goto targetFuncOp; }
-			CASE(BinaryAnd): { targetFunc = wr_ANDBinary; goto targetFuncOp; }
-			CASE(BinaryAddition):
-			{
-				targetFunc = wr_AdditionBinary;
-targetFuncOp:
-				register1 = --stackTop;
-				register0 = stackTop - 1;
-				targetFunc[(register1->type<<2)|register0->type]( register1, register0, register0 );
-				CONTINUE;
-			}
-
-
-			CASE(SubtractAssign): { voidFunc = wr_SubtractAssign; goto binaryTableOp; }
-			CASE(AddAssign): { voidFunc = wr_AddAssign; goto binaryTableOp; }
-			CASE(ModAssign): { voidFunc = wr_ModAssign; goto binaryTableOp; }
-			CASE(MultiplyAssign): { voidFunc = wr_MultiplyAssign; goto binaryTableOp; }
-			CASE(DivideAssign): { voidFunc = wr_DivideAssign; goto binaryTableOp; }
-			CASE(ORAssign): { voidFunc = wr_ORAssign; goto binaryTableOp; }
-			CASE(ANDAssign): { voidFunc = wr_ANDAssign; goto binaryTableOp; }
-			CASE(XORAssign): { voidFunc = wr_XORAssign; goto binaryTableOp; }
-			CASE(RightShiftAssign): { voidFunc = wr_RightShiftAssign; goto binaryTableOp; }
-			CASE(LeftShiftAssign): { voidFunc = wr_LeftShiftAssign; goto binaryTableOp; }
-			CASE(Assign):
-			{
-				voidFunc = wr_assign;
-binaryTableOp:
-				register0 = --stackTop;
-				register1 = stackTop - 1;
-				voidFunc[(register0->type<<2)|register1->type]( register0, register1 );
-				CONTINUE;
-			}
-			
-			CASE(SubtractAssignAndPop): { voidFunc = wr_SubtractAssign; goto binaryTableOpAndPop; }
-			CASE(AddAssignAndPop): { voidFunc = wr_AddAssign; goto binaryTableOpAndPop; }
-			CASE(ModAssignAndPop): { voidFunc = wr_ModAssign; goto binaryTableOpAndPop; }
-			CASE(MultiplyAssignAndPop): { voidFunc = wr_MultiplyAssign; goto binaryTableOpAndPop; }
-			CASE(DivideAssignAndPop): { voidFunc = wr_DivideAssign; goto binaryTableOpAndPop; }
-			CASE(ORAssignAndPop): { voidFunc = wr_ORAssign; goto binaryTableOpAndPop; }
-			CASE(ANDAssignAndPop): { voidFunc = wr_ANDAssign; goto binaryTableOpAndPop; }
-			CASE(XORAssignAndPop): { voidFunc = wr_XORAssign; goto binaryTableOpAndPop; }
-			CASE(RightShiftAssignAndPop): { voidFunc = wr_RightShiftAssign; goto binaryTableOpAndPop; }
-			CASE(LeftShiftAssignAndPop): { voidFunc = wr_LeftShiftAssign; goto binaryTableOpAndPop; }
-			CASE(AssignAndPop):
-			{
-				voidFunc = wr_assign;
-					
-binaryTableOpAndPop:
-				register0 = --stackTop;
-				register1 = --stackTop;
-				voidFunc[(register0->type<<2)|register1->type]( register0, register1 );
-				
-				CONTINUE;
-			}
-			
-			CASE(BinaryAdditionAndStoreGlobal) : { targetFunc = wr_AdditionBinary; goto targetFuncStoreGlobalOp; }
-			CASE(BinarySubtractionAndStoreGlobal): { targetFunc = wr_SubtractBinary; goto targetFuncStoreGlobalOp; }
-			CASE(BinaryMultiplicationAndStoreGlobal): { targetFunc = wr_MultiplyBinary; goto targetFuncStoreGlobalOp; }
-			CASE(BinaryDivisionAndStoreGlobal):
-			{
-				targetFunc = wr_DivideBinary;
-				
-targetFuncStoreGlobalOp:
-				register0 = --stackTop;
-				register1 = --stackTop;
-				targetFunc[(register0->type<<2)|register1->type]( register0, register1, globalSpace + *pc++ );
-				CONTINUE;
-			}
-			
-			CASE(BinaryAdditionAndStoreLocal): { targetFunc = wr_AdditionBinary; goto targetFuncStoreLocalOp; }
-			CASE(BinarySubtractionAndStoreLocal): { targetFunc = wr_SubtractBinary; goto targetFuncStoreLocalOp; }
-			CASE(BinaryMultiplicationAndStoreLocal): { targetFunc = wr_MultiplyBinary; goto targetFuncStoreLocalOp; }
-			CASE(BinaryDivisionAndStoreLocal):
-			{
-				targetFunc = wr_DivideBinary;
-				
-targetFuncStoreLocalOp:
-				register0 = --stackTop;
-				register1 = --stackTop;
-				targetFunc[(register0->type<<2)|register1->type]( register0, register1, frameBase + *pc++ );
-				CONTINUE;
-			}
-
-#endif	
-
-			
 			CASE(BitwiseNOT):
 			{
 				register0 = stackTop - 1;
@@ -1674,10 +1519,256 @@ doAssignToLocalAndPop:
 				(stackTop++)->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
+
+			CASE(PostIncrement):
+			{
+				register0 = stackTop - 1;
+				wr_postinc[ register0->type ]( register0, register0 );
+				CONTINUE;
+			}
+
+			CASE(PostDecrement):
+			{
+				register0 = stackTop - 1;
+				wr_postdec[ register0->type ]( register0, register0 );
+				CONTINUE;
+			}
+
+			CASE(LiteralInt8ToGlobal):
+			{
+				register0 = globalSpace + *pc++;
+				register0->i = (int32_t)(int8_t)*pc++;
+				register0->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+
+			CASE(LiteralInt16ToGlobal):
+			{
+				register0 = globalSpace + *pc++;
+				register0->i = (int32_t)(int16_t)((((int16_t) * (pc)) << 8) | ((int16_t) * (pc + 1)));
+				register0->p2 = INIT_AS_INT;
+				pc += 2;
+				CONTINUE;
+			}
+
+			CASE(LiteralInt32ToLocal):
+			{
+				register0 = frameBase + *pc++;
+				register0->p2 = INIT_AS_INT;
+				goto load32ToTemp;
+			}
+
+			CASE(LiteralInt8ToLocal):
+			{
+				register0 = frameBase + *pc++;
+				register0->i = (int32_t)(int8_t)*pc++;
+				register0->p2 = INIT_AS_INT;
+				CONTINUE;
+			}
+
+			CASE(LiteralInt16ToLocal):
+			{
+				register0 = frameBase + *pc++;
+				register0->i = (int32_t)(int16_t)((((int16_t) * (pc)) << 8) | ((int16_t) * (pc + 1)));
+				register0->p2 = INIT_AS_INT;
+				pc += 2;
+				CONTINUE;
+			}
+
+			CASE(LiteralFloatToGlobal):
+			{
+				register0 = globalSpace + *pc++;
+				register0->p2 = INIT_AS_FLOAT;
+				goto load32ToTemp;
+			}
+
+			CASE(LiteralFloatToLocal):
+			{
+				register0 = frameBase + *pc++;
+				register0->p2 = INIT_AS_FLOAT;
+				goto load32ToTemp;
+			}
+
+			CASE(LiteralInt32ToGlobal):
+			{
+				register0 = globalSpace + *pc++;
+				register0->p2 = INIT_AS_INT;
+load32ToTemp:
+				register0->i = READ_32_FROM_PC(pc);
+				pc += 4;
+				CONTINUE;
+			}
+
+			CASE(GC_Command):
+			{
+				context->gcPauseCount = (uint16_t)((((uint16_t)*(pc)) << 8) | ((uint16_t)*(pc+1)));
+				pc+=2;
+				CONTINUE;
+			}
+			
+			CASE(GPushIterator):
+			{
+				register0 = globalSpace + *pc++;
+				wr_pushIterator[register0->type]( register0, globalSpace + *pc++ );
+				CONTINUE;
+			}
+
+			CASE(LPushIterator):
+			{
+				register0 = frameBase + *pc++;
+				wr_pushIterator[register0->type]( register0, globalSpace + *pc++ );
+				CONTINUE;
+			}
+
+			CASE(GGNextKeyValueOrJump): { register1 = globalSpace + *pc++; register0 = globalSpace + *pc++; goto NextIterator; }
+			CASE(GLNextKeyValueOrJump):	{ register1 = globalSpace + *pc++; register0 = frameBase + *pc++; goto NextIterator; }
+			CASE(LGNextKeyValueOrJump): { register1 = frameBase + *pc++; register0 = globalSpace + *pc++; goto NextIterator; }
+			CASE(LLNextKeyValueOrJump): { register1 = frameBase + *pc++; register0 = frameBase + *pc++; goto NextIterator; }
+			CASE(GNextValueOrJump): { register0 = globalSpace + *pc++; register1 = 0; goto NextIterator; }
+			CASE(LNextValueOrJump):
+			{
+				register0 = frameBase + *pc++;
+				register1 = 0;
+NextIterator:
+				register2 = globalSpace + *pc++;
+				pc += wr_getNextValue( register2, register0, register1) ? 2 : (uint16_t)((((uint16_t)*(pc)) << 8) | ((uint16_t)*(pc+1)));
+				CONTINUE;
+			}
 			
 #ifdef WRENCH_COMPACT
 
-
+			CASE(BinaryRightShiftSkipLoad): { intCall = rightShiftI; goto targetFuncOpSkipLoad; }
+			CASE(BinaryLeftShiftSkipLoad): { intCall = leftShiftI; goto targetFuncOpSkipLoad; }
+			CASE(BinaryAndSkipLoad): { intCall = andI; goto targetFuncOpSkipLoad; }
+			CASE(BinaryOrSkipLoad): { intCall = orI; goto targetFuncOpSkipLoad; }
+			CASE(BinaryXORSkipLoad): { intCall = xorI; goto targetFuncOpSkipLoad; }
+			CASE(BinaryModSkipLoad):
+			{
+				intCall = modI;
+targetFuncOpSkipLoad:
+				wr_funcBinary[(register1->type<<2)|register0->type]( register1,
+																	 register0,
+																	 stackTop++,
+																	 intCall,
+																	 blankF );
+				CONTINUE;
+			}
+			
+			CASE(BinaryMultiplication): { floatCall = multiplicationF; intCall = multiplicationI; goto targetFuncOp; }
+			CASE(BinarySubtraction): { floatCall = subtractionF; intCall = subtractionI; goto targetFuncOp; } 
+			CASE(BinaryDivision): { floatCall = divisionF; intCall = divisionI; goto targetFuncOp; }
+			CASE(BinaryRightShift): { floatCall = blankF; intCall = rightShiftI; goto targetFuncOp; }
+			CASE(BinaryLeftShift): { floatCall = blankF; intCall = leftShiftI; goto targetFuncOp; }
+			CASE(BinaryMod): { floatCall = blankF; intCall = modI; goto targetFuncOp; }
+			CASE(BinaryOr): { floatCall = blankF; intCall = orI; goto targetFuncOp; }
+			CASE(BinaryXOR): { floatCall = blankF; intCall = xorI; goto targetFuncOp; }
+			CASE(BinaryAnd): { floatCall = blankF; intCall = andI; goto targetFuncOp; }
+			CASE(BinaryAddition):
+			{
+				floatCall = addF;
+				intCall = addI;
+targetFuncOp:
+				register1 = --stackTop;
+				register0 = stackTop - 1;
+				wr_funcBinary[(register1->type<<2)|register0->type]( register1,
+																	 register0,
+																	 register0,
+																	 intCall,
+																	 floatCall );
+				CONTINUE;
+			}
+			
+			
+			CASE(SubtractAssign): { floatCall = subtractionF; intCall = subtractionI; goto binaryTableOp; }
+			CASE(AddAssign): { floatCall = addF; intCall = addI; goto binaryTableOp; }
+			CASE(MultiplyAssign): { floatCall = multiplicationF; intCall = multiplicationI; goto binaryTableOp; }
+			CASE(DivideAssign): { floatCall = divisionF; intCall = divisionI; goto binaryTableOp; }
+			CASE(ModAssign): { intCall = modI; goto binaryTableOpBlankF; }
+			CASE(ORAssign): { intCall = orI; goto binaryTableOpBlankF; }
+			CASE(ANDAssign): { intCall = andI; goto binaryTableOpBlankF; }
+			CASE(XORAssign): { intCall = xorI; goto binaryTableOpBlankF; }
+			CASE(RightShiftAssign): { intCall = rightShiftI; goto binaryTableOpBlankF; }
+			CASE(LeftShiftAssign):
+			{
+				intCall = leftShiftI;
+binaryTableOpBlankF:	
+				floatCall = blankF; 
+binaryTableOp:	
+				register0 = --stackTop;
+				register1 = stackTop - 1;
+				goto binaryTableOpAndPopCall;
+			}
+			
+			
+			CASE(Assign):
+			{
+				register0 = --stackTop;
+				register1 = stackTop - 1;
+				goto assignAndPopEx;
+			}
+			
+			CASE(SubtractAssignAndPop): { floatCall = subtractionF; intCall = subtractionI; goto binaryTableOpAndPop; }
+			CASE(AddAssignAndPop): { floatCall = addF; intCall = addI; goto binaryTableOpAndPop; }
+			CASE(MultiplyAssignAndPop): { floatCall = multiplicationF; intCall = multiplicationI; goto binaryTableOpAndPop; }
+			CASE(DivideAssignAndPop): { floatCall = divisionF; intCall = divisionI; goto binaryTableOpAndPop; }
+			CASE(ModAssignAndPop): { intCall = modI; goto binaryTableOpAndPopBlankF; }
+			CASE(ORAssignAndPop): { intCall = orI; goto binaryTableOpAndPopBlankF; }
+			CASE(ANDAssignAndPop): { intCall = andI; goto binaryTableOpAndPopBlankF; }
+			CASE(XORAssignAndPop): { intCall = xorI; goto binaryTableOpAndPopBlankF; }
+			CASE(RightShiftAssignAndPop): { intCall = rightShiftI; goto binaryTableOpAndPopBlankF; }
+			CASE(LeftShiftAssignAndPop): 
+			{
+				intCall = leftShiftI;
+				
+binaryTableOpAndPopBlankF:
+				floatCall = blankF;
+binaryTableOpAndPop:
+				register0 = --stackTop;
+				register1 = --stackTop;
+binaryTableOpAndPopCall:
+				wr_FuncAssign[(register0->type<<2)|register1->type]( register0, register1, intCall, floatCall );
+				CONTINUE;
+			}
+			
+			CASE(AssignAndPop):
+			{
+				register0 = --stackTop;
+				register1 = --stackTop;
+assignAndPopEx:
+				wr_assign[(register0->type<<2)|register1->type]( register0, register1 );
+				CONTINUE;
+			}
+			
+			CASE(BinaryAdditionAndStoreGlobal) : { floatCall = addF; intCall = addI; goto targetFuncStoreGlobalOp; }
+			CASE(BinarySubtractionAndStoreGlobal): { floatCall = subtractionF; intCall = subtractionI; goto targetFuncStoreGlobalOp; }
+			CASE(BinaryMultiplicationAndStoreGlobal): { floatCall = multiplicationF; intCall = multiplicationI; goto targetFuncStoreGlobalOp; }
+			CASE(BinaryDivisionAndStoreGlobal):
+			{
+				floatCall = divisionF;
+				intCall = divisionI;
+				
+targetFuncStoreGlobalOp:
+				register0 = --stackTop;
+				register1 = --stackTop;
+				wr_funcBinary[(register0->type<<2)|register1->type]( register0, register1, globalSpace + *pc++, intCall, floatCall );
+				CONTINUE;
+			}
+			
+			CASE(BinaryAdditionAndStoreLocal): { floatCall = addF; intCall = addI; goto targetFuncStoreLocalOp; }
+			CASE(BinarySubtractionAndStoreLocal): { floatCall = subtractionF; intCall = subtractionI; goto targetFuncStoreLocalOp; }
+			CASE(BinaryMultiplicationAndStoreLocal): { floatCall = multiplicationF; intCall = multiplicationI; goto targetFuncStoreLocalOp; }
+			CASE(BinaryDivisionAndStoreLocal):
+			{
+				floatCall = divisionF;
+				intCall = divisionI;
+				
+targetFuncStoreLocalOp:
+				register0 = --stackTop;
+				register1 = --stackTop;
+				wr_funcBinary[(register0->type<<2)|register1->type]( register0, register1, frameBase + *pc++, intCall, floatCall );
+				CONTINUE;
+			}
+			
 			CASE(PreIncrement):
 			{
 				register0 = stackTop - 1;
@@ -1776,128 +1867,112 @@ compactBLA8:
 
 			CASE(GGBinaryMultiplication):
 			{
-				register0 = globalSpace + *pc++;
-				register1 = globalSpace + *pc++;
 				floatCall = multiplicationF;
 				intCall = multiplicationI;
+CompactGGFunc:
+				register0 = globalSpace + *pc++;
+				register1 = globalSpace + *pc++;
 				goto targetFuncOpSkipLoad;
 			}
 
 			CASE(GLBinaryMultiplication):
 			{
-				register0 = globalSpace + *pc++;
-				register1 = frameBase + *pc++;
 				floatCall = multiplicationF;
 				intCall = multiplicationI;
+CompactGLFunc:
+				register0 = globalSpace + *pc++;
+				register1 = frameBase + *pc++;
 				goto targetFuncOpSkipLoad;
 			}
 
 			CASE(LLBinaryMultiplication):
 			{
-				register0 = frameBase + *pc++;
-				register1 = frameBase + *pc++;
 				floatCall = multiplicationF;
 				intCall = multiplicationI;
+CompactFFFunc:
+				register0 = frameBase + *pc++;
+				register1 = frameBase + *pc++;
 				goto targetFuncOpSkipLoad;
 			}
 
 			CASE(GGBinaryAddition):
 			{
-				register0 = globalSpace + *pc++;
-				register1 = globalSpace + *pc++;
 				floatCall = addF;
 				intCall = addI;
-				goto targetFuncOpSkipLoad;
+				goto CompactGGFunc;
 			}
 
 			CASE(GLBinaryAddition):
 			{
-				register0 = globalSpace + *pc++;
-				register1 = frameBase + *pc++;
 				floatCall = addF;
 				intCall = addI;
-				goto targetFuncOpSkipLoad;
+				goto CompactGLFunc;
 			}
 
 			CASE(LLBinaryAddition):
 			{
-				register0 = frameBase + *pc++;
-				register1 = frameBase + *pc++;
 				floatCall = addF;
 				intCall = addI;
-				goto targetFuncOpSkipLoad;
+				goto CompactFFFunc;
 			}
 
 			CASE(GGBinarySubtraction):
 			{
-				register0 = globalSpace + *pc++;
-				register1 = globalSpace + *pc++;
 				floatCall = subtractionF;
 				intCall = subtractionI;
-				goto targetFuncOpSkipLoad;
+				goto CompactGGFunc;
 			}
 
 			CASE(GLBinarySubtraction):
 			{
-				register0 = globalSpace + *pc++;
-				register1 = frameBase + *pc++;
 				floatCall = subtractionF;
 				intCall = subtractionI;
-				goto targetFuncOpSkipLoad;
+				goto CompactGLFunc;
 			}
 
 			CASE(LGBinarySubtraction):
 			{
-				register0 = frameBase + *pc++;
-				register1 = globalSpace + *pc++;
 				floatCall = subtractionF;
 				intCall = subtractionI;
+CompactFGFunc:
+				register0 = frameBase + *pc++;
+				register1 = globalSpace + *pc++;
 				goto targetFuncOpSkipLoad;
 			}
 
 			CASE(LLBinarySubtraction):
 			{
-				register0 = frameBase + *pc++;
-				register1 = frameBase + *pc++;
 				floatCall = subtractionF;
 				intCall = subtractionI;
-				goto targetFuncOpSkipLoad;
+				goto CompactFFFunc;
 			}
 
 			CASE(GGBinaryDivision):
 			{
-				register0 = globalSpace + *pc++;
-				register1 = globalSpace + *pc++;
 				floatCall = divisionF;
 				intCall = divisionI;
-				goto targetFuncOpSkipLoad;
+				goto CompactGGFunc;
 			}
 
 			CASE(GLBinaryDivision):
 			{
-				register0 = globalSpace + *pc++;
-				register1 = frameBase + *pc++;
 				floatCall = divisionF;
 				intCall = divisionI;
-				goto targetFuncOpSkipLoad;
+				goto CompactGLFunc;
 			}
 
 			CASE(LGBinaryDivision):
 			{
-				register0 = frameBase + *pc++;
-				register1 = globalSpace + *pc++;
 				floatCall = divisionF;
 				intCall = divisionI;
-				goto targetFuncOpSkipLoad;
+				goto CompactFGFunc;
 			}
 
 			CASE(LLBinaryDivision):
 			{
-				register0 = frameBase + *pc++;
-				register1 = frameBase + *pc++;
 				floatCall = divisionF;
 				intCall = divisionI;
-				goto targetFuncOpSkipLoad;
+				goto CompactFFFunc;
 			}
 
 			CASE(LogicalAnd): { boolIntCall = CompareANDI; goto compactReturnFuncNormal; }
@@ -2002,14 +2077,11 @@ compactReturnFuncBInverted8:
 				CONTINUE;
 			}
 			
-
 			CASE(GGCompareEQ):
 			{
 				boolIntCall = CompareEQI;
 				boolFloatCall = CompareEQF;
-				register1 = globalSpace + *pc++;
-				register0 = globalSpace + *pc++;
-				goto compactReturnCompareEQPost;
+				goto compactEQCompareGGReg;
 			}
 			CASE(GGCompareNE):
 			{
@@ -2023,14 +2095,13 @@ compactReturnFuncBInverted8:
 			{
 				boolIntCall = CompareGTI;
 				boolFloatCall = CompareGTF;
-				register1 = globalSpace + *pc++;
-				register0 = globalSpace + *pc++;
-				goto compactReturnCompareEQPost;
+				goto compactEQCompareGGReg;
 			}
 			CASE(GGCompareLT):
 			{
 				boolIntCall = CompareLTI;
 				boolFloatCall = CompareLTF;
+compactEQCompareGGReg:
 				register1 = globalSpace + *pc++;
 				register0 = globalSpace + *pc++;
 				goto compactReturnCompareEQPost;
@@ -2247,7 +2318,7 @@ compactCompareGG8:
 				goto compactCompareInverted8Work;
 			}
 			
-#else
+#else // ---------------------------- Non-Compact:
 
 			CASE(PreIncrement): { register0 = stackTop - 1; wr_preinc[ register0->type ]( register0 ); CONTINUE; }
 			CASE(PreDecrement): { register0 = stackTop - 1; wr_predec[ register0->type ]( register0 ); CONTINUE; }
@@ -2432,7 +2503,6 @@ returnFuncInvertedPostLoad:
 				CONTINUE;
 			}
 
-
 			CASE(GSCompareEQ): { register0 = globalSpace + *pc++; returnFunc = wr_CompareEQ; goto returnFuncPostLoad; }
 			CASE(GSCompareNE): { register0 = globalSpace + *pc++; returnFunc = wr_CompareEQ; goto returnFuncInvertedPostLoad; }
 			CASE(GSCompareGT): { register0 = globalSpace + *pc++; returnFunc = wr_CompareGT; goto returnFuncPostLoad; }
@@ -2446,7 +2516,6 @@ returnFuncInvertedPostLoad:
 			CASE(LSCompareLT): { register0 = frameBase + *pc++; returnFunc = wr_CompareLT; goto returnFuncPostLoad; }
 			CASE(LSCompareGE): { register0 = frameBase + *pc++; returnFunc = wr_CompareLT; goto returnFuncInvertedPostLoad; }
 			CASE(LSCompareLE): { register0 = frameBase + *pc++; returnFunc = wr_CompareGT; goto returnFuncInvertedPostLoad; }
-
 
 			CASE(CompareBLE): { returnFunc = wr_CompareGT; goto returnFuncBInverted; }
 			CASE(CompareBGE): { returnFunc = wr_CompareLT; goto returnFuncBInverted; }
@@ -2538,6 +2607,7 @@ returnCompareEQPost:
 				(stackTop++)->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
+			
 			CASE(LLCompareNE):
 			{
 				returnFunc = wr_CompareEQ;
@@ -2721,85 +2791,110 @@ CompareGG8:
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ?  (int8_t)*pc : 2;
 				CONTINUE;
 			}
-			
-#endif	
 
-			
-			CASE(PostIncrement): { register0 = stackTop - 1; wr_postinc[ register0->type ]( register0, register0 ); CONTINUE; }
-			CASE(PostDecrement): { register0 = stackTop - 1; wr_postdec[ register0->type ]( register0, register0 ); CONTINUE; }
-
-			CASE(LiteralInt8ToGlobal):
+			CASE(BinaryRightShiftSkipLoad): { targetFunc = wr_RightShiftBinary; goto targetFuncOpSkipLoad; }
+			CASE(BinaryLeftShiftSkipLoad): { targetFunc = wr_LeftShiftBinary; goto targetFuncOpSkipLoad; }
+			CASE(BinaryAndSkipLoad): { targetFunc = wr_ANDBinary; goto targetFuncOpSkipLoad; }
+			CASE(BinaryOrSkipLoad): { targetFunc = wr_ORBinary; goto targetFuncOpSkipLoad; }
+			CASE(BinaryXORSkipLoad): { targetFunc = wr_XORBinary; goto targetFuncOpSkipLoad; }
+			CASE(BinaryModSkipLoad):
 			{
-				register0 = globalSpace + *pc++;
-				register0->i = (int32_t)(int8_t)*pc++;
-				register0->p2 = INIT_AS_INT;
-				CONTINUE;
-			}
-
-			CASE(LiteralInt16ToGlobal):
-			{
-				register0 = globalSpace + *pc++;
-				register0->i = (int32_t)(int16_t)((((int16_t) * (pc)) << 8) | ((int16_t) * (pc + 1)));
-				register0->p2 = INIT_AS_INT;
-				pc += 2;
-				CONTINUE;
-			}
-
-			CASE(LiteralInt32ToLocal):
-			{
-				register0 = frameBase + *pc++;
-				register0->p2 = INIT_AS_INT;
-				goto load32ToTemp;
-			}
-			
-			CASE(LiteralInt8ToLocal):
-			{
-				register0 = frameBase + *pc++;
-				register0->i = (int32_t)(int8_t)*pc++;
-				register0->p2 = INIT_AS_INT;
-				CONTINUE;
-			}
-
-			CASE(LiteralInt16ToLocal):
-			{
-				register0 = frameBase + *pc++;
-				register0->i = (int32_t)(int16_t)((((int16_t) * (pc)) << 8) | ((int16_t) * (pc + 1)));
-				register0->p2 = INIT_AS_INT;
-				pc += 2;
-				CONTINUE;
-			}
-
-			CASE(LiteralFloatToGlobal):
-			{
-				register0 = globalSpace + *pc++;
-				register0->p2 = INIT_AS_FLOAT;
-				goto load32ToTemp;
-			}
-			
-			CASE(LiteralFloatToLocal):
-			{
-				register0 = frameBase + *pc++;
-				register0->p2 = INIT_AS_FLOAT;
-				goto load32ToTemp;
-			}
-
-			CASE(LiteralInt32ToGlobal):
-			{
-				register0 = globalSpace + *pc++;
-				register0->p2 = INIT_AS_INT;
-load32ToTemp:
-				register0->i = READ_32_FROM_PC(pc);
-				pc += 4;
-				CONTINUE;
-			}
-
-			CASE(GC_Command):
-			{
-				context->gcPauseCount = (uint16_t)((((uint16_t)*(pc)) << 8) | ((uint16_t)*(pc+1)));
-				pc+=2;
+				targetFunc = wr_ModBinary;
+targetFuncOpSkipLoad:
+				targetFunc[(register1->type<<2)|register0->type]( register1, register0, stackTop++ );
 				CONTINUE;
 			}
 			
+			CASE(BinaryMultiplication): { targetFunc = wr_MultiplyBinary; goto targetFuncOp; }
+			CASE(BinarySubtraction): { targetFunc = wr_SubtractBinary; goto targetFuncOp; }
+			CASE(BinaryDivision): { targetFunc = wr_DivideBinary; goto targetFuncOp; }
+			CASE(BinaryRightShift): { targetFunc = wr_RightShiftBinary; goto targetFuncOp; }
+			CASE(BinaryLeftShift): { targetFunc = wr_LeftShiftBinary; goto targetFuncOp; }
+			CASE(BinaryMod): { targetFunc = wr_ModBinary; goto targetFuncOp; }
+			CASE(BinaryOr): { targetFunc = wr_ORBinary; goto targetFuncOp; }
+			CASE(BinaryXOR): { targetFunc = wr_XORBinary; goto targetFuncOp; }
+			CASE(BinaryAnd): { targetFunc = wr_ANDBinary; goto targetFuncOp; }
+			CASE(BinaryAddition):
+			{
+				targetFunc = wr_AdditionBinary;
+targetFuncOp:
+				register1 = --stackTop;
+				register0 = stackTop - 1;
+				targetFunc[(register1->type<<2)|register0->type]( register1, register0, register0 );
+				CONTINUE;
+			}
+			
+			CASE(SubtractAssign): { voidFunc = wr_SubtractAssign; goto binaryTableOp; }
+			CASE(AddAssign): { voidFunc = wr_AddAssign; goto binaryTableOp; }
+			CASE(ModAssign): { voidFunc = wr_ModAssign; goto binaryTableOp; }
+			CASE(MultiplyAssign): { voidFunc = wr_MultiplyAssign; goto binaryTableOp; }
+			CASE(DivideAssign): { voidFunc = wr_DivideAssign; goto binaryTableOp; }
+			CASE(ORAssign): { voidFunc = wr_ORAssign; goto binaryTableOp; }
+			CASE(ANDAssign): { voidFunc = wr_ANDAssign; goto binaryTableOp; }
+			CASE(XORAssign): { voidFunc = wr_XORAssign; goto binaryTableOp; }
+			CASE(RightShiftAssign): { voidFunc = wr_RightShiftAssign; goto binaryTableOp; }
+			CASE(LeftShiftAssign): { voidFunc = wr_LeftShiftAssign; goto binaryTableOp; }
+			CASE(Assign):
+			{
+				voidFunc = wr_assign;
+binaryTableOp:	
+				register0 = --stackTop;
+				register1 = stackTop - 1;
+				voidFunc[(register0->type<<2)|register1->type]( register0, register1 );
+				CONTINUE;
+			}
+			
+			CASE(SubtractAssignAndPop): { voidFunc = wr_SubtractAssign; goto binaryTableOpAndPop; }
+			CASE(AddAssignAndPop): { voidFunc = wr_AddAssign; goto binaryTableOpAndPop; }
+			CASE(ModAssignAndPop): { voidFunc = wr_ModAssign; goto binaryTableOpAndPop; }
+			CASE(MultiplyAssignAndPop): { voidFunc = wr_MultiplyAssign; goto binaryTableOpAndPop; }
+			CASE(DivideAssignAndPop): { voidFunc = wr_DivideAssign; goto binaryTableOpAndPop; }
+			CASE(ORAssignAndPop): { voidFunc = wr_ORAssign; goto binaryTableOpAndPop; }
+			CASE(ANDAssignAndPop): { voidFunc = wr_ANDAssign; goto binaryTableOpAndPop; }
+			CASE(XORAssignAndPop): { voidFunc = wr_XORAssign; goto binaryTableOpAndPop; }
+			CASE(RightShiftAssignAndPop): { voidFunc = wr_RightShiftAssign; goto binaryTableOpAndPop; }
+			CASE(LeftShiftAssignAndPop): { voidFunc = wr_LeftShiftAssign; goto binaryTableOpAndPop; }
+			CASE(AssignAndPop):
+			{
+				voidFunc = wr_assign;
+				
+binaryTableOpAndPop:
+				register0 = --stackTop;
+				register1 = --stackTop;
+				voidFunc[(register0->type<<2)|register1->type]( register0, register1 );
+				
+				CONTINUE;
+			}
+			
+			CASE(BinaryAdditionAndStoreGlobal) : { targetFunc = wr_AdditionBinary; goto targetFuncStoreGlobalOp; }
+			CASE(BinarySubtractionAndStoreGlobal): { targetFunc = wr_SubtractBinary; goto targetFuncStoreGlobalOp; }
+			CASE(BinaryMultiplicationAndStoreGlobal): { targetFunc = wr_MultiplyBinary; goto targetFuncStoreGlobalOp; }
+			CASE(BinaryDivisionAndStoreGlobal):
+			{
+				targetFunc = wr_DivideBinary;
+				
+targetFuncStoreGlobalOp:
+				register0 = --stackTop;
+				register1 = --stackTop;
+				targetFunc[(register0->type<<2)|register1->type]( register0, register1, globalSpace + *pc++ );
+				CONTINUE;
+			}
+			
+			CASE(BinaryAdditionAndStoreLocal): { targetFunc = wr_AdditionBinary; goto targetFuncStoreLocalOp; }
+			CASE(BinarySubtractionAndStoreLocal): { targetFunc = wr_SubtractBinary; goto targetFuncStoreLocalOp; }
+			CASE(BinaryMultiplicationAndStoreLocal): { targetFunc = wr_MultiplyBinary; goto targetFuncStoreLocalOp; }
+			CASE(BinaryDivisionAndStoreLocal):
+			{
+				targetFunc = wr_DivideBinary;
+				
+targetFuncStoreLocalOp:
+				register0 = --stackTop;
+				register1 = --stackTop;
+				targetFunc[(register0->type<<2)|register1->type]( register0, register1, frameBase + *pc++ );
+				CONTINUE;
+			}
+#endif		
+		
 #ifndef WRENCH_JUMPTABLE_INTERPRETER
 		}
 	}

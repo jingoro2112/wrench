@@ -104,8 +104,12 @@ const WROperation c_operations[] =
 	{ "@[]",  2, O_Index,               true,  WR_OPER_POST, O_LAST },
 	{ "@init", 2, O_Index,              true,  WR_OPER_POST, O_LAST },
 
+	{ "@macroBegin", 0, O_LAST,         true,  WR_OPER_POST, O_LAST },
+
 	{ "._count", 2, O_CountOf,          true,  WR_OPER_POST, O_LAST },
 	{ "._hash", 2, O_HashOf,            true,  WR_OPER_POST, O_LAST },
+	{ "._remove", 2, O_RemoveFromHashTable, true,  WR_OPER_POST, O_LAST },
+	{ "._exists", 2, O_HashEntryExists, true,  WR_OPER_POST, O_LAST },
 	
 	{ 0, 0, O_LAST, false, WR_OPER_PRE, O_LAST },
 };
@@ -372,6 +376,7 @@ private:
 	
 	int addRelativeJumpTarget( WRBytecode& bytecode );
 	void setRelativeJumpTarget( WRBytecode& bytecode, int relativeJumpTarget );
+	void addRelativeJumpSourceEx( WRBytecode& bytecode, WROpcode opcode, int relativeJumpTarget, const unsigned char* data, const int dataSize );
 	void addRelativeJumpSource( WRBytecode& bytecode, WROpcode opcode, int relativeJumpTarget );
 	void resolveRelativeJumps( WRBytecode& bytecode );
 
@@ -417,6 +422,7 @@ private:
 	WRarray<int> m_continueTargets;
 	WRarray<int> m_breakTargets;
 
+	int m_foreachHash;
 
 /*
 
@@ -434,6 +440,7 @@ fill 2             jump to jumpOffset
   when appended
 
 */
+
 };
 
 //------------------------------------------------------------------------------

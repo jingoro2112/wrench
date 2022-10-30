@@ -96,7 +96,7 @@ struct WRState
 };
 
 
-void wr_arrayToValue( const WRValue* array, WRValue* value );
+void wr_arrayToValue( const WRValue* array, WRValue* value, int index =-1 );
 void wr_intValueToArray( const WRValue* array, int32_t I );
 void wr_floatValueToArray( const WRValue* array, float F );
 void wr_countOfArrayElement( WRValue* array, WRValue* target );
@@ -117,6 +117,8 @@ extern WRVoidFunc wr_RightShiftAssign[16];
 extern WRVoidFunc wr_LeftShiftAssign[16];
 extern WRVoidFunc wr_postinc[4];
 extern WRVoidFunc wr_postdec[4];
+extern WRVoidFunc wr_pushIterator[4];
+
 
 
 typedef int (*WRFuncIntCall)( int a, int b );
@@ -130,7 +132,6 @@ typedef bool (*WRCompareFuncIntCall)( int a, int b );
 typedef bool (*WRCompareFuncFloatCall)( float a, float b );
 typedef bool (*WRBoolCallbackReturnFunc)( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall );
 extern WRBoolCallbackReturnFunc wr_Compare[16];
-
 
 
 typedef void (*WRTargetFunc)( WRValue* to, WRValue* from, WRValue* target );
@@ -165,8 +166,9 @@ extern WRUnaryFunc wr_toInt[4];
 extern WRUnaryFunc wr_toFloat[4];
 extern WRUnaryFunc wr_bitwiseNot[4];
 
-typedef bool (*WRReturnSingleFunc)( WRValue* value );
 
+
+typedef bool (*WRReturnSingleFunc)( WRValue* value );
 
 typedef bool (*WRValueCheckFunc)( WRValue* value );
 extern WRReturnSingleFunc wr_LogicalNot[4];
@@ -175,7 +177,14 @@ typedef void (*WRIndexHashFunc)( WRValue* value, WRValue* target, uint32_t hash 
 extern WRIndexHashFunc wr_IndexHash[4];
 
 void wr_assignToHashTable( WRContext* c, WRValue* index, WRValue* value, WRValue* table );
+void wr_removeFromHashTable( WRContext* c, WRValue* index, WRValue* table );
 
 extern WRReturnFunc wr_CompareEQ[16];
+
+#ifdef WRENCH_COMPACT
+int32_t READ_32_FROM_PC( const unsigned char* P );
+#else
+#define READ_32_FROM_PC(P) ((((int32_t)*(P)) << 24) | (((int32_t)*((P)+1)) << 16) | (((int32_t)*((P)+2)) << 8) | ((int32_t)*((P)+3))) 
+#endif
 
 #endif

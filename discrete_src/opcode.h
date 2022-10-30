@@ -38,7 +38,7 @@ enum WROpcode
 	O_CallFunctionByHashAndPop,
 	O_CallFunctionByIndex,
 	O_PushIndexFunctionReturnValue,
-	
+		
 	O_CallLibFunction,
 	O_CallLibFunctionAndPop,
 
@@ -46,6 +46,8 @@ enum WROpcode
 	O_AssignToObjectTableByOffset,
 
 	O_AssignToHashTableAndPop,
+	O_RemoveFromHashTable,
+	O_HashEntryExists,
 
 	O_PopOne,
 	O_ReturnZero,
@@ -289,6 +291,15 @@ enum WROpcode
 	O_LLBinaryDivision,
 
 	O_GC_Command,
+
+	O_GPushIterator,
+	O_LPushIterator,
+	O_GGNextKeyValueOrJump,
+	O_GLNextKeyValueOrJump,
+	O_LGNextKeyValueOrJump,
+	O_LLNextKeyValueOrJump,
+	O_GNextValueOrJump,
+	O_LNextValueOrJump,
 	
 	// nmon-interpreted opcodes
 	O_HASH_PLACEHOLDER,

@@ -381,6 +381,7 @@ enum WRGCObjectType
 #define INIT_AS_REFARRAY   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_REFARRAY<<24))
 #define INIT_AS_STRUCT     (((uint32_t)WR_EX) | ((uint32_t)WR_EX_STRUCT<<24))
 #define INIT_AS_HASH_TABLE (((uint32_t)WR_EX) | ((uint32_t)WR_EX_HASH_TABLE<<24))
+#define INIT_AS_ITERATOR   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ITERATOR<<24))
 
 #define INIT_AS_REF      WR_REF
 #define INIT_AS_INT      WR_INT
@@ -388,8 +389,10 @@ enum WRGCObjectType
 
 #define IS_EXARRAY_TYPE(P) ((P)&0x80)
 
-#define ARRAY_ELEMENT_FROM_P2(P) (((P)&0x00FFFF00) >> 8)
-#define ARRAY_ELEMENT_TO_P2(P,E) { (P)->padL = (E); (P)->padH  = ((E)>>8); (P)->xtype |= (((E)>>16)&0x1F); }
+#define ARRAY_ELEMENT_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
+#define ARRAY_ELEMENT_TO_P2(P,E) { (P)&=0xE00000FF; (P)|=(E<<8); }
 
+#define IS_REFARRAY(X) (((X)&0xE0)==WR_EX_REFARRAY)
+#define IS_ITERATOR(X) (((X)&0xE0)==WR_EX_ITERATOR)
 
 #endif

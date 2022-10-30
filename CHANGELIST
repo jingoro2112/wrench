@@ -1,3 +1,5 @@
+1.6.0 -------------------------------------------------------------------------
+
 10/26/22 1.5.0 -------------------------------------------------------------------------
 - added goto. sometimes it's just the right solution
 - added optimized int/float to string so no more dependency on std/sprintf

@@ -68,6 +68,12 @@ for( i=0; i<10; ++i )
     // will execute 10 times 0-9
 }
 
+foreach:
+
+for( value : array ) {}
+
+for( key, value : array ) {}
+
 -----------------------------------------------------------------
                           do/while
 

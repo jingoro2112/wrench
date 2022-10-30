@@ -8,21 +8,20 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 #ifdef WRENCH_STD_FILE
 	if ( argn == 1 )
 	{
-		char buf[256];
 		WRValue* arg = stackTop - 1;
-		arg->asString( buf, 256 );
+		const char* fileName = arg->c_str();
 
 #ifdef _WIN32
 		struct _stat sbuf;
-		int ret = _stat( buf, &sbuf );
+		int ret = _stat( fileName, &sbuf );
 #else
 		struct stat sbuf;
-		int ret = stat( buf, &sbuf );
+		int ret = stat( fileName, &sbuf );
 #endif
 
 		if ( ret == 0 )
 		{
-			FILE *infil = fopen( buf, "rb" );
+			FILE *infil = fopen( fileName, "rb" );
 			if ( infil )
 			{
 				stackTop->p2 = INIT_AS_ARRAY;
@@ -50,16 +49,19 @@ void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue* arg1 = stackTop - 2;
 		unsigned int len;
 		char type;
-		char* data = (char*)((stackTop - 1)->array(&len, &type));
+		const char* data = (char*)((stackTop - 1)->array(&len, &type));
 		if ( !data || type != SV_CHAR )
 		{
 			return;
 		}
 		
-		char buf[256];
-		arg1->asString( buf, 256 );
+		const char* fileName = arg1->c_str();
+		if ( !fileName )
+		{
+			return;
+		}
 
-		FILE *outfil = fopen( buf, "wb" );
+		FILE *outfil = fopen( fileName, "wb" );
 		if ( !outfil )
 		{
 			return;

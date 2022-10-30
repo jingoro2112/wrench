@@ -149,7 +149,7 @@ public:
 	WRstr& operator += ( const char c ) { return append(c); }
 
 	WRstr& operator = ( const WRstr& str ) { if ( &str != this ) set(str, str.size()); return *this; }
-	WRstr& operator = ( const WRstr* str ) { if ( !str ) { clear(); } else if ( this != this ) { set(*str, str->size()); } return *this; }
+	WRstr& operator = ( const WRstr* str ) { if ( !str ) { clear(); } else if ( this != str ) { set(*str, str->size()); } return *this; }
 	WRstr& operator = ( const char* c ) { set(c, (unsigned int)strlen(c)); return *this; }
 	WRstr& operator = ( const char c ) { set(&c, 1); return *this; }
 
