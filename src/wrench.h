@@ -52,7 +52,7 @@ possible at the cost of some interpreter speed (due to the removal of
 unrolled loops, cache optimizations, and additional 'shared' code with
 some goto spaghetti) This flag also overrides WRENCH_JUMPTABLE_INTERPRETER
 */
-//#define WRENCH_COMPACT
+#define WRENCH_COMPACT
 /***********************************************************************/
 
 /************************************************************************
@@ -452,10 +452,9 @@ struct WRValue
 	inline WRValue& operator= (const WRValue& V) { p = V.p; frame = V.frame; return *this; }
 };
 
+
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
-  #if defined(WRENCH_COMPACT) 
-    #undef WRENCH_JUMPTABLE_INTERPRETER
-  #elif !defined(__clang__)
+  #if !defined(__clang__)
     #if _MSC_VER
       #undef WRENCH_JUMPTABLE_INTERPRETER
     #endif

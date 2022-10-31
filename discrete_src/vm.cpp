@@ -567,6 +567,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 		&&NewObjectTable,
 		&&AssignToObjectTableByOffset,
+
 		&&AssignToHashTableAndPop,
 		&&RemoveFromHashTable,
 		&&HashEntryExists,
@@ -632,19 +633,23 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&CompareGT,
 		&&CompareLT,
 		&&CompareEQ,
-		&&CompareNE, 
+		&&CompareNE,
 
+		&&GGCompareGT,
+		&&GGCompareGE,
+		&&GGCompareLT,
+		&&GGCompareLE,
 		&&GGCompareEQ, 
 		&&GGCompareNE, 
-		&&GGCompareGT,
-		&&GGCompareLT,
-		
+
 		&&LLCompareGT,
+		&&LLCompareGE,
 		&&LLCompareLT,
+		&&LLCompareLE,
 		&&LLCompareEQ, 
 		&&LLCompareNE, 
 
-		&&GSCompareEQ, 
+		&&GSCompareEQ,
 		&&LSCompareEQ, 
 		&&GSCompareNE, 
 		&&LSCompareNE, 
@@ -684,20 +689,30 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&LSCompareLTBZ8,
 
 		&&LLCompareLTBZ,
+		&&LLCompareLEBZ,
 		&&LLCompareGTBZ,
+		&&LLCompareGEBZ,
 		&&LLCompareEQBZ,
 		&&LLCompareNEBZ,
+
 		&&GGCompareLTBZ,
+		&&GGCompareLEBZ,
 		&&GGCompareGTBZ,
+		&&GGCompareGEBZ,
 		&&GGCompareEQBZ,
 		&&GGCompareNEBZ,
 
 		&&LLCompareLTBZ8,
+		&&LLCompareLEBZ8,
 		&&LLCompareGTBZ8,
+		&&LLCompareGEBZ8,
 		&&LLCompareEQBZ8,
 		&&LLCompareNEBZ8,
+
 		&&GGCompareLTBZ8,
+		&&GGCompareLEBZ8,
 		&&GGCompareGTBZ8,
+		&&GGCompareGEBZ8,
 		&&GGCompareEQBZ8,
 		&&GGCompareNEBZ8,
 
@@ -742,7 +757,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&RightShiftAssignAndPop,
 		&&LeftShiftAssignAndPop,
 
-		&&LogicalNot,
+		&&LogicalNot, //X
 		&&Negate,
 
 		&&LiteralInt8,
@@ -822,7 +837,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&LLNextKeyValueOrJump,
 		&&GNextValueOrJump,
 		&&LNextValueOrJump,
-
 	};
 #endif
 
@@ -2077,26 +2091,21 @@ compactReturnFuncBInverted8:
 				CONTINUE;
 			}
 			
-			CASE(GGCompareEQ):
-			{
-				boolIntCall = CompareEQI;
-				boolFloatCall = CompareEQF;
-				goto compactEQCompareGGReg;
-			}
+
+			CASE(GGCompareLE): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnCompareGGNEPost; }
+			CASE(GGCompareGE): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnCompareGGNEPost; }
 			CASE(GGCompareNE):
 			{
 				boolIntCall = CompareEQI;
 				boolFloatCall = CompareEQF;
+compactReturnCompareGGNEPost:
 				register1 = globalSpace + *pc++;
 				register0 = globalSpace + *pc++;
 				goto compactReturnCompareNEPost;
 			}
-			CASE(GGCompareGT):
-			{
-				boolIntCall = CompareGTI;
-				boolFloatCall = CompareGTF;
-				goto compactEQCompareGGReg;
-			}
+
+			CASE(GGCompareGT): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactEQCompareGGReg; }
+			CASE(GGCompareEQ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactEQCompareGGReg; }
 			CASE(GGCompareLT):
 			{
 				boolIntCall = CompareLTI;
@@ -2121,10 +2130,14 @@ compactReturnCompareEQPost:
 				(stackTop++)->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
+
+			CASE(LLCompareGE): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnCompareNE; }
+			CASE(LLCompareLE): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnCompareNE; }
 			CASE(LLCompareNE):
 			{
 				boolIntCall = CompareEQI;
 				boolFloatCall = CompareEQF;
+compactReturnCompareNE:
 				register1 = frameBase + *pc++;
 				register0 = frameBase + *pc++;
 compactReturnCompareNEPost:
@@ -2133,6 +2146,9 @@ compactReturnCompareNEPost:
 				CONTINUE;
 			}
 
+
+
+			
 			CASE(GSCompareGEBZ): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareGInverted; }
 			CASE(GSCompareLEBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareGInverted; }
 			CASE(GSCompareNEBZ):
@@ -2236,88 +2252,102 @@ compactCompare8Work:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : (int8_t)*pc;
 				CONTINUE;
 			}
-			
-			CASE(LLCompareEQBZ):
+
+			CASE(LLCompareLEBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareLLInv; }
+			CASE(LLCompareGEBZ): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareLLInv; }
+			CASE(LLCompareNEBZ):
 			{
 				boolIntCall = CompareEQI;
 				boolFloatCall = CompareEQF;
-				register0 = frameBase + *pc++;
+compactCompareLLInv:
 				register1 = frameBase + *pc++;
-				goto compactCompareWork;
+				register0 = frameBase + *pc++;
+				goto compactCompareInvertedWork;
 			}
-			CASE(LLCompareNEBZ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareLL; }
+			CASE(LLCompareEQBZ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareLL; }
 			CASE(LLCompareGTBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareLL; }
 			CASE(LLCompareLTBZ):
 			{
 				boolIntCall = CompareLTI;
 				boolFloatCall = CompareLTF;
 compactCompareLL:
-				register0 = frameBase + *pc++;
 				register1 = frameBase + *pc++;
-				goto compactCompareInvertedWork;
+				register0 = frameBase + *pc++;
+				goto compactCompareWork;
 			}
 			
-			CASE(LLCompareEQBZ8):
+			CASE(LLCompareLEBZ8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareLLInv8; }
+			CASE(LLCompareGEBZ8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareLLInv8; }
+			CASE(LLCompareNEBZ8):
 			{
 				boolIntCall = CompareEQI;
 				boolFloatCall = CompareEQF;
-				register0 = frameBase + *pc++;
+compactCompareLLInv8:
 				register1 = frameBase + *pc++;
-				goto compactCompare8Work;
+				register0 = frameBase + *pc++;
+				goto compactCompareInverted8Work;
 			}
-			CASE(LLCompareNEBZ8): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareLL8; }
+			CASE(LLCompareEQBZ8): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareLL8; }
 			CASE(LLCompareGTBZ8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareLL8; }
 			CASE(LLCompareLTBZ8):
 			{
 				boolIntCall = CompareLTI;
 				boolFloatCall = CompareLTF;
 compactCompareLL8:	
-				register0 = frameBase + *pc++;
 				register1 = frameBase + *pc++;
-				goto compactCompareInverted8Work;
+				register0 = frameBase + *pc++;
+				goto compactCompare8Work;
 			}
-			
-			CASE(GGCompareEQBZ):
+
+
+			CASE(GGCompareGEBZ): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareGGInv; }
+			CASE(GGCompareLEBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareGGInv; }
+			CASE(GGCompareNEBZ):
 			{
 				boolIntCall = CompareEQI;
 				boolFloatCall = CompareEQF;
-				register0 = globalSpace + *pc++;
+compactCompareGGInv:
 				register1 = globalSpace + *pc++;
-				goto compactCompareWork;
+				register0 = globalSpace + *pc++;
+				goto compactCompareInvertedWork;
 			}
 			
-			CASE(GGCompareNEBZ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareGG; }
+			CASE(GGCompareEQBZ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareGG; }
 			CASE(GGCompareGTBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareGG; }
 			CASE(GGCompareLTBZ):
 			{
 				boolIntCall = CompareLTI;
 				boolFloatCall = CompareLTF;
 compactCompareGG:
-				register0 = globalSpace + *pc++;
 				register1 = globalSpace + *pc++;
-				goto compactCompareInvertedWork;
+				register0 = globalSpace + *pc++;
+				goto compactCompareWork;
 			}
 			
-			CASE(GGCompareEQBZ8):
+			CASE(GGCompareGEBZ8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareGGInv8; }
+			CASE(GGCompareLEBZ8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareGGInv8; }
+			CASE(GGCompareNEBZ8):
 			{
 				boolIntCall = CompareEQI;
 				boolFloatCall = CompareEQF;
-				register0 = globalSpace + *pc++;
+compactCompareGGInv8:
 				register1 = globalSpace + *pc++;
-				goto compactCompare8Work;
+				register0 = globalSpace + *pc++;
+				goto compactCompareInverted8Work;
 			}
-			CASE(GGCompareNEBZ8): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareGG8; }
+			CASE(GGCompareEQBZ8): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareGG8; }
 			CASE(GGCompareGTBZ8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareGG8; }
 			CASE(GGCompareLTBZ8):
 			{
 				boolIntCall = CompareLTI;
 				boolFloatCall = CompareLTF;
 compactCompareGG8:
-				register0 = globalSpace + *pc++;
 				register1 = globalSpace + *pc++;
-				goto compactCompareInverted8Work;
+				register0 = globalSpace + *pc++;
+				goto compactCompare8Work;
 			}
-			
+
+	
 #else // ---------------------------- Non-Compact:
 
 			CASE(PreIncrement): { register0 = stackTop - 1; wr_preinc[ register0->type ]( register0 ); CONTINUE; }
@@ -2565,6 +2595,9 @@ returnFuncBInverted8:
 				CONTINUE;
 			}
 
+
+
+			
 			CASE(GGCompareEQ):
 			{
 				returnFunc = wr_CompareEQ;
@@ -2586,6 +2619,13 @@ returnFuncBInverted8:
 				register0 = globalSpace + *pc++;
 				goto returnCompareEQPost;
 			}
+			CASE(GGCompareGE):
+			{
+				returnFunc = wr_CompareLT;
+				register1 = globalSpace + *pc++;
+				register0 = globalSpace + *pc++;
+				goto returnCompareNEPost;
+			}
 			CASE(GGCompareLT):
 			{
 				returnFunc = wr_CompareLT;
@@ -2593,7 +2633,18 @@ returnFuncBInverted8:
 				register0 = globalSpace + *pc++;
 				goto returnCompareEQPost;
 			}
+			CASE(GGCompareLE):
+			{
+				returnFunc = wr_CompareGT;
+				register1 = globalSpace + *pc++;
+				register0 = globalSpace + *pc++;
+				goto returnCompareNEPost;
+			}
 
+
+
+
+			
 			CASE(LLCompareGT): { returnFunc = wr_CompareGT; goto returnCompareEQ; }
 			CASE(LLCompareLT): { returnFunc = wr_CompareLT; goto returnCompareEQ; }
 			CASE(LLCompareEQ):
@@ -2608,9 +2659,12 @@ returnCompareEQPost:
 				CONTINUE;
 			}
 			
+			CASE(LLCompareGE): { returnFunc = wr_CompareLT; goto returnCompareNE; }
+			CASE(LLCompareLE): { returnFunc = wr_CompareGT; goto returnCompareNE; }
 			CASE(LLCompareNE):
 			{
 				returnFunc = wr_CompareEQ;
+returnCompareNE:
 				register1 = frameBase + *pc++;
 				register0 = frameBase + *pc++;
 returnCompareNEPost:
@@ -2618,6 +2672,10 @@ returnCompareNEPost:
 				(stackTop++)->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
+
+
+
+
 			
 			CASE(GSCompareGEBZ): { returnFunc = wr_CompareLT; goto CompareGInverted; }
 			CASE(GSCompareLEBZ): { returnFunc = wr_CompareGT; goto CompareGInverted; }
@@ -2714,84 +2772,109 @@ CompareL8Normal:
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)*pc;
 				CONTINUE;
 			}
-			
-			CASE(LLCompareEQBZ):
+
+			CASE(LLCompareGEBZ): { returnFunc = wr_CompareLT; goto CompareLLInv; }
+			CASE(LLCompareLEBZ): { returnFunc = wr_CompareGT; goto CompareLLInv; }
+			CASE(LLCompareNEBZ):
 			{
-				register0 = frameBase + *pc++;
+				returnFunc = wr_CompareEQ;
+CompareLLInv:
 				register1 = frameBase + *pc++;
-				pc += wr_CompareEQ[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
+				register0 = frameBase + *pc++;
+				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
 				CONTINUE;
 			}
-			CASE(LLCompareNEBZ): { returnFunc = wr_CompareEQ; goto CompareLL; }
+			CASE(LLCompareEQBZ): { returnFunc = wr_CompareEQ; goto CompareLL; }
 			CASE(LLCompareGTBZ): { returnFunc = wr_CompareGT; goto CompareLL; }
 			CASE(LLCompareLTBZ):
 			{
 				returnFunc = wr_CompareLT;
 CompareLL:	
-				register0 = frameBase + *pc++;
 				register1 = frameBase + *pc++;
-				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
+				register0 = frameBase + *pc++;
+				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
 				CONTINUE;
 			}
+
 			
-			CASE(LLCompareEQBZ8):
+			CASE(LLCompareGEBZ8): { returnFunc = wr_CompareLT; goto CompareLL8Inv; }
+			CASE(LLCompareLEBZ8): { returnFunc = wr_CompareGT; goto CompareLL8Inv; }
+			CASE(LLCompareNEBZ8):
 			{
-				register0 = frameBase + *pc++;
+				returnFunc = wr_CompareEQ;
+CompareLL8Inv:
 				register1 = frameBase + *pc++;
-				pc += wr_CompareEQ[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)*pc;
+				register0 = frameBase + *pc++;
+				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)*pc : 2;
 				CONTINUE;
 			}
-			CASE(LLCompareNEBZ8): { returnFunc = wr_CompareEQ; goto CompareLL8; }
+			CASE(LLCompareEQBZ8): { returnFunc = wr_CompareEQ; goto CompareLL8; }
 			CASE(LLCompareGTBZ8): { returnFunc = wr_CompareGT; goto CompareLL8; }
 			CASE(LLCompareLTBZ8):
 			{
 				returnFunc = wr_CompareLT;
 CompareLL8:
-				register0 = frameBase + *pc++;
 				register1 = frameBase + *pc++;
-				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)*pc : 2;
+				register0 = frameBase + *pc++;
+				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)*pc;
 				CONTINUE;
 			}
+
+
+
 			
-			CASE(GGCompareEQBZ):
+			CASE(GGCompareGEBZ): { returnFunc = wr_CompareLT; goto CompareGGInv; }
+ 		    CASE(GGCompareLEBZ): { returnFunc = wr_CompareGT; goto CompareGGInv; }
+			CASE(GGCompareNEBZ):
 			{
-				register0 = globalSpace + *pc++;
+				returnFunc = wr_CompareEQ;
+CompareGGInv:
 				register1 = globalSpace + *pc++;
-				pc += wr_CompareEQ[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
+				register0 = globalSpace + *pc++;
+				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
 				CONTINUE;
 			}
-			
-			CASE(GGCompareNEBZ): { returnFunc = wr_CompareEQ; goto CompareGG; }
+
+			CASE(GGCompareEQBZ): { returnFunc = wr_CompareEQ; goto CompareGG; }
 			CASE(GGCompareGTBZ): { returnFunc = wr_CompareGT; goto CompareGG; }
 			CASE(GGCompareLTBZ):
 			{
 				returnFunc = wr_CompareLT;
 CompareGG:	
-				register0 = globalSpace + *pc++;
 				register1 = globalSpace + *pc++;
-				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1)) : 2;
+				register0 = globalSpace + *pc++;
+				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int32_t)(int16_t)((((int16_t)*pc)<<8) + *(pc+1));
 				CONTINUE;
 			}
+
+
 			
-			CASE(GGCompareEQBZ8):
+			CASE(GGCompareGEBZ8): { returnFunc = wr_CompareLT; goto CompareGG8Inv; }
+			CASE(GGCompareLEBZ8): { returnFunc = wr_CompareGT; goto CompareGG8Inv; }
+			CASE(GGCompareNEBZ8):
 			{
-				register0 = globalSpace + *pc++;
+				returnFunc = wr_CompareEQ;
+CompareGG8Inv:
 				register1 = globalSpace + *pc++;
-				pc += wr_CompareEQ[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)*pc;
+				register0 = globalSpace + *pc++;
+				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)*pc : 2;
 				CONTINUE;
 			}
-			CASE(GGCompareNEBZ8): { returnFunc = wr_CompareEQ; goto CompareGG8; }
+			CASE(GGCompareEQBZ8): { returnFunc = wr_CompareEQ; goto CompareGG8; }
 			CASE(GGCompareGTBZ8): { returnFunc = wr_CompareGT; goto CompareGG8; }
 			CASE(GGCompareLTBZ8):
 			{
 				returnFunc = wr_CompareLT;
 CompareGG8:	
-				register0 = globalSpace + *pc++;
 				register1 = globalSpace + *pc++;
-				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ?  (int8_t)*pc : 2;
+				register0 = globalSpace + *pc++;
+				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)*pc;
 				CONTINUE;
 			}
 
+
+
+			
 			CASE(BinaryRightShiftSkipLoad): { targetFunc = wr_RightShiftBinary; goto targetFuncOpSkipLoad; }
 			CASE(BinaryLeftShiftSkipLoad): { targetFunc = wr_LeftShiftBinary; goto targetFuncOpSkipLoad; }
 			CASE(BinaryAndSkipLoad): { targetFunc = wr_ANDBinary; goto targetFuncOpSkipLoad; }

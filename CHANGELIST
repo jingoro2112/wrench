@@ -1,4 +1,5 @@
 1.6.0 -------------------------------------------------------------------------
+- fixed error in compare logic surrounding GE/LE/GT/LT in keyhole optimizer
 
 10/26/22 1.5.0 -------------------------------------------------------------------------
 - added goto. sometimes it's just the right solution

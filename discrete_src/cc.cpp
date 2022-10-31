@@ -920,6 +920,24 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			bytecode.opcodes += O_LLCompareLT;
 			return;
 		}
+		else if ( opcode == O_CompareGE && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 3 ] = O_LLCompareGE;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.shave( 2 );
+			bytecode.opcodes += O_LLCompareGE;
+			return;
+		}
+		else if ( opcode == O_CompareLE && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 3 ] = O_LLCompareLE;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.shave( 2 );
+			bytecode.opcodes += O_LLCompareLE;
+			return;
+		}
 		else if ( opcode == O_CompareEQ && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
 		{
 			bytecode.all[ a - 3 ] = O_GGCompareEQ;
@@ -956,6 +974,24 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			bytecode.opcodes += O_GGCompareLT;
 			return;
 		}
+		else if ( opcode == O_CompareGE && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 3 ] = O_GGCompareGE;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.shave( 2 );
+			bytecode.opcodes += O_GGCompareGE;
+			return;
+		}
+		else if ( opcode == O_CompareLE && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 3 ] = O_GGCompareLE;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.shave( 2 );
+			bytecode.opcodes += O_GGCompareLE;
+			return;
+		}
 		else if ( (opcode == O_CompareEQ && (o>0))
 				  && CheckCompareReplace(O_LSCompareEQ, O_GSCompareEQ, O_LSCompareEQ, O_GSCompareEQ, bytecode, a, o) )
 		{
@@ -967,22 +1003,22 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			return;
 		}
 		else if ( (opcode == O_CompareGE && (o>0))
-			 && CheckCompareReplace(O_LSCompareGE, O_GSCompareGE, O_LSCompareLT, O_GSCompareLT, bytecode, a, o) )
+			 && CheckCompareReplace(O_LSCompareGE, O_GSCompareGE, O_LSCompareLE, O_GSCompareLE, bytecode, a, o) )
 		{
 			return;
 		}
 		else if ( (opcode == O_CompareLE && (o>0))
-				  && CheckCompareReplace(O_LSCompareLE, O_GSCompareLE, O_LSCompareGT, O_GSCompareGT, bytecode, a, o) )
+				  && CheckCompareReplace(O_LSCompareLE, O_GSCompareLE, O_LSCompareGE, O_GSCompareGE, bytecode, a, o) )
 		{
 			return;
 		}
 		else if ( (opcode == O_CompareGT && (o>0))
-				  && CheckCompareReplace(O_LSCompareGT, O_GSCompareGT, O_LSCompareLE, O_GSCompareLE, bytecode, a, o) )
+				  && CheckCompareReplace(O_LSCompareGT, O_GSCompareGT, O_LSCompareLT, O_GSCompareLT, bytecode, a, o) )
 		{
 			return;
 		}
 		else if ( (opcode == O_CompareLT && (o>0))
-				  && CheckCompareReplace(O_LSCompareLT, O_GSCompareLT, O_LSCompareGE, O_GSCompareGE, bytecode, a, o) )
+				  && CheckCompareReplace(O_LSCompareLT, O_GSCompareLT, O_LSCompareGT, O_GSCompareGT, bytecode, a, o) )
 		{
 			return;
 		}
@@ -1198,6 +1234,18 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				bytecode.all[ a - 2 ] = O_LLCompareGTBZ;
 				return;
 			}
+			else if ( bytecode.opcodes[o] == O_LLCompareGE )
+			{
+				bytecode.opcodes[o] = O_LLCompareGEBZ;
+				bytecode.all[ a - 2 ] = O_LLCompareGEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LLCompareLE )
+			{
+				bytecode.opcodes[o] = O_LLCompareLEBZ;
+				bytecode.all[ a - 2 ] = O_LLCompareLEBZ;
+				return;
+			}
 			else if ( bytecode.opcodes[o] == O_LLCompareEQ )
 			{
 				bytecode.opcodes[o] = O_LLCompareEQBZ;
@@ -1220,6 +1268,18 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			{
 				bytecode.opcodes[o] = O_GGCompareGTBZ;
 				bytecode.all[ a - 2 ] = O_GGCompareGTBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GGCompareLE )
+			{
+				bytecode.opcodes[o] = O_GGCompareLEBZ;
+				bytecode.all[ a - 2 ] = O_GGCompareLEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GGCompareGE )
+			{
+				bytecode.opcodes[o] = O_GGCompareGEBZ;
+				bytecode.all[ a - 2 ] = O_GGCompareGEBZ;
 				return;
 			}
 			else if ( bytecode.opcodes[o] == O_GGCompareEQ )
@@ -1331,7 +1391,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				}
 				return;
 			}
-			else if ( bytecode.opcodes[o] == O_CompareLT ) // assign+pop is very common
+			else if ( bytecode.opcodes[o] == O_CompareLT )
 			{
 				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
 				{
@@ -1356,7 +1416,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				}
 				return;
 			}
-			else if ( bytecode.opcodes[o] == O_CompareGT ) // assign+pop is very common
+			else if ( bytecode.opcodes[o] == O_CompareGT )
 			{
 				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
 				{
@@ -1381,11 +1441,11 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				}
 				return;
 			}
-			else if ( bytecode.opcodes[o] == O_CompareGE ) // assign+pop is very common
+			else if ( bytecode.opcodes[o] == O_CompareGE )
 			{
 				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
 				{
-					bytecode.all[a-4] = O_LLCompareLTBZ;
+					bytecode.all[a-4] = O_LLCompareGEBZ;
 					bytecode.all[a-2] = bytecode.all[a-3];
 					bytecode.all[a-3] = bytecode.all[a-1];
 					bytecode.opcodes.shave(2);
@@ -1394,7 +1454,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				}
 				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
 				{
-					bytecode.all[a-4] = O_GGCompareLTBZ;
+					bytecode.all[a-4] = O_GGCompareGEBZ;
 					bytecode.all[a-2] = bytecode.all[a-3];
 					bytecode.all[a-3] = bytecode.all[a-1];
 					bytecode.opcodes.shave(2);
@@ -1408,11 +1468,11 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				}
 				return;
 			}
-			else if ( bytecode.opcodes[o] == O_CompareLE ) // assign+pop is very common
+			else if ( bytecode.opcodes[o] == O_CompareLE )
 			{
 				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
 				{
-					bytecode.all[a-4] = O_LLCompareGTBZ;
+					bytecode.all[a-4] = O_LLCompareLEBZ;
 					bytecode.all[a-2] = bytecode.all[a-3];
 					bytecode.all[a-3] = bytecode.all[a-1];
 					bytecode.opcodes.shave(2);
@@ -1421,7 +1481,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				}
 				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
 				{
-					bytecode.all[a-4] = O_GGCompareGTBZ;
+					bytecode.all[a-4] = O_GGCompareLEBZ;
 					bytecode.all[a-2] = bytecode.all[a-3];
 					bytecode.all[a-3] = bytecode.all[a-1];
 					bytecode.opcodes.shave(2);
@@ -1859,10 +1919,14 @@ void WRCompilationContext::addRelativeJumpSource( WRBytecode& bytecode, WROpcode
 
 		case O_LLCompareLTBZ:
 		case O_LLCompareGTBZ:
+		case O_LLCompareLEBZ:
+		case O_LLCompareGEBZ:
 		case O_LLCompareEQBZ:
 		case O_LLCompareNEBZ:
 		case O_GGCompareLTBZ:
 		case O_GGCompareGTBZ:
+		case O_GGCompareLEBZ:
+		case O_GGCompareGEBZ:
 		case O_GGCompareEQBZ:
 		case O_GGCompareNEBZ:
 		{
@@ -1923,18 +1987,26 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 
 				case O_LLCompareLTBZ8:
 				case O_LLCompareGTBZ8:
+				case O_LLCompareLEBZ8:
+				case O_LLCompareGEBZ8:
 				case O_LLCompareEQBZ8:
 				case O_LLCompareNEBZ8:
 				case O_GGCompareLTBZ8:
 				case O_GGCompareGTBZ8:
+				case O_GGCompareLEBZ8:
+				case O_GGCompareGEBZ8:
 				case O_GGCompareEQBZ8:
 				case O_GGCompareNEBZ8:
 				case O_LLCompareLTBZ:
 				case O_LLCompareGTBZ:
+				case O_LLCompareLEBZ:
+				case O_LLCompareGEBZ:
 				case O_LLCompareEQBZ:
 				case O_LLCompareNEBZ:
 				case O_GGCompareLTBZ:
 				case O_GGCompareGTBZ:
+				case O_GGCompareLEBZ:
+				case O_GGCompareGEBZ:
 				case O_GGCompareEQBZ:
 				case O_GGCompareNEBZ:
 				{
@@ -1994,10 +2066,14 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 										  
 					case O_LLCompareLTBZ: *bytecode.all.p_str(offset - 1) = O_LLCompareLTBZ8; offset += 2; break;
 					case O_LLCompareGTBZ: *bytecode.all.p_str(offset - 1) = O_LLCompareGTBZ8; offset += 2; break;
+					case O_LLCompareLEBZ: *bytecode.all.p_str(offset - 1) = O_LLCompareLEBZ8; offset += 2; break;
+					case O_LLCompareGEBZ: *bytecode.all.p_str(offset - 1) = O_LLCompareGEBZ8; offset += 2; break;
 					case O_LLCompareEQBZ: *bytecode.all.p_str(offset - 1) = O_LLCompareEQBZ8; offset += 2; break;
 					case O_LLCompareNEBZ: *bytecode.all.p_str(offset - 1) = O_LLCompareNEBZ8; offset += 2; break;
 					case O_GGCompareLTBZ: *bytecode.all.p_str(offset - 1) = O_GGCompareLTBZ8; offset += 2; break;
 					case O_GGCompareGTBZ: *bytecode.all.p_str(offset - 1) = O_GGCompareGTBZ8; offset += 2; break;
+					case O_GGCompareLEBZ: *bytecode.all.p_str(offset - 1) = O_GGCompareLEBZ8; offset += 2; break;
+					case O_GGCompareGEBZ: *bytecode.all.p_str(offset - 1) = O_GGCompareGEBZ8; offset += 2; break;
 					case O_GGCompareEQBZ: *bytecode.all.p_str(offset - 1) = O_GGCompareEQBZ8; offset += 2; break;
 					case O_GGCompareNEBZ: *bytecode.all.p_str(offset - 1) = O_GGCompareNEBZ8; offset += 2; break;
 
@@ -2034,10 +2110,14 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 
 					case O_LLCompareLTBZ8:
 					case O_LLCompareGTBZ8:
+					case O_LLCompareLEBZ8:
+					case O_LLCompareGEBZ8:
 					case O_LLCompareEQBZ8:
 					case O_LLCompareNEBZ8:
 					case O_GGCompareLTBZ8:
 					case O_GGCompareGTBZ8:
+					case O_GGCompareLEBZ8:
+					case O_GGCompareGEBZ8:
 					case O_GGCompareEQBZ8:
 					case O_GGCompareNEBZ8:
 					{
@@ -2081,10 +2161,14 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 
 					case O_LLCompareLTBZ8: *bytecode.all.p_str(offset - 1) = O_LLCompareLTBZ; offset += 2; break;
 					case O_LLCompareGTBZ8: *bytecode.all.p_str(offset - 1) = O_LLCompareGTBZ; offset += 2; break;
+					case O_LLCompareLEBZ8: *bytecode.all.p_str(offset - 1) = O_LLCompareLEBZ; offset += 2; break;
+					case O_LLCompareGEBZ8: *bytecode.all.p_str(offset - 1) = O_LLCompareGEBZ; offset += 2; break;
 					case O_LLCompareEQBZ8: *bytecode.all.p_str(offset - 1) = O_LLCompareEQBZ; offset += 2; break;
 					case O_LLCompareNEBZ8: *bytecode.all.p_str(offset - 1) = O_LLCompareNEBZ; offset += 2; break;
 					case O_GGCompareLTBZ8: *bytecode.all.p_str(offset - 1) = O_GGCompareLTBZ; offset += 2; break;
 					case O_GGCompareGTBZ8: *bytecode.all.p_str(offset - 1) = O_GGCompareGTBZ; offset += 2; break;
+					case O_GGCompareLEBZ8: *bytecode.all.p_str(offset - 1) = O_GGCompareLEBZ; offset += 2; break;
+					case O_GGCompareGEBZ8: *bytecode.all.p_str(offset - 1) = O_GGCompareGEBZ; offset += 2; break;
 					case O_GGCompareEQBZ8: *bytecode.all.p_str(offset - 1) = O_GGCompareEQBZ; offset += 2; break;
 					case O_GGCompareNEBZ8: *bytecode.all.p_str(offset - 1) = O_GGCompareNEBZ; offset += 2; break;
 
@@ -2137,10 +2221,14 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 					
 					case O_LLCompareLTBZ:
 					case O_LLCompareGTBZ:
+					case O_LLCompareLEBZ:
+					case O_LLCompareGEBZ:
 					case O_LLCompareEQBZ:
 					case O_LLCompareNEBZ:
 					case O_GGCompareLTBZ:
 					case O_GGCompareGTBZ:
+					case O_GGCompareLEBZ:
+					case O_GGCompareGEBZ:
 					case O_GGCompareEQBZ:
 					case O_GGCompareNEBZ:
 					{
@@ -5121,6 +5209,8 @@ const char* c_opcodeName[] =
 	"AssignToObjectTableByOffset",
 
 	"AssignToHashTableAndPop",
+	"RemoveFromHashTable",
+	"HashEntryExists",
 
 	"PopOne",
 	"ReturnZero",
@@ -5185,13 +5275,17 @@ const char* c_opcodeName[] =
 	"CompareEQ",
 	"CompareNE", 
 
+	"GGCompareGT",
+	"GGCompareGE",
+	"GGCompareLT",
+	"GGCompareLE",
 	"GGCompareEQ", 
 	"GGCompareNE", 
-	"GGCompareGT",
-	"GGCompareLT",
 
 	"LLCompareGT",
+	"LLCompareGE",
 	"LLCompareLT",
+	"LLCompareLE",
 	"LLCompareEQ", 
 	"LLCompareNE", 
 
@@ -5235,20 +5329,30 @@ const char* c_opcodeName[] =
 	"LSCompareLTBZ8",
 
 	"LLCompareLTBZ",
+	"LLCompareLEBZ",
 	"LLCompareGTBZ",
+	"LLCompareGEBZ",
 	"LLCompareEQBZ",
 	"LLCompareNEBZ",
+
 	"GGCompareLTBZ",
+	"GGCompareLEBZ",
 	"GGCompareGTBZ",
+	"GGCompareGEBZ",
 	"GGCompareEQBZ",
 	"GGCompareNEBZ",
 
 	"LLCompareLTBZ8",
+	"LLCompareLEBZ8",
 	"LLCompareGTBZ8",
+	"LLCompareGEBZ8",
 	"LLCompareEQBZ8",
 	"LLCompareNEBZ8",
+
 	"GGCompareLTBZ8",
+	"GGCompareLEBZ8",
 	"GGCompareGTBZ8",
+	"GGCompareGEBZ8",
 	"GGCompareEQBZ8",
 	"GGCompareNEBZ8",
 

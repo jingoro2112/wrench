@@ -34,7 +34,7 @@ void setup()
 	int outLen;
 	
 	int err = wr_compile( wrenchCode, strlen(wrenchCode), &outBytes, &outLen ); // compile it
-//	if ( err == 0 )
+	if ( err == 0 )
 	{
 		wr_run( w, outBytes ); // load and run the code!
 		delete[] outBytes; // clean up 

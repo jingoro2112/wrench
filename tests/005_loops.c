@@ -2,7 +2,6 @@
 hi
 hi
 hi
-out
 0
 0
 1
@@ -118,6 +117,7 @@ lt6!
 1
 ~*/
 
+
 goto label;
 
 
@@ -135,8 +135,7 @@ if ( a > 2 )
 goto label;
 out:
 
-print("out");
-
+if ( a != 3 ) print("a 0");
 
 
 tle();
@@ -368,3 +367,4 @@ function f3()
 		while(1);
 	} while(1);
 }
+

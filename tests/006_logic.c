@@ -40,6 +40,109 @@ a||b
 a||b
 ~*/
 
+abc();
+
+a = 10;
+b = 5;
+c = 0;
+
+if ( 10 <= a ) { c += 0x1000; }
+if ( 10 >= a ) { c += 0x1000; }
+if ( 10 == b ) { print("CB1"); }
+if ( 10 != a ) { print("CB2"); }
+if ( 10 < b )  { print("CB3"); }
+if ( b > 10 )  { print("CB4"); }
+if ( 10 <= b ) { print("CB8"); }
+if ( b >= 10 ) { print("CB8"); }
+
+if ( 10 <= a && 10 <= a  ) { c += 0x10; }
+if ( 10 >= a && 10 >= a ) { c += 0x10; }
+if ( 10 == b && 10 == b ) { print("BB1"); }
+if ( 10 != a && 10 != a ) { print("BB2"); }
+if ( 10 < b && 10 < b ) { print("BB3"); }
+if ( b > 10 && b > 10 ) { print("BB4"); }
+if ( 10 <= b && 10 <= b ) { print("BB8"); }
+if ( b >= 10 && b >= 10 ) { print("BB8"); }
+
+if ( a <= a && a <= a  ) { c += 0x1; }
+if ( a >= a && a >= a ) { c += 0x1; }
+if ( a == b && a == b ) { print("AB1"); }
+if ( a != a && a != a ) { print("AB2"); }
+if ( a < b && a < b ) { print("AB3"); }
+if ( b > a && b > a ) { print("AB4"); }
+if ( a <= b && a <= b ) { print("AB8"); }
+if ( b >= a && b >= a ) { print("AB8"); }
+
+
+if ( a <= a ) { c += 0x100; }
+if ( a >= a ) { c += 0x100; }
+if ( a == b ) { print("CB1"); }
+if ( a != a ) { print("CB2"); }
+if ( a < b ) { print("CB3"); }
+if ( b > a ) { print("CB4"); }
+if ( a <= b ) { print("CB8"); }
+if ( b >= a ) { print("CB8"); }
+
+
+if ( c != 0x2222 ) { print("err C:"); print(c); }
+
+function abc()
+{
+	aa = 10;
+	ba = 5;
+	ca = 0;
+
+	if ( 10 <= aa ) { ca += 0x1000; }
+	if ( 10 >= aa ) { ca += 0x1000; }
+	if ( 10 == ba ) { print("L CB1"); }
+	if ( 10 != aa ) { print("L CB2"); }
+	if ( 10 < ba )  { print("L CB3"); }
+	if ( ba > 10 )  { print("L CB4"); }
+	if ( 10 <= ba ) { print("L CB8"); }
+	if ( ba >= 10 ) { print("L CB8"); }
+	
+	if ( 10 <= aa && 10 <= aa  ) { ca += 0x10; }
+	if ( 10 >= aa && 10 >= aa ) { ca += 0x10; }
+	if ( 10 == ba && 10 == ba ) { print("L BB1"); }
+	if ( 10 != aa && 10 != aa ) { print("L BB2"); }
+	if ( 10 < ba && 10 < ba ) { print("L BB3"); }
+	if ( ba > 10 && ba > 10 ) { print("L BB4"); }
+	if ( 10 <= ba && 10 <= ba ) { print("L BB8"); }
+	if ( ba >= 10 && ba >= 10 ) { print("L BB8"); }
+
+	if ( aa >= aa && aa >= aa ) { ca += 1; }
+	if ( aa <= aa && aa <= aa ) { ca += 1; }
+	if ( aa == ba && aa == ba ) { print("L AB1"); }
+	if ( aa != aa && aa != aa ) { print("L AB2"); }
+	if ( aa < ba && aa < ba ) { print("L AB3"); }
+	if ( ba > aa && ba > aa ) { print("L AB4"); }
+	if ( aa <= ba && aa <= ba ) { print("L AB8"); }
+	if ( ba >= aa && ba >= aa ) { print("L AB8"); }
+
+	if ( aa >= aa ) { ca += 0x100; }
+	if ( aa <= aa ) { ca += 0x100; }
+	if ( aa == ba ) { print("L AB1"); }
+	if ( aa != aa ) { print("L AB2"); }
+	if ( aa < ba ) { print("L AB3"); }
+	if ( ba > aa ) { print("L AB4"); }
+	if ( aa <= ba ) { print("L AB8"); }
+	if ( ba >= aa ) { print("L AB8"); }
+
+	if ( ca != 0x2222 ) { print("L err C:"); print(ca); }
+}
+
+a = 10.5;
+if ( 10.5 < 10 || 10.5 < 10 ) print("E T1");
+if ( 10.5 <= 10 || 10.5 <= 10 ) print("E T11");
+if ( 10 > 10.5 || 10 > 10.5 ) print("E T2");
+if ( 10 >= 10.5 || 10 >= 10.5 ) print("E T21");
+if ( 10.5 == 10 || 10.5 == 10 ) print("E 3");
+if ( 10 != 10 || 10 != 10 ) print("E 4");
+if ( !(10 <= 10 || 10 <= 10) ) print("E 5");
+if ( !(10 >= 10 || 10 >= 10) ) print("E 6");
+
+
+
 // float <- int
 f = .5;
 i = 3;
@@ -95,7 +198,6 @@ else
 
 
 a = 10.5;
-
 if ( a > 10 ) print("T1");
 if ( a < 11 ) print("T2");
 if ( a >= 10.5 ) print("T3");

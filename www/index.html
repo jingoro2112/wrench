@@ -80,6 +80,7 @@ pre code {
                 <span class="menu-title"><a href="#library">Lib Reference</a></span>
                 <span class="menu-title"><a href="#benchmarks">Benchmarks</a></span>
                 <span class="menu-title"><a href="#faq">FAQ</a></span>
+                <span class="menu-title"><a href="mailto: curt.hartung@gmail.com">Email Me</a></span>
 
 
 
@@ -286,7 +287,8 @@ very familiar.
 b = 3.4;
 string = "some string";
 </code></pre>
-wrench natively handles signed-32, float-32, and strings. Variable
+wrench natively handles 32 bit ints, floats and 8 bit character
+strings. Variable
 names follow c-syntax for legality, the must start with a letter or
 '_' and can contain letters, numbers and more '_' characters.
 
@@ -387,6 +389,11 @@ for( k,v : somArray )
 {
 } while( condition );
 </code></pre>
+
+<p><b>break/continue</b>
+<p>inside any looping structure (do/while/for) continue and break
+function as they do in c
+
 
 <p><b>if</b>
 <code><pre>if( a == true )
@@ -509,7 +516,7 @@ print( hashTable[2] ); // "two"
 print( hashTable[3] ); // 3
 print( hashTable["str"] ); // 6
 
-// and this also works:
+// and this also works (syntactic sugar for string-keys only)
 print( hashTable.str ); // 6
 </code></pre>
 

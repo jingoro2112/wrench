@@ -110,19 +110,23 @@ enum WROpcode
 	O_CompareGT,
 	O_CompareLT,
 	O_CompareEQ,
-	O_CompareNE, 
+	O_CompareNE,
 
+	O_GGCompareGT,
+	O_GGCompareGE,
+	O_GGCompareLT,
+	O_GGCompareLE,
 	O_GGCompareEQ, 
 	O_GGCompareNE, 
-	O_GGCompareGT,
-	O_GGCompareLT,
 	
 	O_LLCompareGT,
+	O_LLCompareGE,
 	O_LLCompareLT,
+	O_LLCompareLE,
 	O_LLCompareEQ, 
 	O_LLCompareNE, 
 	
-	O_GSCompareEQ, 
+	O_GSCompareEQ,
 	O_LSCompareEQ, 
 	O_GSCompareNE, 
 	O_LSCompareNE, 
@@ -162,20 +166,30 @@ enum WROpcode
 	O_LSCompareLTBZ8,
 
 	O_LLCompareLTBZ,
+	O_LLCompareLEBZ,
 	O_LLCompareGTBZ,
+	O_LLCompareGEBZ,
 	O_LLCompareEQBZ,
 	O_LLCompareNEBZ,
+	
 	O_GGCompareLTBZ,
+	O_GGCompareLEBZ,
 	O_GGCompareGTBZ,
+	O_GGCompareGEBZ,
 	O_GGCompareEQBZ,
 	O_GGCompareNEBZ,
 
 	O_LLCompareLTBZ8,
+	O_LLCompareLEBZ8,
 	O_LLCompareGTBZ8,
+	O_LLCompareGEBZ8,
 	O_LLCompareEQBZ8,
 	O_LLCompareNEBZ8,
+	
 	O_GGCompareLTBZ8,
+	O_GGCompareLEBZ8,
 	O_GGCompareGTBZ8,
+	O_GGCompareGEBZ8,
 	O_GGCompareEQBZ8,
 	O_GGCompareNEBZ8,
 
@@ -220,7 +234,7 @@ enum WROpcode
 	O_RightShiftAssignAndPop,
 	O_LeftShiftAssignAndPop,
 
-	O_LogicalNot,
+	O_LogicalNot, //X
 	O_Negate,
 
 	O_LiteralInt8,
@@ -301,7 +315,7 @@ enum WROpcode
 	O_GNextValueOrJump,
 	O_LNextValueOrJump,
 	
-	// nmon-interpreted opcodes
+	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,
 	O_FUNCTION_CALL_PLACEHOLDER,
 	
