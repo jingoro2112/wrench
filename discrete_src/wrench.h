@@ -51,7 +51,7 @@ possible at the cost of some interpreter speed (due to the removal of
 unrolled loops, cache optimizations, and additional 'shared' code with
 some goto spaghetti) This flag also overrides WRENCH_JUMPTABLE_INTERPRETER
 */
-#define WRENCH_COMPACT
+//#define WRENCH_COMPACT
 /***********************************************************************/
 
 /************************************************************************
