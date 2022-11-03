@@ -2,7 +2,7 @@
 
 A full-featured interpreter that uses a bare minimum of ram and program space.
 
-How little? The wrench interpreter compiles to ~45k on a CortexM0, and
+How little? The wrench interpreter compiles to ~34k on an Arduino, and
 uses less than 1k of ram to operate.
 
 Highlights:
@@ -10,7 +10,7 @@ Highlights:
 - Weakly typed, supporting native 32-bit int, float and string.
   Code is easy to write and intuitive.
 
-- Fast, 30-80% faster than lua depending on benchmark
+- Fast
 
 - Produces very compact endian-neutral bytecode compile
   anywhere-run-anywhere.

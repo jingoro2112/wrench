@@ -264,6 +264,7 @@ possible at the cost of some interpreter speed (due to the removal of
 unrolled loops, cache optimizations, and additional 'shared' code with
 some goto spaghetti)
 
+
 <p>To add functions to extend wrench, as well as calling into it are
 dead simple and super low overhead. Some examples are provided, but
 frankly if you actually got this far and are interested, the code in
@@ -354,7 +355,6 @@ print( arrayOne[1] ); // will print "1"
 <p><b>for</b>
 
 <p>follows the standard c syntax:
-type
 <code><pre>for( a=0; a<10; ++a )
 {
 
@@ -384,6 +384,21 @@ for( k,v : somArray )
 }
 </code></pre>
 
+
+<p><b>switch</b>
+<p>switch works the same as c, there is an optimized code path for a
+list of cases (including default) that are between 0 and 254. wrench
+also supports fall-through.
+<code><pre>switch( expression )
+{
+    case 0:
+        break;
+    defalt:
+        break;
+}
+</code></pre>
+
+
 <p><b>do/while</b>
 <code><pre>do
 {
@@ -395,10 +410,17 @@ for( k,v : somArray )
 function as they do in c
 
 
-<p><b>if</b>
+<p><b>if/else</b>
+<p>work exactly the same as c:
 <code><pre>if( a == true )
 {
-} while( condition );
+}
+else if ( b == true ) // or whatever
+{
+}
+else
+{
+}
 </code></pre>
 
 <p><b>function</b>
@@ -607,13 +629,13 @@ speed
     <td><center>wrench</center></tc>
     <td><center><a href="perf/particles.w">particles.w</w></center></tc>
     <td><center>518</center></tc>
-    <td><center>18s</center></tc>
+    <td><center>15.2s</center></tc>
   </tr>
   <tr>
     <td><center>wrench [compact]</center></tc>
     <td><center><a href="perf/particles.w">particles.w</w></center></tc>
     <td><center>518</center></tc>
-    <td><center style="color:red">24.8s 37% slower</center></tc>
+    <td><center style="color:red">18.6s 22% slower</center></tc>
   </tr>
   <tr>
     <td><center>lua</center></tc>
@@ -647,7 +669,7 @@ speed
     <td><center>wrench [compact]</center></tc>
     <td><center><a href="perf/primes.w">primes.w</w></center></tc>
     <td><center>113</center></tc>
-    <td><center style="color:red">16.5s 39% slower</center></tc>
+    <td><center style="color:red">14s 40% slower</center></tc>
   </tr>
   <tr>
     <td><center>lua</center></tc>
@@ -681,7 +703,7 @@ speed
     <td><center>wrench [compact]</center></tc>
     <td><center><a href="perf/fibo.w">fibo.w</w></center></tc>
     <td><center>74</center></tc>
-    <td><center style="color:red">29s 31.8% slower</center></tc>
+    <td><center style="color:red">25s</center></tc>
   </tr>
   <tr>
     <td><center>lua</center></tc>

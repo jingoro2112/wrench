@@ -56,8 +56,6 @@ public:
 	};
 
 	WRGCObject* m_next; // for gc
-
-	// this object should occupy 1 + 1 + 2 + 4 + 4 + 4 + 4 = 20 bytes of memory
 	
 	~WRGCObject() { clear(); }
 

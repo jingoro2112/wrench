@@ -16,9 +16,15 @@ function U()
 {
 	enum
 	{
-		value2 = 6
+		value2 = 6,
+		value3 = 6.5,
 	};
 
+	if ( value3 != 6.5 )
+	{
+		print("float");
+	}
+	
 	enum
 	{
 		a16 = 32000,

@@ -314,6 +314,9 @@ enum WROpcode
 	O_LLNextKeyValueOrJump,
 	O_GNextValueOrJump,
 	O_LNextValueOrJump,
+
+	O_Switch,
+	O_SwitchLinear,
 	
 	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,

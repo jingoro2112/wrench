@@ -13,3 +13,4 @@ tests/011_dicts.c
 tests/012_enums.c
 tests/013_files.c
 tests/014_foreach.c
+tests/015_switch.c

@@ -39,7 +39,10 @@ public:
 		return *this;
 	}
 
-	unsigned int size() const { return m_len; }
+	unsigned int size() const 
+	{
+		return m_len; 
+	}
 
 	WROpcodeStream (const WROpcodeStream &other ) { m_buf = 0; *this = other; }
 	WROpcodeStream& operator = ( const WROpcodeStream& str )

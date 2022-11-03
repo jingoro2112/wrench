@@ -24,21 +24,6 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 /************************************************************************
-The interpreter operates in two fundamentally different modes:
-switch() and jumptable (where each instruction jumps to the next one
-directly instead of going to the top and switch()-ing again)
-
-jumptable: only works on GCC/Clang type compilers, since it uses the &&
-label operator. This glag:
-
--- Has NO EFFECT on the compiler or the compiled object code
--- Is MUCH faster (20%)
--- increases interpreter size (this flag is overridden by WRENCH_COMPACT)
-*/
-#define WRENCH_JUMPTABLE_INTERPRETER
-/***********************************************************************/
-
-/************************************************************************
 Build wrench without it's compiler. this will minimize
 the code size at the cost of being able to only load/run bytecode
 */
@@ -299,6 +284,7 @@ enum WRError
 	WR_ERR_continue_keyword_not_in_looping_structure,
 	WR_ERR_expected_while,
 	WR_ERR_compiler_panic,
+	WR_ERR_constant_refined,
 
 	WR_ERR_run_must_be_called_by_itself_first,
 	WR_ERR_hash_table_size_exceeded,
@@ -314,6 +300,12 @@ enum WRError
 	WR_ERR_bad_goto_label,
 	WR_ERR_bad_goto_location,
 	WR_ERR_goto_target_not_found,
+
+	WR_ERR_switch_with_no_cases,
+	WR_ERR_switch_case_or_default_expected,
+	WR_ERR_switch_construction_error,
+	WR_ERR_switch_bad_case_hash,
+	WR_ERR_switch_duplicate_case,
 
 	WR_warning_enums_follow,
 
@@ -451,13 +443,15 @@ struct WRValue
 	inline WRValue& operator= (const WRValue& V) { p = V.p; frame = V.frame; return *this; }
 };
 
-
+#define WRENCH_JUMPTABLE_INTERPRETER
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
-  #if !defined(__clang__)
-    #if _MSC_VER
-      #undef WRENCH_JUMPTABLE_INTERPRETER
-    #endif
-  #endif
+	#if defined(WRENCH_COMPACT)
+		#undef WRENCH_JUMPTABLE_INTERPRETER
+	#elif !defined(__clang__)
+		#if _MSC_VER
+			#undef WRENCH_JUMPTABLE_INTERPRETER
+		#endif
+	#endif
 #endif
 
 

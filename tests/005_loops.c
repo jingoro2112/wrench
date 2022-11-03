@@ -118,6 +118,8 @@ lt6!
 ~*/
 
 
+label2:
+
 goto label;
 
 

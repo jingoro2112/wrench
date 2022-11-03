@@ -92,7 +92,7 @@ resetState:
 		{
 			if ( listPtr < argn )
 			{
-				*out++ = (char)(args[listPtr++].i);
+				*out++ = (char)(args[listPtr++].asInt());
 			}
 			goto resetState;
 		}
@@ -204,11 +204,11 @@ parseDecimal:
 				else if ( c == 'x' || c == 'X' || c == 'p' ) // hexadecimal or pointer (pointer is treated as 'X')
 				{
 					base = 16;
-					width = 4;
+					width = 8;
 convertBase:
 					if ( listPtr < argn )
 					{
-						val = args[listPtr++].i;
+						val = args[listPtr++].asInt();
 					}
 					else
 					{

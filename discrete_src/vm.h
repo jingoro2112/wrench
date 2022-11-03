@@ -183,8 +183,10 @@ extern WRReturnFunc wr_CompareEQ[16];
 
 #ifdef WRENCH_COMPACT
 int32_t READ_32_FROM_PC( const unsigned char* P );
+int16_t READ_16_FROM_PC( const unsigned char* P );
 #else
 #define READ_32_FROM_PC(P) ((((int32_t)*(P)) << 24) | (((int32_t)*((P)+1)) << 16) | (((int32_t)*((P)+2)) << 8) | ((int32_t)*((P)+3))) 
+#define READ_16_FROM_PC(P) ((int16_t)((((int16_t)*(P)) << 8) | ((int16_t)*(P+1))))
 #endif
 
 #endif

@@ -56,6 +56,7 @@ const char* c_reserved[] =
 
 //#define _DUMP
 #ifdef _DUMP
+#define D_STREAM(a) streamDump(a)
 //------------------------------------------------------------------------------
 const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str )
 {
@@ -89,9 +90,11 @@ void streamDump( WROpcodeStream const& stream )
 {
 	WRstr str;
 	wr_asciiDump( stream, stream.size(), str );
-	printf( "\n%s\n", str.c_str() );
+	printf( "%d:\n%s\n", stream.size(), str.c_str() );
 }
 
+#else
+#define D_STREAM(a)
 #endif
 
 //------------------------------------------------------------------------------
@@ -193,13 +196,14 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 
 		token = m_source[m_pos - 1];
 
-		int t=0;
+		unsigned int t=0;
 		for( ; c_operations[t].token && strncmp( c_operations[t].token, "@macroBegin", 11); ++t );
-		
+
+		int offset = m_pos - 1;
+
 		for( ; c_operations[t].token; ++t )
 		{
 			int len = (int)strnlen( c_operations[t].token, 20 );
-			int offset = m_pos - 1;
 			if ( ((offset + len) < m_sourceLen)
 				 && !strncmp(m_source + offset, c_operations[t].token, len) )
 			{
@@ -213,7 +217,43 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 				goto foundMacroToken;
 			}
 		}
-		
+
+		for( t = 0; t<m_units[0].constantValues.count(); ++t )
+		{
+			int len = m_units[0].constantValues[t].label.size();
+			if ( ((offset + len) < m_sourceLen)
+				 && !strncmp(m_source + offset, m_units[0].constantValues[t].label.c_str(), len) )
+			{
+				if ( isalnum(m_source[offset+len]) )
+				{
+					continue;
+				}
+
+				m_pos += len - 1;
+				token.clear();
+				value = m_units[0].constantValues[t].value;
+				goto foundMacroToken;
+			}
+		}
+
+		for( t = 0; t<m_units[m_unitTop].constantValues.count(); ++t )
+		{
+			int len = m_units[m_unitTop].constantValues[t].label.size();
+			if ( ((offset + len) < m_sourceLen)
+				 && !strncmp(m_source + offset, m_units[m_unitTop].constantValues[t].label.c_str(), len) )
+			{
+				if ( isalnum(m_source[offset+len]) )
+				{
+					continue;
+				}
+
+				m_pos += len - 1;
+				token.clear();
+				value = m_units[m_unitTop].constantValues[t].value;
+				goto foundMacroToken;
+			}
+		}
+
 		if ( token[0] == '-' )
 		{
 			if ( m_pos < m_sourceLen )
@@ -592,15 +632,33 @@ parseAsNumber:
 					}
 				}
 			}
+			else if ( token[0] == ':' && isspace(m_source[m_pos]) )
+			{
+				
+			}
 			else if ( isalpha(token[0]) || token[0] == '_' || token[0] == ':' ) // must be a label
 			{
-				if (token[0] != ':' || m_source[m_pos] == ':')
+				if ( token[0] != ':' || m_source[m_pos] == ':' )
 				{
 					m_LastParsedLabel = true;
+					if ( m_pos < m_sourceLen
+						 && token[0] == ':'
+						 && m_source[m_pos] == ':' )
+					{
+						token += ':';
+						++m_pos;
+					}
 
 					for (; m_pos < m_sourceLen; ++m_pos)
 					{
-						if (!isalnum(m_source[m_pos]) && m_source[m_pos] != '_' && m_source[m_pos] != ':')
+						if ( m_source[m_pos] == ':' && m_source[m_pos + 1] == ':' && token.size() > 2 )
+						{
+							token += "::";
+							m_pos ++;
+							continue;
+						}
+						
+						if (!isalnum(m_source[m_pos]) && m_source[m_pos] != '_' )
 						{
 							break;
 						}
@@ -2252,6 +2310,74 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 //------------------------------------------------------------------------------
 void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& addMe )
 {
+	for (unsigned int n = 0; n < addMe.jumpOffsetTargets.count(); ++n)
+	{
+		if (addMe.jumpOffsetTargets[n].gotoHash)
+		{
+			int index = addRelativeJumpTarget(bytecode);
+			bytecode.jumpOffsetTargets[index].gotoHash = addMe.jumpOffsetTargets[n].gotoHash;
+			bytecode.jumpOffsetTargets[index].offset = addMe.jumpOffsetTargets[n].offset + bytecode.all.size();
+		}
+	}
+
+	// add the namespace, making sure to offset it into the new block properly
+	for (unsigned int n = 0; n < addMe.localSpace.count(); ++n)
+	{
+		unsigned int m = 0;
+		for (m = 0; m < bytecode.localSpace.count(); ++m)
+		{
+			if (bytecode.localSpace[m].hash == addMe.localSpace[n].hash)
+			{
+				for (unsigned int s = 0; s < addMe.localSpace[n].references.count(); ++s)
+				{
+					bytecode.localSpace[m].references.append() = addMe.localSpace[n].references[s] + bytecode.all.size();
+				}
+
+				break;
+			}
+		}
+
+		if (m >= bytecode.localSpace.count())
+		{
+			WRNamespaceLookup* space = &bytecode.localSpace.append();
+			*space = addMe.localSpace[n];
+			for (unsigned int s = 0; s < space->references.count(); ++s)
+			{
+				space->references[s] += bytecode.all.size();
+			}
+		}
+	}
+
+	// add the function space, making sure to offset it into the new block properly
+	for (unsigned int n = 0; n < addMe.functionSpace.count(); ++n)
+	{
+		WRNamespaceLookup* space = &bytecode.functionSpace.append();
+		*space = addMe.functionSpace[n];
+		for (unsigned int s = 0; s < space->references.count(); ++s)
+		{
+			space->references[s] += bytecode.all.size();
+		}
+	}
+
+	// add the function space, making sure to offset it into the new block properly
+	for (unsigned int u = 0; u < addMe.unitObjectSpace.count(); ++u)
+	{
+		WRNamespaceLookup* space = &bytecode.unitObjectSpace.append();
+		*space = addMe.unitObjectSpace[u];
+		for (unsigned int s = 0; s < space->references.count(); ++s)
+		{
+			space->references[s] += bytecode.all.size();
+		}
+	}
+
+	// add the goto targets, making sure to offset it into the new block properly
+	for (unsigned int u = 0; u < addMe.gotoSource.count(); ++u)
+	{
+		GotoSource* G = &bytecode.gotoSource.append();
+		G->hash = addMe.gotoSource[u].hash;
+		G->offset = addMe.gotoSource[u].offset + bytecode.all.size();
+	}
+
 	if ( bytecode.all.size() > 1
 		 && bytecode.opcodes.size() > 0
 		 && addMe.opcodes.size() == 1
@@ -2449,63 +2575,6 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 
 	resolveRelativeJumps( addMe );
 
-	// add the namespace, making sure to offset it into the new block properly
-	for( unsigned int n=0; n<addMe.localSpace.count(); ++n )
-	{
-		unsigned int m = 0;
-		for ( m=0; m<bytecode.localSpace.count(); ++m )
-		{
-			if ( bytecode.localSpace[m].hash == addMe.localSpace[n].hash )
-			{
-				for( unsigned int s=0; s<addMe.localSpace[n].references.count(); ++s )
-				{
-					bytecode.localSpace[m].references.append() = addMe.localSpace[n].references[s] + bytecode.all.size();
-				}
-				
-				break;
-			}
-		}
-
-		if ( m >= bytecode.localSpace.count() )
-		{
-			WRNamespaceLookup* space = &bytecode.localSpace.append();
-			*space = addMe.localSpace[n];
-			for( unsigned int s=0; s<space->references.count(); ++s )
-			{
-				space->references[s] += bytecode.all.size();
-			}
-		}
-	}
-
-	// add the function space, making sure to offset it into the new block properly
-	for( unsigned int n=0; n<addMe.functionSpace.count(); ++n )
-	{
-		WRNamespaceLookup* space = &bytecode.functionSpace.append();
-		*space = addMe.functionSpace[n];
-		for( unsigned int s=0; s<space->references.count(); ++s )
-		{
-			space->references[s] += bytecode.all.size();
-		}
-	}
-
-	// add the function space, making sure to offset it into the new block properly
-	for( unsigned int u=0; u<addMe.unitObjectSpace.count(); ++u )
-	{
-		WRNamespaceLookup* space = &bytecode.unitObjectSpace.append();
-		*space = addMe.unitObjectSpace[u];
-		for( unsigned int s=0; s<space->references.count(); ++s )
-		{
-			space->references[s] += bytecode.all.size();
-		}
-	}
-
-	// add the goto targets, making sure to offset it into the new block properly
-	for( unsigned int u=0; u<addMe.gotoSource.count(); ++u )
-	{
-		GotoSource* G = &bytecode.gotoSource.append();
-		G->hash = addMe.gotoSource[u].hash;
-		G->offset = addMe.gotoSource[u].offset + bytecode.all.size();
-	}
 
 	bytecode.all += addMe.all;
 	bytecode.opcodes += addMe.opcodes;
@@ -3281,7 +3350,6 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			continue;
 		}
 
-
 		if ( token == ";" || token == ")" || token == "}" || token == "," || token == "]" || token == ":" )
 		{
 			end = token[0];
@@ -3832,7 +3900,48 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				return 0;
 			}
 
+
+			WRstr label = token;
+			if ( depth == 0 && !m_parsingFor )
+			{
+				if ( !getToken(expression.context[depth]) )
+				{
+					m_err = WR_ERR_unexpected_EOF;
+					return 0;
+				}
+				
+				if ( token == ":" )
+				{
+					uint32_t hash = wr_hashStr( label );
+					for( unsigned int i=0; i<expression.bytecode.jumpOffsetTargets.count(); ++i )
+					{
+						if ( expression.bytecode.jumpOffsetTargets[i].gotoHash == hash )
+						{
+							m_err = WR_ERR_bad_goto_label;
+							return false;
+						}
+					}
+					
+					int index = addRelativeJumpTarget( expression.bytecode );
+					expression.bytecode.jumpOffsetTargets[index].gotoHash = hash;
+					expression.bytecode.jumpOffsetTargets[index].offset = expression.bytecode.all.size() + 1;
+
+					// this always return a value
+					pushOpcode( expression.bytecode, O_LiteralZero );
+
+					
+					return ';';
+				}
+				else
+				{
+					m_loadedToken = token;
+					m_loadedValue = value;
+				}
+			}
+			
+			
 			expression.context[depth].type = EXTYPE_LABEL;
+			expression.context[depth].token = label;
 			expression.context[depth].global = isGlobal;
 			expression.context[depth].prefix = prefix;
 			++depth;
@@ -4126,6 +4235,8 @@ A:
 	unsigned char foreachLoad[4];
 	unsigned char g;
 
+	m_parsingFor = true;
+
 	// [setup]
 	for(;;)
 	{
@@ -4284,6 +4395,8 @@ A:
 				}
 			}
 		}
+		
+		m_parsingFor = false;
 
 		// [ code ]
 		if ( !parseStatement(m_unitTop, ';', returnCalled, opcodeToReturn) )
@@ -4359,6 +4472,8 @@ A:
 			}
 		}
 
+		m_parsingFor = false;
+
 		// [ code ]
 		if ( !parseStatement(m_unitTop, ';', returnCalled, opcodeToReturn) )
 		{
@@ -4381,6 +4496,36 @@ A:
 	resolveRelativeJumps( m_units[m_unitTop].bytecode );
 
 	return true;
+}
+
+//------------------------------------------------------------------------------
+bool WRCompilationContext::lookupConstantValue( WRstr& prefix, WRValue* value )
+{
+	for( unsigned int v=0; v<m_units[m_unitTop].constantValues.count(); ++v )
+	{
+		if ( m_units[m_unitTop].constantValues[v].label == prefix )
+		{
+			if ( value )
+			{
+				*value = m_units[m_unitTop].constantValues[v].value;
+			}
+			return true;
+		}
+	}
+
+	for( unsigned int v=0; v<m_units[0].constantValues.count(); ++v )
+	{
+		if ( m_units[0].constantValues[v].label == prefix )
+		{
+			if ( value )
+			{
+				*value = m_units[0].constantValues[v].value;
+			}
+			return true;
+		}
+	}
+
+	return false;
 }
 
 //------------------------------------------------------------------------------
@@ -4448,8 +4593,6 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 				m_err = WR_ERR_bad_label;
 				return false;
 			}
-
-			index = value.ui + 1;
 		}
 		else
 		{
@@ -4459,59 +4602,25 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 			value = defaultValue;
 		}
 
-		if ( value.type != WR_INT )
+		if ( value.type == WR_INT )
+		{
+			index = value.ui + 1;
+		}
+		else if ( value.type != WR_FLOAT )
 		{
 			m_err = WR_ERR_bad_label;
 			return false;
 		}
+		
+		if ( lookupConstantValue(prefix) )
+		{
+			m_err = WR_ERR_constant_refined;
+			return false;
+		}
 
-		unsigned char buf[6];
-		if ( unitIndex == 0 )
-		{
-			buf[1] = addGlobalSpaceLoad( m_units[unitIndex].bytecode, prefix, true );
-			if ( (value.i <= 127) && (value.i >= -128) )
-			{
-				buf[0] = O_LiteralInt8ToGlobal;
-				buf[2] = value.i;
-				pushData( m_units[unitIndex].bytecode, buf, 3 );
-			}
-			else if ( (value.i <= 32767) && (value.i >= -32768) )
-			{
-				buf[0] = O_LiteralInt16ToGlobal;
-				buf[2] = value.i >> 8;
-				buf[3] = value.i;
-				pushData( m_units[unitIndex].bytecode, buf, 4 );
-			}
-			else
-			{
-				buf[0] = O_LiteralInt32ToGlobal;
-				pack32( value.i, buf + 2 );
-				pushData( m_units[unitIndex].bytecode, buf, 6 );
-			}
-		}
-		else
-		{
-			buf[1] = addLocalSpaceLoad( m_units[unitIndex].bytecode, prefix, true );
-			if ( (value.i <= 127) && (value.i >= -128) )
-			{
-				buf[0] = O_LiteralInt8ToLocal;
-				buf[2] = value.i;
-				pushData( m_units[unitIndex].bytecode, buf, 3 );
-			}
-			else if ( (value.i <= 32767) && (value.i >= -32768) )
-			{
-				buf[0] = O_LiteralInt16ToLocal;
-				buf[2] = value.i >> 8;
-				buf[3] = value.i;
-				pushData( m_units[unitIndex].bytecode, buf, 4 );
-			}
-			else
-			{
-				buf[0] = O_LiteralInt32ToLocal;
-				pack32( value.i, buf + 2 );
-				pushData( m_units[unitIndex].bytecode, buf, 6 );
-			}
-		}
+		ConstantValue& newVal = m_units[m_unitTop].constantValues.append();
+		newVal.label = prefix;
+		newVal.value = value;
 	}
 
 	if ( getToken(ex) && token != ";" )
@@ -4522,6 +4631,375 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 
 	return true;
 }
+
+//------------------------------------------------------------------------------
+uint32_t WRCompilationContext::getSingleValueHash( const char* end )
+{
+	WRExpressionContext ex;
+	WRstr& token = ex.token;
+	WRValue& value = ex.value;
+	getToken( ex );
+	
+	if ( token == "(" )
+	{
+		return getSingleValueHash( ")" );
+	}
+
+	if ( value.type == WR_REF )
+	{
+		m_err = WR_ERR_switch_bad_case_hash;
+		return 0;
+	}
+	
+	uint32_t hash = (value.type == WR_COMPILER_LITERAL_STRING) ? wr_hashStr(token) : value.getHash();
+
+	if ( !getToken(ex, end) )
+	{
+		m_err = WR_ERR_unexpected_token;
+		return 0;
+	}
+
+	return hash;
+}
+
+/*
+
+
+    continue target:
+    targetswitchLinear
+    8-bit max
+pc> 16-bit default location
+    16 bit case offset
+    16 bit case offset
+    16 bit case offset
+    cases...
+    [cases]
+    break target:
+
+
+continue target:
+switch ins
+16-bit mod
+16-bit default location
+32 hash case mod 0 : 16 bit case offset
+32 hash case mod 1 : 16 bit case offset
+32 hash case mod 2 : 16 bit case offset
+...
+[cases]
+break target:
+
+*/
+
+//------------------------------------------------------------------------------
+struct WRSwitchCase
+{
+	uint32_t hash; // hash to get this case
+	bool occupied; // null hash is legal and common, must mark occupation of a node with extra flag
+	bool defaultCase;
+	int16_t jumpOffset; // where to go to get to this case
+};
+
+//------------------------------------------------------------------------------
+bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToReturn )
+{
+	WRExpressionContext ex;
+	WRstr& token = ex.token;
+	WRValue& value = ex.value;
+
+	WRarray<WRSwitchCase> cases;
+	int16_t defaultOffset = -1;
+
+	if ( !getToken(ex, "(") )
+	{
+		m_err = WR_ERR_unexpected_token;
+		return false;
+	}
+	
+	WRExpression nex( m_units[m_unitTop].bytecode.localSpace, m_units[m_unitTop].bytecode.isStructSpace );
+	nex.context[0].token = token;
+	nex.context[0].value = value;
+	
+	if ( parseExpression(nex) != ')' )
+	{
+		m_err = WR_ERR_unexpected_token;
+		return false;
+	}
+
+	appendBytecode( m_units[m_unitTop].bytecode, nex.bytecode );
+
+	WRBytecode bytecodeSnapshot; // snapshot up to now
+
+	bytecodeSnapshot = m_units[m_unitTop].bytecode;
+	m_units[m_unitTop].bytecode.clear();
+
+	D_STREAM( bytecodeSnapshot.all );
+
+	if ( !getToken(ex, "{") )
+	{
+		m_err = WR_ERR_unexpected_token;
+		return false;
+	}
+
+	WRSwitchCase* swCase = 0;
+
+	*m_breakTargets.push() = addRelativeJumpTarget( m_units[m_unitTop].bytecode );
+
+	for(;;)
+	{
+		if ( !getToken(ex) )
+		{
+			m_err = WR_ERR_unexpected_EOF;
+			return false;
+		}
+
+		if( token == "}" )
+		{
+			break;
+		}
+		else if ( token == "case" )
+		{
+			swCase = &cases.append();
+			swCase->jumpOffset = m_units[m_unitTop].bytecode.all.size();
+			swCase->hash = getSingleValueHash(":");
+			swCase->occupied = true;
+			swCase->defaultCase = false;
+
+			if (m_err)
+			{
+				return false;
+			}
+
+			if ( cases.count() > 1 )
+			{
+				for( unsigned int h = 0; h < cases.count() - 1 ; ++h )
+				{
+					if ( cases[h].occupied && !cases[h].defaultCase && (swCase->hash == cases[h].hash) )
+					{
+						m_err = WR_ERR_switch_duplicate_case;
+						return false;
+					}
+				}
+			}
+		}
+		else if ( token == "default" )
+		{
+			if ( defaultOffset != -1 )
+			{
+				m_err = WR_ERR_switch_duplicate_case;
+				return false;
+			}
+			
+			swCase = &cases.append();
+			swCase->jumpOffset = m_units[m_unitTop].bytecode.all.size();
+			swCase->occupied = true;
+			swCase->defaultCase = true;
+
+			if ( !getToken(ex, ":") )
+			{
+				m_err = WR_ERR_unexpected_token;
+				return false;
+			}
+
+			defaultOffset = swCase->jumpOffset;
+		}
+		else
+		{
+			if (swCase == 0)
+			{
+				m_err = WR_ERR_switch_case_or_default_expected;
+				return false;
+			}
+			
+			m_loadedToken = token;
+			m_loadedValue = value;
+
+			if ( !parseStatement(m_unitTop, ';', returnCalled, opcodeToReturn) )
+			{
+				return false;
+			}
+		}
+	}
+
+	setRelativeJumpTarget( m_units[m_unitTop].bytecode, *m_breakTargets.tail() );
+
+	if ( cases.count() == 1 && defaultOffset != -1 )
+	{
+		// single default case? no switch here just always execute the default case
+		appendBytecode( bytecodeSnapshot, m_units[m_unitTop].bytecode );
+	}
+	else if ( cases.count() > 0 )
+	{
+		// first try the easy way
+
+		// find the highest hash value, and size an array to that
+		unsigned int size = 0;
+		for( unsigned int d=0; d<cases.count(); ++d )
+		{
+			if ( cases[d].defaultCase )
+			{
+				continue;
+			}
+
+			if ( cases[d].hash > size )
+			{
+				size = cases[d].hash;
+			}
+
+			if ( size >= 254 )
+			{
+				break;
+			}
+		}
+
+		// first try the easy way
+
+		++size;
+		
+		WRSwitchCase* table = 0;
+		unsigned char packbuf[4];
+		
+		if ( size < 254 )
+		{
+			pushOpcode( bytecodeSnapshot, O_SwitchLinear );
+
+			packbuf[0] = size;
+			pushData( bytecodeSnapshot, packbuf, 1 );
+
+			table = new WRSwitchCase[size];
+			memset( table, 0, size*sizeof(WRSwitchCase) );
+
+			for( unsigned int i = 0; i<size; ++i ) // for each of the possible entries..
+			{
+				for( unsigned int hash = 0; hash<cases.count(); ++hash ) // if a hash matches it, populate that table entry
+				{
+					if ( cases[hash].occupied && !cases[hash].defaultCase && (cases[hash].hash == i) )
+					{
+						table[cases[hash].hash].jumpOffset = cases[hash].jumpOffset + 2*size + 2;
+						table[cases[hash].hash].occupied = true;
+						break;
+					}
+				}
+			}
+
+			// default case is jumping to the end of the code segment
+			if ( defaultOffset == -1 )
+			{
+				defaultOffset = m_units[m_unitTop].bytecode.all.size() + 2*size + 2;
+			}
+			else
+			{
+				defaultOffset += 2*size + 2;
+			}
+
+			pushData( bytecodeSnapshot, pack16(defaultOffset, packbuf), 2 );
+
+			for( unsigned int i=0; i<size; ++i )
+			{
+				if ( table[i].occupied )
+				{
+					pushData( bytecodeSnapshot, pack16(table[i].jumpOffset, packbuf), 2 );
+				}
+				else
+				{
+					pushData( bytecodeSnapshot, pack16(defaultOffset, packbuf), 2 );
+				}
+			}
+		}
+		else
+		{
+			// find a suitable mod
+			uint16_t mod = 1;
+			for( ; mod<0x7FFE; ++mod )
+			{
+				table = new WRSwitchCase[mod];
+				memset( table, 0, sizeof(WRSwitchCase)*mod );
+
+				unsigned int c=0;
+				for( ; c<cases.count(); ++c )
+				{
+					if ( cases[c].defaultCase )
+					{
+						continue;
+					}
+
+					if ( table[cases[c].hash % mod].occupied )
+					{
+						break;
+					}
+
+					table[cases[c].hash % mod].hash = cases[c].hash;
+					table[cases[c].hash % mod].jumpOffset = 2 + 2 + (mod * 6) + cases[c].jumpOffset;
+					table[cases[c].hash % mod].occupied = true;
+				}
+
+				if ( c >= cases.count() )
+				{
+					break;
+				}
+				else
+				{
+					delete[] table;
+				} 
+			}
+
+			if ( mod >= 0x7FFE )
+			{
+				delete[] table;
+				m_err = WR_ERR_switch_construction_error;
+				return false;
+			}
+
+			pushOpcode( bytecodeSnapshot, O_Switch ); // add switch command
+			unsigned char packbuf[4];
+
+			pushData( bytecodeSnapshot, pack16(mod, packbuf), 2 ); // mod value
+
+			if ( defaultOffset == -1 ) // no default case? point it to the end
+			{
+				defaultOffset = 2 + 2 + (mod * 6) + m_units[m_unitTop].bytecode.all.size();
+			}
+			else
+			{
+				defaultOffset += 2 + 2 + (mod * 6);
+			}
+
+			pushData( bytecodeSnapshot, pack16(defaultOffset, packbuf), 2 );
+
+			for( uint16_t m = 0; m<mod; ++m )
+			{
+				pushData( bytecodeSnapshot, pack32(table[m].hash, packbuf), 4 );
+
+				if ( !table[m].occupied )
+				{
+					pushData( bytecodeSnapshot, pack16(defaultOffset, packbuf), 2 );
+				}
+				else
+				{
+					pushData( bytecodeSnapshot, pack16(table[m].jumpOffset, packbuf), 2 );
+				}
+			}
+		}
+
+		appendBytecode( bytecodeSnapshot, m_units[m_unitTop].bytecode );
+
+		delete[] table;
+	}
+	// else 0 cases, skip switch parsing nothing happens!
+
+	D_STREAM( bytecodeSnapshot.all );
+	D_STREAM( m_units[m_unitTop].bytecode.all );
+
+	m_units[m_unitTop].bytecode = bytecodeSnapshot;
+		
+	m_breakTargets.pop();
+
+	resolveRelativeJumps( m_units[m_unitTop].bytecode ); // at least do the ones we added
+
+	D_STREAM( m_units[m_unitTop].bytecode.all );
+
+	return true;
+}
+
 
 //------------------------------------------------------------------------------
 bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn )
@@ -4714,6 +5192,13 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 		}
+		else if ( token == "switch" )
+		{
+			if ( !parseSwitch(returnCalled, opcodeToReturn) )
+			{
+				return false;
+			}
+		}
 		else if ( token == "do" )
 		{
 			if ( !parseDoWhile(returnCalled, opcodeToReturn) )
@@ -4800,33 +5285,6 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				m_err = WR_ERR_unexpected_token;
 				return false;
 			}
-		}
-		else if ( token[token.size() - 1] == ':' )
-		{
-			WRstr substr = token;
-			substr.shave(1);
-			bool isGlobal;
-			WRstr prefix;
-
-			if ( !isValidLabel(substr, isGlobal, prefix) || isGlobal )
-			{
-				m_err = WR_ERR_unexpected_token;
-				return false;
-			}
-			
-			uint32_t hash = wr_hashStr( substr );
-			for( unsigned int i=0; i<m_units[unitIndex].bytecode.jumpOffsetTargets.count(); ++i )
-			{
-				if ( m_units[unitIndex].bytecode.jumpOffsetTargets[i].gotoHash == hash )
-				{
-					m_err = WR_ERR_bad_goto_label;
-					return false;
-				}
-			}
-
-			int index = addRelativeJumpTarget( m_units[unitIndex].bytecode );
-			m_units[unitIndex].bytecode.jumpOffsetTargets[index].gotoHash = hash;
-			m_units[unitIndex].bytecode.jumpOffsetTargets[index].offset = m_units[unitIndex].bytecode.all.size() + 1;
 		}
 		else
 		{
@@ -5092,6 +5550,7 @@ WRError WRCompilationContext::compile( const char* source,
 	m_pos = 0;
 	m_err = WR_ERR_None;
 	m_EOF = false;
+	m_parsingFor = false;
 	m_unitTop = 0;
 	m_foreachHash = 0;
 
@@ -5107,12 +5566,13 @@ WRError WRCompilationContext::compile( const char* source,
 
 	} while ( !m_EOF && (m_err == WR_ERR_None) );
 
+	WRstr msg;
+	
 	if ( m_err != WR_ERR_None )
 	{			
 		int onChar = 0;
 		int onLine = 1;
 		WRstr line;
-		WRstr msg;
 
 		for( int p = 0; p<size && source[p] != '\n'; p++ )
 		{
@@ -5137,7 +5597,7 @@ WRError WRCompilationContext::compile( const char* source,
 				onChar++;
 			}
 		}
-
+		
 		msg.format( "line:%d\n", onLine );
 		msg.appendFormat( "err:%d\n", m_err );
 		msg.appendFormat( "%-5d %s\n", onLine, line.c_str() );
@@ -5167,7 +5627,16 @@ WRError WRCompilationContext::compile( const char* source,
 	}
 	
 	link( out, outLen );
+	if ( m_err )
+	{
+		printf( "link error [%d]\n", m_err );
+		if ( errorMsg )
+		{
+			sprintf( errorMsg, "link error [%d]\n", m_err );
+		}
 
+	}
+		 
 	return m_err;
 }
 
@@ -5273,7 +5742,7 @@ const char* c_opcodeName[] =
 	"CompareGT",
 	"CompareLT",
 	"CompareEQ",
-	"CompareNE", 
+	"CompareNE",
 
 	"GGCompareGT",
 	"GGCompareGE",
@@ -5289,7 +5758,7 @@ const char* c_opcodeName[] =
 	"LLCompareEQ", 
 	"LLCompareNE", 
 
-	"GSCompareEQ", 
+	"GSCompareEQ",
 	"LSCompareEQ", 
 	"GSCompareNE", 
 	"LSCompareNE", 
@@ -5397,7 +5866,7 @@ const char* c_opcodeName[] =
 	"RightShiftAssignAndPop",
 	"LeftShiftAssignAndPop",
 
-	"LogicalNot",
+	"LogicalNot", //X
 	"Negate",
 
 	"LiteralInt8",
@@ -5477,6 +5946,9 @@ const char* c_opcodeName[] =
 	"LLNextKeyValueOrJump",
 	"GNextValueOrJump",
 	"LNextValueOrJump",
+
+	"Switch",
+	"SwitchLinear",
 };
 #endif
 

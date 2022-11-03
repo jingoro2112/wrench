@@ -174,7 +174,20 @@ struct WRBytecode
 	WRarray<BytecodeJumpOffset> jumpOffsetTargets;
 	WRarray<GotoSource> gotoSource;
 	
-	void clear() { all.clear(); opcodes.clear(); localSpace.clear(); jumpOffsetTargets.clear(); isStructSpace = false; }
+	void clear()
+	{
+		all.clear();
+		opcodes.clear();
+		isStructSpace = false;
+		localSpace.clear();
+		functionSpace.clear();
+		unitObjectSpace.clear();
+		
+		jumpOffsetTargets.clear();
+		gotoSource.clear();
+		
+		isStructSpace = false;
+	}
 };
 
 //------------------------------------------------------------------------------
@@ -313,11 +326,21 @@ public:
 };
 
 //------------------------------------------------------------------------------
+struct ConstantValue
+{
+	WRValue value;
+	WRstr label;
+	ConstantValue() { value.init(); }
+};
+
+//------------------------------------------------------------------------------
 struct WRUnitContext
 {
 	uint32_t hash; // hashed name of this unit
 	int arguments; // how many arguments it expects
 	int offsetInBytecode; // where in the bytecode it resides
+
+	WRarray<ConstantValue> constantValues;
 
 	int16_t offsetOfLocalHashMap;
 	
@@ -398,7 +421,10 @@ private:
 	bool parseWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseDoWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseForLoop( bool& returnCalled, WROpcode opcodeToReturn );
+	bool lookupConstantValue( WRstr& prefix, WRValue* value =0 );
 	bool parseEnum( int unitIndex );
+	uint32_t getSingleValueHash( const char* end );
+	bool parseSwitch( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseIf( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseStatement( int unitIndex, char end, bool& returnCalled, WROpcode opcodeToReturn );
 
@@ -415,6 +441,7 @@ private:
 	WRError m_err;
 	bool m_EOF;
 	bool m_LastParsedLabel;
+	bool m_parsingFor;
 
 	int m_unitTop;
 	WRarray<WRUnitContext> m_units;
