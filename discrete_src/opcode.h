@@ -40,7 +40,6 @@ enum WROpcode
 	O_PushIndexFunctionReturnValue,
 		
 	O_CallLibFunction,
-	O_CallLibFunctionAndPop,
 
 	O_NewObjectTable,
 	O_AssignToObjectTableByOffset,
@@ -93,9 +92,6 @@ enum WROpcode
 	O_BinaryAddition,
 
 	O_BitwiseNOT,
-
-	O_CoerceToInt,
-	O_CoerceToFloat,
 
 	O_RelativeJump,
 	O_RelativeJump8,

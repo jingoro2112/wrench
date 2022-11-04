@@ -69,7 +69,6 @@ const char* sourceOrder[]=
 {
 	"/utils.h",
 	"/gc_object.h",
-	"/container_data.h",
 	"/vm.h",
 	"/opcode.h",
 	"/str.h",
@@ -150,7 +149,7 @@ int main( int argn, char* argv[] )
 	}
 
 	WRstr command(argv[1]);
-
+	
 	if ( command == "t" )
 	{
 //		setup();
@@ -314,6 +313,7 @@ int runTests( int number )
 	WRstr codeName;
 
 	
+/*
 	WRValue data2;
 	data2.init();
 	
@@ -348,7 +348,7 @@ int runTests( int number )
 
 
 	wr_addUserValue( &userData, "subUser", &subUserData );
-	
+*/	
 	FILE* tfile = fopen( "test_files.txt", "r" );
 	char buf[256];
 	int fileNumber = 0;
@@ -398,7 +398,7 @@ int runTests( int number )
 
 				if ( !wr_getLastError(w) )
 				{
-					wr_callFunction( w, context, "userCheck", &userData, 1 );
+					wr_callFunction(w, context, "userCheck");
 				}
 				
 				if ( err )

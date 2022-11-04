@@ -49,7 +49,7 @@ WRContext::~WRContext()
 }
 
 //------------------------------------------------------------------------------
-WRState::WRState( int EntriesInStack )
+WRState::WRState( int EntriesInStack ) : c_functionRegistry( 0, SV_VOID_HASH_TABLE )
 {
 	err = WR_ERR_None;
 
@@ -258,15 +258,11 @@ void wr_destroyContext( WRState* w, WRContext* context )
 //------------------------------------------------------------------------------
 int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr )
 {
-	WRCFunctionCallback callback;
-	callback.usr = usr;
-	callback.function = function;
-
 	uint32_t hash = wr_hashStr( name );
-	if ( !w->c_functionRegistry.set(hash, callback) )
-	{
-		return w->err = WR_ERR_hash_table_size_exceeded;
-	}
+
+	WRValue* V = w->c_functionRegistry.getAsRawValueHashTable(hash);
+	V->usr = usr;
+	V->ccb = function;
 	
 	return 0;
 }
@@ -274,7 +270,7 @@ int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, v
 //------------------------------------------------------------------------------
 void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLBACK function )
 {
-	w->c_libFunctionRegistry.set( wr_hashStr(signature), function );
+	w->c_functionRegistry.getAsRawValueHashTable(wr_hashStr(signature) )->lcb = function;
 }
 
 //------------------------------------------------------------------------------
@@ -313,7 +309,7 @@ float WRValue::asFloat() const
 		return (float)i;
 	}
 	
-	return IS_REFARRAY(xtype) ? arrayValueAsFloat() : 0;
+	return IS_REFARRAY(xtype) ? (float)arrayValueAsInt() : 0;
 }
 
 //------------------------------------------------------------------------------
@@ -323,11 +319,6 @@ char* WRValue::asString( char* string, size_t len ) const
 	{
 		switch( xtype )
 		{
-			case WR_EX_USR:
-			{
-				return string;
-			}
-			
 			case WR_EX_STRUCT:
 			{
 				strncpy( string, "struct", len );
@@ -405,7 +396,7 @@ int wr_callFunction( WRState* w, WRContext* context, const char* functionName, c
 //------------------------------------------------------------------------------
 int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
 {
-	WRFunction* function = 0;
+	WRValue* cF = 0;
 	if ( hash )
 	{
 		if ( context->stopLocation == 0 )
@@ -413,15 +404,14 @@ int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const W
 			return w->err = WR_ERR_run_must_be_called_by_itself_first;
 		}
 
-		function = context->localFunctionRegistry.getItem( hash );
-
-		if ( !function )
+		cF = w->c_functionRegistry.getAsRawValueHashTable( hash ^ context->hashOffset );
+		if ( !cF->wrf )
 		{
 			return w->err = WR_ERR_wrench_function_not_found;
 		}
 	}
 
-	return wr_callFunction( w, context, function, argv, argn );
+	return wr_callFunction( w, context, cF ? cF->wrf : 0, argv, argn );
 }
 
 //------------------------------------------------------------------------------
@@ -431,9 +421,9 @@ WRValue* wr_returnValueFromLastCall( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-WRFunction* wr_getFunction( WRContext* context, const char* functionName )
+WRFunction* wr_getFunction( WRState* w, WRContext* context, const char* functionName )
 {
-	return context->localFunctionRegistry.getItem( wr_hashStr(functionName) );
+	return w->c_functionRegistry.getAsRawValueHashTable( wr_hashStr(functionName) ^ context->hashOffset )->wrf;
 }
 
 //------------------------------------------------------------------------------
@@ -568,7 +558,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&PushIndexFunctionReturnValue,
 
 		&&CallLibFunction,
-		&&CallLibFunctionAndPop,
 
 		&&NewObjectTable,
 		&&AssignToObjectTableByOffset,
@@ -621,9 +610,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&BinaryAddition,
 
 		&&BitwiseNOT,
-
-		&&CoerceToInt,
-		&&CoerceToFloat,
 
 		&&RelativeJump,
 		&&RelativeJump8,
@@ -852,6 +838,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 	union
 	{
+		unsigned char findex;
 		WRValue* register0 = 0;
 		const unsigned char *hashLoc;
 		uint32_t hashLocInt;
@@ -861,7 +848,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	{
 		WRValue* register1;
 		uint16_t switchMod;
-		WR_LIB_CALLBACK lib;
 	};
 	WRValue* frameBase = 0;
 	WRValue* stackTop = w->stack;
@@ -888,7 +874,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		WRCompareFuncFloatCall boolFloatCall;
 	};
 #endif
-	
+
 	w->err = WR_ERR_None;
 
 	if ( function )
@@ -920,33 +906,27 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 #endif
 			CASE(RegisterFunction):
 			{
-				unsigned int i = (stackTop - 3)->i;
-				unsigned char index = (unsigned char)i;
+				hash = (stackTop -= 3)->i;
+				findex = hash;
 
-				context->localFunctions[ index ].arguments = (unsigned char)(i>>8);
-				context->localFunctions[ index ].frameSpaceNeeded = (unsigned char)(i>>16);
-				context->localFunctions[ index ].hash = (stackTop - 2)->i;
-				context->localFunctions[ index ].offset = context->bottom + (stackTop - 1)->i;
-				context->localFunctions[ index ].frameBaseAdjustment = 1
-																	   + context->localFunctions[ index ].frameSpaceNeeded
-																	   + context->localFunctions[ index ].arguments;
+				context->localFunctions[findex].arguments = (unsigned char)(hash>>8);
+				context->localFunctions[findex].frameSpaceNeeded = (unsigned char)(hash>>16);
+				context->localFunctions[findex].hash = (stackTop + 1)->i;
+				context->localFunctions[findex].offset = context->bottom + (stackTop + 2)->i;
 
-				context->localFunctionRegistry.set( context->localFunctions[ index ].hash,
-													context->localFunctions + index );
-				stackTop -= 3;
+				context->localFunctions[findex].frameBaseAdjustment = 1
+																	  + context->localFunctions[ findex ].frameSpaceNeeded
+																	  + context->localFunctions[ findex ].arguments;
+				w->c_functionRegistry.getAsRawValueHashTable(context->localFunctions[findex].hash ^ context->hashOffset)->wrf = context->localFunctions + findex;
+				
 				CONTINUE;
 			}
 
 			CASE(ReserveGlobalFrame):
 			{
-				delete[] context->globalSpace;
 				context->globals = *pc++;
 				context->globalSpace = new WRValue[ context->globals ];
-				for( int i=0; i<context->globals; ++i )
-				{
-					context->globalSpace[i].p = 0;
-					context->globalSpace[i].p2 = INIT_AS_INT;
-				}
+				memset( (char*)context->globalSpace, 0, context->globals*sizeof(WRValue) );
 				globalSpace = context->globalSpace;
 				CONTINUE;
 			}
@@ -981,10 +961,9 @@ literalZero:
 				context->gc( stackTop  );
 				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = context->getSVA( len, SV_CHAR, false );
-				memcpy( (unsigned char *)stackTop->va->m_data, pc, len );
+				memcpy( (unsigned char *)(stackTop++)->va->m_data, pc, len );
 				pc += len;
 				
-				++stackTop;
 				CONTINUE;
 			}
 
@@ -992,16 +971,14 @@ literalZero:
 			{
 				args = *pc++;
 
-				WRCFunctionCallback* cF;
-
 				// initialize a return value of 'zero'
 				register0 = stackTop;
 				register0->p = 0;
 				register0->p2 = INIT_AS_INT;
 
-				if ( (cF = w->c_functionRegistry.get(READ_32_FROM_PC(pc))) )
+				if ( (register1 = w->c_functionRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb )
 				{
-					cF->function( w, stackTop - args, args, *stackTop, cF->usr );
+					register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
 				}
 
 				// DO care about return value, which will be at the top
@@ -1024,10 +1001,9 @@ literalZero:
 			{
 				args = *pc++;
 
-				WRCFunctionCallback* cF;
-				if ( (cF = w->c_functionRegistry.get( READ_32_FROM_PC(pc))) )
+				if ( (register1 = w->c_functionRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb )
 				{
-					cF->function( w, stackTop - args, args, *stackTop, cF->usr );
+					register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
 				}
 
 				stackTop -= args;
@@ -1106,29 +1082,14 @@ callFunction:
 
 				args = *pc++; // which have already been pushed
 
-				if ( (lib = w->c_libFunctionRegistry.getItem( READ_32_FROM_PC(pc))) )
+				if ( (register1 = w->c_functionRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb )
 				{
-					lib( stackTop, args, context );
+					register1->lcb( stackTop, args, context );
 				}
 				pc += 4;
 
 				stackTop -= --args;
 				*(stackTop - 1) = *(stackTop + args);
-
-				CONTINUE;
-			}
-
-			CASE(CallLibFunctionAndPop):
-			{
-				args = *pc++; // which have already been pushed
-
-				if ( (lib = w->c_libFunctionRegistry.getItem(READ_32_FROM_PC(pc))) )
-				{
-					lib( stackTop, args, context );
-				}
-				pc += 4;
-
-				stackTop -= args;
 
 				CONTINUE;
 			}
@@ -1188,15 +1149,14 @@ callFunction:
 			{
 				register0 = --stackTop;
 				register1 = (stackTop - 1);
+				
 				if ( !IS_EXARRAY_TYPE(register1->xtype) || *pc < register1->va->m_size )
 				{
-					register1 = register1->va->m_Vdata + *pc++;
+					register1 = register1->va->m_Vdata + *pc;
 					wr_assign[register1->type<<2|register0->type]( register1, register0 );
 				}
-				else
-				{
-					++pc;
-				}
+
+				++pc;
 
 				CONTINUE;
 			}
@@ -1223,8 +1183,7 @@ callFunction:
 					hash %= register0->va->m_mod;
 					register0->va->m_hashTable[ hash ] = 0;
 					hash <<= 1;
-					register0->va->m_Vdata[hash++].p2 = INIT_AS_INT;
-					register0->va->m_Vdata[hash].p2 = INIT_AS_INT;
+					memset( (char*)(register0->va->m_Vdata + hash), 0, sizeof(WRValue)*2 );
 				}
 				
 				CONTINUE;	
@@ -1283,11 +1242,15 @@ callFunction:
 			CASE(CountOf):
 			{
 				register0 = stackTop - 1;
+#ifdef WRENCH_COMPACT
+				wr_countOfArrayElement( register0, register0 );
+#else
 				while( register0->type == WR_REF )
 				{
 					register0 = register0->r;
 				}
 				wr_countOfArrayElement( register0, stackTop - 1 );
+#endif
 				CONTINUE;
 			}
 
@@ -1394,20 +1357,6 @@ indexHash:
 				CONTINUE;
 			}
 
-			CASE(CoerceToInt):
-			{
-				register0 = stackTop - 1;
-				wr_toInt[ register0->type ]( register0 );
-				CONTINUE;
-			}
-
-			CASE(CoerceToFloat):
-			{
-				register0 = stackTop - 1;
-				wr_toFloat[ register0->type ]( register0 );
-				CONTINUE;
-			}
-
 			CASE(RelativeJump):
 			{
 				pc += READ_16_FROM_PC(pc);
@@ -1478,8 +1427,8 @@ indexLiteral:
 				register0 = frameBase + *pc++;
 indexTempLiteral:
 				(++stackTop)->i = *pc++;
-				stackTop->p2 = INIT_AS_INT;
 indexTempLiteralPostLoad:
+				stackTop->p2 = INIT_AS_INT;
 				wr_index[(WR_INT<<4)|register0->type]( context, stackTop, register0, stackTop - 1 );
 				CONTINUE;
 			}
@@ -1501,14 +1450,22 @@ indexTempLiteralPostLoad:
 			CASE(AssignToGlobalAndPop):
 			{
 				register0 = globalSpace + *pc++;
+#ifdef WRENCH_COMPACT
+				goto doAssignToLocalAndPopPreLoad;
+#else
 				register1 = --stackTop;
 				wr_assign[(register0->type<<2)|register1->type]( register0, register1 );
 				CONTINUE;
+#endif
 			}
 
 			CASE(AssignToLocalAndPop):
 			{
 				register0 = frameBase + *pc++;
+
+#ifdef WRENCH_COMPACT
+doAssignToLocalAndPopPreLoad:
+#endif
 				register1 = --stackTop;
 
 doAssignToLocalAndPop:
@@ -1891,6 +1848,7 @@ compactPreDecrement:
 			{
 				boolIntCall = CompareANDI;
 				boolFloatCall = CompareBlankF;
+compactBLAPreLoad:
 				register0 = --stackTop;
 				register1 = --stackTop;
 compactBLA:
@@ -1902,7 +1860,9 @@ compactBLA:
 			{
 				boolIntCall = CompareANDI;
 				boolFloatCall = CompareBlankF;
+compactBLA8PreLoad:
 				register0 = --stackTop;
+compactBLA8PreReg1:
 				register1 = --stackTop;
 compactBLA8:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : (int8_t)*pc;
@@ -2087,18 +2047,13 @@ compactReturnFuncInvertedPostLoad:
 
 			CASE(CompareBLE): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncBInverted; }
 			CASE(CompareBGE): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnFuncBInverted; }
-			CASE(CompareBGT): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncBNormal; }
-			CASE(CompareBLT): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnFuncBNormal; }
+			CASE(CompareBGT): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactBLAPreLoad; }
+			CASE(CompareBLT): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactBLAPreLoad; }
 			CASE(CompareBEQ): 
 			{
 				boolIntCall = CompareEQI;
 				boolFloatCall = CompareEQF; 
-
-compactReturnFuncBNormal:
-				register0 = --stackTop;
-				register1 = --stackTop;
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : READ_16_FROM_PC(pc);
-				CONTINUE;
+				goto compactBLAPreLoad;
 			}
 
 			CASE(CompareBNE):
@@ -2108,24 +2063,22 @@ compactReturnFuncBNormal:
 				
 compactReturnFuncBInverted:
 				register0 = --stackTop;
+compactReturnFuncBInvertedPreReg1:
 				register1 = --stackTop;
+compactReturnFuncBInvertedPostReg1:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? READ_16_FROM_PC(pc) : 2;
 				CONTINUE;
 			}
 			
 			CASE(CompareBLE8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncBInverted8; }
 			CASE(CompareBGE8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnFuncBInverted8; }
-			CASE(CompareBGT8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncBNormal8; }
-			CASE(CompareBLT8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnFuncBNormal8; }
+			CASE(CompareBGT8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactBLA8PreLoad; }
+			CASE(CompareBLT8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactBLA8PreLoad; }
 			CASE(CompareBEQ8):
 			{
 				boolIntCall = CompareEQI;
 				boolFloatCall = CompareEQF;
-compactReturnFuncBNormal8:
-				register0 = --stackTop;
-				register1 = --stackTop;
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : *pc;
-				CONTINUE;
+				goto compactBLA8PreLoad;
 			}
 			
 			CASE(CompareBNE8):
@@ -2134,11 +2087,12 @@ compactReturnFuncBNormal8:
 				boolFloatCall = CompareEQF;
 compactReturnFuncBInverted8:
 				register0 = --stackTop;
+compactReturnFuncBInverted8PreReg1:
 				register1 = --stackTop;
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? *pc : 2;
+compactReturnFuncBInverted8Post:
+				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? (int8_t)*pc : 2;
 				CONTINUE;
 			}
-			
 
 			CASE(GGCompareLE): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnCompareGGNEPost; }
 			CASE(GGCompareGE): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnCompareGGNEPost; }
@@ -2194,8 +2148,6 @@ compactReturnCompareNEPost:
 				CONTINUE;
 			}
 
-
-
 			
 			CASE(GSCompareGEBZ): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareGInverted; }
 			CASE(GSCompareLEBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareGInverted; }
@@ -2205,10 +2157,7 @@ compactReturnCompareNEPost:
 				boolFloatCall = CompareEQF;
 compactCompareGInverted:
 				register0 = globalSpace + *pc++;
-				register1 = --stackTop;
-compactCompareInvertedWork:
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? READ_16_FROM_PC(pc) : 2;
-				CONTINUE;
+				goto compactReturnFuncBInvertedPreReg1;
 			}
 			
 			CASE(GSCompareEQBZ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareGNormal; }
@@ -2220,9 +2169,7 @@ compactCompareInvertedWork:
 compactCompareGNormal:
 				register0 = globalSpace + *pc++;
 				register1 = --stackTop;
-compactCompareWork:
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : READ_16_FROM_PC(pc);
-				CONTINUE;
+				goto compactBLA;
 			}
 			
 			CASE(LSCompareGEBZ): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareLInverted; }
@@ -2234,7 +2181,7 @@ compactCompareWork:
 compactCompareLInverted:
 				register0 = frameBase + *pc++;
 				register1 = --stackTop;
-				goto compactCompareInvertedWork;
+				goto compactReturnFuncBInvertedPostReg1;
 			}
 			
 			CASE(LSCompareEQBZ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareLNormal; }
@@ -2246,7 +2193,7 @@ compactCompareLInverted:
 compactCompareLNormal:
 				register0 = frameBase + *pc++;
 				register1 = --stackTop;
-				goto compactCompareWork;
+				goto compactBLA;
 			}
 			
 			CASE(GSCompareGEBZ8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareG8Inverted; }
@@ -2257,8 +2204,7 @@ compactCompareLNormal:
 				boolFloatCall = CompareEQF;
 compactCompareG8Inverted:
 				register0 = globalSpace + *pc++;
-				register1 = --stackTop;
-				goto compactCompareInverted8Work;
+				goto compactReturnFuncBInverted8PreReg1;
 			}
 			
 			CASE(GSCompareEQBZ8): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareG8Normal; }
@@ -2269,8 +2215,7 @@ compactCompareG8Inverted:
 				boolFloatCall = CompareLTF;
 compactCompareG8Normal:
 				register0 = globalSpace + *pc++;
-				register1 = --stackTop;
-				goto compactCompare8Work;
+				goto compactBLA8PreReg1;
 			}
 			
 			CASE(LSCompareGEBZ8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareL8Inverted; }
@@ -2281,10 +2226,7 @@ compactCompareG8Normal:
 				boolFloatCall = CompareEQF;
 compactCompareL8Inverted:
 				register0 = frameBase + *pc++;
-				register1 = --stackTop;
-compactCompareInverted8Work:
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? (int8_t)*pc : 2;
-				CONTINUE;
+				goto compactReturnFuncBInverted8PreReg1;
 			}
 			
 			CASE(LSCompareEQBZ8): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareL8Normal; }
@@ -2295,10 +2237,7 @@ compactCompareInverted8Work:
 				boolFloatCall = CompareLTF;
 compactCompareL8Normal:
 				register0 = frameBase + *pc++;
-				register1 = --stackTop;
-compactCompare8Work:
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : (int8_t)*pc;
-				CONTINUE;
+				goto compactBLA8PreReg1;
 			}
 
 			CASE(LLCompareLEBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareLLInv; }
@@ -2310,7 +2249,7 @@ compactCompare8Work:
 compactCompareLLInv:
 				register1 = frameBase + *pc++;
 				register0 = frameBase + *pc++;
-				goto compactCompareInvertedWork;
+				goto compactReturnFuncBInvertedPostReg1;
 			}
 			CASE(LLCompareEQBZ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareLL; }
 			CASE(LLCompareGTBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareLL; }
@@ -2321,7 +2260,7 @@ compactCompareLLInv:
 compactCompareLL:
 				register1 = frameBase + *pc++;
 				register0 = frameBase + *pc++;
-				goto compactCompareWork;
+				goto compactBLA;
 			}
 			
 			CASE(LLCompareLEBZ8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareLLInv8; }
@@ -2333,7 +2272,7 @@ compactCompareLL:
 compactCompareLLInv8:
 				register1 = frameBase + *pc++;
 				register0 = frameBase + *pc++;
-				goto compactCompareInverted8Work;
+				goto compactReturnFuncBInverted8Post;
 			}
 			CASE(LLCompareEQBZ8): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareLL8; }
 			CASE(LLCompareGTBZ8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareLL8; }
@@ -2344,9 +2283,8 @@ compactCompareLLInv8:
 compactCompareLL8:	
 				register1 = frameBase + *pc++;
 				register0 = frameBase + *pc++;
-				goto compactCompare8Work;
+				goto compactBLA8;
 			}
-
 
 			CASE(GGCompareGEBZ): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareGGInv; }
 			CASE(GGCompareLEBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareGGInv; }
@@ -2357,7 +2295,7 @@ compactCompareLL8:
 compactCompareGGInv:
 				register1 = globalSpace + *pc++;
 				register0 = globalSpace + *pc++;
-				goto compactCompareInvertedWork;
+				goto compactReturnFuncBInvertedPostReg1;
 			}
 			
 			CASE(GGCompareEQBZ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareGG; }
@@ -2369,7 +2307,7 @@ compactCompareGGInv:
 compactCompareGG:
 				register1 = globalSpace + *pc++;
 				register0 = globalSpace + *pc++;
-				goto compactCompareWork;
+				goto compactBLA;
 			}
 			
 			CASE(GGCompareGEBZ8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareGGInv8; }
@@ -2381,7 +2319,7 @@ compactCompareGG:
 compactCompareGGInv8:
 				register1 = globalSpace + *pc++;
 				register0 = globalSpace + *pc++;
-				goto compactCompareInverted8Work;
+				goto compactReturnFuncBInverted8Post;
 			}
 			CASE(GGCompareEQBZ8): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareGG8; }
 			CASE(GGCompareGTBZ8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareGG8; }
@@ -2392,9 +2330,8 @@ compactCompareGGInv8:
 compactCompareGG8:
 				register1 = globalSpace + *pc++;
 				register0 = globalSpace + *pc++;
-				goto compactCompare8Work;
+				goto compactBLA8;
 			}
-
 	
 #else // ---------------------------- Non-Compact:
 
@@ -2629,7 +2566,7 @@ returnFuncBInverted:
 returnFuncBNormal8:
 				register0 = --stackTop;
 				register1 = --stackTop;
-				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : *pc;
+				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)*pc;
 				CONTINUE;
 			}
 			
@@ -2639,7 +2576,7 @@ returnFuncBNormal8:
 returnFuncBInverted8:
 				register0 = --stackTop;
 				register1 = --stackTop;
-				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? *pc : 2;
+				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)*pc : 2;
 				CONTINUE;
 			}
 
@@ -3034,44 +2971,8 @@ void wr_makeFloat( WRValue* val, float f )
 	val->f = f;
 }
 
-//------------------------------------------------------------------------------
-WRContainerData::~WRContainerData()
-{
-	while( m_head )
-	{
-		UDNode* next = m_head->next;
 
-		if ( IS_EXARRAY_TYPE(m_head->val->xtype) )
-		{
-			delete m_head->val->va;
-		}
-
-		delete m_head->val;
-		delete m_head;
-		m_head = next;
-	}
-
-	while (m_nodeOnlyHead)
-	{
-		UDNode* next = m_nodeOnlyHead->next;
-		delete m_nodeOnlyHead;
-		m_nodeOnlyHead = next;
-	}
-}
-
-//------------------------------------------------------------------------------
-void wr_makeUserData( WRValue* val, int sizeHint )
-{
-	val->p2 = INIT_AS_USR;
-	val->u = new WRContainerData( sizeHint );
-}
-
-//------------------------------------------------------------------------------
-void wr_addUserValue( WRValue* userData, const char* key, WRValue* value )
-{
-	userData->u->registerValue( key, value );
-}
-
+/*
 //------------------------------------------------------------------------------
 void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned char* data, const int len )
 {
@@ -3079,29 +2980,5 @@ void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned ch
 	val->p2 = INIT_AS_ARRAY;
 	val->va = new WRGCObject( len, SV_CHAR, data );
 }
-
-//------------------------------------------------------------------------------
-void wr_addUserIntArray( WRValue* userData, const char* name, const int* data, const int len )
-{
-	WRValue* val = userData->u->addValue( name );
-	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRGCObject( len, SV_INT, data );
-}
-
-//------------------------------------------------------------------------------
-void wr_addUserFloatArray( WRValue* userData, const char* name, const float* data, const int len )
-{
-	WRValue* val = userData->u->addValue( name );
-	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRGCObject( len, SV_FLOAT, data );
-}
-
-//------------------------------------------------------------------------------
-void WRValue::free()
-{
-	if ( xtype == WR_EX_USR )
-	{
-		delete u;
-	}
-}
+*/
 

@@ -234,6 +234,8 @@ const uint16_t c_primeTable[] =
 };
 */
 
+#ifndef WRENCH_WITHOUT_COMPILER
+
 //------------------------------------------------------------------------------
 template <class T> class WRHashTable
 {
@@ -365,14 +367,16 @@ private:
 	Node* m_list;
 };
 
+#endif
+
 //------------------------------------------------------------------------------
 enum WRGCObjectType
 {
-	SV_CHAR = 0x02,
-	SV_INT = 0x04,
-	SV_FLOAT = 0x06,
-
 	SV_VALUE = 0x01,
+	SV_CHAR = 0x02,
+
+	SV_VOID_HASH_TABLE = 0x04,
+	
 	SV_HASH_TABLE = 0x03,
 };
 

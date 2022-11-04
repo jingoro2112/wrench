@@ -99,8 +99,6 @@ const WROperation c_operations[] =
 
 	{ "=",   16, O_Assign,             false,  WR_OPER_BINARY, O_LAST },
 
-	{ "@i",   3, O_CoerceToInt,         true,  WR_OPER_PRE, O_LAST },
-	{ "@f",   3, O_CoerceToFloat,       true,  WR_OPER_PRE, O_LAST },
 	{ "@[]",  2, O_Index,               true,  WR_OPER_POST, O_LAST },
 	{ "@init", 2, O_Index,              true,  WR_OPER_POST, O_LAST },
 

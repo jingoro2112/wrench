@@ -1,4 +1,5 @@
-/*~
+/*~ ~*/
+/*
 777
 33
 222
@@ -47,9 +48,13 @@ C
 254
 ~*/
 
+return;
+
 //------------------------------------------------------------------------------
 function userCheck( data )
 {
+	return;
+	
 	print( data.subUser.data2 );
 	data.subUser.data2 = 28;
 	print( 1 + data.subUser.data2++ + 10 - 2 * 3 ); // 33

@@ -628,7 +628,7 @@ parseAsNumber:
 					else
 					{
 						value.p2 = INIT_AS_INT;
-						value.i = strtol( token, 0, 10 );
+						value.i = (int32_t)strtoll( token, 0, 10 );
 					}
 				}
 			}
@@ -1648,12 +1648,6 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 					bytecode.opcodes[o] = O_PreDecrementAndPop;
 				}
 				
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_CallLibFunction )
-			{
-				bytecode.all[a-5] = O_CallLibFunctionAndPop;
-				bytecode.opcodes[o] = O_CallLibFunctionAndPop;
 				return;
 			}
 			else if ( bytecode.opcodes[o] == O_Assign ) // assign+pop is very common
@@ -5672,7 +5666,6 @@ const char* c_opcodeName[] =
 	"PushIndexFunctionReturnValue",
 
 	"CallLibFunction",
-	"CallLibFunctionAndPop",
 
 	"NewObjectTable",
 	"AssignToObjectTableByOffset",
@@ -5725,9 +5718,6 @@ const char* c_opcodeName[] =
 	"BinaryAddition",
 
 	"BitwiseNOT",
-
-	"CoerceToInt",
-	"CoerceToFloat",
 
 	"RelativeJump",
 	"RelativeJump8",

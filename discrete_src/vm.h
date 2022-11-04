@@ -41,12 +41,19 @@ struct WRFunction
 	};
 };
 
+/*
 //------------------------------------------------------------------------------
 struct WRCFunctionCallback
 {
-	WR_C_CALLBACK function;
+	union
+	{
+		WR_C_CALLBACK function;
+		WR_LIB_CALLBACK lib;
+		WRFunction* scriptFunc;
+	};
 	void* usr;
 };
+*/
 
 //------------------------------------------------------------------------------
 class WRGCValueArray;
@@ -56,8 +63,12 @@ class WRGCValueArray;
 //------------------------------------------------------------------------------
 struct WRContext
 {
-	WRFunction* localFunctions;
-	WRHashTable<WRFunction*> localFunctionRegistry;
+	union
+	{
+		WRFunction* localFunctions;
+		uint32_t hashOffset;
+	};
+	
 	WRValue* globalSpace;
 	int globals;
 
@@ -81,8 +92,8 @@ struct WRContext
 //------------------------------------------------------------------------------
 struct WRState
 {
-	WRHashTable<WRCFunctionCallback> c_functionRegistry;
-	WRHashTable<WR_LIB_CALLBACK> c_libFunctionRegistry;
+	WRGCObject c_functionRegistry;
+	//WRHashTable<WRCFunctionCallback> c_functionRegistry;
 
 	WRError err;
 

@@ -1,7 +1,31 @@
 /*~ ~*/
 
+/*
+enum
+{
+	n1,
+	n2,
+	n3
+}
 t = 0;
 
+e = n1;
+switch( e )
+{
+	case n1: t += 10; 
+	case n2: t += 20; break;
+}
+e = n2;
+switch( e )
+{
+	default:
+	case n3: t += 15; break;
+	case n1: t += 25; break;
+}
+if ( t != 45 ) print("e");
+
+
+t = 0;
 // some degenerate cases..
 for( k = 0; k<3; ++k )
 {
@@ -310,7 +334,7 @@ for( i=1000; i<1006; i++ )
 
 }
 if ( t != 0x333333 ) print( "t9b" );
-
+*/
 
 t = 0;
 for( k = 4000000000 ; k < 4000000009; ++k )

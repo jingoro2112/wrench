@@ -1,5 +1,6 @@
 OPT ?= -O3
 #OPT ?= -O0 -ggdb
+
 PERF ?=
 
 #FLAGS ?= $(OPT) $(PERF) -std=c++11

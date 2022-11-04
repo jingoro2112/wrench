@@ -22,7 +22,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\discrete_src\cc.h" />
-    <ClInclude Include="..\discrete_src\container_data.h" />
     <ClInclude Include="..\discrete_src\gc_object.h" />
     <ClInclude Include="..\discrete_src\opcode.h" />
     <ClInclude Include="..\discrete_src\opcode_stream.h" />

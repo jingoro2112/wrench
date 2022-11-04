@@ -49,7 +49,6 @@ hello world
 3
 10
 1.3
-1
 ~*/
 
 a1 = b1 = c1 = 10;
@@ -164,8 +163,6 @@ print( a ); // 3
 print( b ); // 10
 
 a = 1.3;
-print( a );
-(int)a;
 print( a );
 
 // // excercise keyhole optimizer loads

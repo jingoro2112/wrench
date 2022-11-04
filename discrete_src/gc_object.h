@@ -60,31 +60,22 @@ public:
 	~WRGCObject() { clear(); }
 
 	//------------------------------------------------------------------------------
-	void* growHash( const uint32_t hash )
+	void growHash( const uint32_t hash )
 	{
 		// there was a collision with the passed hash, grow until the
 		// collision disappears
 		
 		int t = 0;
-		for( ; c_primeTable[t]; ++t )
-		{
-			if ( c_primeTable[t] == m_mod )
-			{
-				++t;
-				break;
-			}
-		}
+		for( ; c_primeTable[t] <= m_mod ; ++t );
 
 		for(;;)
 		{
-			int newMod = c_primeTable[t];
-			if ( newMod == 0 )
+tryAgain:
+			int newMod;
+			if ( !(newMod = c_primeTable[t]) )
 			{
-				// could not grow large enough to avoid collision, give up.
-				return m_Vdata + ((hash % m_mod)<<1);
+				return;
 			}
-
-			int newSize = newMod << 1;
 
 			uint32_t* proposed = new uint32_t[newMod];
 			memset( proposed, 0, newMod*sizeof(uint32_t) );
@@ -108,16 +99,23 @@ public:
 				{
 					delete[] proposed;
 					++t;
-					break;
+					goto tryAgain;
 				}
 			}
 
-			if ( h < m_mod )
+			int newSize;
+			if ( m_type == SV_VOID_HASH_TABLE )
 			{
-				continue;
+				newSize = newMod;
 			}
+			else
+			{
+				newSize = newMod << 1;
+			}
+			
+			WRValue* newValues;
 
-			WRValue* newValues = new WRValue[ newSize ];
+			newValues = new WRValue[newSize];
 			memset( (char*)newValues, 0, newSize*sizeof(WRValue) );
 
 			for( int v=0; v<m_mod; ++v )
@@ -127,21 +125,30 @@ public:
 					continue;
 				}
 
+				unsigned int m1 = m_hashTable[v] % m_mod;
+				unsigned int m2 = m_hashTable[v] % newMod;
 				
-				WRValue* to = newValues + ((m_hashTable[v] % newMod)<<1);
-				WRValue* from = m_Vdata + ((m_hashTable[v] % m_mod)<<1);
-
-				// value
-				to->p2 = from->p2;
-				to->p = from->p;
-				from->p2 = INIT_AS_INT;
-
-				// key
-				++to;
-				++from;
-				to->p2 = from->p2;
-				to->p = from->p;
-				from->p2 = INIT_AS_INT;
+				if ( m_type == SV_VOID_HASH_TABLE )
+				{
+					newValues[m2] = m_Vdata[m1];
+				}
+				else
+				{
+					WRValue* to = newValues + (m2<<1);
+					WRValue* from = m_Vdata + (m1<<1);
+					
+					// value
+					to->p2 = from->p2;
+					to->p = from->p;
+					from->p2 = INIT_AS_INT;
+					
+					// key
+					++to;
+					++from;
+					to->p2 = from->p2;
+					to->p = from->p;
+					from->p2 = INIT_AS_INT;
+				}
 			}
 
 			m_mod = newMod;
@@ -150,8 +157,8 @@ public:
 			delete[] m_hashTable;
 			m_hashTable = proposed;
 			m_Vdata = newValues;
-
-			return m_Vdata + ((hash % m_mod)<<1);
+			
+			return;
 		}
 	}
 	
@@ -163,28 +170,19 @@ public:
 		m_type = (char)type;
 		m_next = 0;
 		m_size = size;
-		if ( preAlloc )
+		if ( !(m_preAllocated = (m_constData = preAlloc) ? 1 : 0) )
 		{
-			m_preAllocated = 1;
-			m_constData = preAlloc;
-		}
-		else
-		{
-			m_preAllocated = 0;
 			switch( m_type )
 			{
 				case SV_VALUE: { m_Vdata = new WRValue[size]; break; }
 				case SV_CHAR: { m_Cdata = new unsigned char[size+1]; m_Cdata[size]=0; break; }
-				case SV_INT: { m_Idata = new int[size]; break; }
-				case SV_FLOAT: { m_Fdata = new float[size]; break; }
+				case SV_VOID_HASH_TABLE:
 				case SV_HASH_TABLE:
 				{
-					m_mod = c_primeTable[0];
-					m_hashTable = new uint32_t[m_mod];
-					memset( m_hashTable, 0, m_mod*sizeof(uint32_t) );
-					m_size = m_mod<<1;
-					m_Vdata = new WRValue[m_size];
-					memset( (char*)m_Vdata, 0, m_size*sizeof(WRValue) );
+					m_mod = 0;
+					m_hashTable = 0;
+					m_size = 0;
+					growHash(0);
 					break;
 				}
 			}
@@ -201,12 +199,11 @@ public:
 
 		switch( m_type )
 		{
+			case SV_VOID_HASH_TABLE:
 			case SV_HASH_TABLE: delete[] m_hashTable; m_hashTable = 0; // intentionally fall through:
 			case SV_VALUE: delete[] m_Vdata; break; 
 
 			case SV_CHAR: { delete[] m_Cdata; break; }
-			case SV_INT: { delete[] m_Idata; break; }
-			case SV_FLOAT: { delete[] m_Fdata; break; }
 		}
 
 		m_data = 0;
@@ -251,19 +248,6 @@ public:
 				memcpy( (char*)m_data, (char*)A.m_data, m_size );
 				break;
 			}
-			case SV_INT:
-			{
-				m_Idata = new int[m_size];
-				memcpy( (char*)m_data, (char*)A.m_data, m_size*sizeof(int) );
-				break;
-			}
-
-			case SV_FLOAT:
-			{
-				m_Fdata = new float[m_size];
-				memcpy( (char*)m_data, (char*)A.m_data, m_size*sizeof(float) );
-				break;
-			}
 		}
 
 		return *this;
@@ -271,6 +255,25 @@ public:
 
 	void* operator[]( const unsigned int l ) { return get(l); }
 
+	//------------------------------------------------------------------------------
+	WRValue* getAsRawValueHashTable( const uint32_t hash )
+	{
+		uint32_t index = hash % m_mod;
+		if ( m_hashTable[index] != hash )
+		{
+			if (m_hashTable[index] == 0)
+			{
+				m_hashTable[index] = hash;
+			}
+			else
+			{
+				growHash(hash);
+				index = hash % m_mod;
+			}
+		}
+		return m_Vdata + index;
+	}
+	
 	//------------------------------------------------------------------------------
 	void* get( const uint32_t l )
 	{
@@ -280,8 +283,6 @@ public:
 		{
 			case SV_VALUE: { return (void*)(m_Vdata + s); }
 			case SV_CHAR: { return (void*)(m_Cdata + s); }
-			case SV_INT: { return  (void*)(m_Idata + s); }
-			case SV_FLOAT: { return (void*)(m_Fdata + s); }
 
 			case SV_HASH_TABLE:
 			{
@@ -294,7 +295,6 @@ public:
 				assert( l != 0x55555555 );
 
 
-				
 				uint32_t hash = l ^ 0x55555555; 
 				uint32_t index = hash % m_mod;
 
@@ -306,11 +306,12 @@ public:
 					}
 					else
 					{
-						return growHash( hash ); // not empty and not us, there was a collision
+						growHash( hash ); // not empty and not us, there was a collision
+						index = hash % m_mod;
 					}
 				}
 
-				return (void*)(m_Vdata + (index<<1));
+				return m_Vdata + (index<<1);
 			}
 
 			default: return 0;

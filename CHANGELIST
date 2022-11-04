@@ -1,7 +1,8 @@
-1.6.1 -------------------------------------------------------------------------
+1.7.0 -------------------------------------------------------------------------
 - removed WRENCH_JUMPTABLE_INTERPRETER from top-level, really not a user-visible
   thing
 - added switch, linear and arbitrary flavors
+- added WRENCH_REALLY_COMPACT to allow small-but-almost-full-speed WRENCH_COMPACT
 
 1.6.0 -------------------------------------------------------------------------
 - fixed error in compare logic surrounding GE/LE/GT/LT in keyhole optimizer
