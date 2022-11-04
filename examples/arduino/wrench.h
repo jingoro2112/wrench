@@ -25,19 +25,26 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 /************************************************************************
-Build wrench without it's compiler. this will minimize
-the code size at the cost of being able to only load/run bytecode
+wrench's compiler was not designed to be memory or space effecient, for
+embedded systems it is strongly reccommeded (nay, required) that
+only bytecode be executed. This flag allows the source code to be
+explicitly removed.
 */
-//#define WRENCH_WITHOUT_COMPILER
+#define WRENCH_WITHOUT_COMPILER
 /***********************************************************************/
 
 /***********************************************************************
-This causes wrench to compile into the absolutely smallest program size
-possible at the cost of some interpreter speed (due to the removal of
-unrolled loops, cache optimizations, and additional 'shared' code with
-some goto spaghetti) This flag also overrides WRENCH_JUMPTABLE_INTERPRETER
+This causes wrench to compile into the smallest program size
+possible at the cost of some interpreter speed. The speed loss is from
+the removal of unrolled loops and inlined functionality, it also makes
+use of some goto spaghetti which can play havok with branch-prediction
+and actually slow down PC-class processors.
+WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
+interpreter in favor of a giant switch(). This saves ~6k at the cost
+of a chunk of speed so only use it if you need to.
 */
-//#define WRENCH_COMPACT
+//#define WRENCH_COMPACT           // saves a lot, costs some speed
+#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 /***********************************************************************/
 
 /************************************************************************
@@ -55,7 +62,7 @@ This will consume 8 bytes per stack entry on a 32-bit system, 16 on 64.
 /************************************************************************
 set this to try compiling sys/stat.h for fstat and file operations.
 */
-#define WRENCH_STD_FILE
+//#define WRENCH_STD_FILE
 /***********************************************************************/
 
 #include <stdint.h>
@@ -123,7 +130,7 @@ WRValue* wr_returnValueFromLastCall( WRState* w );
 // once wr_run() is called the returned context object can be used to
 // pre-fetch a function pointer. This reduces the overhead of calling
 // that function to almost nothing.
-WRFunction* wr_getFunction( WRContext* context, const char* functionName );
+WRFunction* wr_getFunction( WRState* w, WRContext* context, const char* functionName );
 
 // Destroy a context you no longer need and free up all the memory it
 // was using, all contexts are freed when wr_destroyState() is called,
@@ -203,7 +210,7 @@ void wr_loadStringLib( WRState* w ); // string functions
 
 /***************************************************************/
 /***************************************************************/
-//              wrench types and how to make them!
+//             wrench types and how to make them!
 
 // The WRValue is the basic data unit inside wrench, it can be a
 // float/int/array whatever... think of it as a thneed. It's 8 bytes on
@@ -213,51 +220,7 @@ void wr_loadStringLib( WRState* w ); // string functions
 // load a value up and make it ready for calling a function
 void wr_makeInt( WRValue* val, int i );
 void wr_makeFloat( WRValue* val, float f );
-
-// So you want to access memory directly? This is how you do that. with
-// a custom User type. creating a UserData is like creating a struct,
-// it's a container that can be accessed by wrench with dot notation:
-//
-// someUserData.value1      <- simple value
-// someUserData.value2[20]  <- array
-// someUserData.value1.value2 <- yes this works too
-
-// STEP 1:    create the user data. This will be the 'top level' object
-// the other members are loaded into. It can be passed to any function as
-// a parameter. "SizeHint" allows a right-sized hash table to be made
-// instead of growing, which can help reduce memory fragmentation, the
-// hint should be the number of values you plan to pack into it.
-void wr_makeUserData( WRValue* value, int sizeHint =0 );
-
-// STEP 2:    load it up!
-//
-// add the given value to the userData, which will be accessible by
-// 'name' as in:  theObject.name 
-
-// userData:  User data object created with wr_makeUserData() above
-// name:      what the array will be called inside wrench
-// data/len:  pointer to a user-managed memory space which will be
-//            accessible via .name inside wrench
-// value:     pointer to a plain user-mananged WRValue
-void wr_addUserValue( WRValue* userData, const char* name, WRValue* value );
-void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned char* data, const int len );
-void wr_addUserIntArray( WRValue* userData, const char* name, const int* data, const int len );
-void wr_addUserFloatArray( WRValue* userData, const char* name, const float* data, const int len );
-
-// STEP 3:    use it!
-// the userData object can now be used in any call into wrench and be
-// accessible as shown above. All structures will be freed when WRValue
-// falls out of scope, alternately they can be manually freed by
-// calling the free() method from WRValue
-
-
-// NOTE: for efficiency there is no constructor on WRValue despite it
-// having pointers! This is because 99.99% of the time one is
-// created it's immediately loaded with values, so a constructor would
-// be wasted cycles in all cases. But this also means it's your
-// responsibility to call "wr_makeXXX or at LEAST .init() after
-// creating one!
-
+void wr_makeCharArray( WRValue* val, const unsigned char* data, const int len );
 
 /***************************************************************/
 /***************************************************************/
@@ -348,7 +311,6 @@ enum WRExType
 {
 	WR_EX_NONE       = 0x00,
 
-	WR_EX_USR        = 0x20,  // 0010
 	WR_EX_ITERATOR	 = 0x60,  // 0110
 	
 	WR_EX_REFARRAY   = 0x80,  // 1000
@@ -358,7 +320,6 @@ enum WRExType
 };
 
 //------------------------------------------------------------------------------
-class WRContainerData;
 class WRGCObject;
 struct WRValue
 {
@@ -380,21 +341,16 @@ struct WRValue
 	//WRValueType getType() { return enumType == WR_REF ? r->getType() : enumType; }
 
 //	WRValue* valueArray( int* len =0 );
-//	char* charArray( int* len =0 );
-//	int* intArray( int* len =0 );
-//	float* floatArray( int* len =0 );
 
 	inline void init() { p = 0; p2 = 0; } // call upon first create or when you're sure no memory is hanging from one
 
 //private: // is what this SHOULD be.. but that's impractical since the
 		   // VM is not an object that can be friended.
 		   
-	void free(); // treat this object as if it owns any memory allocated on u or va pointer
 	int arrayValueAsInt() const;
-	float arrayValueAsFloat() const;
 
-	uint32_t getHashEx() const;
-	uint32_t getHash() const
+	uint32_t getHashEx() const; // harder
+	uint32_t getHash() const // for easy cases
 	{
 		if ( type <= WR_FLOAT )
 		{
@@ -403,14 +359,6 @@ struct WRValue
 
 		return type == WR_REF ? r->getHashEx() : getHashEx();
 	}
-	
-	inline ~WRValue()
-	{
-		if ( xtype )
-		{
-			free(); 
-		}
-	} // this will stay inline MOST of the time
 
 	union // first 4 bytes (or 8 on a 64-bit system but.. what are you doing here?)
 	{
@@ -420,7 +368,9 @@ struct WRValue
 		const void* p;
 		WRValue* r;
 		WRGCObject* va;
-		WRContainerData* u;
+		WR_C_CALLBACK ccb;
+		WR_LIB_CALLBACK lcb;
+		WRFunction* wrf;
 	};
 
 	union
@@ -438,23 +388,27 @@ struct WRValue
 		{
 			WRValue* frame;
 			WRValue* r2;
+			void* usr;
 		};
 	};
 
 	inline WRValue& operator= (const WRValue& V) { p = V.p; frame = V.frame; return *this; }
 };
 
-#define WRENCH_JUMPTABLE_INTERPRETER
-#ifdef WRENCH_JUMPTABLE_INTERPRETER
-	#if defined(WRENCH_COMPACT)
-		#undef WRENCH_JUMPTABLE_INTERPRETER
-	#elif !defined(__clang__)
-		#if _MSC_VER
-			#undef WRENCH_JUMPTABLE_INTERPRETER
-		#endif
-	#endif
+#ifdef WRENCH_REALLY_COMPACT
+#ifndef WRENCH_COMPACT
+#define WRENCH_COMPACT
+#endif
 #endif
 
+#define WRENCH_JUMPTABLE_INTERPRETER
+#ifdef WRENCH_REALLY_COMPACT
+  #undef WRENCH_JUMPTABLE_INTERPRETER
+#elif !defined(__clang__)
+  #if _MSC_VER
+	#undef WRENCH_JUMPTABLE_INTERPRETER
+  #endif
+#endif
 
 #if __arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__
 #include <memory.h>
@@ -471,7 +425,6 @@ struct WRValue
 #ifndef WRENCH_COMBINED
 #include "utils.h"
 #include "gc_object.h"
-#include "container_data.h"
 #include "vm.h"
 #include "opcode.h"
 #include "str.h"

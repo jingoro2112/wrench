@@ -235,6 +235,8 @@ const uint16_t c_primeTable[] =
 };
 */
 
+#ifndef WRENCH_WITHOUT_COMPILER
+
 //------------------------------------------------------------------------------
 template <class T> class WRHashTable
 {
@@ -366,14 +368,16 @@ private:
 	Node* m_list;
 };
 
+#endif
+
 //------------------------------------------------------------------------------
 enum WRGCObjectType
 {
-	SV_CHAR = 0x02,
-	SV_INT = 0x04,
-	SV_FLOAT = 0x06,
-
 	SV_VALUE = 0x01,
+	SV_CHAR = 0x02,
+
+	SV_VOID_HASH_TABLE = 0x04,
+	
 	SV_HASH_TABLE = 0x03,
 };
 
@@ -459,31 +463,22 @@ public:
 	~WRGCObject() { clear(); }
 
 	//------------------------------------------------------------------------------
-	void* growHash( const uint32_t hash )
+	void growHash( const uint32_t hash )
 	{
 		// there was a collision with the passed hash, grow until the
 		// collision disappears
 		
 		int t = 0;
-		for( ; c_primeTable[t]; ++t )
-		{
-			if ( c_primeTable[t] == m_mod )
-			{
-				++t;
-				break;
-			}
-		}
+		for( ; c_primeTable[t] <= m_mod ; ++t );
 
 		for(;;)
 		{
-			int newMod = c_primeTable[t];
-			if ( newMod == 0 )
+tryAgain:
+			int newMod;
+			if ( !(newMod = c_primeTable[t]) )
 			{
-				// could not grow large enough to avoid collision, give up.
-				return m_Vdata + ((hash % m_mod)<<1);
+				return;
 			}
-
-			int newSize = newMod << 1;
 
 			uint32_t* proposed = new uint32_t[newMod];
 			memset( proposed, 0, newMod*sizeof(uint32_t) );
@@ -507,16 +502,23 @@ public:
 				{
 					delete[] proposed;
 					++t;
-					break;
+					goto tryAgain;
 				}
 			}
 
-			if ( h < m_mod )
+			int newSize;
+			if ( m_type == SV_VOID_HASH_TABLE )
 			{
-				continue;
+				newSize = newMod;
 			}
+			else
+			{
+				newSize = newMod << 1;
+			}
+			
+			WRValue* newValues;
 
-			WRValue* newValues = new WRValue[ newSize ];
+			newValues = new WRValue[newSize];
 			memset( (char*)newValues, 0, newSize*sizeof(WRValue) );
 
 			for( int v=0; v<m_mod; ++v )
@@ -526,21 +528,30 @@ public:
 					continue;
 				}
 
+				unsigned int m1 = m_hashTable[v] % m_mod;
+				unsigned int m2 = m_hashTable[v] % newMod;
 				
-				WRValue* to = newValues + ((m_hashTable[v] % newMod)<<1);
-				WRValue* from = m_Vdata + ((m_hashTable[v] % m_mod)<<1);
-
-				// value
-				to->p2 = from->p2;
-				to->p = from->p;
-				from->p2 = INIT_AS_INT;
-
-				// key
-				++to;
-				++from;
-				to->p2 = from->p2;
-				to->p = from->p;
-				from->p2 = INIT_AS_INT;
+				if ( m_type == SV_VOID_HASH_TABLE )
+				{
+					newValues[m2] = m_Vdata[m1];
+				}
+				else
+				{
+					WRValue* to = newValues + (m2<<1);
+					WRValue* from = m_Vdata + (m1<<1);
+					
+					// value
+					to->p2 = from->p2;
+					to->p = from->p;
+					from->p2 = INIT_AS_INT;
+					
+					// key
+					++to;
+					++from;
+					to->p2 = from->p2;
+					to->p = from->p;
+					from->p2 = INIT_AS_INT;
+				}
 			}
 
 			m_mod = newMod;
@@ -549,8 +560,8 @@ public:
 			delete[] m_hashTable;
 			m_hashTable = proposed;
 			m_Vdata = newValues;
-
-			return m_Vdata + ((hash % m_mod)<<1);
+			
+			return;
 		}
 	}
 	
@@ -562,28 +573,19 @@ public:
 		m_type = (char)type;
 		m_next = 0;
 		m_size = size;
-		if ( preAlloc )
+		if ( !(m_preAllocated = (m_constData = preAlloc) ? 1 : 0) )
 		{
-			m_preAllocated = 1;
-			m_constData = preAlloc;
-		}
-		else
-		{
-			m_preAllocated = 0;
 			switch( m_type )
 			{
 				case SV_VALUE: { m_Vdata = new WRValue[size]; break; }
 				case SV_CHAR: { m_Cdata = new unsigned char[size+1]; m_Cdata[size]=0; break; }
-				case SV_INT: { m_Idata = new int[size]; break; }
-				case SV_FLOAT: { m_Fdata = new float[size]; break; }
+				case SV_VOID_HASH_TABLE:
 				case SV_HASH_TABLE:
 				{
-					m_mod = c_primeTable[0];
-					m_hashTable = new uint32_t[m_mod];
-					memset( m_hashTable, 0, m_mod*sizeof(uint32_t) );
-					m_size = m_mod<<1;
-					m_Vdata = new WRValue[m_size];
-					memset( (char*)m_Vdata, 0, m_size*sizeof(WRValue) );
+					m_mod = 0;
+					m_hashTable = 0;
+					m_size = 0;
+					growHash(0);
 					break;
 				}
 			}
@@ -600,12 +602,11 @@ public:
 
 		switch( m_type )
 		{
+			case SV_VOID_HASH_TABLE:
 			case SV_HASH_TABLE: delete[] m_hashTable; m_hashTable = 0; // intentionally fall through:
 			case SV_VALUE: delete[] m_Vdata; break; 
 
 			case SV_CHAR: { delete[] m_Cdata; break; }
-			case SV_INT: { delete[] m_Idata; break; }
-			case SV_FLOAT: { delete[] m_Fdata; break; }
 		}
 
 		m_data = 0;
@@ -650,19 +651,6 @@ public:
 				memcpy( (char*)m_data, (char*)A.m_data, m_size );
 				break;
 			}
-			case SV_INT:
-			{
-				m_Idata = new int[m_size];
-				memcpy( (char*)m_data, (char*)A.m_data, m_size*sizeof(int) );
-				break;
-			}
-
-			case SV_FLOAT:
-			{
-				m_Fdata = new float[m_size];
-				memcpy( (char*)m_data, (char*)A.m_data, m_size*sizeof(float) );
-				break;
-			}
 		}
 
 		return *this;
@@ -670,6 +658,25 @@ public:
 
 	void* operator[]( const unsigned int l ) { return get(l); }
 
+	//------------------------------------------------------------------------------
+	WRValue* getAsRawValueHashTable( const uint32_t hash )
+	{
+		uint32_t index = hash % m_mod;
+		if ( m_hashTable[index] != hash )
+		{
+			if (m_hashTable[index] == 0)
+			{
+				m_hashTable[index] = hash;
+			}
+			else
+			{
+				growHash(hash);
+				index = hash % m_mod;
+			}
+		}
+		return m_Vdata + index;
+	}
+	
 	//------------------------------------------------------------------------------
 	void* get( const uint32_t l )
 	{
@@ -679,8 +686,6 @@ public:
 		{
 			case SV_VALUE: { return (void*)(m_Vdata + s); }
 			case SV_CHAR: { return (void*)(m_Cdata + s); }
-			case SV_INT: { return  (void*)(m_Idata + s); }
-			case SV_FLOAT: { return (void*)(m_Fdata + s); }
 
 			case SV_HASH_TABLE:
 			{
@@ -693,7 +698,6 @@ public:
 				assert( l != 0x55555555 );
 
 
-				
 				uint32_t hash = l ^ 0x55555555; 
 				uint32_t index = hash % m_mod;
 
@@ -705,11 +709,12 @@ public:
 					}
 					else
 					{
-						return growHash( hash ); // not empty and not us, there was a collision
+						growHash( hash ); // not empty and not us, there was a collision
+						index = hash % m_mod;
 					}
 				}
 
-				return (void*)(m_Vdata + (index<<1));
+				return m_Vdata + (index<<1);
 			}
 
 			default: return 0;
@@ -718,84 +723,6 @@ public:
 
 private:
 	WRGCObject(WRGCObject& A);
-};
-
-#endif
-/*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*******************************************************************************/
-#ifndef _CONTAINER_DATA_H
-#define _CONTAINER_DATA_H
-/*------------------------------------------------------------------------------*/
-
-//------------------------------------------------------------------------------
-class WRContainerData
-{
-public:
-
-	//------------------------------------------------------------------------------
-	void registerValue( const char* key, WRValue* value )
-	{
-		int32_t hash = wr_hashStr(key);
-
-		UDNode* node = m_index.getItem( hash );
-		if ( !node )
-		{
-			node = new UDNode;
-			node->next = m_nodeOnlyHead;
-			m_nodeOnlyHead = node;
-			m_index.set( wr_hashStr(key), node );
-		}
-
-		node->val = value;
-	}
-
-	//------------------------------------------------------------------------------
-	WRValue* addValue( const char* key )
-	{
-		UDNode* node = new UDNode;
-		node->val = new WRValue;
-		node->val->type = 0;
-		node->next = m_head;
-		m_head = node;
-		m_index.set( wr_hashStr(key), node );
-		return node->val;
-	}
-
-	//------------------------------------------------------------------------------
-	WRValue* get( const char* key ) { UDNode* N = m_index.getItem( wr_hashStr(key) ); return N ? N->val : 0; }
-	WRValue* get( const int32_t hash ) { UDNode* N = m_index.getItem(hash); return N ? N->val : 0; }
-
-	WRContainerData( int sizeHint =0 ) : m_head(0), m_nodeOnlyHead(0), m_index(sizeHint) {}
-	~WRContainerData();
-
-private:
-	struct UDNode
-	{
-		WRValue* val;
-		UDNode* next;
-	};
-	UDNode* m_head; // values that might have been handed to this structure so it does not necessarily own (see below)
-	UDNode* m_nodeOnlyHead; // values created by this structure (so are destroyed with it)
-	WRHashTable<UDNode*> m_index;
 };
 
 #endif
@@ -842,12 +769,19 @@ struct WRFunction
 	};
 };
 
+/*
 //------------------------------------------------------------------------------
 struct WRCFunctionCallback
 {
-	WR_C_CALLBACK function;
+	union
+	{
+		WR_C_CALLBACK function;
+		WR_LIB_CALLBACK lib;
+		WRFunction* scriptFunc;
+	};
 	void* usr;
 };
+*/
 
 //------------------------------------------------------------------------------
 class WRGCValueArray;
@@ -857,8 +791,12 @@ class WRGCValueArray;
 //------------------------------------------------------------------------------
 struct WRContext
 {
-	WRFunction* localFunctions;
-	WRHashTable<WRFunction*> localFunctionRegistry;
+	union
+	{
+		WRFunction* localFunctions;
+		uint32_t hashOffset;
+	};
+	
 	WRValue* globalSpace;
 	int globals;
 
@@ -882,8 +820,8 @@ struct WRContext
 //------------------------------------------------------------------------------
 struct WRState
 {
-	WRHashTable<WRCFunctionCallback> c_functionRegistry;
-	WRHashTable<WR_LIB_CALLBACK> c_libFunctionRegistry;
+	WRGCObject c_functionRegistry;
+	//WRHashTable<WRCFunctionCallback> c_functionRegistry;
 
 	WRError err;
 
@@ -1033,7 +971,6 @@ enum WROpcode
 	O_PushIndexFunctionReturnValue,
 		
 	O_CallLibFunction,
-	O_CallLibFunctionAndPop,
 
 	O_NewObjectTable,
 	O_AssignToObjectTableByOffset,
@@ -1086,9 +1023,6 @@ enum WROpcode
 	O_BinaryAddition,
 
 	O_BitwiseNOT,
-
-	O_CoerceToInt,
-	O_CoerceToFloat,
 
 	O_RelativeJump,
 	O_RelativeJump8,
@@ -1919,8 +1853,6 @@ const WROperation c_operations[] =
 
 	{ "=",   16, O_Assign,             false,  WR_OPER_BINARY, O_LAST },
 
-	{ "@i",   3, O_CoerceToInt,         true,  WR_OPER_PRE, O_LAST },
-	{ "@f",   3, O_CoerceToFloat,       true,  WR_OPER_PRE, O_LAST },
 	{ "@[]",  2, O_Index,               true,  WR_OPER_POST, O_LAST },
 	{ "@init", 2, O_Index,              true,  WR_OPER_POST, O_LAST },
 
@@ -2936,7 +2868,7 @@ parseAsNumber:
 					else
 					{
 						value.p2 = INIT_AS_INT;
-						value.i = strtol( token, 0, 10 );
+						value.i = (int32_t)strtoll( token, 0, 10 );
 					}
 				}
 			}
@@ -3956,12 +3888,6 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 					bytecode.opcodes[o] = O_PreDecrementAndPop;
 				}
 				
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_CallLibFunction )
-			{
-				bytecode.all[a-5] = O_CallLibFunctionAndPop;
-				bytecode.opcodes[o] = O_CallLibFunctionAndPop;
 				return;
 			}
 			else if ( bytecode.opcodes[o] == O_Assign ) // assign+pop is very common
@@ -7980,7 +7906,6 @@ const char* c_opcodeName[] =
 	"PushIndexFunctionReturnValue",
 
 	"CallLibFunction",
-	"CallLibFunctionAndPop",
 
 	"NewObjectTable",
 	"AssignToObjectTableByOffset",
@@ -8033,9 +7958,6 @@ const char* c_opcodeName[] =
 	"BinaryAddition",
 
 	"BitwiseNOT",
-
-	"CoerceToInt",
-	"CoerceToFloat",
 
 	"RelativeJump",
 	"RelativeJump8",
@@ -8320,7 +8242,7 @@ WRContext::~WRContext()
 }
 
 //------------------------------------------------------------------------------
-WRState::WRState( int EntriesInStack )
+WRState::WRState( int EntriesInStack ) : c_functionRegistry( 0, SV_VOID_HASH_TABLE )
 {
 	err = WR_ERR_None;
 
@@ -8529,15 +8451,11 @@ void wr_destroyContext( WRState* w, WRContext* context )
 //------------------------------------------------------------------------------
 int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr )
 {
-	WRCFunctionCallback callback;
-	callback.usr = usr;
-	callback.function = function;
-
 	uint32_t hash = wr_hashStr( name );
-	if ( !w->c_functionRegistry.set(hash, callback) )
-	{
-		return w->err = WR_ERR_hash_table_size_exceeded;
-	}
+
+	WRValue* V = w->c_functionRegistry.getAsRawValueHashTable(hash);
+	V->usr = usr;
+	V->ccb = function;
 	
 	return 0;
 }
@@ -8545,7 +8463,7 @@ int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, v
 //------------------------------------------------------------------------------
 void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLBACK function )
 {
-	w->c_libFunctionRegistry.set( wr_hashStr(signature), function );
+	w->c_functionRegistry.getAsRawValueHashTable(wr_hashStr(signature) )->lcb = function;
 }
 
 //------------------------------------------------------------------------------
@@ -8584,7 +8502,7 @@ float WRValue::asFloat() const
 		return (float)i;
 	}
 	
-	return IS_REFARRAY(xtype) ? arrayValueAsFloat() : 0;
+	return IS_REFARRAY(xtype) ? (float)arrayValueAsInt() : 0;
 }
 
 //------------------------------------------------------------------------------
@@ -8594,11 +8512,6 @@ char* WRValue::asString( char* string, size_t len ) const
 	{
 		switch( xtype )
 		{
-			case WR_EX_USR:
-			{
-				return string;
-			}
-			
 			case WR_EX_STRUCT:
 			{
 				strncpy( string, "struct", len );
@@ -8676,7 +8589,7 @@ int wr_callFunction( WRState* w, WRContext* context, const char* functionName, c
 //------------------------------------------------------------------------------
 int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
 {
-	WRFunction* function = 0;
+	WRValue* cF = 0;
 	if ( hash )
 	{
 		if ( context->stopLocation == 0 )
@@ -8684,15 +8597,14 @@ int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const W
 			return w->err = WR_ERR_run_must_be_called_by_itself_first;
 		}
 
-		function = context->localFunctionRegistry.getItem( hash );
-
-		if ( !function )
+		cF = w->c_functionRegistry.getAsRawValueHashTable( hash ^ context->hashOffset );
+		if ( !cF->wrf )
 		{
 			return w->err = WR_ERR_wrench_function_not_found;
 		}
 	}
 
-	return wr_callFunction( w, context, function, argv, argn );
+	return wr_callFunction( w, context, cF ? cF->wrf : 0, argv, argn );
 }
 
 //------------------------------------------------------------------------------
@@ -8702,9 +8614,9 @@ WRValue* wr_returnValueFromLastCall( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-WRFunction* wr_getFunction( WRContext* context, const char* functionName )
+WRFunction* wr_getFunction( WRState* w, WRContext* context, const char* functionName )
 {
-	return context->localFunctionRegistry.getItem( wr_hashStr(functionName) );
+	return w->c_functionRegistry.getAsRawValueHashTable( wr_hashStr(functionName) ^ context->hashOffset )->wrf;
 }
 
 //------------------------------------------------------------------------------
@@ -8839,7 +8751,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&PushIndexFunctionReturnValue,
 
 		&&CallLibFunction,
-		&&CallLibFunctionAndPop,
 
 		&&NewObjectTable,
 		&&AssignToObjectTableByOffset,
@@ -8892,9 +8803,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&BinaryAddition,
 
 		&&BitwiseNOT,
-
-		&&CoerceToInt,
-		&&CoerceToFloat,
 
 		&&RelativeJump,
 		&&RelativeJump8,
@@ -9123,6 +9031,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 	union
 	{
+		unsigned char findex;
 		WRValue* register0 = 0;
 		const unsigned char *hashLoc;
 		uint32_t hashLocInt;
@@ -9132,7 +9041,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	{
 		WRValue* register1;
 		uint16_t switchMod;
-		WR_LIB_CALLBACK lib;
 	};
 	WRValue* frameBase = 0;
 	WRValue* stackTop = w->stack;
@@ -9159,6 +9067,37 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		WRCompareFuncFloatCall boolFloatCall;
 	};
 #endif
+
+
+
+
+
+
+
+
+
+
+/*
+	WRGCObject H( 0, SV_VOID_HASH_TABLE );
+	for( int i=1; i<100; ++i )
+	{
+		*((int *)H.getAsVoidHashTable(i)) = i;
+		printf("%d\n", *(int*)H.getAsVoidHashTable(i));
+	}
+
+	for (int i = 1; i < 100; ++i)
+	{
+		printf("%d\n", *(int*)H.getAsVoidHashTable(i));
+		
+	}
+*/
+
+
+
+
+
+
+
 	
 	w->err = WR_ERR_None;
 
@@ -9191,33 +9130,27 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 #endif
 			CASE(RegisterFunction):
 			{
-				unsigned int i = (stackTop - 3)->i;
-				unsigned char index = (unsigned char)i;
+				hash = (stackTop -= 3)->i;
+				findex = hash;
 
-				context->localFunctions[ index ].arguments = (unsigned char)(i>>8);
-				context->localFunctions[ index ].frameSpaceNeeded = (unsigned char)(i>>16);
-				context->localFunctions[ index ].hash = (stackTop - 2)->i;
-				context->localFunctions[ index ].offset = context->bottom + (stackTop - 1)->i;
-				context->localFunctions[ index ].frameBaseAdjustment = 1
-																	   + context->localFunctions[ index ].frameSpaceNeeded
-																	   + context->localFunctions[ index ].arguments;
+				context->localFunctions[findex].arguments = (unsigned char)(hash>>8);
+				context->localFunctions[findex].frameSpaceNeeded = (unsigned char)(hash>>16);
+				context->localFunctions[findex].hash = (stackTop + 1)->i;
+				context->localFunctions[findex].offset = context->bottom + (stackTop + 2)->i;
 
-				context->localFunctionRegistry.set( context->localFunctions[ index ].hash,
-													context->localFunctions + index );
-				stackTop -= 3;
+				context->localFunctions[findex].frameBaseAdjustment = 1
+																	  + context->localFunctions[ findex ].frameSpaceNeeded
+																	  + context->localFunctions[ findex ].arguments;
+				w->c_functionRegistry.getAsRawValueHashTable(context->localFunctions[findex].hash ^ context->hashOffset)->wrf = context->localFunctions + findex;
+				
 				CONTINUE;
 			}
 
 			CASE(ReserveGlobalFrame):
 			{
-				delete[] context->globalSpace;
 				context->globals = *pc++;
 				context->globalSpace = new WRValue[ context->globals ];
-				for( int i=0; i<context->globals; ++i )
-				{
-					context->globalSpace[i].p = 0;
-					context->globalSpace[i].p2 = INIT_AS_INT;
-				}
+				memset( (char*)context->globalSpace, 0, context->globals*sizeof(WRValue) );
 				globalSpace = context->globalSpace;
 				CONTINUE;
 			}
@@ -9252,10 +9185,9 @@ literalZero:
 				context->gc( stackTop  );
 				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = context->getSVA( len, SV_CHAR, false );
-				memcpy( (unsigned char *)stackTop->va->m_data, pc, len );
+				memcpy( (unsigned char *)(stackTop++)->va->m_data, pc, len );
 				pc += len;
 				
-				++stackTop;
 				CONTINUE;
 			}
 
@@ -9263,16 +9195,14 @@ literalZero:
 			{
 				args = *pc++;
 
-				WRCFunctionCallback* cF;
-
 				// initialize a return value of 'zero'
 				register0 = stackTop;
 				register0->p = 0;
 				register0->p2 = INIT_AS_INT;
 
-				if ( (cF = w->c_functionRegistry.get(READ_32_FROM_PC(pc))) )
+				if ( (register1 = w->c_functionRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb )
 				{
-					cF->function( w, stackTop - args, args, *stackTop, cF->usr );
+					register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
 				}
 
 				// DO care about return value, which will be at the top
@@ -9295,10 +9225,9 @@ literalZero:
 			{
 				args = *pc++;
 
-				WRCFunctionCallback* cF;
-				if ( (cF = w->c_functionRegistry.get( READ_32_FROM_PC(pc))) )
+				if ( (register1 = w->c_functionRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb )
 				{
-					cF->function( w, stackTop - args, args, *stackTop, cF->usr );
+					register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
 				}
 
 				stackTop -= args;
@@ -9377,29 +9306,14 @@ callFunction:
 
 				args = *pc++; // which have already been pushed
 
-				if ( (lib = w->c_libFunctionRegistry.getItem( READ_32_FROM_PC(pc))) )
+				if ( (register1 = w->c_functionRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb )
 				{
-					lib( stackTop, args, context );
+					register1->lcb( stackTop, args, context );
 				}
 				pc += 4;
 
 				stackTop -= --args;
 				*(stackTop - 1) = *(stackTop + args);
-
-				CONTINUE;
-			}
-
-			CASE(CallLibFunctionAndPop):
-			{
-				args = *pc++; // which have already been pushed
-
-				if ( (lib = w->c_libFunctionRegistry.getItem(READ_32_FROM_PC(pc))) )
-				{
-					lib( stackTop, args, context );
-				}
-				pc += 4;
-
-				stackTop -= args;
 
 				CONTINUE;
 			}
@@ -9459,15 +9373,14 @@ callFunction:
 			{
 				register0 = --stackTop;
 				register1 = (stackTop - 1);
+				
 				if ( !IS_EXARRAY_TYPE(register1->xtype) || *pc < register1->va->m_size )
 				{
-					register1 = register1->va->m_Vdata + *pc++;
+					register1 = register1->va->m_Vdata + *pc;
 					wr_assign[register1->type<<2|register0->type]( register1, register0 );
 				}
-				else
-				{
-					++pc;
-				}
+
+				++pc;
 
 				CONTINUE;
 			}
@@ -9494,8 +9407,7 @@ callFunction:
 					hash %= register0->va->m_mod;
 					register0->va->m_hashTable[ hash ] = 0;
 					hash <<= 1;
-					register0->va->m_Vdata[hash++].p2 = INIT_AS_INT;
-					register0->va->m_Vdata[hash].p2 = INIT_AS_INT;
+					memset( (char*)(register0->va->m_Vdata + hash), 0, sizeof(WRValue)*2 );
 				}
 				
 				CONTINUE;	
@@ -9554,11 +9466,15 @@ callFunction:
 			CASE(CountOf):
 			{
 				register0 = stackTop - 1;
+#ifdef WRENCH_COMPACT
+				wr_countOfArrayElement( register0, register0 );
+#else
 				while( register0->type == WR_REF )
 				{
 					register0 = register0->r;
 				}
 				wr_countOfArrayElement( register0, stackTop - 1 );
+#endif
 				CONTINUE;
 			}
 
@@ -9665,20 +9581,6 @@ indexHash:
 				CONTINUE;
 			}
 
-			CASE(CoerceToInt):
-			{
-				register0 = stackTop - 1;
-				wr_toInt[ register0->type ]( register0 );
-				CONTINUE;
-			}
-
-			CASE(CoerceToFloat):
-			{
-				register0 = stackTop - 1;
-				wr_toFloat[ register0->type ]( register0 );
-				CONTINUE;
-			}
-
 			CASE(RelativeJump):
 			{
 				pc += READ_16_FROM_PC(pc);
@@ -9749,8 +9651,8 @@ indexLiteral:
 				register0 = frameBase + *pc++;
 indexTempLiteral:
 				(++stackTop)->i = *pc++;
-				stackTop->p2 = INIT_AS_INT;
 indexTempLiteralPostLoad:
+				stackTop->p2 = INIT_AS_INT;
 				wr_index[(WR_INT<<4)|register0->type]( context, stackTop, register0, stackTop - 1 );
 				CONTINUE;
 			}
@@ -9772,14 +9674,22 @@ indexTempLiteralPostLoad:
 			CASE(AssignToGlobalAndPop):
 			{
 				register0 = globalSpace + *pc++;
+#ifdef WRENCH_COMPACT
+				goto doAssignToLocalAndPopPreLoad;
+#else
 				register1 = --stackTop;
 				wr_assign[(register0->type<<2)|register1->type]( register0, register1 );
 				CONTINUE;
+#endif
 			}
 
 			CASE(AssignToLocalAndPop):
 			{
 				register0 = frameBase + *pc++;
+
+#ifdef WRENCH_COMPACT
+doAssignToLocalAndPopPreLoad:
+#endif
 				register1 = --stackTop;
 
 doAssignToLocalAndPop:
@@ -10162,6 +10072,7 @@ compactPreDecrement:
 			{
 				boolIntCall = CompareANDI;
 				boolFloatCall = CompareBlankF;
+compactBLAPreLoad:
 				register0 = --stackTop;
 				register1 = --stackTop;
 compactBLA:
@@ -10173,7 +10084,9 @@ compactBLA:
 			{
 				boolIntCall = CompareANDI;
 				boolFloatCall = CompareBlankF;
+compactBLA8PreLoad:
 				register0 = --stackTop;
+compactBLA8PreReg1:
 				register1 = --stackTop;
 compactBLA8:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : (int8_t)*pc;
@@ -10358,18 +10271,13 @@ compactReturnFuncInvertedPostLoad:
 
 			CASE(CompareBLE): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncBInverted; }
 			CASE(CompareBGE): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnFuncBInverted; }
-			CASE(CompareBGT): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncBNormal; }
-			CASE(CompareBLT): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnFuncBNormal; }
+			CASE(CompareBGT): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactBLAPreLoad; }
+			CASE(CompareBLT): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactBLAPreLoad; }
 			CASE(CompareBEQ): 
 			{
 				boolIntCall = CompareEQI;
 				boolFloatCall = CompareEQF; 
-
-compactReturnFuncBNormal:
-				register0 = --stackTop;
-				register1 = --stackTop;
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : READ_16_FROM_PC(pc);
-				CONTINUE;
+				goto compactBLAPreLoad;
 			}
 
 			CASE(CompareBNE):
@@ -10379,24 +10287,22 @@ compactReturnFuncBNormal:
 				
 compactReturnFuncBInverted:
 				register0 = --stackTop;
+compactReturnFuncBInvertedPreReg1:
 				register1 = --stackTop;
+compactReturnFuncBInvertedPostReg1:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? READ_16_FROM_PC(pc) : 2;
 				CONTINUE;
 			}
 			
 			CASE(CompareBLE8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncBInverted8; }
 			CASE(CompareBGE8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnFuncBInverted8; }
-			CASE(CompareBGT8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncBNormal8; }
-			CASE(CompareBLT8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnFuncBNormal8; }
+			CASE(CompareBGT8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactBLA8PreLoad; }
+			CASE(CompareBLT8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactBLA8PreLoad; }
 			CASE(CompareBEQ8):
 			{
 				boolIntCall = CompareEQI;
 				boolFloatCall = CompareEQF;
-compactReturnFuncBNormal8:
-				register0 = --stackTop;
-				register1 = --stackTop;
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : *pc;
-				CONTINUE;
+				goto compactBLA8PreLoad;
 			}
 			
 			CASE(CompareBNE8):
@@ -10405,11 +10311,12 @@ compactReturnFuncBNormal8:
 				boolFloatCall = CompareEQF;
 compactReturnFuncBInverted8:
 				register0 = --stackTop;
+compactReturnFuncBInverted8PreReg1:
 				register1 = --stackTop;
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? *pc : 2;
+compactReturnFuncBInverted8Post:
+				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? (int8_t)*pc : 2;
 				CONTINUE;
 			}
-			
 
 			CASE(GGCompareLE): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnCompareGGNEPost; }
 			CASE(GGCompareGE): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnCompareGGNEPost; }
@@ -10465,8 +10372,6 @@ compactReturnCompareNEPost:
 				CONTINUE;
 			}
 
-
-
 			
 			CASE(GSCompareGEBZ): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareGInverted; }
 			CASE(GSCompareLEBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareGInverted; }
@@ -10476,10 +10381,7 @@ compactReturnCompareNEPost:
 				boolFloatCall = CompareEQF;
 compactCompareGInverted:
 				register0 = globalSpace + *pc++;
-				register1 = --stackTop;
-compactCompareInvertedWork:
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? READ_16_FROM_PC(pc) : 2;
-				CONTINUE;
+				goto compactReturnFuncBInvertedPreReg1;
 			}
 			
 			CASE(GSCompareEQBZ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareGNormal; }
@@ -10491,9 +10393,7 @@ compactCompareInvertedWork:
 compactCompareGNormal:
 				register0 = globalSpace + *pc++;
 				register1 = --stackTop;
-compactCompareWork:
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : READ_16_FROM_PC(pc);
-				CONTINUE;
+				goto compactBLA;
 			}
 			
 			CASE(LSCompareGEBZ): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareLInverted; }
@@ -10505,7 +10405,7 @@ compactCompareWork:
 compactCompareLInverted:
 				register0 = frameBase + *pc++;
 				register1 = --stackTop;
-				goto compactCompareInvertedWork;
+				goto compactReturnFuncBInvertedPostReg1;
 			}
 			
 			CASE(LSCompareEQBZ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareLNormal; }
@@ -10517,7 +10417,7 @@ compactCompareLInverted:
 compactCompareLNormal:
 				register0 = frameBase + *pc++;
 				register1 = --stackTop;
-				goto compactCompareWork;
+				goto compactBLA;
 			}
 			
 			CASE(GSCompareGEBZ8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareG8Inverted; }
@@ -10528,8 +10428,7 @@ compactCompareLNormal:
 				boolFloatCall = CompareEQF;
 compactCompareG8Inverted:
 				register0 = globalSpace + *pc++;
-				register1 = --stackTop;
-				goto compactCompareInverted8Work;
+				goto compactReturnFuncBInverted8PreReg1;
 			}
 			
 			CASE(GSCompareEQBZ8): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareG8Normal; }
@@ -10540,8 +10439,7 @@ compactCompareG8Inverted:
 				boolFloatCall = CompareLTF;
 compactCompareG8Normal:
 				register0 = globalSpace + *pc++;
-				register1 = --stackTop;
-				goto compactCompare8Work;
+				goto compactBLA8PreReg1;
 			}
 			
 			CASE(LSCompareGEBZ8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareL8Inverted; }
@@ -10552,10 +10450,7 @@ compactCompareG8Normal:
 				boolFloatCall = CompareEQF;
 compactCompareL8Inverted:
 				register0 = frameBase + *pc++;
-				register1 = --stackTop;
-compactCompareInverted8Work:
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? (int8_t)*pc : 2;
-				CONTINUE;
+				goto compactReturnFuncBInverted8PreReg1;
 			}
 			
 			CASE(LSCompareEQBZ8): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareL8Normal; }
@@ -10566,10 +10461,7 @@ compactCompareInverted8Work:
 				boolFloatCall = CompareLTF;
 compactCompareL8Normal:
 				register0 = frameBase + *pc++;
-				register1 = --stackTop;
-compactCompare8Work:
-				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : (int8_t)*pc;
-				CONTINUE;
+				goto compactBLA8PreReg1;
 			}
 
 			CASE(LLCompareLEBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareLLInv; }
@@ -10581,7 +10473,7 @@ compactCompare8Work:
 compactCompareLLInv:
 				register1 = frameBase + *pc++;
 				register0 = frameBase + *pc++;
-				goto compactCompareInvertedWork;
+				goto compactReturnFuncBInvertedPostReg1;
 			}
 			CASE(LLCompareEQBZ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareLL; }
 			CASE(LLCompareGTBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareLL; }
@@ -10592,7 +10484,7 @@ compactCompareLLInv:
 compactCompareLL:
 				register1 = frameBase + *pc++;
 				register0 = frameBase + *pc++;
-				goto compactCompareWork;
+				goto compactBLA;
 			}
 			
 			CASE(LLCompareLEBZ8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareLLInv8; }
@@ -10604,7 +10496,7 @@ compactCompareLL:
 compactCompareLLInv8:
 				register1 = frameBase + *pc++;
 				register0 = frameBase + *pc++;
-				goto compactCompareInverted8Work;
+				goto compactReturnFuncBInverted8Post;
 			}
 			CASE(LLCompareEQBZ8): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareLL8; }
 			CASE(LLCompareGTBZ8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareLL8; }
@@ -10615,9 +10507,8 @@ compactCompareLLInv8:
 compactCompareLL8:	
 				register1 = frameBase + *pc++;
 				register0 = frameBase + *pc++;
-				goto compactCompare8Work;
+				goto compactBLA8;
 			}
-
 
 			CASE(GGCompareGEBZ): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareGGInv; }
 			CASE(GGCompareLEBZ): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareGGInv; }
@@ -10628,7 +10519,7 @@ compactCompareLL8:
 compactCompareGGInv:
 				register1 = globalSpace + *pc++;
 				register0 = globalSpace + *pc++;
-				goto compactCompareInvertedWork;
+				goto compactReturnFuncBInvertedPostReg1;
 			}
 			
 			CASE(GGCompareEQBZ): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareGG; }
@@ -10640,7 +10531,7 @@ compactCompareGGInv:
 compactCompareGG:
 				register1 = globalSpace + *pc++;
 				register0 = globalSpace + *pc++;
-				goto compactCompareWork;
+				goto compactBLA;
 			}
 			
 			CASE(GGCompareGEBZ8): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactCompareGGInv8; }
@@ -10652,7 +10543,7 @@ compactCompareGG:
 compactCompareGGInv8:
 				register1 = globalSpace + *pc++;
 				register0 = globalSpace + *pc++;
-				goto compactCompareInverted8Work;
+				goto compactReturnFuncBInverted8Post;
 			}
 			CASE(GGCompareEQBZ8): { boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactCompareGG8; }
 			CASE(GGCompareGTBZ8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactCompareGG8; }
@@ -10663,9 +10554,8 @@ compactCompareGGInv8:
 compactCompareGG8:
 				register1 = globalSpace + *pc++;
 				register0 = globalSpace + *pc++;
-				goto compactCompare8Work;
+				goto compactBLA8;
 			}
-
 	
 #else // ---------------------------- Non-Compact:
 
@@ -10900,7 +10790,7 @@ returnFuncBInverted:
 returnFuncBNormal8:
 				register0 = --stackTop;
 				register1 = --stackTop;
-				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : *pc;
+				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)*pc;
 				CONTINUE;
 			}
 			
@@ -10910,7 +10800,7 @@ returnFuncBNormal8:
 returnFuncBInverted8:
 				register0 = --stackTop;
 				register1 = --stackTop;
-				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? *pc : 2;
+				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)*pc : 2;
 				CONTINUE;
 			}
 
@@ -11305,44 +11195,8 @@ void wr_makeFloat( WRValue* val, float f )
 	val->f = f;
 }
 
-//------------------------------------------------------------------------------
-WRContainerData::~WRContainerData()
-{
-	while( m_head )
-	{
-		UDNode* next = m_head->next;
 
-		if ( IS_EXARRAY_TYPE(m_head->val->xtype) )
-		{
-			delete m_head->val->va;
-		}
-
-		delete m_head->val;
-		delete m_head;
-		m_head = next;
-	}
-
-	while (m_nodeOnlyHead)
-	{
-		UDNode* next = m_nodeOnlyHead->next;
-		delete m_nodeOnlyHead;
-		m_nodeOnlyHead = next;
-	}
-}
-
-//------------------------------------------------------------------------------
-void wr_makeUserData( WRValue* val, int sizeHint )
-{
-	val->p2 = INIT_AS_USR;
-	val->u = new WRContainerData( sizeHint );
-}
-
-//------------------------------------------------------------------------------
-void wr_addUserValue( WRValue* userData, const char* key, WRValue* value )
-{
-	userData->u->registerValue( key, value );
-}
-
+/*
 //------------------------------------------------------------------------------
 void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned char* data, const int len )
 {
@@ -11350,31 +11204,7 @@ void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned ch
 	val->p2 = INIT_AS_ARRAY;
 	val->va = new WRGCObject( len, SV_CHAR, data );
 }
-
-//------------------------------------------------------------------------------
-void wr_addUserIntArray( WRValue* userData, const char* name, const int* data, const int len )
-{
-	WRValue* val = userData->u->addValue( name );
-	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRGCObject( len, SV_INT, data );
-}
-
-//------------------------------------------------------------------------------
-void wr_addUserFloatArray( WRValue* userData, const char* name, const float* data, const int len )
-{
-	WRValue* val = userData->u->addValue( name );
-	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRGCObject( len, SV_FLOAT, data );
-}
-
-//------------------------------------------------------------------------------
-void WRValue::free()
-{
-	if ( xtype == WR_EX_USR )
-	{
-		delete u;
-	}
-}
+*/
 
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
@@ -11442,19 +11272,10 @@ void growValueArray( WRValue* v, int newSize )
 	newArray->m_next = v->va->m_next;
 	v->va->m_next = newArray;
 
-	int size_of;
-	switch( v->va->m_type )
+	int size_of = sizeof(WRValue);
+	if ( v->va->m_type == SV_CHAR )
 	{
-		case SV_VALUE: { size_of = sizeof(WRValue); break; }
-		case SV_CHAR: {size_of = sizeof(char); break; }
-					  
-		default:
-		case SV_INT: 
-		case SV_FLOAT:
-		{
-			size_of = sizeof(int);
-			break;
-		}
+		size_of = 1;
 	}
 	
 	memcpy( newArray->m_Cdata, v->va->m_Cdata, v->va->m_size * size_of );
@@ -11466,56 +11287,26 @@ void growValueArray( WRValue* v, int newSize )
 int WRValue::arrayValueAsInt() const
 {
 	unsigned int s = ARRAY_ELEMENT_FROM_P2(p2);
-	switch( r->va->m_type )
+	if ( r->va->m_type == SV_VALUE )
 	{
-		case SV_VALUE:
+		if ( s >= r->va->m_size )
 		{
-			if ( s >= r->va->m_size )
+			if ( r->va->m_preAllocated )
 			{
-				if ( r->va->m_preAllocated )
-				{
-					return 0;
-				}
-
-				growValueArray( r, s + 1 );
+				return 0;
 			}
-
-			return r->va->m_Vdata[s].asInt();
+			
+			growValueArray( r, s + 1 );
 		}
 		
-		case SV_CHAR: { return r->va->m_Cdata[(s >= r->va->m_size) ? 0 : s]; }
-		case SV_INT: { return r->va->m_Idata[(s >= r->va->m_size) ? 0 : s]; }
-		case SV_FLOAT: { return (int)r->va->m_Fdata[(s >= r->va->m_size) ? 0 : s]; }
-		default: return 0;
+		return r->va->m_Vdata[s].asInt();
 	}
-}
-
-//------------------------------------------------------------------------------
-float WRValue::arrayValueAsFloat() const
-{
-	unsigned int s = ARRAY_ELEMENT_FROM_P2(p2);
-	switch( r->va->m_type )
+	else if ( r->va->m_type == SV_CHAR )
 	{
-		case SV_VALUE:
-		{
-			if ( s >= r->va->m_size )
-			{
-				if ( r->va->m_preAllocated )
-				{
-					return 0;
-				}
-
-				growValueArray( r, s + 1 );
-			}
-
-			return r->va->m_Vdata[s].asFloat();
-		}
-
-		case SV_CHAR: { return r->va->m_Cdata[(s >= r->va->m_size) ? 0 : s]; }
-		case SV_INT: { return (float)r->va->m_Idata[(s >= r->va->m_size) ? 0 : s]; }
-		case SV_FLOAT: { return r->va->m_Fdata[(s >= r->va->m_size) ? 0 : s]; }
-		default: return 0;
+		return r->va->m_Cdata[(s >= r->va->m_size) ? 0 : s];
 	}
+
+	return 0;
 }
 
 //------------------------------------------------------------------------------
@@ -11529,50 +11320,24 @@ void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 {
 	unsigned int s = index == -1 ? ARRAY_ELEMENT_FROM_P2(array->p2) : index;
 	
-	switch( array->r->va->m_type )
+	if( array->r->va->m_type == SV_VALUE )
 	{
-		case SV_VALUE:
+		if ( s >= array->r->va->m_size )
 		{
-			if ( s >= array->r->va->m_size )
+			if ( array->r->va->m_preAllocated )
 			{
-				if ( array->r->va->m_preAllocated )
-				{
-					goto arrayToValueDefault;
-				}
-
-				growValueArray( array->r, s + 1 );
+				value->init();
+				return;
 			}
-			*value = array->r->va->m_Vdata[s];
-			break;
+			
+			growValueArray( array->r, s + 1 );
 		}
-
-		case SV_CHAR:
-		{
-			value->i = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Cdata[s];
-			value->p2 = INIT_AS_INT;
-			break;
-		}
-
-		case SV_INT:
-		{
-			value->i = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Idata[s];
-			value->p2 = INIT_AS_INT;
-			break;
-		}
-
-		case SV_FLOAT:
-		{
-			value->f = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Fdata[s];
-			value->p2 = INIT_AS_FLOAT;
-			break;
-		}
-
-		default:
-		{
-arrayToValueDefault:
-			value->init();
-			break;
-		}
+		*value = array->r->va->m_Vdata[s];
+	}
+	else if ( array->r->va->m_type == SV_CHAR )
+	{
+		value->i = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Cdata[s];
+		value->p2 = INIT_AS_INT;
 	}
 }
 
@@ -11594,21 +11359,15 @@ uint32_t WRValue::getHashEx() const
 		wr_arrayToValue( this, &element );
 		return element.getHash();
 	}
-	else if ( xtype == WR_EX_ARRAY )
+	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
 	{
-		switch( va->m_type )
-		{
-			case SV_VALUE: return 0;
-			case SV_CHAR: return wr_hash( va->m_Cdata, va->m_size );
-			case SV_INT: return wr_hash( va->m_Cdata, va->m_size*sizeof(int) );
-			case SV_FLOAT: return wr_hash( va->m_Cdata, va->m_size*sizeof(float) );
-		}
+		return wr_hash( va->m_Cdata, va->m_size );
 	}
 	return 0;
 }
 
 //------------------------------------------------------------------------------
-void wr_intValueToArray( const WRValue* array, int32_t intVal)
+void wr_intValueToArray( const WRValue* array, int32_t intVal )
 {
 	if ( !IS_EXARRAY_TYPE(array->r->xtype) )
 	{
@@ -11617,69 +11376,38 @@ void wr_intValueToArray( const WRValue* array, int32_t intVal)
 	
 	unsigned int s = ARRAY_ELEMENT_FROM_P2(array->p2);
 
-	switch( array->r->va->m_type )
+	if ( array->r->va->m_type == SV_VALUE )
 	{
-		case SV_VALUE:
+		if ( s >= array->r->va->m_size )
 		{
-			if ( s >= array->r->va->m_size )
+			if ( array->r->va->m_preAllocated )
 			{
-				if ( array->r->va->m_preAllocated )
-				{
-					return;
-				}
-
-				growValueArray( array->r, s + 1 );
+				return;
 			}
-			WRValue* val = array->r->va->m_Vdata + s;
-			val->i = intVal;
-			val->p2 = INIT_AS_INT;
-			break;
+			
+			growValueArray( array->r, s + 1 );
 		}
-
-		case SV_CHAR: { if ( s < array->r->va->m_size ) { array->r->va->m_Cdata[s] = intVal; } break; }
-		case SV_INT: { if ( s < array->r->va->m_size ) { array->r->va->m_Idata[s] = intVal; } break; }
-		case SV_FLOAT: { if ( s < array->r->va->m_size ) { array->r->va->m_Fdata[s] = (float)intVal; } break; }
+		WRValue* val = array->r->va->m_Vdata + s;
+		val->i = intVal;
+		val->p2 = INIT_AS_INT;
 	}
-}
-
-//------------------------------------------------------------------------------
-void wr_floatValueToArray( const WRValue* array, float floatVal )
-{
-	if ( !IS_EXARRAY_TYPE(array->r->xtype) )
+	else if ( (array->r->va->m_type == SV_CHAR)
+			  && (s < array->r->va->m_size) )
 	{
-		return;
-	}
-				
-	unsigned int s = ARRAY_ELEMENT_FROM_P2(array->p2);
-
-	switch( array->r->va->m_type )
-	{
-		case SV_VALUE:
-		{
-			if ( s >= array->r->va->m_size )
-			{
-				if ( array->r->va->m_preAllocated )
-				{
-					return;
-				}
-				
-				growValueArray( array->r, s + 1 );
-			}
-			WRValue* val = array->r->va->m_Vdata + s;
-			val->f = floatVal;
-			val->p2 = INIT_AS_FLOAT;
-			break;
-		}
-
-		case SV_CHAR: { if ( s < array->r->va->m_size ) { array->r->va->m_Cdata[s] = (unsigned char)floatVal; } break; }
-		case SV_INT: { if ( s < array->r->va->m_size ) { array->r->va->m_Idata[s] = (int)floatVal; } break; }
-		case SV_FLOAT: { if ( s < array->r->va->m_size ) { array->r->va->m_Fdata[s] = floatVal; } break; }
+		array->r->va->m_Cdata[s] = intVal;
 	}
 }
 
 //------------------------------------------------------------------------------
 void wr_countOfArrayElement( WRValue* array, WRValue* target )
 {
+#ifdef WRENCH_COMPACT
+	if ( array->type == WR_REF )
+	{
+		return wr_countOfArrayElement( array->r, target );
+	}
+	else
+#endif
 	if ( IS_EXARRAY_TYPE(array->xtype) )
 	{
 		if ( IS_REFARRAY(array->xtype) )
@@ -11742,7 +11470,7 @@ static void doAssign_E_F( WRValue* to, WRValue* from )
 {
 	if ( IS_REFARRAY(to->xtype) )
 	{
-		wr_floatValueToArray( to, from->f );
+		wr_intValueToArray( to, (int)from->f );
 	}
 	else
 	{
@@ -11821,24 +11549,21 @@ static bool wr_CompareArrays( WRGCObject* a, WRGCObject* b )
 {
 	if ( (a->m_size == b->m_size) && (a->m_type == b->m_type) )
 	{
-		switch( a->m_type )
+		if ( a->m_type == SV_VALUE )
 		{
-			case SV_VALUE:
+			for( unsigned int i=0; i<a->m_size; ++i )
 			{
-				for( unsigned int i=0; i<a->m_size; ++i )
+				if ( !wr_Compare[(a->m_Vdata[i].type<<2)|b->m_Vdata[i].type](a->m_Vdata + i, b->m_Vdata + i, CompareEQI, CompareEQF ) )
 				{
-					if ( !wr_Compare[(a->m_Vdata[i].type<<2)|b->m_Vdata[i].type](a->m_Vdata + i, b->m_Vdata + i, CompareEQI, CompareEQF ) )
-					{
-						return false;
-					}
+					return false;
 				}
-
-				return true;
 			}
 
-			case SV_CHAR: { return !memcmp(a->m_data, b->m_data, a->m_size); }
-			case SV_INT: { return !memcmp(a->m_data, b->m_data, a->m_size*sizeof(int)); }
-			case SV_FLOAT: { return !memcmp(a->m_data, b->m_data, a->m_size*sizeof(float)); }
+			return true;
+		}
+		else if ( a->m_type == SV_CHAR )
+		{
+			return !memcmp( a->m_data, b->m_data, a->m_size );
 		}
 	}
 
@@ -11877,7 +11602,7 @@ static void FuncAssign_E_F( WRValue* to, WRValue* from, WRFuncIntCall intCall, W
 
 		wr_FuncAssign[(element.type<<2)|WR_FLOAT]( &element, from, intCall, floatCall );
 
-		wr_floatValueToArray( to, element.f );
+		wr_intValueToArray( to, (int)element.f );
 		*from = element;
 	}
 }
@@ -11930,7 +11655,7 @@ static void FuncAssign_R_F( WRValue* to, WRValue* from, WRFuncIntCall intCall, W
 static void FuncAssign_I_R( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 { WRValue temp = *from->r; wr_FuncAssign[(WR_INT<<2)+temp.type](to, &temp, intCall, floatCall); *from = *to; }
 static void FuncAssign_F_R( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
-{ WRValue temp = *from->r; wr_FuncAssign[(WR_FLOAT<<2)+from->r->type](to, from->r, intCall, floatCall); *from = *to; }
+{ wr_FuncAssign[(WR_FLOAT<<2)+from->r->type](to, from->r, intCall, floatCall); *from = *to; }
 
 static void FuncAssign_F_F( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
@@ -12170,24 +11895,21 @@ static bool wr_CompareArrays( WRGCObject* a, WRGCObject* b )
 {
 	if ( (a->m_size == b->m_size) && (a->m_type == b->m_type) )
 	{
-		switch( a->m_type )
+		if ( a->m_type == SV_VALUE )
 		{
-			case SV_VALUE:
+			for( unsigned int i=0; i<a->m_size; ++i )
 			{
-				for( unsigned int i=0; i<a->m_size; ++i )
+				if ( !wr_CompareEQ[(a->m_Vdata[i].type<<2)|b->m_Vdata[i].type](a->m_Vdata + i, b->m_Vdata + i) )
 				{
-					if ( !wr_CompareEQ[(a->m_Vdata[i].type<<2)|b->m_Vdata[i].type](a->m_Vdata + i, b->m_Vdata + i) )
-					{
-						return false;
-					}
+					return false;
 				}
-
-				return true;
 			}
 
-			case SV_CHAR: { return !memcmp(a->m_data, b->m_data, a->m_size); }
-			case SV_INT: { return !memcmp(a->m_data, b->m_data, a->m_size*sizeof(int)); }
-			case SV_FLOAT: { return !memcmp(a->m_data, b->m_data, a->m_size*sizeof(float)); }
+			return true;
+		}
+		else if ( a->m_type == SV_CHAR )
+		{
+			return !memcmp(a->m_data, b->m_data, a->m_size); 
 		}
 	}
 
@@ -12302,7 +12024,7 @@ static void NAME##Assign_E_F( WRValue* to, WRValue* from )\
 		\
 		NAME##Assign[(element.type<<2)|WR_FLOAT]( &element, from );\
 		\
-		wr_floatValueToArray( to, element.f );\
+		wr_intValueToArray( to, (int)element.f );\
 		*from = element;\
 	}\
 }\
@@ -12350,7 +12072,7 @@ static void NAME##Assign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *fro
 static void NAME##Assign_R_I( WRValue* to, WRValue* from ) { NAME##Assign[(to->r->type<<2)|WR_INT](to->r, from); *from = *to->r; }\
 static void NAME##Assign_R_F( WRValue* to, WRValue* from ) { NAME##Assign[(to->r->type<<2)|WR_FLOAT](to->r, from); *from = *to->r; }\
 static void NAME##Assign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; NAME##Assign[(WR_INT<<2)+temp.type](to, &temp); *from = *to; }\
-static void NAME##Assign_F_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; NAME##Assign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }\
+static void NAME##Assign_F_R( WRValue* to, WRValue* from ) { NAME##Assign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }\
 static void NAME##Assign_F_F( WRValue* to, WRValue* from ) { to->f OPERATION##= from->f; }\
 static void NAME##Assign_I_I( WRValue* to, WRValue* from ) { to->i OPERATION##= from->i; }\
 static void NAME##Assign_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; to->f = (float)to->i OPERATION from->f; }\
@@ -12650,8 +12372,6 @@ static void NAME##_E( WRValue* value )\
 			}\
 			\
 			case SV_CHAR: {	value->i = (s >= value->r->va->m_size) ? 0 : OPERATION value->r->va->m_Cdata[s]; value->p2 = INIT_AS_INT; return; }\
-			case SV_INT: { value->i = (s >= value->r->va->m_size) ? 0 : OPERATION value->r->va->m_Idata[s]; value->p2 = INIT_AS_INT; return; }\
-			case SV_FLOAT: { value->f = (s >= value->r->va->m_size) ? 0 : OPERATION value->r->va->m_Fdata[s]; value->p2 = INIT_AS_FLOAT; return; }\
 		}\
 	}\
 }\
@@ -12668,6 +12388,8 @@ X_UNARY_PRE( wr_predec, -- );
 
 
 #endif
+
+
 
 //------------------------------------------------------------------------------
 #define X_UNARY_POST( NAME, OPERATION ) \
@@ -12693,20 +12415,6 @@ static void NAME##_E( WRValue* value, WRValue* stack )\
 			{\
 				stack->p2 = INIT_AS_INT;\
 				stack->i = (s >= value->r->va->m_size) ? 0 : value->r->va->m_Cdata[s] OPERATION;\
-				break;\
-			}\
-			\
-			case SV_INT:\
-			{\
-				stack->p2 = INIT_AS_INT;\
-				stack->i = (s >= value->r->va->m_size) ? 0 : value->r->va->m_Idata[s] OPERATION;\
-				break;\
-			}\
-			\
-			case SV_FLOAT:\
-			{\
-				stack->p2 = INIT_AS_FLOAT;\
-				stack->f = (s >= value->r->va->m_size) ? 0 : value->r->va->m_Fdata[s] OPERATION;\
 				break;\
 			}\
 		}\
@@ -12800,28 +12508,6 @@ WRStateFunc wr_index[16] =
 static void doSingleVoidBlank( WRValue* value ) {}
 
 //------------------------------------------------------------------------------
-static void doToInt_R( WRValue* value ) { wr_toInt[ value->r->type ]( value->r ); }
-static void doToInt_F( WRValue* value ) { value->p2 = WR_INT; value->i = (int32_t)value->f; }
-WRUnaryFunc wr_toInt[4] = 
-{
-	doSingleVoidBlank, doToInt_F, doToInt_R, doSingleVoidBlank
-};
-
-static void doToFloat_R( WRValue* value ) { wr_toInt[ value->r->type ]( value->r ); }
-static void doToFloat_I( WRValue* value ) { value->p2 = INIT_AS_FLOAT; value->f = (float)value->i; }
-WRUnaryFunc wr_toFloat[4] = 
-{
-	doToFloat_I, doSingleVoidBlank, doToFloat_R, doSingleVoidBlank
-};
-
-static void bitwiseNOT_R( WRValue* value ) { wr_toInt[ value->r->type ]( value->r ); }
-static void bitwiseNOT_I( WRValue* value ) { value->i = ~value->i; }
-WRUnaryFunc wr_bitwiseNOT[4] = 
-{
-	bitwiseNOT_I, doSingleVoidBlank, bitwiseNOT_R, doSingleVoidBlank
-};
-
-//------------------------------------------------------------------------------
 static void doIndexHash_X( WRValue* value, WRValue* target, uint32_t hash ) { target->init(); }
 static void doIndexHash_R( WRValue* value, WRValue* target, uint32_t hash ) { wr_IndexHash[ value->r->type ]( value->r, target, hash ); }
 static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
@@ -12839,15 +12525,6 @@ static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
 
 			WRValue* val = value->r->va->m_Vdata + s;
 			wr_IndexHash[ val->type ]( val, target, hash );
-		}
-	}
-	else if ( value->xtype == WR_EX_USR )
-	{
-		target->p2 = INIT_AS_REF;
-		if ( !(target->r = value->u->get(hash)) )
-		{
-			target->p = 0;
-			target->p2 = 0;
 		}
 	}
 	else if ( value->xtype == WR_EX_STRUCT )
@@ -12903,49 +12580,28 @@ static void doNegate_E( WRValue* value )
 	{
 		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
 
-		switch( value->r->va->m_type )
+		if (value->r->va->m_type == SV_VALUE)
 		{
-			case SV_VALUE:
+			if (s >= value->r->va->m_size)
 			{
-				if ( s >= value->r->va->m_size )
-				{
-					growValueArray( value->r, s + 1 );
-				}
-
-				WRValue* val = value->r->va->m_Vdata + s;
-				if ( val->type == WR_INT )
-				{
-					val->i = -val->i;
-					*value = *val;
-				}
-				else if ( val->type == WR_FLOAT )
-				{
-					val->f = -val->f;
-					*value = *val;
-				}
-				break;
+				growValueArray(value->r, s + 1);
 			}
-
-			case SV_CHAR:
+			WRValue* val = value->r->va->m_Vdata + s;
+			if (val->type == WR_INT)
 			{
-				value->p2 = INIT_AS_INT;
-				value->i = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Cdata[s] = -value->r->va->m_Cdata[s]);
-				break;
+				val->i = -val->i;
+				*value = *val;
 			}
-
-			case SV_INT:
+			else if (val->type == WR_FLOAT)
 			{
-				value->p2 = INIT_AS_INT;
-				value->i = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Idata[s] = -value->r->va->m_Idata[s]);
-				break;
+				val->f = -val->f;
+				*value = *val;
 			}
-
-			case SV_FLOAT:
-			{
-				value->p2 = INIT_AS_FLOAT;
-				value->f = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Fdata[s] = -value->r->va->m_Fdata[s]);
-				break;
-			}
+		}
+		else if (value->r->va->m_type == SV_CHAR)
+		{
+			value->p2 = INIT_AS_INT;
+			value->i = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Cdata[s] = -value->r->va->m_Cdata[s]);
 		}
 	}
 }
@@ -12970,42 +12626,24 @@ static void doBitwiseNot_E( WRValue* value )
 	{
 		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
 
-		switch( value->r->va->m_type )
+		if ( value->r->va->m_type == SV_VALUE )
 		{
-			case SV_VALUE:
+			if ( s >= value->r->va->m_size )
 			{
-				if ( s >= value->r->va->m_size )
-				{
-					growValueArray( value->r, s + 1 );
-				}
-
-				WRValue* val = (WRValue *)value->r->va->m_data + s;
-				if ( val->type == WR_INT )
-				{
-					val->i = ~val->i;
-					*value = *val;
-				}
-				break;
+				growValueArray( value->r, s + 1 );
 			}
 
-			case SV_CHAR:
+			WRValue* val = (WRValue *)value->r->va->m_data + s;
+			if ( val->type == WR_INT )
 			{
-				value->p2 = INIT_AS_INT;
-				value->i = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Cdata[s] = ~value->r->va->m_Cdata[s]);
-				break;
+				val->i = ~val->i;
+				*value = *val;
 			}
-
-			case SV_INT:
-			{
-				value->p2 = INIT_AS_INT;
-				value->i = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Idata[s] = ~value->r->va->m_Idata[s]);
-				break;
-			}
-
-			case SV_FLOAT:
-			{
-				break;
-			}
+		}
+		else if (value->r->va->m_type == SV_CHAR )
+		{
+			value->p2 = INIT_AS_INT;
+			value->i = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Cdata[s] = ~value->r->va->m_Cdata[s]);
 		}
 	}
 }
