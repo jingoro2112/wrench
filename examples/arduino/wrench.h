@@ -67,7 +67,7 @@ This will consume 8 bytes per stack entry on a 32-bit system, 16 on 64.
 /************************************************************************
 set this to try compiling sys/stat.h for fstat and file operations.
 */
-#define WRENCH_STD_FILE
+//#define WRENCH_STD_FILE
 /***********************************************************************/
 
 #include <stdint.h>
