@@ -206,7 +206,7 @@ void wr_destroyState( WRState* w )
 //------------------------------------------------------------------------------
 WRError wr_getLastError( WRState* w )
 {
-	return w->err;
+	return (WRError)w->err;
 }
 
 //------------------------------------------------------------------------------
@@ -3021,11 +3021,11 @@ void wr_addFloatToContainer( WRValue* container, const char* name, const float v
 }
 
 //------------------------------------------------------------------------------
-void wr_addStringToContainer( WRValue* container, const char* name, char* string )
+void wr_addArrayToContainer( WRValue* container, const char* name, char* array )
 {
 	WRValue v;
 	v.p2 = INIT_AS_RAW_ARRAY;
-	v.c = string;
+	v.c = array;
 	wr_addValueToContainer( container, name, &v );
 }
 

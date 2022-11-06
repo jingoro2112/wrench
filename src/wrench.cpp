@@ -811,13 +811,12 @@ struct WRContext
 //------------------------------------------------------------------------------
 struct WRState
 {
-	WRGCObject c_functionRegistry;
-	//WRHashTable<WRCFunctionCallback> c_functionRegistry;
+	uint16_t stackSize;
+	int8_t err;
 
-	WRError err;
+	WRGCObject c_functionRegistry;
 
 	WRValue* stack;
-	int stackSize;
 
 	WRContext* contextList;
 
@@ -848,7 +847,6 @@ extern WRVoidFunc wr_LeftShiftAssign[16];
 extern WRVoidFunc wr_postinc[4];
 extern WRVoidFunc wr_postdec[4];
 extern WRVoidFunc wr_pushIterator[4];
-
 
 
 typedef int (*WRFuncIntCall)( int a, int b );
@@ -8400,7 +8398,7 @@ void wr_destroyState( WRState* w )
 //------------------------------------------------------------------------------
 WRError wr_getLastError( WRState* w )
 {
-	return w->err;
+	return (WRError)w->err;
 }
 
 //------------------------------------------------------------------------------
@@ -11215,11 +11213,11 @@ void wr_addFloatToContainer( WRValue* container, const char* name, const float v
 }
 
 //------------------------------------------------------------------------------
-void wr_addStringToContainer( WRValue* container, const char* name, char* string )
+void wr_addArrayToContainer( WRValue* container, const char* name, char* array )
 {
 	WRValue v;
 	v.p2 = INIT_AS_RAW_ARRAY;
-	v.c = string;
+	v.c = array;
 	wr_addValueToContainer( container, name, &v );
 }
 

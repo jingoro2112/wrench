@@ -1,3 +1,7 @@
+1.7.1 ----------------------------------------------------------------------------------
+- reduced memory footprint a tad by shrinking data types in WRState
+- fixed some compiler warnings from newer compilers
+
 1.7.0 -------------------------------------------------------------------------
 - removed WRENCH_JUMPTABLE_INTERPRETER from top-level, really not a user-visible
   thing

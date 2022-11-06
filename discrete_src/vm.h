@@ -78,13 +78,12 @@ struct WRContext
 //------------------------------------------------------------------------------
 struct WRState
 {
-	WRGCObject c_functionRegistry;
-	//WRHashTable<WRCFunctionCallback> c_functionRegistry;
+	uint16_t stackSize;
+	int8_t err;
 
-	WRError err;
+	WRGCObject c_functionRegistry;
 
 	WRValue* stack;
-	int stackSize;
 
 	WRContext* contextList;
 
@@ -115,7 +114,6 @@ extern WRVoidFunc wr_LeftShiftAssign[16];
 extern WRVoidFunc wr_postinc[4];
 extern WRVoidFunc wr_postdec[4];
 extern WRVoidFunc wr_pushIterator[4];
-
 
 
 typedef int (*WRFuncIntCall)( int a, int b );

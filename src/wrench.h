@@ -231,7 +231,7 @@ void wr_makeContainer( WRValue* val );
 void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value );
 void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value );
 void wr_addFloatToContainer( WRValue* container, const char* name, const float value );
-void wr_addStringToContainer( WRValue* container, const char* name, char* string );
+void wr_addArrayToContainer( WRValue* container, const char* name, char* array );
 
 
 void wr_destroyContainer( WRValue* val );

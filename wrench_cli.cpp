@@ -302,13 +302,6 @@ static void emit( WRState* s, const WRValue* argv, const int argn, WRValue& retV
 }
 
 //------------------------------------------------------------------------------
-unsigned int cliTestLoader( const int offset, const unsigned char** block, void* usr )
-{
-	*block = (unsigned char *)usr + offset;
-	return 16; // return only 16 bytes at a time to be nasty
-}
-
-//------------------------------------------------------------------------------
 int runTests( int number )
 {
 	WRstr code;
@@ -324,7 +317,7 @@ int runTests( int number )
 	wr_addFloatToContainer( &container, "fl", 1.123f );
 
 	char someArray[10] = "hello";
-	wr_addStringToContainer( &container, "name", someArray );
+	wr_addArrayToContainer( &container, "name", someArray );
 
 	FILE* tfile = fopen( "test_files.txt", "r" );
 	char buf[256];
