@@ -1,6 +1,8 @@
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
+MIT Licence
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -23,8 +25,11 @@ SOFTWARE.
 #define _WRENCH_H
 /*------------------------------------------------------------------------------*/
 
+#define WRENCH_VERSION_MAJOR 01
+#define WRENCH_VERSION_MINOR 71
+
 /************************************************************************
-wrench's compiler was not designed to be memory or space effecient, for
+wrench's compiler was not designed to be memory or space efficient, for
 embedded systems it is strongly reccommeded (nay, required) that
 only bytecode be executed. This flag allows the source code to be
 explicitly removed.

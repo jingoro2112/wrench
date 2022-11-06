@@ -2,6 +2,8 @@
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
+MIT Licence
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -24,8 +26,11 @@ SOFTWARE.
 #define _WRENCH_H
 /*------------------------------------------------------------------------------*/
 
+#define WRENCH_VERSION_MAJOR 01
+#define WRENCH_VERSION_MINOR 71
+
 /************************************************************************
-wrench's compiler was not designed to be memory or space effecient, for
+wrench's compiler was not designed to be memory or space efficient, for
 embedded systems it is strongly reccommeded (nay, required) that
 only bytecode be executed. This flag allows the source code to be
 explicitly removed.
@@ -224,9 +229,9 @@ void wr_makeCharArray( WRValue* val, const unsigned char* data, const int len );
 
 void wr_makeContainer( WRValue* val );
 void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value );
-void wr_addIntToContainer( WRValue* container, const char* name, int32_t value );
-void wr_addFloatToContainer( WRValue* container, const char* name, float value );
-void wr_addStringToContainer( WRValue* container, const char* name, const char* string );
+void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value );
+void wr_addFloatToContainer( WRValue* container, const char* name, const float value );
+void wr_addStringToContainer( WRValue* container, const char* name, char* string );
 
 
 void wr_destroyContainer( WRValue* val );
@@ -327,7 +332,8 @@ enum WRExType
 	WR_EX_STRUCT     = 0xC0,  // 1100
 	WR_EX_HASH_TABLE = 0xE0,  // 1110
 };
-#define IS_EXARRAY_TYPE(P) ((P)&0x80)
+#define IS_EXARRAY_TYPE(P)   ((P)&0x80)
+
 
 //------------------------------------------------------------------------------
 class WRGCObject;

@@ -1,6 +1,6 @@
              wrench
 
-A full-featured interpreter that uses a bare minimum of ram and program space: http://northarc.com/wrench/www/
+A full-featured interpreter that uses a bare minimum of ram and program space.
 
 How little? The wrench interpreter compiles to ~34k on an Arduino, and
 uses less than 1k of ram to operate.

@@ -87,8 +87,11 @@ const char* sourceOrder[]=
 //------------------------------------------------------------------------------
 int usage()
 {
-	printf( "usage: wrench <command> [options]\n"
+	printf( "version: %d.%d\n"
+			"usage: wrench <command> [options]\n"
 			"where command is:\n"
+			"\n"
+			"v                              show version + help\n"
 			"\n"
 			"c [infile] [out as bytecode]   compile infile and output as raw bytecode\n"
 			"\n"
@@ -107,9 +110,8 @@ int usage()
 			"rb [binary file to execute]    execute the file as if its bytecode\n"
 			"r  [source file to execute]    compile and execute execute the file\n"
 			"                               as if its source code\n"
-			"\n"
-		  );
-	
+			"\n", (int)WRENCH_VERSION_MAJOR, (int)WRENCH_VERSION_MINOR );
+
 	return -1;
 }
 

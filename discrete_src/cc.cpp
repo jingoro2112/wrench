@@ -1,6 +1,8 @@
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
+MIT Licence
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -4933,12 +4935,12 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 				else
 				{
 					delete[] table;
+					table = 0;
 				} 
 			}
 
 			if ( mod >= 0x7FFE )
 			{
-				delete[] table;
 				m_err = WR_ERR_switch_construction_error;
 				return false;
 			}
