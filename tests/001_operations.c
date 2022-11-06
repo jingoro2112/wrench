@@ -51,6 +51,13 @@ hello world
 1.3
 ~*/
 
+not = 1;
+if ( !not ) print("n1");
+if ( not != 1 ) print("n1");
+flip = 0x0000FFFF;
+if ( ~flip != 0xFFFF0000 ) print("flip1");
+if ( flip != 0x0000FFFF ) print("flip2");
+
 a1 = b1 = c1 = 10;
 if ( a1 != 10 || b1 != 10 || c1 != 10 ) print("err 0");
 
@@ -223,6 +230,4 @@ function local()
 	c = ::ag | ::bg;if ( c != 11 ) print("F6");
 	
 }
-
-
 

@@ -312,43 +312,18 @@ int runTests( int number )
 	WRstr code;
 	WRstr codeName;
 
-	
-/*
-	WRValue data2;
-	data2.init();
-	
-	WRValue userData;
-	wr_makeUserData( &userData );
+	WRValue container;
+	wr_makeContainer( &container );
 
+	WRValue integer;
+	wr_makeInt( &integer, 765 );
+	wr_addValueToContainer( &container, "integer", &integer );
+	wr_addIntToContainer( &container, "integer2", 222 );
+	wr_addFloatToContainer( &container, "fl", 1.123f );
 
-	unsigned char userChar[10];
-	userChar[1] = 222;
-	wr_addUserCharArray( &userData, "ac", userChar, 10 );
+	char someArray[10] = "hello";
+	wr_addStringToContainer( &container, "name", someArray );
 
-	int usrInt[10];
-	wr_addUserIntArray( &userData, "ai", usrInt, 10 );
-
-	float usrFloat[10];
-	wr_addUserFloatArray( &userData, "af", usrFloat, 10 );
-
-	WRValue userval;
-	wr_makeInt( &userval, 1 );
-
-	wr_addUserValue( &userData, "value", &userval );
-
-
-	wr_makeInt( &data2, 777 );
-
-	WRValue subUserData;
-	subUserData.init();
-
-	wr_makeUserData( &subUserData );
-	wr_addUserValue( &subUserData, "data2", &data2 );
-	wr_addUserCharArray( &subUserData, "data3", userChar, 10 );
-
-
-	wr_addUserValue( &userData, "subUser", &subUserData );
-*/	
 	FILE* tfile = fopen( "test_files.txt", "r" );
 	char buf[256];
 	int fileNumber = 0;
@@ -398,7 +373,7 @@ int runTests( int number )
 
 				if ( !wr_getLastError(w) )
 				{
-					wr_callFunction(w, context, "userCheck");
+					wr_callFunction(w, context, "userCheck", &container, 1 );
 				}
 				
 				if ( err )
@@ -432,6 +407,8 @@ int runTests( int number )
 		fileNumber++;
 	}
 
+	wr_destroyContainer( &container );
+
 	wr_destroyState( w );
 
 	fclose( tfile );
@@ -439,14 +416,9 @@ int runTests( int number )
 }
 
 
-
-
-
 // COMPLETE EXAMPLE MUST WORK
 
 
-
-//#include <Arduino.h>
 #include "wrench.h"
 
 void log2( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )

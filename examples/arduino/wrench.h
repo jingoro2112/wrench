@@ -222,6 +222,15 @@ void wr_makeInt( WRValue* val, int i );
 void wr_makeFloat( WRValue* val, float f );
 void wr_makeCharArray( WRValue* val, const unsigned char* data, const int len );
 
+void wr_makeContainer( WRValue* val );
+void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value );
+void wr_addIntToContainer( WRValue* container, const char* name, int32_t value );
+void wr_addFloatToContainer( WRValue* container, const char* name, float value );
+void wr_addStringToContainer( WRValue* container, const char* name, const char* string );
+
+
+void wr_destroyContainer( WRValue* val );
+
 /***************************************************************/
 /***************************************************************/
 //                          Errors
@@ -309,8 +318,8 @@ enum WRValueType
 //------------------------------------------------------------------------------
 enum WRExType
 {
-	WR_EX_NONE       = 0x00,
-
+	WR_EX_NONE       = 0x00,  // 0000
+	WR_EX_RAW_ARRAY  = 0x20,  // 0010
 	WR_EX_ITERATOR	 = 0x60,  // 0110
 	
 	WR_EX_REFARRAY   = 0x80,  // 1000
@@ -318,6 +327,7 @@ enum WRExType
 	WR_EX_STRUCT     = 0xC0,  // 1100
 	WR_EX_HASH_TABLE = 0xE0,  // 1110
 };
+#define IS_EXARRAY_TYPE(P) ((P)&0x80)
 
 //------------------------------------------------------------------------------
 class WRGCObject;
@@ -366,6 +376,7 @@ struct WRValue
 		uint32_t ui;
 		float f;
 		const void* p;
+		char* c;
 		WRValue* r;
 		WRGCObject* va;
 		WR_C_CALLBACK ccb;

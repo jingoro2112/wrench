@@ -41,24 +41,8 @@ struct WRFunction
 	};
 };
 
-/*
-//------------------------------------------------------------------------------
-struct WRCFunctionCallback
-{
-	union
-	{
-		WR_C_CALLBACK function;
-		WR_LIB_CALLBACK lib;
-		WRFunction* scriptFunc;
-	};
-	void* usr;
-};
-*/
-
 //------------------------------------------------------------------------------
 class WRGCValueArray;
-
-#define IS_SVA_VALUE_TYPE(V) ((V)->m_type & 0x1)
 
 //------------------------------------------------------------------------------
 struct WRContext
@@ -175,9 +159,9 @@ extern WRUnaryFunc wr_preinc[4];
 extern WRUnaryFunc wr_predec[4];
 extern WRUnaryFunc wr_toInt[4];
 extern WRUnaryFunc wr_toFloat[4];
-extern WRUnaryFunc wr_bitwiseNot[4];
 
-
+typedef uint32_t (*WRUint32Call)( WRValue* value );
+extern WRUint32Call wr_bitwiseNot[4];
 
 typedef bool (*WRReturnSingleFunc)( WRValue* value );
 

@@ -96,8 +96,11 @@ void WRContext::mark( WRValue* s )
 	{
 		return;
 	}
-	
+
+	assert( s->xtype != WR_EX_RAW_ARRAY );
+
 	WRGCObject* sva = s->va;
+
 	
 	if ( IS_SVA_VALUE_TYPE(sva) )
 	{
@@ -319,12 +322,6 @@ char* WRValue::asString( char* string, size_t len ) const
 	{
 		switch( xtype )
 		{
-			case WR_EX_STRUCT:
-			{
-				strncpy( string, "struct", len );
-				return string;
-			}
-			
 			case WR_EX_ARRAY:
 			{
 				unsigned int s = 0;
@@ -357,9 +354,11 @@ char* WRValue::asString( char* string, size_t len ) const
 				}
 			}
 
+			case WR_EX_RAW_ARRAY:
+			case WR_EX_STRUCT:
 			case WR_EX_NONE:
 			{
-				strncpy( string, "None", len );
+				string[0] = 0;
 				break;
 			}
 		}
@@ -380,7 +379,10 @@ char* WRValue::asString( char* string, size_t len ) const
 				break;
 			}
 
-			case WR_REF: { return r->asString( string, len ); }
+			case WR_REF:
+			{
+				return r->asString( string, len );
+			}
 		}
 	}
 	
@@ -862,12 +864,14 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		WRVoidFunc* voidFunc;
 		WRReturnFunc* returnFunc;
 		WRTargetFunc* targetFunc;
-
-		WRFuncIntCall intCall;
-		WRCompareFuncIntCall boolIntCall;
 	};
 
 #ifdef WRENCH_COMPACT
+	union
+	{
+		WRFuncIntCall intCall;
+		WRCompareFuncIntCall boolIntCall;
+	};
 	union
 	{
 		WRFuncFloatCall floatCall;
@@ -1353,7 +1357,8 @@ indexHash:
 			CASE(BitwiseNOT):
 			{
 				register0 = stackTop - 1;
-				wr_bitwiseNot[ register0->type ]( register0 );
+				register0->ui = wr_bitwiseNot[ register0->type ]( register0 );
+				register0->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
 
@@ -1641,11 +1646,11 @@ NextIterator:
 
 			CASE(SwitchLinear):
 			{
-				hashLocInt = (--stackTop)->getHash(); // we are lucky, the "hashes" were all trivial low numbers
-				if ( hashLocInt < (int32_t)(*pc++) ) // doesn't mean you switched() on one though ;) check against default top
+				hashLocInt = (--stackTop)->getHash(); // the "hashes" were all 0<=h<256
+				if ( hashLocInt < *pc++ ) // doesn't mean you switched() on one though ;) check against default top
 				{
-					hashLoc = pc + (hashLocInt<<1) + 2; // skip past default vector table
-					pc += READ_16_FROM_PC(hashLoc);
+					hashLoc = pc + (hashLocInt<<1) + 2; // jump to vector
+					pc += READ_16_FROM_PC(hashLoc); // and read it
 				}
 				else
 				{
@@ -1665,11 +1670,14 @@ NextIterator:
 			{
 				intCall = modI;
 targetFuncOpSkipLoad:
+				register2 = stackTop++;
+				floatCall = blankF;
+targetFuncOpSkipLoadAndReg2:
 				wr_funcBinary[(register1->type<<2)|register0->type]( register1,
 																	 register0,
-																	 stackTop++,
+																	 register2,
 																	 intCall,
-																	 blankF );
+																	 floatCall );
 				CONTINUE;
 			}
 			
@@ -1689,12 +1697,8 @@ targetFuncOpSkipLoad:
 targetFuncOp:
 				register1 = --stackTop;
 				register0 = stackTop - 1;
-				wr_funcBinary[(register1->type<<2)|register0->type]( register1,
-																	 register0,
-																	 register0,
-																	 intCall,
-																	 floatCall );
-				CONTINUE;
+				register2 = register0;
+				goto targetFuncOpSkipLoadAndReg2;
 			}
 			
 			
@@ -1792,22 +1796,23 @@ targetFuncStoreLocalOp:
 			{
 				register0 = stackTop - 1;
 compactPreIncrement:
+				intCall = addI;
+				floatCall = addF;
+
+compactIncrementWork:
 				stackTop->i = 1;
 				stackTop->p2 = INIT_AS_INT;
 				register1 = stackTop;
-				wr_FuncAssign[(register0->type<<2)|register1->type]( register0, register1, addI, addF );
-				CONTINUE;
+				goto binaryTableOpAndPopCall;
 			}
 
 			CASE(PreDecrement):
 			{
 				register0 = stackTop - 1;
 compactPreDecrement:
-				stackTop->i = 1;
-				stackTop->p2 = INIT_AS_INT;
-				register1 = stackTop;
-				wr_FuncAssign[(register0->type<<2)|register1->type]( register0, register1, subtractionI, subtractionF );
-				CONTINUE;
+				intCall = subtractionI;
+				floatCall = subtractionF;
+				goto compactIncrementWork;
 			}
 			CASE(PreIncrementAndPop):
 			{
@@ -2971,14 +2976,66 @@ void wr_makeFloat( WRValue* val, float f )
 	val->f = f;
 }
 
-
-/*
 //------------------------------------------------------------------------------
-void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned char* data, const int len )
+void wr_makeContainer( WRValue* val )
 {
-	WRValue* val = userData->u->addValue( name );
-	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRGCObject( len, SV_CHAR, data );
+	val->p2 = INIT_AS_HASH_TABLE;
+	val->va = new WRGCObject( 0, SV_HASH_TABLE );
 }
-*/
+
+//------------------------------------------------------------------------------
+void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value )
+{
+	if ( container->xtype != WR_EX_HASH_TABLE )
+	{
+		return;
+	}
+
+	uint32_t hash = wr_hashStr( name );
+
+	WRValue *entry = (WRValue *)container->va->get( hash );
+
+	*entry++ = *value;
+	entry->p2 = INIT_AS_INT;
+	entry->ui = hash;
+}
+
+//------------------------------------------------------------------------------
+void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value )
+{
+	WRValue v;
+	v.p2 = INIT_AS_INT;
+	v.i = value;
+	wr_addValueToContainer( container, name, &v );
+}
+
+//------------------------------------------------------------------------------
+void wr_addFloatToContainer( WRValue* container, const char* name, const float value )
+{
+	WRValue v;
+	v.p2 = INIT_AS_FLOAT;
+	v.f = value;
+	wr_addValueToContainer( container, name, &v );
+}
+
+//------------------------------------------------------------------------------
+void wr_addStringToContainer( WRValue* container, const char* name, char* string )
+{
+	WRValue v;
+	v.p2 = INIT_AS_RAW_ARRAY;
+	v.c = string;
+	wr_addValueToContainer( container, name, &v );
+}
+
+//------------------------------------------------------------------------------
+void wr_destroyContainer( WRValue* val )
+{
+	if ( val->xtype != WR_EX_HASH_TABLE )
+	{
+		return;
+	}
+
+	delete val->va;
+	val->init();
+}
 

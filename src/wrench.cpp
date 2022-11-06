@@ -373,16 +373,19 @@ private:
 //------------------------------------------------------------------------------
 enum WRGCObjectType
 {
-	SV_VALUE = 0x01,
-	SV_CHAR = 0x02,
+	SV_VALUE = 0x01,           // 0001
+	SV_CHAR = 0x02,            // 0010
 
-	SV_VOID_HASH_TABLE = 0x04,
-	
-	SV_HASH_TABLE = 0x03,
+	SV_VOID_HASH_TABLE = 0x04, // 0100
+
+	SV_HASH_TABLE = 0x03,      // 0011
 };
+
+#define IS_SVA_VALUE_TYPE(V) ((V)->m_type & 0x1)
 
 #define INIT_AS_ARRAY      (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
 #define INIT_AS_USR        (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
+#define INIT_AS_RAW_ARRAY  (((uint32_t)WR_EX) | ((uint32_t)WR_EX_RAW_ARRAY<<24))
 #define INIT_AS_REFARRAY   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_REFARRAY<<24))
 #define INIT_AS_STRUCT     (((uint32_t)WR_EX) | ((uint32_t)WR_EX_STRUCT<<24))
 #define INIT_AS_HASH_TABLE (((uint32_t)WR_EX) | ((uint32_t)WR_EX_HASH_TABLE<<24))
@@ -391,8 +394,6 @@ enum WRGCObjectType
 #define INIT_AS_REF      WR_REF
 #define INIT_AS_INT      WR_INT
 #define INIT_AS_FLOAT    WR_FLOAT
-
-#define IS_EXARRAY_TYPE(P) ((P)&0x80)
 
 #define ARRAY_ELEMENT_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define ARRAY_ELEMENT_TO_P2(P,E) { (P)&=0xE00000FF; (P)|=(E<<8); }
@@ -769,24 +770,8 @@ struct WRFunction
 	};
 };
 
-/*
-//------------------------------------------------------------------------------
-struct WRCFunctionCallback
-{
-	union
-	{
-		WR_C_CALLBACK function;
-		WR_LIB_CALLBACK lib;
-		WRFunction* scriptFunc;
-	};
-	void* usr;
-};
-*/
-
 //------------------------------------------------------------------------------
 class WRGCValueArray;
-
-#define IS_SVA_VALUE_TYPE(V) ((V)->m_type & 0x1)
 
 //------------------------------------------------------------------------------
 struct WRContext
@@ -903,9 +888,9 @@ extern WRUnaryFunc wr_preinc[4];
 extern WRUnaryFunc wr_predec[4];
 extern WRUnaryFunc wr_toInt[4];
 extern WRUnaryFunc wr_toFloat[4];
-extern WRUnaryFunc wr_bitwiseNot[4];
 
-
+typedef uint32_t (*WRUint32Call)( WRValue* value );
+extern WRUint32Call wr_bitwiseNot[4];
 
 typedef bool (*WRReturnSingleFunc)( WRValue* value );
 
@@ -8289,8 +8274,11 @@ void WRContext::mark( WRValue* s )
 	{
 		return;
 	}
-	
+
+	assert( s->xtype != WR_EX_RAW_ARRAY );
+
 	WRGCObject* sva = s->va;
+
 	
 	if ( IS_SVA_VALUE_TYPE(sva) )
 	{
@@ -8512,12 +8500,6 @@ char* WRValue::asString( char* string, size_t len ) const
 	{
 		switch( xtype )
 		{
-			case WR_EX_STRUCT:
-			{
-				strncpy( string, "struct", len );
-				return string;
-			}
-			
 			case WR_EX_ARRAY:
 			{
 				unsigned int s = 0;
@@ -8550,9 +8532,11 @@ char* WRValue::asString( char* string, size_t len ) const
 				}
 			}
 
+			case WR_EX_RAW_ARRAY:
+			case WR_EX_STRUCT:
 			case WR_EX_NONE:
 			{
-				strncpy( string, "None", len );
+				string[0] = 0;
 				break;
 			}
 		}
@@ -8573,7 +8557,10 @@ char* WRValue::asString( char* string, size_t len ) const
 				break;
 			}
 
-			case WR_REF: { return r->asString( string, len ); }
+			case WR_REF:
+			{
+				return r->asString( string, len );
+			}
 		}
 	}
 	
@@ -9055,12 +9042,14 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		WRVoidFunc* voidFunc;
 		WRReturnFunc* returnFunc;
 		WRTargetFunc* targetFunc;
-
-		WRFuncIntCall intCall;
-		WRCompareFuncIntCall boolIntCall;
 	};
 
 #ifdef WRENCH_COMPACT
+	union
+	{
+		WRFuncIntCall intCall;
+		WRCompareFuncIntCall boolIntCall;
+	};
 	union
 	{
 		WRFuncFloatCall floatCall;
@@ -9546,7 +9535,8 @@ indexHash:
 			CASE(BitwiseNOT):
 			{
 				register0 = stackTop - 1;
-				wr_bitwiseNot[ register0->type ]( register0 );
+				register0->ui = wr_bitwiseNot[ register0->type ]( register0 );
+				register0->p2 = INIT_AS_INT;
 				CONTINUE;
 			}
 
@@ -9834,11 +9824,11 @@ NextIterator:
 
 			CASE(SwitchLinear):
 			{
-				hashLocInt = (--stackTop)->getHash(); // we are lucky, the "hashes" were all trivial low numbers
-				if ( hashLocInt < (int32_t)(*pc++) ) // doesn't mean you switched() on one though ;) check against default top
+				hashLocInt = (--stackTop)->getHash(); // the "hashes" were all 0<=h<256
+				if ( hashLocInt < *pc++ ) // doesn't mean you switched() on one though ;) check against default top
 				{
-					hashLoc = pc + (hashLocInt<<1) + 2; // skip past default vector table
-					pc += READ_16_FROM_PC(hashLoc);
+					hashLoc = pc + (hashLocInt<<1) + 2; // jump to vector
+					pc += READ_16_FROM_PC(hashLoc); // and read it
 				}
 				else
 				{
@@ -9858,11 +9848,14 @@ NextIterator:
 			{
 				intCall = modI;
 targetFuncOpSkipLoad:
+				register2 = stackTop++;
+				floatCall = blankF;
+targetFuncOpSkipLoadAndReg2:
 				wr_funcBinary[(register1->type<<2)|register0->type]( register1,
 																	 register0,
-																	 stackTop++,
+																	 register2,
 																	 intCall,
-																	 blankF );
+																	 floatCall );
 				CONTINUE;
 			}
 			
@@ -9882,12 +9875,8 @@ targetFuncOpSkipLoad:
 targetFuncOp:
 				register1 = --stackTop;
 				register0 = stackTop - 1;
-				wr_funcBinary[(register1->type<<2)|register0->type]( register1,
-																	 register0,
-																	 register0,
-																	 intCall,
-																	 floatCall );
-				CONTINUE;
+				register2 = register0;
+				goto targetFuncOpSkipLoadAndReg2;
 			}
 			
 			
@@ -9985,22 +9974,23 @@ targetFuncStoreLocalOp:
 			{
 				register0 = stackTop - 1;
 compactPreIncrement:
+				intCall = addI;
+				floatCall = addF;
+
+compactIncrementWork:
 				stackTop->i = 1;
 				stackTop->p2 = INIT_AS_INT;
 				register1 = stackTop;
-				wr_FuncAssign[(register0->type<<2)|register1->type]( register0, register1, addI, addF );
-				CONTINUE;
+				goto binaryTableOpAndPopCall;
 			}
 
 			CASE(PreDecrement):
 			{
 				register0 = stackTop - 1;
 compactPreDecrement:
-				stackTop->i = 1;
-				stackTop->p2 = INIT_AS_INT;
-				register1 = stackTop;
-				wr_FuncAssign[(register0->type<<2)|register1->type]( register0, register1, subtractionI, subtractionF );
-				CONTINUE;
+				intCall = subtractionI;
+				floatCall = subtractionF;
+				goto compactIncrementWork;
 			}
 			CASE(PreIncrementAndPop):
 			{
@@ -11164,16 +11154,68 @@ void wr_makeFloat( WRValue* val, float f )
 	val->f = f;
 }
 
-
-/*
 //------------------------------------------------------------------------------
-void wr_addUserCharArray( WRValue* userData, const char* name, const unsigned char* data, const int len )
+void wr_makeContainer( WRValue* val )
 {
-	WRValue* val = userData->u->addValue( name );
-	val->p2 = INIT_AS_ARRAY;
-	val->va = new WRGCObject( len, SV_CHAR, data );
+	val->p2 = INIT_AS_HASH_TABLE;
+	val->va = new WRGCObject( 0, SV_HASH_TABLE );
 }
-*/
+
+//------------------------------------------------------------------------------
+void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value )
+{
+	if ( container->xtype != WR_EX_HASH_TABLE )
+	{
+		return;
+	}
+
+	uint32_t hash = wr_hashStr( name );
+
+	WRValue *entry = (WRValue *)container->va->get( hash );
+
+	*entry++ = *value;
+	entry->p2 = INIT_AS_INT;
+	entry->ui = hash;
+}
+
+//------------------------------------------------------------------------------
+void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value )
+{
+	WRValue v;
+	v.p2 = INIT_AS_INT;
+	v.i = value;
+	wr_addValueToContainer( container, name, &v );
+}
+
+//------------------------------------------------------------------------------
+void wr_addFloatToContainer( WRValue* container, const char* name, const float value )
+{
+	WRValue v;
+	v.p2 = INIT_AS_FLOAT;
+	v.f = value;
+	wr_addValueToContainer( container, name, &v );
+}
+
+//------------------------------------------------------------------------------
+void wr_addStringToContainer( WRValue* container, const char* name, char* string )
+{
+	WRValue v;
+	v.p2 = INIT_AS_RAW_ARRAY;
+	v.c = string;
+	wr_addValueToContainer( container, name, &v );
+}
+
+//------------------------------------------------------------------------------
+void wr_destroyContainer( WRValue* val )
+{
+	if ( val->xtype != WR_EX_HASH_TABLE )
+	{
+		return;
+	}
+
+	delete val->va;
+	val->init();
+}
 
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
@@ -11212,7 +11254,7 @@ void* WRValue::array( unsigned int* len, char* arrayType ) const
 		return 0;
 	}
 
-	if (arrayType )
+	if ( arrayType )
 	{
 		*arrayType = va->m_type;
 	}
@@ -11288,8 +11330,13 @@ WRState* wr_newState( int stackSize )
 void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 {
 	unsigned int s = index == -1 ? ARRAY_ELEMENT_FROM_P2(array->p2) : index;
-	
-	if( array->r->va->m_type == SV_VALUE )
+
+	if ( array->r->xtype == WR_EX_RAW_ARRAY )
+	{
+		value->i = array->r->c[s];
+		value->p2 = INIT_AS_INT;
+	}
+	else if( array->r->va->m_type == SV_VALUE )
 	{
 		if ( s >= array->r->va->m_size )
 		{
@@ -11332,6 +11379,7 @@ uint32_t WRValue::getHashEx() const
 	{
 		return wr_hash( va->m_Cdata, va->m_size );
 	}
+
 	return 0;
 }
 
@@ -11345,7 +11393,11 @@ void wr_intValueToArray( const WRValue* array, int32_t intVal )
 	
 	unsigned int s = ARRAY_ELEMENT_FROM_P2(array->p2);
 
-	if ( array->r->va->m_type == SV_VALUE )
+	if ( array->r->xtype == WR_EX_RAW_ARRAY )
+	{
+		array->r->c[s] = (char)intVal;
+	}
+	else if ( array->r->va->m_type == SV_VALUE )
 	{
 		if ( s >= array->r->va->m_size )
 		{
@@ -11513,31 +11565,6 @@ WRVoidFunc wr_assign[16] =
 
 extern bool CompareEQI( int a, int b );
 extern bool CompareEQF( float a, float b );
-
-static bool wr_CompareArrays( WRGCObject* a, WRGCObject* b )
-{
-	if ( (a->m_size == b->m_size) && (a->m_type == b->m_type) )
-	{
-		if ( a->m_type == SV_VALUE )
-		{
-			for( unsigned int i=0; i<a->m_size; ++i )
-			{
-				if ( !wr_Compare[(a->m_Vdata[i].type<<2)|b->m_Vdata[i].type](a->m_Vdata + i, b->m_Vdata + i, CompareEQI, CompareEQF ) )
-				{
-					return false;
-				}
-			}
-
-			return true;
-		}
-		else if ( a->m_type == SV_CHAR )
-		{
-			return !memcmp( a->m_data, b->m_data, a->m_size );
-		}
-	}
-
-	return false;
-}
 
 static void FuncAssign_R_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall ) 
 {
@@ -11768,10 +11795,7 @@ static bool Compare_E_E( WRValue* to, WRValue* from, WRCompareFuncIntCall intCal
 		wr_arrayToValue( from, &element2 );
 		return wr_Compare[(element1.type<<2)|element2.type](&element1, &element2, intCall, floatCall);
 	}
-	return intCall(0,0) // is this an "==" call?
-			&& to->xtype == WR_EX_ARRAY
-			&& from->xtype == WR_EX_ARRAY
-			&& wr_CompareArrays( to->va, from->va );
+	return intCall(0,0) && to->getHash() == from->getHash();
 }
 static bool Compare_R_E( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall )
 {
@@ -11781,10 +11805,7 @@ static bool Compare_R_E( WRValue* to, WRValue* from, WRCompareFuncIntCall intCal
 		wr_arrayToValue( from, &element );
 		return wr_Compare[(to->type<<2)|element.type](to, &element, intCall, floatCall);
 	}
-	return intCall(0,0) // is this an "==" call?
-			&& to->r->xtype == WR_EX_ARRAY
-			&& from->xtype == WR_EX_ARRAY
-			&& wr_CompareArrays( to->r->va, from->va );
+	return intCall(0,0) && to->r->getHash() == from->getHash();
 }
 static bool Compare_E_R( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall )
 {
@@ -11794,10 +11815,7 @@ static bool Compare_E_R( WRValue* to, WRValue* from, WRCompareFuncIntCall intCal
 		wr_arrayToValue( to, &element );
 		return wr_Compare[(element.type<<2)|from->type](&element, from, intCall, floatCall);
 	}
-	return intCall(0,0) // is this an "==" call?
-			&& to->xtype == WR_EX_ARRAY
-			&& from->r->xtype == WR_EX_ARRAY
-			&& wr_CompareArrays( to->va, from->r->va );
+	return intCall(0,0) && to->getHash() == from->r->getHash();
 }
 static bool Compare_E_I( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall )
 {
@@ -11859,31 +11877,6 @@ WRBoolCallbackReturnFunc wr_Compare[16] =
 #else
 
 static void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
-
-static bool wr_CompareArrays( WRGCObject* a, WRGCObject* b )
-{
-	if ( (a->m_size == b->m_size) && (a->m_type == b->m_type) )
-	{
-		if ( a->m_type == SV_VALUE )
-		{
-			for( unsigned int i=0; i<a->m_size; ++i )
-			{
-				if ( !wr_CompareEQ[(a->m_Vdata[i].type<<2)|b->m_Vdata[i].type](a->m_Vdata + i, b->m_Vdata + i) )
-				{
-					return false;
-				}
-			}
-
-			return true;
-		}
-		else if ( a->m_type == SV_CHAR )
-		{
-			return !memcmp(a->m_data, b->m_data, a->m_size); 
-		}
-	}
-
-	return false;
-}
 
 #define X_INT_ASSIGN( NAME, OPERATION ) \
 static void NAME##Assign_E_R( WRValue* to, WRValue* from )\
@@ -12233,7 +12226,7 @@ static bool NAME##_E_E( WRValue* to, WRValue* from )\
 		wr_arrayToValue( from, &element2 );\
 		return NAME[(element1.type<<2)|element2.type](&element1, &element2);\
 	}\
-	return (0 OPERATION 0) && to->xtype == WR_EX_ARRAY && from->xtype == WR_EX_ARRAY && wr_CompareArrays( to->va, from->va );\
+	return (0 OPERATION 0) && to->getHash() == from->getHash(); \
 }\
 static bool NAME##_R_E( WRValue* to, WRValue* from )\
 {\
@@ -12243,7 +12236,7 @@ static bool NAME##_R_E( WRValue* to, WRValue* from )\
 		wr_arrayToValue( from, &element );\
 		return NAME[(to->type<<2)|element.type](to, &element);\
 	}\
-	return (0 OPERATION 0) && to->r->xtype == WR_EX_ARRAY && from->xtype == WR_EX_ARRAY && wr_CompareArrays( to->r->va, from->va );\
+	return (0 OPERATION 0) && to->r->getHash() == from->getHash(); \
 }\
 static bool NAME##_E_R( WRValue* to, WRValue* from )\
 {\
@@ -12253,7 +12246,7 @@ static bool NAME##_E_R( WRValue* to, WRValue* from )\
 		wr_arrayToValue( to, &element );\
 		return NAME[(element.type<<2)|from->type](&element, from);\
 	}\
-	return (0 OPERATION 0) && to->xtype == WR_EX_ARRAY && from->r->xtype == WR_EX_ARRAY && wr_CompareArrays( to->va, from->r->va );\
+	return (0 OPERATION 0) && to->getHash() == from->r->getHash(); \
 }\
 static bool NAME##_E_I( WRValue* to, WRValue* from )\
 {\
@@ -12360,6 +12353,21 @@ X_UNARY_PRE( wr_predec, -- );
 
 
 
+//******************************************************************************
+//******************************************************************************
+//******************************************************************************
+//******************************************************************************
+//******************************************************************************
+
+//                    COMPACT AND NON_COMPACT below here
+
+//******************************************************************************
+//******************************************************************************
+//******************************************************************************
+//******************************************************************************
+//******************************************************************************
+
+
 //------------------------------------------------------------------------------
 #define X_UNARY_POST( NAME, OPERATION ) \
 static void NAME##_E( WRValue* value, WRValue* stack )\
@@ -12414,14 +12422,16 @@ static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 }
 static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
-	if ( IS_REFARRAY(value->xtype) )
+	if ( value->xtype == WR_EX_HASH_TABLE )
 	{
-		value = value->r;
-	}
-	else if ( value->xtype == WR_EX_HASH_TABLE )
-	{
-		target->r = (WRValue*)value->va->get( index->getHash() );
+		target->r = (WRValue*)value->va->get( index->ui );
 		target->p2 = INIT_AS_REF;
+		return;
+	}
+	else if ( value->xtype == WR_EX_RAW_ARRAY )
+	{
+		target->p2 = INIT_AS_INT;
+		target->i = value->c[index->ui];
 		return;
 	}
 	else if ( !(value->xtype == WR_EX_ARRAY) )
@@ -12443,6 +12453,7 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 
 		growValueArray( value, index->ui + 1 );
 	}
+	
 	target->r = value;
 	target->p2 = INIT_AS_REFARRAY;
 	ARRAY_ELEMENT_TO_P2( target->p2, index->ui );
@@ -12472,9 +12483,6 @@ WRStateFunc wr_index[16] =
         doIndex_R_I,     doIndex_R_F,     doIndex_R_R,     doIndex_R_E, 
 	doVoidIndexFunc, doVoidIndexFunc,     doIndex_E_R,     doIndex_E_E,
 };
-
-//------------------------------------------------------------------------------
-static void doSingleVoidBlank( WRValue* value ) {}
 
 //------------------------------------------------------------------------------
 static void doIndexHash_X( WRValue* value, WRValue* target, uint32_t hash ) { target->init(); }
@@ -12586,43 +12594,34 @@ WRUnaryFunc wr_negate[4] =
 	doNegate_I,  doNegate_F,  doNegate_R,  doNegate_E
 };
 
+
+
+
+
+
+
 //------------------------------------------------------------------------------
-static void doBitwiseNot_I( WRValue* value ) { value->i = ~value->i; }
-static void doBitwiseNot_R( WRValue* value ) { wr_bitwiseNot[ value->r->type ]( value->r ); *value = *value->r; }
-static void doBitwiseNot_E( WRValue* value )
+static uint32_t doBitwiseNot_I( WRValue* value ) { return ~value->ui; }
+static uint32_t doBitwiseNot_F( WRValue* value ) { return 0; }
+static uint32_t doBitwiseNot_R( WRValue* value ) { return wr_bitwiseNot[ value->r->type ]( value->r ); }
+static uint32_t doBitwiseNot_E( WRValue* value )
 {
 	if ( IS_REFARRAY(value->xtype) && IS_EXARRAY_TYPE(value->r->xtype))
 	{
-		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
-
-		if ( value->r->va->m_type == SV_VALUE )
-		{
-			if ( s >= value->r->va->m_size )
-			{
-				growValueArray( value->r, s + 1 );
-			}
-
-			WRValue* val = (WRValue *)value->r->va->m_data + s;
-			if ( val->type == WR_INT )
-			{
-				val->i = ~val->i;
-				*value = *val;
-			}
-		}
-		else if (value->r->va->m_type == SV_CHAR )
-		{
-			value->p2 = INIT_AS_INT;
-			value->i = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Cdata[s] = ~value->r->va->m_Cdata[s]);
-		}
+		WRValue element;
+		wr_arrayToValue( value, &element );
+		return wr_bitwiseNot[ element.type ]( &element );
 	}
+	return 0;
 }
-
-WRUnaryFunc wr_bitwiseNot[4] = 
+WRUint32Call wr_bitwiseNot[4] = 
 {
-	doBitwiseNot_I,  doSingleVoidBlank, doBitwiseNot_R, doBitwiseNot_E
+	doBitwiseNot_I,  doBitwiseNot_F,  doBitwiseNot_R,  doBitwiseNot_E
 };
 
 
+
+//------------------------------------------------------------------------------
 void pushIterator_X( WRValue* on, WRValue* to ) { on->init(); }
 void pushIterator_R( WRValue* on, WRValue* to ) { wr_pushIterator[on->r->type]( on->r, to ); }
 void pushIterator_E( WRValue* on, WRValue* to )
