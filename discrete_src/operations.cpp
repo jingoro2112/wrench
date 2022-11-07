@@ -138,6 +138,10 @@ void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 		value->i = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Cdata[s];
 		value->p2 = INIT_AS_INT;
 	}
+	else
+	{
+		value->init();
+	}
 }
 
 //------------------------------------------------------------------------------

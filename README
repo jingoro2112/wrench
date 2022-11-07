@@ -2,7 +2,7 @@
 
 A full-featured compiler+interpreter that uses a bare minimum of ram and program space.
 
-How little? The wrench interpreter compiles to ~34k on an Arduino, and
+How little? The wrench interpreter compiles to ~30k on an Arduino, and
 uses less than 1k of ram to operate.
 
 Highlights:

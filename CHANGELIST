@@ -3,6 +3,8 @@
 - fixed some compiler warnings from newer compilers
 - fixed major bug in not preserving return values correctly
 - removed "create globals" instruction in favor of always-init to save space
+- allocate context and globals all in one go and removing constructor/destructor
+  this should save a teeny bit of overhead and code space
 
 1.7.0 -------------------------------------------------------------------------
 - removed WRENCH_JUMPTABLE_INTERPRETER from top-level, really not a user-visible

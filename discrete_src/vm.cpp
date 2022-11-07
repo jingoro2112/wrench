@@ -833,7 +833,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	union
 	{
 		unsigned char findex;
-		WRValue* register0 = 0;
+		WRValue* register0;
 		const unsigned char *hashLoc;
 		uint32_t hashLocInt;
 	};

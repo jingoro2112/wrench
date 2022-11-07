@@ -9030,7 +9030,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	union
 	{
 		unsigned char findex;
-		WRValue* register0 = 0;
+		WRValue* register0;
 		const unsigned char *hashLoc;
 		uint32_t hashLocInt;
 	};
@@ -11360,6 +11360,10 @@ void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 	{
 		value->i = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Cdata[s];
 		value->p2 = INIT_AS_INT;
+	}
+	else
+	{
+		value->init();
 	}
 }
 
