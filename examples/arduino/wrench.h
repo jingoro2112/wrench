@@ -35,7 +35,7 @@ embedded systems it is strongly reccommeded (nay, required) that
 only bytecode be executed. This flag allows the source code to be
 explicitly removed.
 */
-#define WRENCH_WITHOUT_COMPILER
+//#define WRENCH_WITHOUT_COMPILER
 /***********************************************************************/
 
 /***********************************************************************
@@ -49,7 +49,7 @@ interpreter in favor of a giant switch(). This saves ~6k at the cost
 of a chunk of speed so only use it if you need to.
 */
 //#define WRENCH_COMPACT           // saves a lot, costs some speed
-#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
+//#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 /***********************************************************************/
 
 /************************************************************************
@@ -67,7 +67,7 @@ This will consume 8 bytes per stack entry on a 32-bit system, 16 on 64.
 /************************************************************************
 set this to try compiling sys/stat.h for fstat and file operations.
 */
-//#define WRENCH_STD_FILE
+#define WRENCH_STD_FILE
 /***********************************************************************/
 
 #include <stdint.h>

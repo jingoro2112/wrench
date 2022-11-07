@@ -315,6 +315,8 @@ enum WROpcode
 
 	O_Switch,
 	O_SwitchLinear,
+
+	O_GlobalStop,
 	
 	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,

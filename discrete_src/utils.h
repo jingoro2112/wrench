@@ -197,6 +197,7 @@ const char* wr_asciiDump( const void* d, unsigned int len, WRstr* str =0 );
 #endif // WRENCH_WITHOUT_COMPILER
 
 //------------------------------------------------------------------------------
+// "good values" for hash table progression
 const uint16_t c_primeTable[] =
 {
 	2,

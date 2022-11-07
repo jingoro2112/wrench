@@ -85,7 +85,7 @@ int WRValue::arrayValueAsInt() const
 	{
 		if ( s >= r->va->m_size )
 		{
-			if ( r->va->m_preAllocated )
+			if ( r->va->m_skipGC )
 			{
 				return 0;
 			}
@@ -123,7 +123,7 @@ void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 	{
 		if ( s >= array->r->va->m_size )
 		{
-			if ( array->r->va->m_preAllocated )
+			if ( array->r->va->m_skipGC )
 			{
 				value->init();
 				return;
@@ -169,11 +169,6 @@ uint32_t WRValue::getHashEx() const
 //------------------------------------------------------------------------------
 void wr_intValueToArray( const WRValue* array, int32_t intVal )
 {
-	if ( !IS_EXARRAY_TYPE(array->r->xtype) )
-	{
-		return;
-	}
-	
 	unsigned int s = ARRAY_ELEMENT_FROM_P2(array->p2);
 
 	if ( array->r->xtype == WR_EX_RAW_ARRAY )
@@ -184,7 +179,7 @@ void wr_intValueToArray( const WRValue* array, int32_t intVal )
 	{
 		if ( s >= array->r->va->m_size )
 		{
-			if ( array->r->va->m_preAllocated )
+			if ( array->r->va->m_skipGC )
 			{
 				return;
 			}
@@ -308,7 +303,7 @@ static void doAssign_E_E( WRValue* to, WRValue* from )
 			
 			if ( index > to->r->va->m_size )
 			{
-				if ( to->r->va->m_preAllocated )
+				if ( to->r->va->m_skipGC )
 				{
 					return;
 				}
@@ -351,7 +346,7 @@ extern bool CompareEQF( float a, float b );
 
 static void FuncAssign_R_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall ) 
 {
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype) )
+	if ( IS_REFARRAY(from->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( from, &element );
@@ -361,7 +356,7 @@ static void FuncAssign_R_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, W
 }
 static void FuncAssign_E_I( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))
+	if ( IS_REFARRAY(to->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( to, &element );
@@ -374,7 +369,7 @@ static void FuncAssign_E_I( WRValue* to, WRValue* from, WRFuncIntCall intCall, W
 }
 static void FuncAssign_E_F( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))
+	if ( IS_REFARRAY(to->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( to, &element );
@@ -387,7 +382,7 @@ static void FuncAssign_E_F( WRValue* to, WRValue* from, WRFuncIntCall intCall, W
 }
 static void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall ) 
 {
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))
+	if ( IS_REFARRAY(from->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( from, &element );
@@ -398,7 +393,7 @@ static void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, W
 }
 static void FuncAssign_I_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))
+	if ( IS_REFARRAY(from->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( from, &element );
@@ -408,7 +403,7 @@ static void FuncAssign_I_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, W
 }
 static void FuncAssign_F_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype) )
+	if ( IS_REFARRAY(from->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( from, &element );
@@ -418,7 +413,7 @@ static void FuncAssign_F_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, W
 }
 static void FuncAssign_E_R( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))
+	if ( IS_REFARRAY(to->xtype) )
 	{
 		WRValue temp = *from->r;
 		wr_FuncAssign[(WR_EX<<2)|temp.type]( to, &temp, intCall, floatCall );
@@ -468,7 +463,7 @@ WRFuncAssignFunc wr_FuncAssign[16] =
 //------------------------------------------------------------------------------
 static void FuncBinary_E_R( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))
+	if ( IS_REFARRAY(to->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( to, &element );
@@ -477,7 +472,7 @@ static void FuncBinary_E_R( WRValue* to, WRValue* from, WRValue* target, WRFuncI
 }
 static void FuncBinary_R_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))
+	if ( IS_REFARRAY(from->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( from, &element );
@@ -486,7 +481,7 @@ static void FuncBinary_R_E( WRValue* to, WRValue* from, WRValue* target, WRFuncI
 }
 static void FuncBinary_E_I( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))
+	if ( IS_REFARRAY(to->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( to, &element );
@@ -495,7 +490,7 @@ static void FuncBinary_E_I( WRValue* to, WRValue* from, WRValue* target, WRFuncI
 }
 static void FuncBinary_E_F( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))
+	if ( IS_REFARRAY(to->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( to, &element );
@@ -504,7 +499,7 @@ static void FuncBinary_E_F( WRValue* to, WRValue* from, WRValue* target, WRFuncI
 }
 static void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	if ( IS_REFARRAY(to->xtype) && IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype) && IS_EXARRAY_TYPE(to->r->xtype))
+	if ( IS_REFARRAY(to->xtype) && IS_REFARRAY(from->xtype) )
 	{
 		WRValue element1;
 		wr_arrayToValue( to, &element1 );
@@ -515,7 +510,7 @@ static void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncI
 }
 static void FuncBinary_I_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))
+	if ( IS_REFARRAY(from->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( from, &element );
@@ -524,7 +519,7 @@ static void FuncBinary_I_E( WRValue* to, WRValue* from, WRValue* target, WRFuncI
 }
 static void FuncBinary_F_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))
+	if ( IS_REFARRAY(from->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( from, &element );
@@ -566,11 +561,9 @@ WRTargetCallbackFunc wr_funcBinary[16] =
 	FuncBinary_E_I,  FuncBinary_E_F,  FuncBinary_E_R,  FuncBinary_E_E,
 };
 
-
-
 static bool Compare_E_E( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(to->xtype) && IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(to->r->xtype) && IS_EXARRAY_TYPE(from->r->xtype))
+	if ( IS_REFARRAY(to->xtype) )
 	{
 		WRValue element1;
 		wr_arrayToValue( to, &element1 );
@@ -582,7 +575,7 @@ static bool Compare_E_E( WRValue* to, WRValue* from, WRCompareFuncIntCall intCal
 }
 static bool Compare_R_E( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))
+	if ( IS_REFARRAY(from->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( from, &element );
@@ -592,7 +585,7 @@ static bool Compare_R_E( WRValue* to, WRValue* from, WRCompareFuncIntCall intCal
 }
 static bool Compare_E_R( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))
+	if ( IS_REFARRAY(to->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( to, &element );
@@ -602,7 +595,7 @@ static bool Compare_E_R( WRValue* to, WRValue* from, WRCompareFuncIntCall intCal
 }
 static bool Compare_E_I( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))
+	if ( IS_REFARRAY(to->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( to, &element );
@@ -612,7 +605,7 @@ static bool Compare_E_I( WRValue* to, WRValue* from, WRCompareFuncIntCall intCal
 }
 static bool Compare_E_F( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))
+	if ( IS_REFARRAY(to->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( to, &element );
@@ -622,7 +615,7 @@ static bool Compare_E_F( WRValue* to, WRValue* from, WRCompareFuncIntCall intCal
 }
 static bool Compare_I_E( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))
+	if ( IS_REFARRAY(from->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( from, &element );
@@ -632,7 +625,7 @@ static bool Compare_I_E( WRValue* to, WRValue* from, WRCompareFuncIntCall intCal
 }
 static bool Compare_F_E( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))
+	if ( IS_REFARRAY(from->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( from, &element );
@@ -664,7 +657,7 @@ static void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
 #define X_INT_ASSIGN( NAME, OPERATION ) \
 static void NAME##Assign_E_R( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) )\
 	{\
 		WRValue temp = *from->r;\
 		NAME##Assign[(WR_EX<<2)+temp.type]( to, &temp );\
@@ -673,7 +666,7 @@ static void NAME##Assign_E_R( WRValue* to, WRValue* from )\
 }\
 static void NAME##Assign_R_E( WRValue* to, WRValue* from ) \
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -683,7 +676,7 @@ static void NAME##Assign_R_E( WRValue* to, WRValue* from ) \
 }\
 static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -696,7 +689,7 @@ static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 }\
 static void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype) )\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -707,7 +700,7 @@ static void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
 }\
 static void NAME##Assign_I_E( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -739,7 +732,7 @@ X_INT_ASSIGN( wr_LeftShift, << );
 #define X_ASSIGN( NAME, OPERATION ) \
 static void NAME##Assign_R_E( WRValue* to, WRValue* from ) \
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype) )\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -749,7 +742,7 @@ static void NAME##Assign_R_E( WRValue* to, WRValue* from ) \
 }\
 static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -762,7 +755,7 @@ static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 }\
 static void NAME##Assign_E_F( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -775,7 +768,7 @@ static void NAME##Assign_E_F( WRValue* to, WRValue* from )\
 }\
 static void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -786,7 +779,7 @@ static void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
 }\
 static void NAME##Assign_I_E( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -796,7 +789,7 @@ static void NAME##Assign_I_E( WRValue* to, WRValue* from )\
 }\
 static void NAME##Assign_F_E( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype) )\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -806,7 +799,7 @@ static void NAME##Assign_F_E( WRValue* to, WRValue* from )\
 }\
 static void NAME##Assign_E_R( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) )\
 	{\
 		WRValue temp = *from->r;\
 		NAME##Assign[(WR_EX<<2)|temp.type]( to, &temp );\
@@ -840,7 +833,7 @@ X_ASSIGN( wr_Divide, / );
 #define X_BINARY( NAME, OPERATION ) \
 static void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -849,7 +842,7 @@ static void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -858,7 +851,7 @@ static void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -867,7 +860,7 @@ static void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_E_F( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -876,7 +869,7 @@ static void NAME##Binary_E_F( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_E_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) && IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element1;\
 		wr_arrayToValue( to, &element1 );\
@@ -887,7 +880,7 @@ static void NAME##Binary_E_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_I_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -896,7 +889,7 @@ static void NAME##Binary_I_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_F_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -932,7 +925,7 @@ static void doTargetFuncBlank( WRValue* to, WRValue* from, WRValue* target ) {}
 #define X_INT_BINARY( NAME, OPERATION ) \
 static void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -941,7 +934,7 @@ static void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -950,7 +943,7 @@ static void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -959,7 +952,7 @@ static void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_E_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype) && IS_EXARRAY_TYPE(to->r->xtype) )\
+	if ( IS_REFARRAY(to->xtype) && IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element1;\
 		wr_arrayToValue( to, &element1 );\
@@ -970,7 +963,7 @@ static void NAME##Binary_E_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 static void NAME##Binary_I_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -1001,7 +994,7 @@ X_INT_BINARY( wr_XOR, ^ );
 #define X_COMPARE( NAME, OPERATION ) \
 static bool NAME##_E_E( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(to->r->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) && IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element1;\
 		wr_arrayToValue( to, &element1 );\
@@ -1013,7 +1006,7 @@ static bool NAME##_E_E( WRValue* to, WRValue* from )\
 }\
 static bool NAME##_R_E( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -1023,7 +1016,7 @@ static bool NAME##_R_E( WRValue* to, WRValue* from )\
 }\
 static bool NAME##_E_R( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -1033,7 +1026,7 @@ static bool NAME##_E_R( WRValue* to, WRValue* from )\
 }\
 static bool NAME##_E_I( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -1043,7 +1036,7 @@ static bool NAME##_E_I( WRValue* to, WRValue* from )\
 }\
 static bool NAME##_E_F( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))\
+	if ( IS_REFARRAY(to->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( to, &element );\
@@ -1053,7 +1046,7 @@ static bool NAME##_E_F( WRValue* to, WRValue* from )\
 }\
 static bool NAME##_I_E( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -1063,7 +1056,7 @@ static bool NAME##_I_E( WRValue* to, WRValue* from )\
 }\
 static bool NAME##_F_E( WRValue* to, WRValue* from )\
 {\
-	if ( IS_REFARRAY(from->xtype) && IS_EXARRAY_TYPE(from->r->xtype))\
+	if ( IS_REFARRAY(from->xtype) )\
 	{\
 		WRValue element;\
 		wr_arrayToValue( from, &element );\
@@ -1155,7 +1148,7 @@ X_UNARY_PRE( wr_predec, -- );
 #define X_UNARY_POST( NAME, OPERATION ) \
 static void NAME##_E( WRValue* value, WRValue* stack )\
 {\
-	if ( IS_REFARRAY(value->xtype) && IS_EXARRAY_TYPE(value->r->xtype))\
+	if ( IS_REFARRAY(value->xtype) )\
 	{\
 		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);\
 		switch( value->r->va->m_type )\
@@ -1213,9 +1206,7 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 	}
 	else if ( value->xtype == WR_EX_RAW_ARRAY )
 	{
-		target->p2 = INIT_AS_INT;
-		target->i = value->c[index->ui];
-		return;
+		goto skipBoundsCheck;
 	}
 	else if ( !(value->xtype == WR_EX_ARRAY) )
 	{
@@ -1228,7 +1219,7 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 	
 	if ( index->ui >= value->va->m_size )
 	{
-		if ( value->va->m_preAllocated )
+		if ( value->va->m_skipGC )
 		{
 			target->init();
 			return;
@@ -1236,7 +1227,8 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 
 		growValueArray( value, index->ui + 1 );
 	}
-	
+
+skipBoundsCheck:
 	target->r = value;
 	target->p2 = INIT_AS_REFARRAY;
 	ARRAY_ELEMENT_TO_P2( target->p2, index->ui );
@@ -1272,9 +1264,8 @@ static void doIndexHash_X( WRValue* value, WRValue* target, uint32_t hash ) { ta
 static void doIndexHash_R( WRValue* value, WRValue* target, uint32_t hash ) { wr_IndexHash[ value->r->type ]( value->r, target, hash ); }
 static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
 {
-	if (IS_REFARRAY(value->xtype) && IS_EXARRAY_TYPE(value->r->xtype))
+	if (IS_REFARRAY(value->xtype) )\
 	{
-
 		if ( value->r->va->m_type == SV_VALUE )
 		{
 			unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
@@ -1318,7 +1309,7 @@ static bool doLogicalNot_F( WRValue* value ) { return value->f == 0; }
 static bool doLogicalNot_R( WRValue* value ) { return wr_LogicalNot[ value->r->type ]( value->r ); }
 static bool doLogicalNot_E( WRValue* value )
 {
-	if ( IS_REFARRAY(value->xtype) && IS_EXARRAY_TYPE(value->r->xtype))
+	if ( IS_REFARRAY(value->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( value, &element );
@@ -1336,7 +1327,7 @@ WRReturnSingleFunc wr_LogicalNot[4] =
 static void doNegate_I( WRValue* value ) { value->i = -value->i; }
 static void doNegate_E( WRValue* value )
 {
-	if ( IS_REFARRAY(value->xtype) && IS_EXARRAY_TYPE(value->r->xtype))
+	if ( IS_REFARRAY(value->xtype) )
 	{
 		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
 
@@ -1378,18 +1369,13 @@ WRUnaryFunc wr_negate[4] =
 };
 
 
-
-
-
-
-
 //------------------------------------------------------------------------------
 static uint32_t doBitwiseNot_I( WRValue* value ) { return ~value->ui; }
 static uint32_t doBitwiseNot_F( WRValue* value ) { return 0; }
 static uint32_t doBitwiseNot_R( WRValue* value ) { return wr_bitwiseNot[ value->r->type ]( value->r ); }
 static uint32_t doBitwiseNot_E( WRValue* value )
 {
-	if ( IS_REFARRAY(value->xtype) && IS_EXARRAY_TYPE(value->r->xtype))
+	if ( IS_REFARRAY(value->xtype) )
 	{
 		WRValue element;
 		wr_arrayToValue( value, &element );
@@ -1401,7 +1387,6 @@ WRUint32Call wr_bitwiseNot[4] =
 {
 	doBitwiseNot_I,  doBitwiseNot_F,  doBitwiseNot_R,  doBitwiseNot_E
 };
-
 
 
 //------------------------------------------------------------------------------
@@ -1420,4 +1405,3 @@ WRVoidFunc wr_pushIterator[4] =
 {
 	pushIterator_X, pushIterator_X, pushIterator_R, pushIterator_E
 };
-

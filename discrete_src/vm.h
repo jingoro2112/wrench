@@ -49,6 +49,9 @@ class WRGCValueArray;
 //------------------------------------------------------------------------------
 struct WRContext
 {
+	uint16_t gcPauseCount;
+	uint8_t globals;
+
 	union
 	{
 		WRFunction* localFunctions;
@@ -56,11 +59,9 @@ struct WRContext
 	};
 	
 	WRValue* globalSpace;
-	int globals;
 
 	const unsigned char* bottom;
 	const unsigned char* stopLocation;
-	uint16_t gcPauseCount;
 	WRGCObject* svAllocated;
 	
 	void mark( WRValue* s );

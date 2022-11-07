@@ -85,16 +85,18 @@ WRState::~WRState()
 //------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
 {
+	//printf("marking %p->%p: [%d:%p] 0x%08X\n", s, s->r, s->i, s->p, s->type);
+
 	if ( IS_REFARRAY(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
 	{
-		if ( !s->r->va->m_preAllocated )
+		if ( !s->r->va->m_skipGC )
 		{
 			mark( s->r );
 		}
 		return;
 	}
 
-	if ( s->va->m_preAllocated )
+	if ( s->va->m_skipGC )
 	{
 		return;
 	}
@@ -111,7 +113,7 @@ void WRContext::mark( WRValue* s )
 		WRValue* top = sva->m_Vdata + sva->m_size;
 		for( WRValue* V = sva->m_Vdata; V<top; ++V )
 		{
-			if ( IS_EXARRAY_TYPE(V->xtype) && !(V->va->m_preAllocated) && !(V->va->m_size & 0x40000000) )
+			if ( IS_EXARRAY_TYPE(V->xtype) && !(V->va->m_skipGC) && !(V->va->m_size & 0x40000000) )
 			{
 				mark( V );
 			}
@@ -139,7 +141,7 @@ void WRContext::gc( WRValue* stackTop )
 	for( WRValue* s=w->stack; s<stackTop; ++s)
 	{
 		// an array in the chain?
-		if ( IS_EXARRAY_TYPE(s->xtype) && !(s->va->m_preAllocated) )
+		if ( IS_EXARRAY_TYPE(s->xtype) && !(s->va->m_skipGC) )
 		{
 			mark( s );
 		}
@@ -148,7 +150,7 @@ void WRContext::gc( WRValue* stackTop )
 	// mark context's global
 	for( int i=0; i<globals; ++i )
 	{
-		if ( IS_EXARRAY_TYPE(globalSpace[i].xtype) && !(globalSpace[i].va->m_preAllocated) )
+		if ( IS_EXARRAY_TYPE(globalSpace[i].xtype) && !(globalSpace[i].va->m_skipGC) )
 		{
 			mark( globalSpace + i );
 		}
@@ -421,7 +423,7 @@ int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const W
 //------------------------------------------------------------------------------
 WRValue* wr_returnValueFromLastCall( WRState* w )
 {
-	return w->stack + 1; // this is where it ends up
+	return w->stack; // this is where it ends up
 }
 
 //------------------------------------------------------------------------------
@@ -835,6 +837,8 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 		&&Switch,
 		&&SwitchLinear,
+
+		&&GlobalStop,
 	};
 #endif
 
@@ -1216,6 +1220,7 @@ callFunction:
 			{
 				(stackTop++)->init();
 			}
+			
 			CASE(Return):
 			{
 				register0 = stackTop - 2;
@@ -1227,8 +1232,14 @@ callFunction:
 				CONTINUE;
 			}
 
+			CASE(GlobalStop):
+			{
+				register0 = w->stack - 1;
+				++pc;
+			}
 			CASE(Stop):
 			{
+				*w->stack = *(register0 + 1);
 				context->stopLocation = pc - 1;
 				return WR_ERR_None;
 			}
@@ -2067,7 +2078,6 @@ compactReturnFuncInvertedPostLoad:
 			{
 				boolIntCall = CompareEQI;
 				boolFloatCall = CompareEQF;
-				
 compactReturnFuncBInverted:
 				register0 = --stackTop;
 compactReturnFuncBInvertedPreReg1:
@@ -2983,50 +2993,47 @@ void wr_makeContainer( WRValue* val )
 {
 	val->p2 = INIT_AS_HASH_TABLE;
 	val->va = new WRGCObject( 0, SV_HASH_TABLE );
+	val->va->m_skipGC = 1;
 }
 
+
 //------------------------------------------------------------------------------
-void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value )
+WRValue* wr_getContainerEntryEx( WRValue* container, const char* name )
 {
 	if ( container->xtype != WR_EX_HASH_TABLE )
 	{
-		return;
+		return 0;
 	}
 
 	uint32_t hash = wr_hashStr( name );
 
 	WRValue *entry = (WRValue *)container->va->get( hash );
-
-	*entry++ = *value;
-	entry->p2 = INIT_AS_INT;
-	entry->ui = hash;
+	(entry + 1)->p2 = INIT_AS_INT;
+	(entry + 1)->ui = hash;
+	return entry;
 }
 
-//------------------------------------------------------------------------------
-void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value )
-{
-	WRValue v;
-	v.p2 = INIT_AS_INT;
-	v.i = value;
-	wr_addValueToContainer( container, name, &v );
-}
 
 //------------------------------------------------------------------------------
-void wr_addFloatToContainer( WRValue* container, const char* name, const float value )
+void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value )
 {
-	WRValue v;
-	v.p2 = INIT_AS_FLOAT;
-	v.f = value;
-	wr_addValueToContainer( container, name, &v );
+	WRValue* entry = wr_getContainerEntryEx( container, name );
+	if ( entry )
+	{
+		entry->r = value;
+		entry->p2 = INIT_AS_REF;
+	}
 }
 
 //------------------------------------------------------------------------------
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array )
 {
-	WRValue v;
-	v.p2 = INIT_AS_RAW_ARRAY;
-	v.c = array;
-	wr_addValueToContainer( container, name, &v );
+	WRValue* entry = wr_getContainerEntryEx( container, name );
+	if ( entry )
+	{
+		entry->c = array;
+		entry->p2 = INIT_AS_RAW_ARRAY;
+	}
 }
 
 //------------------------------------------------------------------------------

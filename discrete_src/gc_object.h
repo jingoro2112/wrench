@@ -36,7 +36,7 @@ public:
 	// the order here matters for data alignment
 	
 	char m_type;
-	char m_preAllocated;
+	char m_skipGC;
 	uint16_t m_mod;
 	uint32_t m_size;
 
@@ -166,27 +166,26 @@ tryAgain:
 	
 	//------------------------------------------------------------------------------
 	WRGCObject( const unsigned int size,
-				const WRGCObjectType type,
-				const void* preAlloc =0 )
+				const WRGCObjectType type )
 	{
 		m_type = (char)type;
 		m_next = 0;
 		m_size = size;
-		if ( !(m_preAllocated = (m_constData = preAlloc) ? 1 : 0) )
+		m_skipGC = 0;
+		m_constData = 0;
+
+		switch( m_type )
 		{
-			switch( m_type )
+			case SV_VALUE: { m_Vdata = new WRValue[size]; break; }
+			case SV_CHAR: { m_Cdata = new unsigned char[size+1]; m_Cdata[size]=0; break; }
+			case SV_VOID_HASH_TABLE:
+			case SV_HASH_TABLE:
 			{
-				case SV_VALUE: { m_Vdata = new WRValue[size]; break; }
-				case SV_CHAR: { m_Cdata = new unsigned char[size+1]; m_Cdata[size]=0; break; }
-				case SV_VOID_HASH_TABLE:
-				case SV_HASH_TABLE:
-				{
-					m_mod = 0;
-					m_hashTable = 0;
-					m_size = 0;
-					growHash(0);
-					break;
-				}
+				m_mod = 0;
+				m_hashTable = 0;
+				m_size = 0;
+				growHash(0);
+				break;
 			}
 		}
 	}
@@ -194,11 +193,6 @@ tryAgain:
 	//------------------------------------------------------------------------------
 	void clear()
 	{
-		if ( m_preAllocated )
-		{
-			return;
-		}
-
 		switch( m_type )
 		{
 			case SV_VOID_HASH_TABLE:
@@ -215,8 +209,6 @@ tryAgain:
 	WRGCObject& operator= ( WRGCObject& A )
 	{
 		clear();
-
-		m_preAllocated = 0;
 
 		m_mod = A.m_mod;
 		m_size = A.m_size;

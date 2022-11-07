@@ -1,6 +1,8 @@
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
+MIT Licence
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -311,10 +313,8 @@ int runTests( int number )
 	wr_makeContainer( &container );
 
 	WRValue integer;
-	wr_makeInt( &integer, 765 );
+	wr_makeInt( &integer, 0 );
 	wr_addValueToContainer( &container, "integer", &integer );
-	wr_addIntToContainer( &container, "integer2", 222 );
-	wr_addFloatToContainer( &container, "fl", 1.123f );
 
 	char someArray[10] = "hello";
 	wr_addArrayToContainer( &container, "name", someArray );
@@ -364,11 +364,22 @@ int runTests( int number )
 				WRstr logger;
 				wr_registerFunction( w, "print", emit, &logger );
 
+				WRValue* V = wr_returnValueFromLastCall(w);
+
 				WRContext* context = wr_run( w, out );
 
 				if ( !wr_getLastError(w) )
 				{
-					wr_callFunction(w, context, "userCheck", &container, 1 );
+					integer.i = 2456;
+					someArray[1] = 'e';
+
+					wr_callFunction( w, context, "userCheck", &container, 1 );
+					V = wr_returnValueFromLastCall( w );
+					if ( V && V->i == 77 )
+					{
+						assert( integer.i == 56789 );
+						assert( someArray[1] == 'c' );
+					}
 				}
 				
 				if ( err )

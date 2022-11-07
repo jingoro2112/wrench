@@ -5552,13 +5552,23 @@ WRError WRCompilationContext::compile( const char* source,
 
 	m_units.setCount(1);
 	
-	bool returnCalled;
+	bool returnCalled = false;
 
 	m_loadedValue.p2 = INIT_AS_REF;
 
 	do
 	{
-		parseStatement( 0, ';', returnCalled, O_Stop );
+
+		WRExpressionContext ex;
+		WRstr& token = ex.token;
+		WRValue& value = ex.value;
+		if ( !getToken(ex) )
+		{
+			break;
+		}
+		m_loadedToken = token;
+		m_loadedValue = value;
+		parseStatement( 0, ';', returnCalled, O_GlobalStop );
 
 	} while ( !m_EOF && (m_err == WR_ERR_None) );
 
@@ -5619,8 +5629,10 @@ WRError WRCompilationContext::compile( const char* source,
 	{
 		// pop final return value
 		pushOpcode( m_units[0].bytecode, O_LiteralZero );
-		pushOpcode( m_units[0].bytecode, O_Stop );
+		pushOpcode( m_units[0].bytecode, O_GlobalStop );
 	}
+
+	pushOpcode( m_units[0].bytecode, O_Stop );
 	
 	link( out, outLen );
 	if ( m_err )
@@ -5941,6 +5953,8 @@ const char* c_opcodeName[] =
 
 	"Switch",
 	"SwitchLinear",
+
+	"GlobalStop",
 };
 #endif
 
