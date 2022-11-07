@@ -1,4 +1,6 @@
 /*~
+argtest
+1
 6
 4000000
 20
@@ -54,15 +56,15 @@
 ~*/
 
 
-/*
 a = 10;
-test2(20);
-if ( a != 10 ) print("a fail");
-function test2(a)
-{
-	a = 30;
-}
-*/
+a = print("argtest");
+if ( a != 20 ) { print("afail1"); }
+a = 10;
+a = print();
+if ( a != 20 ) { print("afail2"); }
+a = 10;
+a = print(1,2,3,4,5,6);
+if ( a != 20 ) { print("afail3"); }
 
 
 glob = 10;
@@ -79,8 +81,6 @@ a = tle();
 function tle
 {
 }
-
-
 
 
 f(f(0));

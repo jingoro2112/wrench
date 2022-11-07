@@ -5345,6 +5345,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 	WROpcodeStream code;
 
 	code += (unsigned char)(m_units.count() - 1);
+	code += (unsigned char)(m_units[0].bytecode.localSpace.count());
 
 	unsigned char data[4];
 
@@ -5367,13 +5368,6 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 		code.append( data, 2 ); // placeholder, it doesn't matter
 
 		code += O_RegisterFunction;
-	}
-
-	// reserve global space
-	if ( m_units[0].bytecode.localSpace.count() )
-	{
-		code += O_ReserveGlobalFrame;
-		code += (unsigned char)(m_units[0].bytecode.localSpace.count());
 	}
 
 	// append all the unit code
@@ -5667,7 +5661,6 @@ int wr_compile( const char* source, const int size, unsigned char** out, int* ou
 const char* c_opcodeName[] = 
 {
 	"RegisterFunction",
-	"ReserveGlobalFrame",
 
 	"LiteralInt32",
 	"LiteralZero",

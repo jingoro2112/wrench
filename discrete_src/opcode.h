@@ -29,7 +29,6 @@ SOFTWARE.
 enum WROpcode
 {
 	O_RegisterFunction = 0,
-	O_ReserveGlobalFrame,
 	
 	O_LiteralInt32,
 	O_LiteralZero,

@@ -138,6 +138,8 @@ static void print( WRState* s, const WRValue* argv, const int argn, WRValue& ret
 		argv[i].asString( outbuf, 64000 );
 		printf( "%s", outbuf );
 	}
+
+	retVal.i = 20;
 }
 
 //------------------------------------------------------------------------------
@@ -195,7 +197,7 @@ int main( int argn, char* argv[] )
 			delete[] out;
 		}
 
-		WRState* w = wr_newState();
+		WRState* w = wr_newState( 128 );
 		wr_loadAllLibs(w);
 		wr_registerFunction( w, "printl", printl );
 		wr_registerFunction( w, "print", print );
@@ -301,6 +303,7 @@ static void emit( WRState* s, const WRValue* argv, const int argn, WRValue& retV
 		char buf[256];
 		((WRstr*)usr)->appendFormat( "%s\n", argv->asString(buf, 256) );
 	}
+	retVal.i = 20;
 }
 
 //------------------------------------------------------------------------------
@@ -324,7 +327,7 @@ int runTests( int number )
 	int fileNumber = 0;
 	int err = 0;
 
-	WRState* w = wr_newState();
+	WRState* w = wr_newState( 128 );
 
 	wr_loadAllLibs( w );
 

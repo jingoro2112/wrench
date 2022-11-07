@@ -943,7 +943,6 @@ SOFTWARE.
 enum WROpcode
 {
 	O_RegisterFunction = 0,
-	O_ReserveGlobalFrame,
 	
 	O_LiteralInt32,
 	O_LiteralZero,
@@ -7578,6 +7577,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 	WROpcodeStream code;
 
 	code += (unsigned char)(m_units.count() - 1);
+	code += (unsigned char)(m_units[0].bytecode.localSpace.count());
 
 	unsigned char data[4];
 
@@ -7600,13 +7600,6 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 		code.append( data, 2 ); // placeholder, it doesn't matter
 
 		code += O_RegisterFunction;
-	}
-
-	// reserve global space
-	if ( m_units[0].bytecode.localSpace.count() )
-	{
-		code += O_ReserveGlobalFrame;
-		code += (unsigned char)(m_units[0].bytecode.localSpace.count());
 	}
 
 	// append all the unit code
@@ -7900,7 +7893,6 @@ int wr_compile( const char* source, const int size, unsigned char** out, int* ou
 const char* c_opcodeName[] = 
 {
 	"RegisterFunction",
-	"ReserveGlobalFrame",
 
 	"LiteralInt32",
 	"LiteralZero",
@@ -8227,15 +8219,10 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-WRContext::WRContext( WRState* state ) : w(state)
+WRContext::WRContext( WRState* state )
 {
-	gcPauseCount = 0;
-	localFunctions = 0;
-	globalSpace = 0;
-	globals = 0;
-	svAllocated = 0;
-	stopLocation = 0;
-	bottom = 0;
+	memset( (unsigned char*)this, 0, sizeof(WRContext) );
+	w = state;
 }
 
 //------------------------------------------------------------------------------
@@ -8418,9 +8405,15 @@ WRContext* wr_run( WRState* w, const unsigned char* block )
 {
 	WRContext* C = new WRContext( w );
 
-	if ( *block )
+	if ( block[0] )
 	{
 		C->localFunctions = new WRFunction[ *block ];
+	}
+
+	if ( (C->globals = block[1]) )
+	{
+		C->globalSpace = new WRValue[ C->globals ];
+		memset( (char*)C->globalSpace, 0, C->globals*sizeof(WRValue) );
 	}
 	
 	C->next = w->contextList;
@@ -8753,7 +8746,6 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	const void* opcodeJumptable[] =
 	{
 		&&RegisterFunction,
-		&&ReserveGlobalFrame,
 
 		&&LiteralInt32,
 		&&LiteralZero,
@@ -9103,7 +9095,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		goto callFunction;
 	}
 
-	pc = context->bottom + 1;
+	pc = context->bottom + 2;
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 
@@ -9130,16 +9122,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 																	  + context->localFunctions[ findex ].frameSpaceNeeded
 																	  + context->localFunctions[ findex ].arguments;
 				w->c_functionRegistry.getAsRawValueHashTable(context->localFunctions[findex].hash ^ context->hashOffset)->wrf = context->localFunctions + findex;
-				
-				CONTINUE;
-			}
 
-			CASE(ReserveGlobalFrame):
-			{
-				context->globals = *pc++;
-				context->globalSpace = new WRValue[ context->globals ];
-				memset( (char*)context->globalSpace, 0, context->globals*sizeof(WRValue) );
-				globalSpace = context->globalSpace;
 				CONTINUE;
 			}
 
@@ -9199,7 +9182,7 @@ literalZero:
 				if ( args )
 				{
 					stackTop -= (args - 1);
-					*stackTop = *register0;
+					*(stackTop - 1) = *register0;
 				}
 				else
 				{

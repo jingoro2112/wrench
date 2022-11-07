@@ -60,7 +60,7 @@ like crazy a modest size should be more than enough.
 
 This will consume 8 bytes per stack entry on a 32-bit system, 16 on 64.
 */
-#define WRENCH_DEFAULT_STACK_SIZE 90
+#define WRENCH_DEFAULT_STACK_SIZE 64
 /***********************************************************************/
 
 /************************************************************************
