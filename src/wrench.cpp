@@ -784,8 +784,6 @@ struct WRContext
 		uint32_t hashOffset;
 	};
 	
-	WRValue* globalSpace;
-
 	const unsigned char* bottom;
 	const unsigned char* stopLocation;
 	WRGCObject* svAllocated;
@@ -797,9 +795,14 @@ struct WRContext
 	WRState* w;
 
 	WRContext* next;
+
 	
-	WRContext( WRState* state );
-	~WRContext();
+//	WRValue globalSpace; // must ALWAYS be last
+
+
+	
+//	WRContext( WRState* state );
+//	~WRContext();
 };
 
 //------------------------------------------------------------------------------
@@ -8219,27 +8222,6 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-WRContext::WRContext( WRState* state )
-{
-	memset( (unsigned char*)this, 0, sizeof(WRContext) );
-	w = state;
-}
-
-//------------------------------------------------------------------------------
-WRContext::~WRContext()
-{
-	delete[] globalSpace;
-	delete[] localFunctions;
-
-	while( svAllocated )
-	{
-		WRGCObject* next = svAllocated->m_next;
-		delete svAllocated;
-		svAllocated = next;
-	}
-}
-
-//------------------------------------------------------------------------------
 WRState::WRState( int EntriesInStack ) : c_functionRegistry( 0, SV_VOID_HASH_TABLE )
 {
 	err = WR_ERR_None;
@@ -8259,15 +8241,9 @@ WRState::~WRState()
 {
 	while( contextList )
 	{
-		WRContext* next = contextList->next;
-		delete contextList;
-		contextList = next;
+		wr_destroyContext( this, contextList );
 	}
 
-	for( int i=0; i<stackSize; ++i )
-	{
-		stack[i].init();
-	}
 	delete[] stack;
 }
 
@@ -8336,12 +8312,14 @@ void WRContext::gc( WRValue* stackTop )
 		}
 	}
 
+	WRValue* globalSpace = (WRValue *)(this + 1);
+	
 	// mark context's global
-	for( int i=0; i<globals; ++i )
+	for( int i=0; i<globals; ++i, ++globalSpace )
 	{
-		if ( IS_EXARRAY_TYPE(globalSpace[i].xtype) && !(globalSpace[i].va->m_skipGC) )
+		if ( IS_EXARRAY_TYPE(globalSpace->xtype) && !(globalSpace->va->m_skipGC) )
 		{
-			mark( globalSpace + i );
+			mark( globalSpace );
 		}
 	}
 
@@ -8403,17 +8381,18 @@ WRError wr_getLastError( WRState* w )
 //------------------------------------------------------------------------------
 WRContext* wr_run( WRState* w, const unsigned char* block )
 {
-	WRContext* C = new WRContext( w );
+	int needed = block[1] * sizeof(WRValue) + sizeof(WRContext);
+	
+	WRContext* C = (WRContext *)malloc( needed );
+	
+	memset((char*)C, 0, needed);
+
+	C->globals = block[1];
+	C->w = w;
 
 	if ( block[0] )
 	{
 		C->localFunctions = new WRFunction[ *block ];
-	}
-
-	if ( (C->globals = block[1]) )
-	{
-		C->globalSpace = new WRValue[ C->globals ];
-		memset( (char*)C->globalSpace, 0, C->globals*sizeof(WRValue) );
 	}
 	
 	C->next = w->contextList;
@@ -8449,12 +8428,22 @@ void wr_destroyContext( WRState* w, WRContext* context )
 				w->contextList = w->contextList->next;
 			}
 
+
+			delete[] context->localFunctions;
+
+			while ( context->svAllocated )
+			{
+				WRGCObject* next = context->svAllocated->m_next;
+				delete context->svAllocated;
+				context->svAllocated = next;
+			}
+
+			free( context );
+			
 			break;
 		}
 		prev = c;
 	}
-
-	delete context;
 }
 
 //------------------------------------------------------------------------------
@@ -9053,7 +9042,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	};
 	WRValue* frameBase = 0;
 	WRValue* stackTop = w->stack;
-	WRValue* globalSpace = context->globalSpace;
+	WRValue* globalSpace = (WRValue *)(context + 1);//->globalSpace;
 
 	union
 	{
@@ -10781,7 +10770,6 @@ returnFuncBInverted8:
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)*pc : 2;
 				CONTINUE;
 			}
-
 
 			CASE(GGCompareEQ):
 			{

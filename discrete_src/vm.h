@@ -58,8 +58,6 @@ struct WRContext
 		uint32_t hashOffset;
 	};
 	
-	WRValue* globalSpace;
-
 	const unsigned char* bottom;
 	const unsigned char* stopLocation;
 	WRGCObject* svAllocated;
@@ -71,9 +69,14 @@ struct WRContext
 	WRState* w;
 
 	WRContext* next;
+
 	
-	WRContext( WRState* state );
-	~WRContext();
+//	WRValue globalSpace; // must ALWAYS be last
+
+
+	
+//	WRContext( WRState* state );
+//	~WRContext();
 };
 
 //------------------------------------------------------------------------------

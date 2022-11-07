@@ -431,13 +431,13 @@ struct WRValue
 #include <memory.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <cstdlib>
 #else
 #ifdef WRENCH_STD_FILE
 #undef WRENCH_STD_FILE
 #endif
 #include <Arduino.h>
 #endif
-
 
 #ifndef WRENCH_COMBINED
 #include "utils.h"
