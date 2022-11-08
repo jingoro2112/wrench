@@ -69,14 +69,6 @@ struct WRContext
 	WRState* w;
 
 	WRContext* next;
-
-	
-//	WRValue globalSpace; // must ALWAYS be last
-
-
-	
-//	WRContext( WRState* state );
-//	~WRContext();
 };
 
 //------------------------------------------------------------------------------

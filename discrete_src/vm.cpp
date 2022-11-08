@@ -845,7 +845,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	};
 	WRValue* frameBase = 0;
 	WRValue* stackTop = w->stack;
-	WRValue* globalSpace = (WRValue *)(context + 1);//->globalSpace;
+	WRValue* globalSpace = (WRValue *)(context + 1);
 
 	union
 	{
@@ -1026,12 +1026,12 @@ callFunction:
 				// sure they have a non-collectable type or the gc can
 				// get confused.. shame though this would be SO much
 				// faster... TODO figure out how to use it!
-//				stackTop += function->frameSpaceNeeded; 
+//				stackTop += function->frameSpaceNeeded;
 				for( int l=0; l<function->frameSpaceNeeded; ++l )
 				{
 					(stackTop++)->p2 = INIT_AS_INT;
 				}
-
+			
 				// temp value contains return vector/frame base
 				register0 = stackTop++; // return vector
 				register0->frame = frameBase;
@@ -1041,6 +1041,8 @@ callFunction:
 
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - function->frameBaseAdjustment;
+
+				assert( stackTop < (w->stack + w->stackSize) );
 
 				CONTINUE;
 			}
@@ -1059,9 +1061,6 @@ callFunction:
 				CONTINUE;
 			}
 
-			// it kills me that these are identical except for the "+1"
-			// but I have yet to figure out a way around that, "andPop"
-			// is just too good and common an optimization :(
 			CASE(CallLibFunction):
 			{
 				stackTop->p2 = INIT_AS_INT;

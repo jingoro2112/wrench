@@ -42,7 +42,7 @@ wrench: $(OBJS) wrench_cli.cpp
 	g++ $(OBJS) -Wall -Werror wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_cli
 	./wrench_cli release discrete_src src/.
 	-@rm wrench_cli
-	g++ -o wrench -Wall -Werror $(FLAGS) -Isrc src/wrench.cpp wrench_cli.cpp
+	g++ -o wrench -Wall -Werror $(FLAGS) -DNDEBUG -Isrc src/wrench.cpp wrench_cli.cpp
 
 $(OBJDIR)/cc.o: discrete_src/cc.cpp
 	$(CC) $@ $<
