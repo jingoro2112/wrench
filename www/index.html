@@ -265,6 +265,19 @@ unrolled loops, cache optimizations, and additional 'shared' code with
 some goto spaghetti)
 
 
+
+<pre><code>#define WRENCH_DEFAULT_STACK_SIZE 90
+</pre></code>
+<p>wrench allocates a static stack and does not bounds-check it, this
+is done for speed an simplicity. The stack is used only for function
+calls and local data so it need not be large, the default 90 should be
+more than enough.
+<p>Each stack entry consumes 8 bytes, so embedded devices that have
+very  limited ram (like the Uno Mini) should reduce this
+substantially. The arduino example provided has a stack of 32, which
+should be plenty to run even a pretty intricate script.
+
+
 <p>To add functions to extend wrench, as well as calling into it are
 dead simple and super low overhead. Some examples are provided, but
 frankly if you actually got this far and are interested, the code in
