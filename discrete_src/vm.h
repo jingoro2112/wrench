@@ -44,9 +44,6 @@ struct WRFunction
 };
 
 //------------------------------------------------------------------------------
-class WRGCValueArray;
-
-//------------------------------------------------------------------------------
 struct WRContext
 {
 	uint16_t gcPauseCount;
@@ -82,9 +79,6 @@ struct WRState
 	WRValue* stack;
 
 	WRContext* contextList;
-
-	WRState( int EntriesInStack =WRENCH_DEFAULT_STACK_SIZE );
-	~WRState();
 };
 
 

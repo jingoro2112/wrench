@@ -217,7 +217,7 @@ const uint16_t c_primeTable[] =
 	6151,
 	12289,
 	24593,
-	49157,
+	49157
 };
 /*
 	98317,
@@ -466,8 +466,6 @@ public:
 
 	WRGCObject* m_next; // for gc
 	
-	~WRGCObject() { clear(); }
-
 	//------------------------------------------------------------------------------
 	void growHash( const uint32_t hash )
 	{
@@ -480,14 +478,22 @@ public:
 		for(;;)
 		{
 tryAgain:
-			int newMod;
-			if ( !(newMod = c_primeTable[t]) )
+			int newMod = c_primeTable[t];
+
+			int newSize;
+			if ( m_type == SV_VOID_HASH_TABLE )
 			{
-				return;
+				newSize = newMod;
+			}
+			else
+			{
+				newSize = newMod << 1;
 			}
 
-			uint32_t* proposed = new uint32_t[newMod];
-			memset( proposed, 0, newMod*sizeof(uint32_t) );
+			int total = newMod*sizeof(uint32_t) + newSize*sizeof(WRValue);
+			uint32_t* proposed = (uint32_t*)malloc( total );
+			
+			memset( (unsigned char *)proposed, 0, total );
 
 			proposed[ hash % newMod ] = hash;
 
@@ -506,26 +512,16 @@ tryAgain:
 				}
 				else
 				{
-					delete[] proposed;
+					free( proposed );
 					++t;
+					
+					assert( newMod != 49157 );
+					
 					goto tryAgain;
 				}
 			}
 
-			int newSize;
-			if ( m_type == SV_VOID_HASH_TABLE )
-			{
-				newSize = newMod;
-			}
-			else
-			{
-				newSize = newMod << 1;
-			}
-			
-			WRValue* newValues;
-
-			newValues = new WRValue[newSize];
-			memset( (char*)newValues, 0, newSize*sizeof(WRValue) );
+			WRValue* newValues = (WRValue*)(proposed + newMod);
 
 			for( int v=0; v<m_mod; ++v )
 			{
@@ -543,6 +539,7 @@ tryAgain:
 				}
 				else
 				{
+					// copy all the new hashes to their new locations
 					WRValue* to = newValues + (m2<<1);
 					WRValue* from = m_Vdata + (m1<<1);
 					
@@ -562,98 +559,52 @@ tryAgain:
 
 			m_mod = newMod;
 			m_size = newSize;
-			delete[] m_Vdata;
-			delete[] m_hashTable;
+
+			free( m_hashTable );
+			
 			m_hashTable = proposed;
 			m_Vdata = newValues;
 			
 			return;
 		}
 	}
+
 	
 	//------------------------------------------------------------------------------
-	WRGCObject( const unsigned int size,
-				const WRGCObjectType type )
+	void init( const unsigned int size, const WRGCObjectType type )
 	{
-		m_type = (char)type;
-		m_next = 0;
-		m_size = size;
-		m_skipGC = 0;
-		m_constData = 0;
+		memset( (unsigned char*)this, 0, sizeof(WRGCObject) );
 
-		switch( m_type )
+		if ( (m_type = (char)type) == SV_VALUE )
 		{
-			case SV_VALUE: { m_Vdata = new WRValue[size]; break; }
-			case SV_CHAR: { m_Cdata = new unsigned char[size+1]; m_Cdata[size]=0; break; }
-			case SV_VOID_HASH_TABLE:
-			case SV_HASH_TABLE:
-			{
-				m_mod = 0;
-				m_hashTable = 0;
-				m_size = 0;
-				growHash(0);
-				break;
-			}
+			m_size = size;
+			m_Cdata = (unsigned char*)malloc( m_size * sizeof(WRValue) );
+		}
+		else if ( m_type == SV_CHAR )
+		{
+			m_size = size;
+			m_Cdata = (unsigned char*)malloc( m_size + 1 );
+			m_Cdata[size] = 0;
+		}
+		else
+		{
+			growHash(0);
 		}
 	}
 
 	//------------------------------------------------------------------------------
 	void clear()
 	{
-		switch( m_type )
+		if ( m_type == SV_VALUE || m_type == SV_CHAR )
 		{
-			case SV_VOID_HASH_TABLE:
-			case SV_HASH_TABLE: delete[] m_hashTable; m_hashTable = 0; // intentionally fall through:
-			case SV_VALUE: delete[] m_Vdata; break; 
-
-			case SV_CHAR: { delete[] m_Cdata; break; }
+			free( m_Cdata );
 		}
-
-		m_data = 0;
+		else
+		{
+			free( m_hashTable );
+		}
 	}
-
-	//------------------------------------------------------------------------------
-	WRGCObject& operator= ( WRGCObject& A )
-	{
-		clear();
-
-		m_mod = A.m_mod;
-		m_size = A.m_size;
-		m_ROMHashTable = A.m_ROMHashTable;
-
-		if ( !m_next )
-		{
-			m_next = A.m_next;
-			A.m_next = this;
-		}
-
-		switch( (m_type = A.m_type) )
-		{
-			case SV_HASH_TABLE:
-			case SV_VALUE:
-			{
-				m_data = new WRValue[m_size];
-				m_hashTable = new uint32_t[m_mod];
-				memcpy( m_hashTable, A.m_hashTable, m_mod*sizeof(uint32_t) );
-				for( unsigned int i=0; i<m_size; ++i )
-				{
-					((WRValue*)m_data)[i] = ((WRValue*)A.m_data)[i];
-				}
-				break;
-			}
-
-			case SV_CHAR:
-			{
-				m_Cdata = new unsigned char[m_size+1];
-				m_Cdata[m_size] = 0;
-				memcpy( (char*)m_data, (char*)A.m_data, m_size );
-				break;
-			}
-		}
-
-		return *this;
-	}
-
+	
 	void* operator[]( const unsigned int l ) { return get(l); }
 
 	//------------------------------------------------------------------------------
@@ -680,46 +631,44 @@ tryAgain:
 	{
 		int s = l < m_size ? l : m_size - 1;
 
-		switch( m_type )
+		if ( m_type == SV_CHAR )
 		{
-			case SV_VALUE: { return (void*)(m_Vdata + s); }
-			case SV_CHAR: { return (void*)(m_Cdata + s); }
+			return m_Cdata + s;
+		}
+		else if ( m_type == SV_HASH_TABLE )
+		{
+			// zero remains "null hash" by scrambling. Which means
+			// a hash of "0x55555555" will break the system. If you
+			// are reading this comment then I'm sorry, the only
+			// way out is to re-architect so this hash is not
+			// generated by your program
+			assert( l != 0x55555555 );
 
-			case SV_HASH_TABLE:
+			uint32_t hash = l ^ 0x55555555; 
+			uint32_t index = hash % m_mod;
+
+			if (m_hashTable[index] != hash) // its us
 			{
-
-				// zero remains "null hash" by scrambling. Which means
-				// a hash of "0x55555555" will break the system. If you
-				// are reading this comment then I'm sorry, the only
-				// way out is to re-architect so this hash is not
-				// generated by your program
-				assert( l != 0x55555555 );
-
-
-				uint32_t hash = l ^ 0x55555555; 
-				uint32_t index = hash % m_mod;
-
-				if (m_hashTable[index] != hash) // its us
+				if ( m_hashTable[index] == 0 ) // empty? claim it
 				{
-					if ( m_hashTable[index] == 0 ) // empty? claim it
-					{
-						m_hashTable[index] = hash;
-					}
-					else
-					{
-						growHash( hash ); // not empty and not us, there was a collision
-						index = hash % m_mod;
-					}
+					m_hashTable[index] = hash;
 				}
-
-				return m_Vdata + (index<<1);
+				else
+				{
+					growHash( hash ); // not empty and not us, there was a collision
+					index = hash % m_mod;
+				}
 			}
 
-			default: return 0;
+			s = index<<1;
 		}
+		// else it must be SV_VALUE
+		
+		return m_Vdata + s;
 	}
 
 private:
+	WRGCObject& operator= ( WRGCObject& A );
 	WRGCObject(WRGCObject& A);
 };
 
@@ -770,9 +719,6 @@ struct WRFunction
 };
 
 //------------------------------------------------------------------------------
-class WRGCValueArray;
-
-//------------------------------------------------------------------------------
 struct WRContext
 {
 	uint16_t gcPauseCount;
@@ -808,9 +754,6 @@ struct WRState
 	WRValue* stack;
 
 	WRContext* contextList;
-
-	WRState( int EntriesInStack =WRENCH_DEFAULT_STACK_SIZE );
-	~WRState();
 };
 
 
@@ -8214,32 +8157,6 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-WRState::WRState( int EntriesInStack ) : c_functionRegistry( 0, SV_VOID_HASH_TABLE )
-{
-	err = WR_ERR_None;
-
-	stackSize = EntriesInStack;
-	stack = new WRValue[ stackSize ];
-	for( int i=0; i<stackSize; ++i )
-	{
-		stack[i].init();
-	}
-
-	contextList = 0;
-}
-
-//------------------------------------------------------------------------------
-WRState::~WRState()
-{
-	while( contextList )
-	{
-		wr_destroyContext( this, contextList );
-	}
-
-	delete[] stack;
-}
-
-//------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
 {
 	//printf("marking %p->%p: [%d:%p] 0x%08X\n", s, s->r, s->i, s->p, s->type);
@@ -8331,13 +8248,15 @@ void WRContext::gc( WRValue* stackTop )
 		else if ( prev == 0 )
 		{
 			svAllocated = current->m_next;
-			delete current;
+			current->clear();
+			free( current );
 			current = svAllocated;
 		}
 		else
 		{
 			prev->m_next = current->m_next;
-			delete current;
+			current->clear();
+			free( current );
 			current = prev->m_next;
 		}
 	}
@@ -8346,7 +8265,8 @@ void WRContext::gc( WRValue* stackTop )
 //------------------------------------------------------------------------------
 WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 {
-	WRGCObject* ret = new WRGCObject( size, type );
+	WRGCObject* ret = (WRGCObject*)malloc( sizeof(WRGCObject) );
+	ret->init( size, type );
 	if ( init )
 	{
 		memset( (char*)ret->m_Cdata, 0, sizeof(WRValue) * size);
@@ -8359,9 +8279,29 @@ WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 }
 
 //------------------------------------------------------------------------------
+WRState* wr_newState( int stackSize )
+{
+	WRState* state = (WRState *)malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
+	memset( (unsigned char*)state, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
+
+	state->stackSize = stackSize;
+	state->stack = (WRValue *)((unsigned char *)state + sizeof(WRState));
+
+	state->c_functionRegistry.init( 0, SV_VOID_HASH_TABLE );
+	
+	return state;
+}
+
+//------------------------------------------------------------------------------
 void wr_destroyState( WRState* w )
 {
-	delete w;
+	while( w->contextList )
+	{
+		wr_destroyContext( w, w->contextList );
+	}
+	w->c_functionRegistry.clear();
+
+	free( w );
 }
 
 //------------------------------------------------------------------------------
@@ -8373,7 +8313,9 @@ WRError wr_getLastError( WRState* w )
 //------------------------------------------------------------------------------
 WRContext* wr_run( WRState* w, const unsigned char* block )
 {
-	int needed = block[1] * sizeof(WRValue) + sizeof(WRContext);
+	int needed = sizeof(WRContext) // class
+				 + block[1] * sizeof(WRValue)  // globals
+				 + block[0] * sizeof(WRFunction); // local functions
 	
 	WRContext* C = (WRContext *)malloc( needed );
 	
@@ -8382,10 +8324,7 @@ WRContext* wr_run( WRState* w, const unsigned char* block )
 	C->globals = block[1];
 	C->w = w;
 
-	if ( block[0] )
-	{
-		C->localFunctions = new WRFunction[ *block ];
-	}
+	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + block[1] * sizeof(WRValue));
 	
 	C->next = w->contextList;
 	C->bottom = block;
@@ -8421,12 +8360,11 @@ void wr_destroyContext( WRState* w, WRContext* context )
 			}
 
 
-			delete[] context->localFunctions;
-
 			while ( context->svAllocated )
 			{
 				WRGCObject* next = context->svAllocated->m_next;
-				delete context->svAllocated;
+				context->svAllocated->clear();
+				free( context->svAllocated );
 				context->svAllocated = next;
 			}
 
@@ -11156,7 +11094,8 @@ void wr_makeFloat( WRValue* val, float f )
 void wr_makeContainer( WRValue* val )
 {
 	val->p2 = INIT_AS_HASH_TABLE;
-	val->va = new WRGCObject( 0, SV_HASH_TABLE );
+	val->va = (WRGCObject*)malloc( sizeof(WRGCObject) );
+	val->va->init( 0, SV_HASH_TABLE );
 	val->va->m_skipGC = 1;
 }
 
@@ -11208,7 +11147,8 @@ void wr_destroyContainer( WRValue* val )
 		return;
 	}
 
-	delete val->va;
+	val->va->clear();
+	free( val->va );
 	val->init();
 }
 
@@ -11275,7 +11215,8 @@ const char* WRValue::c_str( unsigned int* len ) const
 //------------------------------------------------------------------------------
 void growValueArray( WRValue* v, int newSize )
 {
-	WRGCObject* newArray = new WRGCObject( newSize, (WRGCObjectType)v->va->m_type );
+	WRGCObject* newArray = (WRGCObject*)malloc( sizeof(WRGCObject) );
+	newArray->init( newSize, (WRGCObjectType)v->va->m_type );
 	
 	newArray->m_next = v->va->m_next;
 	v->va->m_next = newArray;
@@ -11315,12 +11256,6 @@ int WRValue::arrayValueAsInt() const
 	}
 
 	return 0;
-}
-
-//------------------------------------------------------------------------------
-WRState* wr_newState( int stackSize )
-{
-	return new WRState( stackSize );
 }
 
 //------------------------------------------------------------------------------

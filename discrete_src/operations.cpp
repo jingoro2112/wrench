@@ -61,7 +61,8 @@ const char* WRValue::c_str( unsigned int* len ) const
 //------------------------------------------------------------------------------
 void growValueArray( WRValue* v, int newSize )
 {
-	WRGCObject* newArray = new WRGCObject( newSize, (WRGCObjectType)v->va->m_type );
+	WRGCObject* newArray = (WRGCObject*)malloc( sizeof(WRGCObject) );
+	newArray->init( newSize, (WRGCObjectType)v->va->m_type );
 	
 	newArray->m_next = v->va->m_next;
 	v->va->m_next = newArray;
@@ -101,12 +102,6 @@ int WRValue::arrayValueAsInt() const
 	}
 
 	return 0;
-}
-
-//------------------------------------------------------------------------------
-WRState* wr_newState( int stackSize )
-{
-	return new WRState( stackSize );
 }
 
 //------------------------------------------------------------------------------

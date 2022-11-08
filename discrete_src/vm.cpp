@@ -25,32 +25,6 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-WRState::WRState( int EntriesInStack ) : c_functionRegistry( 0, SV_VOID_HASH_TABLE )
-{
-	err = WR_ERR_None;
-
-	stackSize = EntriesInStack;
-	stack = new WRValue[ stackSize ];
-	for( int i=0; i<stackSize; ++i )
-	{
-		stack[i].init();
-	}
-
-	contextList = 0;
-}
-
-//------------------------------------------------------------------------------
-WRState::~WRState()
-{
-	while( contextList )
-	{
-		wr_destroyContext( this, contextList );
-	}
-
-	delete[] stack;
-}
-
-//------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
 {
 	//printf("marking %p->%p: [%d:%p] 0x%08X\n", s, s->r, s->i, s->p, s->type);
@@ -142,13 +116,15 @@ void WRContext::gc( WRValue* stackTop )
 		else if ( prev == 0 )
 		{
 			svAllocated = current->m_next;
-			delete current;
+			current->clear();
+			free( current );
 			current = svAllocated;
 		}
 		else
 		{
 			prev->m_next = current->m_next;
-			delete current;
+			current->clear();
+			free( current );
 			current = prev->m_next;
 		}
 	}
@@ -157,7 +133,8 @@ void WRContext::gc( WRValue* stackTop )
 //------------------------------------------------------------------------------
 WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 {
-	WRGCObject* ret = new WRGCObject( size, type );
+	WRGCObject* ret = (WRGCObject*)malloc( sizeof(WRGCObject) );
+	ret->init( size, type );
 	if ( init )
 	{
 		memset( (char*)ret->m_Cdata, 0, sizeof(WRValue) * size);
@@ -170,9 +147,29 @@ WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 }
 
 //------------------------------------------------------------------------------
+WRState* wr_newState( int stackSize )
+{
+	WRState* state = (WRState *)malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
+	memset( (unsigned char*)state, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
+
+	state->stackSize = stackSize;
+	state->stack = (WRValue *)((unsigned char *)state + sizeof(WRState));
+
+	state->c_functionRegistry.init( 0, SV_VOID_HASH_TABLE );
+	
+	return state;
+}
+
+//------------------------------------------------------------------------------
 void wr_destroyState( WRState* w )
 {
-	delete w;
+	while( w->contextList )
+	{
+		wr_destroyContext( w, w->contextList );
+	}
+	w->c_functionRegistry.clear();
+
+	free( w );
 }
 
 //------------------------------------------------------------------------------
@@ -184,7 +181,9 @@ WRError wr_getLastError( WRState* w )
 //------------------------------------------------------------------------------
 WRContext* wr_run( WRState* w, const unsigned char* block )
 {
-	int needed = block[1] * sizeof(WRValue) + sizeof(WRContext);
+	int needed = sizeof(WRContext) // class
+				 + block[1] * sizeof(WRValue)  // globals
+				 + block[0] * sizeof(WRFunction); // local functions
 	
 	WRContext* C = (WRContext *)malloc( needed );
 	
@@ -193,10 +192,7 @@ WRContext* wr_run( WRState* w, const unsigned char* block )
 	C->globals = block[1];
 	C->w = w;
 
-	if ( block[0] )
-	{
-		C->localFunctions = new WRFunction[ *block ];
-	}
+	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + block[1] * sizeof(WRValue));
 	
 	C->next = w->contextList;
 	C->bottom = block;
@@ -232,12 +228,11 @@ void wr_destroyContext( WRState* w, WRContext* context )
 			}
 
 
-			delete[] context->localFunctions;
-
 			while ( context->svAllocated )
 			{
 				WRGCObject* next = context->svAllocated->m_next;
-				delete context->svAllocated;
+				context->svAllocated->clear();
+				free( context->svAllocated );
 				context->svAllocated = next;
 			}
 
@@ -2967,7 +2962,8 @@ void wr_makeFloat( WRValue* val, float f )
 void wr_makeContainer( WRValue* val )
 {
 	val->p2 = INIT_AS_HASH_TABLE;
-	val->va = new WRGCObject( 0, SV_HASH_TABLE );
+	val->va = (WRGCObject*)malloc( sizeof(WRGCObject) );
+	val->va->init( 0, SV_HASH_TABLE );
 	val->va->m_skipGC = 1;
 }
 
@@ -3019,7 +3015,8 @@ void wr_destroyContainer( WRValue* val )
 		return;
 	}
 
-	delete val->va;
+	val->va->clear();
+	free( val->va );
 	val->init();
 }
 
