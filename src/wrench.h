@@ -354,16 +354,12 @@ struct WRValue
 	void* array( unsigned int* len, char* arrayType =0 ) const; 
 	const char* c_str( unsigned int* len =0 ) const; 
 
-	//WRValueType getType() { return enumType == WR_REF ? r->getType() : enumType; }
-
-//	WRValue* valueArray( int* len =0 );
-
 	inline void init() { p = 0; p2 = 0; } // call upon first create or when you're sure no memory is hanging from one
 
 //private: // is what this SHOULD be.. but that's impractical since the
 		   // VM is not an object that can be friended.
 		   
-	int arrayValueAsInt() const;
+	void arrayValue( WRValue* val ) const;
 
 	uint32_t getHashEx() const; // harder
 	uint32_t getHash() const // for easy cases

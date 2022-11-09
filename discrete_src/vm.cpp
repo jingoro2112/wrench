@@ -112,7 +112,7 @@ void WRContext::gc( WRValue* stackTop )
 			prev = current;
 			current = current->m_next;
 		}
-		// otherwise nuke it as unreferenced
+		// otherwise free it as unreferenced
 		else if ( prev == 0 )
 		{
 			svAllocated = current->m_next;
@@ -227,7 +227,6 @@ void wr_destroyContext( WRState* w, WRContext* context )
 				w->contextList = w->contextList->next;
 			}
 
-
 			while ( context->svAllocated )
 			{
 				WRGCObject* next = context->svAllocated->m_next;
@@ -278,8 +277,14 @@ int WRValue::asInt() const
 	{
 		return (int)f;
 	}
+	if ( IS_REFARRAY(xtype) )
+	{
+		WRValue temp;
+		arrayValue( &temp );
+		return temp.asInt();
+	}
 
-	return IS_REFARRAY(xtype) ? arrayValueAsInt() : 0;
+	return 0;
 }
 
 //------------------------------------------------------------------------------
@@ -297,8 +302,14 @@ float WRValue::asFloat() const
 	{
 		return (float)i;
 	}
-	
-	return IS_REFARRAY(xtype) ? (float)arrayValueAsInt() : 0;
+	if ( IS_REFARRAY(xtype) )
+	{
+		WRValue temp;
+		arrayValue( &temp );
+		return temp.asFloat();
+	}
+
+	return 0;
 }
 
 //------------------------------------------------------------------------------
@@ -353,22 +364,9 @@ char* WRValue::asString( char* string, size_t len ) const
 	{
 		switch( type )
 		{
-			case WR_FLOAT:
-			{
-				wr_ftoa( f, string, len );
-				break;
-			}
-
-			case WR_INT:
-			{
-				wr_itoa( i, string, len );
-				break;
-			}
-
-			case WR_REF:
-			{
-				return r->asString( string, len );
-			}
+			case WR_FLOAT: { wr_ftoa( f, string, len ); break; }
+			case WR_INT: { wr_itoa( i, string, len ); break; }
+			case WR_REF: { return r->asString( string, len ); }
 		}
 	}
 	

@@ -61,13 +61,13 @@ like crazy a modest size should be more than enough.
 
 This will consume 8 bytes per stack entry on a 32-bit system, 16 on 64.
 */
-#define WRENCH_DEFAULT_STACK_SIZE 20
+#define WRENCH_DEFAULT_STACK_SIZE 30
 /***********************************************************************/
 
 /************************************************************************
 set this to try compiling sys/stat.h for fstat and file operations.
 */
-#define WRENCH_STD_FILE
+//#define WRENCH_STD_FILE
 /***********************************************************************/
 
 #include <stdint.h>
@@ -354,16 +354,12 @@ struct WRValue
 	void* array( unsigned int* len, char* arrayType =0 ) const; 
 	const char* c_str( unsigned int* len =0 ) const; 
 
-	//WRValueType getType() { return enumType == WR_REF ? r->getType() : enumType; }
-
-//	WRValue* valueArray( int* len =0 );
-
 	inline void init() { p = 0; p2 = 0; } // call upon first create or when you're sure no memory is hanging from one
 
 //private: // is what this SHOULD be.. but that's impractical since the
 		   // VM is not an object that can be friended.
 		   
-	int arrayValueAsInt() const;
+	void arrayValue( WRValue* val ) const;
 
 	uint32_t getHashEx() const; // harder
 	uint32_t getHash() const // for easy cases
@@ -437,7 +433,9 @@ struct WRValue
 #undef WRENCH_STD_FILE
 #endif
 #include <Arduino.h>
+#include <cstdlib>
 #endif
+
 
 #ifndef WRENCH_COMBINED
 #include "utils.h"

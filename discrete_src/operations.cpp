@@ -79,29 +79,25 @@ void growValueArray( WRValue* v, int newSize )
 }
 
 //------------------------------------------------------------------------------
-int WRValue::arrayValueAsInt() const
+void WRValue::arrayValue( WRValue* val ) const
 {
 	unsigned int s = ARRAY_ELEMENT_FROM_P2(p2);
 	if ( r->va->m_type == SV_VALUE )
 	{
-		if ( s >= r->va->m_size )
+		if ( s < r->va->m_size )
 		{
-			if ( r->va->m_skipGC )
-			{
-				return 0;
-			}
-			
-			growValueArray( r, s + 1 );
+			*val = r->va->m_Vdata[s];
 		}
-		
-		return r->va->m_Vdata[s].asInt();
 	}
 	else if ( r->va->m_type == SV_CHAR )
 	{
-		return r->va->m_Cdata[(s >= r->va->m_size) ? 0 : s];
+		val->p2 = INIT_AS_INT;
+		val->ui = (s < r->va->m_size) ? r->va->m_Cdata[s] : 0;
 	}
-
-	return 0;
+	else
+	{
+		val->init();
+	}
 }
 
 //------------------------------------------------------------------------------

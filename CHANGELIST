@@ -1,4 +1,5 @@
 1.8.0 ----------------------------------------------------------------------------------
+- fixed value-to-array semantics for asInt() and asFloat()
 - removed c++ constructor/destructor semantics from interpretrer, this saves a
   few cycles and at the same time allows large chunks of memory to be allocated
   simultaneously so should reduce RAM usage a bit too
