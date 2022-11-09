@@ -77,6 +77,8 @@ pre code {
                 <span class="menu-title"><a href="#intro">Intro</a></span>
                 <span class="menu-title"><a href="#integration">Integration</a></span>
                 <span class="menu-title"><a href="#language">Language Reference</a></span>
+                <span class="menu-title"><a href="#extending">Extending
+Wrench</a></span>
                 <span class="menu-title"><a href="#library">Lib Reference</a></span>
                 <span class="menu-title"><a href="#benchmarks">Benchmarks</a></span>
                 <span class="menu-title"><a href="#faq">FAQ</a></span>
@@ -573,6 +575,242 @@ hashTable._exists( 2 ); // returns 'true'
 hashTable._remove( 2 );
 hashTable._exists( 2 ); // now false
 </code></pre>
+
+
+
+
+
+
+
+
+
+<hr><h1><a name="extending"></a>3.5 Extending Wrench</h1></hr>
+
+There are three ways wrench interacts with "native" c/c++ code:
+
+
+<ul>
+<li><a href="#callbacks"><b>Callbacks</b> wrench calls a registered
+function directly</a>
+<li><a href="#libcalls"><b>Library Callbacks</b> These are like callbacks but trimmed down for
+absolute maximum speed.</a>
+<li><a href="#calls"><b>Calls</b> any wrench <code>function</code> can be called
+directly</a>
+</ul>
+
+
+<hr><h2><a name="callbacks"></a>Callbacks</h2></hr>
+
+A callback appears inside wrench as an ordinary function, they take
+arguments and return a value:
+<pre><code>retval = myFunction( 25 );
+</code></pre>
+
+in order to receive the "myFunction(...)" callback the c program needs
+to register the callback with<br>
+<br>void <b>wr_registerFunction</b>( WRState* <b>w</b>, const char* <b>name</b>,
+WR_C_CALLBACK <b>function</b>, void* <b>usr</b> )
+
+<br><br><b>w</b> state to be installed in
+<br><b>name</b> name the function will appear as inside
+wrench
+<br><b>function</b> pointer to callback function (see below)
+<br><b>usr</b> opaque pointer that will be passed when the
+function is called (may be null)
+
+
+<pre><code>void myFunction( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+    // do something
+}
+
+void main()
+{
+    WRState* w = wr_newState( 128 );
+    wr_registerFunction( w, "myFunction", myFunction, 0 );
+
+    // and then run wrench
+}
+</code></pre>
+Every time <code>myFunction()</code> is called from wrench the
+external c function will be called.
+
+<p>void <b>myFunction</b>( WRState* <b>w</b>, const WRValue* <b>argv</b>, const
+int <b>argn</b>, WRValue& <b>retVal</b>, void* <b>usr</b> )
+<br><br>WRState* <b>w</b> Pointer to the state that made the call
+<br>const WRValue* <b>argv</b> a list of zero or more
+<code>WRValue</code> that are the arguments the function was called
+with
+<br>const int <b>argn</b> the number of arguments passed in argv
+<br>WRValue& <b>retVal</b> this value is returned to the caller
+(default integer zero) 
+<br>void* <b>usr</b> value passed when the function was registered
+
+<br>
+The arguments passed are directly from the wrench stack for speed,
+because of this their values should never be accessed directly, but
+with the built-in accessors:
+<p>asInt();
+<br>asFloat();
+<br>asString(...);
+<br>c_str();
+<br>array(...);
+
+<p>For safety the return value should use the value constructors
+<p>void wr_makeInt( WRValue* val, int i );
+<br>void wr_makeFloat( WRValue* val, float f );
+<br>void wr_makeCharArray( WRValue* val, const unsigned char* data, const int len );
+
+
+<p>Also since functions in wrench can be called with any number of
+arguments (including zero) that should be checked for safety, as in:
+
+<pre><code>void openDoor( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+    if ( argn != 2 )
+    {
+        // log an error or something
+        return;
+    }
+
+    const char* name = argv[0].c_str();
+    if ( !name )
+    {
+        // was not passed a string!
+        return;
+    }
+	
+    int door = argv[1].asInt(); 
+
+    OpenDoor( name, door ); // some function to do the work
+
+    wr_makeInt( &retVal, 1 ); // return a '1' indicating success
+}
+</code></pre>
+
+<hr><h2><a name="libcalls"></a>Library Callbacks</h2></hr>
+<p>The good news is these are basicall the same as regular callbacks. The
+function signature is a bit different, though, to facilitate very fast
+calls, minimizing the work wrench has to do.
+<p>The assumption here is that if you're writing library calls then
+you are likely familiar and comfortable with some of the wrench
+internals and don't mind looking at examples and source code
+
+<p>There are many examples of library calls in std_math.c,
+std_string.c, and std_io.c.
+
+<br>library functions are registered with a different function, and
+their names must conform to the "x::y" format for them to be
+recognized by wrench code:
+<p>void <b>wr_registerLibraryFunction</b>( WRState* <b>w</b>, const char*
+   <b>signature</b>, WR_LIB_CALLBACK <b>function</b> );
+<br><br>WRState* <b>w</b> Pointer to the state that made the call
+<br>const char* <b>signature</b> "x::y" formatted lib call name
+<br>WR_LIB_CALLBACK <b>function</b> c-function to callback
+
+<p>The WR_LIB_CALLBACK looks liks this:
+<p>void libFunc( WRValue* stackTop, const int argn, WRContext* c )
+<p>Not much to go on, I know, but the idea is to get in and out of a
+library call as fast as possible, so yeah, you gotta know how to use
+it.
+<p>
+If any arguments were passed, they are below the stack pointer,
+examples:
+
+<p>argn = 1:
+<br><code>stackTop[-1].asInt(); // or .asFloat() or whatever</code>
+
+<p>argn = 2:
+<br><code>stackTop[-2].asInt(); // first argument</code>
+<br><code>stackTop[-1].asInt(); // second argument</code>
+
+<p>It might be easier to think about it this way:
+<pre><code>WRValue* args = stackTop - argn;
+
+args[0].asInt(); // first
+args[1].asInt(); // second
+args[2].asInt(); // third
+args[3].asInt(); // fourth
+</code></pre>
+
+<p>The return value is quite a bit easier to explain, it's
+<code>stackTop</code> itself, so for example returning 5.4:
+<p><code>wr_makeFloat( stackTop, 5.4f );</code>
+<p>The WRContext value is provided to save a dereference on the wrench
+side for a rarely used (but necessary!) parameter; the WRState* value contained inside it if necessary as
+<p><code>c->w</code>
+
+
+
+
+
+<hr><h2><a name="calls"></a>Calls</h2></hr>
+
+<p>once wrench code is run for the first time with wr_run() the state
+is preserved and can be re-entered.
+<br>given this simple script:
+
+<pre><code>a = 20;
+function wrenchFunction()
+{
+    ::a += 30;
+}</pre></code>
+
+<p>A program that woiuld call "wrenchFunction()" might look like this:
+
+<pre><code>WRState* w = wr_newState();
+WRContext* context = wr_run( w, someByteCode ); // 'a' will be 20
+
+wr_callFunction( w, context, "wrenchFunction" ); // 'a' will now be 50
+</code></pre>
+
+<p>An array of arguments can be passed to the function:
+
+<pre><code>a = 20;
+function wrenchFunction( b, c )
+{
+    ::a += b * c;
+}</pre></code>
+<pre><code>WRState* w = wr_newState();
+WRContext* context = wr_run( w, someByteCode ); // 'a' will be 20
+
+WRValue values[2];
+wr_makeInt( &value[0], 2 );
+wr_makeInt( &value[1], 3 );
+wr_callFunction( w, context, "wrenchFunction", values, 2 ); // 'a' will now be 26
+</code></pre>
+
+<p> the return value from any call is available with <code>WRValue*
+wr_returnValueFromLastCall( WRState* w )</code>
+
+
+<pre><code>function wrenchFunction( b, c )
+{
+    return b * c;
+}</pre></code>
+<pre><code>WRState* w = wr_newState();
+WRContext* context = wr_run( w, someByteCode ); // must run to establish context
+
+WRValue values[2];
+wr_makeInt( &value[0], 4 );
+wr_makeInt( &value[1], 5 );
+wr_callFunction( w, context, "wrenchFunction", values, 2 );
+
+WRValue* ret = wr_returnValueFromLastCall( w ); // ret->asInt() will contain 20
+</code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

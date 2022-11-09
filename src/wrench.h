@@ -27,7 +27,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 01
-#define WRENCH_VERSION_MINOR 80
+#define WRENCH_VERSION_MINOR 81
 
 /************************************************************************
 wrench's compiler was not designed to be memory or space efficient, for
@@ -433,7 +433,6 @@ struct WRValue
 #undef WRENCH_STD_FILE
 #endif
 #include <Arduino.h>
-#include <cstdlib>
 #endif
 
 

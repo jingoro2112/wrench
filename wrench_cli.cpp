@@ -34,6 +34,7 @@ SOFTWARE.
 int runTests( int number =0 );
 void setup();
 
+
 //------------------------------------------------------------------------------
 void blobToHeader( WRstr const& blob, WRstr const& variableName, WRstr& header )
 {
@@ -118,7 +119,7 @@ int usage()
 }
 
 //------------------------------------------------------------------------------
-static void printl( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+static void printl( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
@@ -130,7 +131,7 @@ static void printl( WRState* s, const WRValue* argv, const int argn, WRValue& re
 }
 
 //------------------------------------------------------------------------------
-static void print( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+static void print( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
