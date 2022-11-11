@@ -1,3 +1,12 @@
+1.8.1 ----------------------------------------------------------------------------------
+- RAM on small devices is precious, and fragmentation is really a problem. wrench's
+  hash tables are bad for this becuase they are very flat, grow-on-collide. So I added
+  a 'linear retry' semantic of size (mod / 8) which will attempt to find empty entries
+  NEAR a collision. This has dramatically reduced ram use and fragmentation on modest
+  size tables, at the cost of the occasional iteration on hit. The only real penalty is
+  felt on a miss, and it's not large.
+- Initial addition of an arduino library
+
 1.8.0 ----------------------------------------------------------------------------------
 - fixed value-to-array semantics for asInt() and asFloat()
 - removed c++ constructor/destructor semantics from interpretrer, this saves a

@@ -689,7 +689,7 @@ arguments (including zero) that should be checked for safety, as in:
 </code></pre>
 
 <hr><h2><a name="libcalls"></a>Library Callbacks</h2></hr>
-<p>The good news is these are basicall the same as regular callbacks. The
+<p>The good news is these are very similair to regular callbacks. The
 function signature is a bit different, though, to facilitate very fast
 calls, minimizing the work wrench has to do.
 <p>The assumption here is that if you're writing library calls then
@@ -708,9 +708,9 @@ recognized by wrench code:
 <br>const char* <b>signature</b> "x::y" formatted lib call name
 <br>WR_LIB_CALLBACK <b>function</b> c-function to callback
 
-<p>The WR_LIB_CALLBACK looks liks this:
+<p>The WR_LIB_CALLBACK looks like this:
 <p>void libFunc( WRValue* stackTop, const int argn, WRContext* c )
-<p>Not much to go on, I know, but the idea is to get in and out of a
+<p>The idea is to get in and out of a
 library call as fast as possible, so yeah, you gotta know how to use
 it.
 <p>
@@ -736,6 +736,12 @@ args[3].asInt(); // fourth
 <p>The return value is quite a bit easier to explain, it's
 <code>stackTop</code> itself, so for example returning 5.4:
 <p><code>wr_makeFloat( stackTop, 5.4f );</code>
+<p><b>NOTE:</b> The return value is defaulted to integer-0 so it is safe
+to install an integer value directly in the interest of speed, ie:
+<code><pre>stackTop->i = returnValue; // we're all friends here
+stackTop[0].i = returnValue; // exactly the same as the above code
+</pre></code>
+
 <p>The WRContext value is provided to save a dereference on the wrench
 side for a rarely used (but necessary!) parameter; the WRState* value contained inside it if necessary as
 <p><code>c->w</code>
@@ -756,7 +762,7 @@ function wrenchFunction()
     ::a += 30;
 }</pre></code>
 
-<p>A program that woiuld call "wrenchFunction()" might look like this:
+<p>A program that would call "wrenchFunction()" might look like this:
 
 <pre><code>WRState* w = wr_newState();
 WRContext* context = wr_run( w, someByteCode ); // 'a' will be 20
@@ -872,8 +878,7 @@ systems. Here is a list of compiled image sizes on various processors.
 image, I do not keep these numbers up to date but I can assure you
 they are cielings, the actual value of the latest version will be the
 same or <b>less.</b>
-<p>NOTE 2: compiled with <code>WRENCH_COMPACT and
-WRENCH_WITHOUT_COMPILER<.code> 
+<p>NOTE 2: compiled with <code>WRENCH_REALLY_COMPACT</code> 
 
 <table>
   <tr>

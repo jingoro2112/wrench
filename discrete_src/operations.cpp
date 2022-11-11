@@ -1259,7 +1259,7 @@ static void doIndexHash_X( WRValue* value, WRValue* target, uint32_t hash ) { ta
 static void doIndexHash_R( WRValue* value, WRValue* target, uint32_t hash ) { wr_IndexHash[ value->r->type ]( value->r, target, hash ); }
 static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
 {
-	if (IS_REFARRAY(value->xtype) )\
+	if (IS_REFARRAY(value->xtype) )
 	{
 		if ( value->r->va->m_type == SV_VALUE )
 		{

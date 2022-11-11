@@ -64,6 +64,7 @@ This will consume 8 bytes per stack entry on a 32-bit system, 16 on 64.
 #define WRENCH_DEFAULT_STACK_SIZE 64
 /***********************************************************************/
 
+
 /************************************************************************
 set this to try compiling sys/stat.h for fstat and file operations.
 */
@@ -135,7 +136,7 @@ WRValue* wr_returnValueFromLastCall( WRState* w );
 // once wr_run() is called the returned context object can be used to
 // pre-fetch a function pointer. This reduces the overhead of calling
 // that function to almost nothing.
-WRFunction* wr_getFunction( WRState* w, WRContext* context, const char* functionName );
+WRFunction* wr_getFunction( WRContext* context, const char* functionName );
 
 // Destroy a context you no longer need and free up all the memory it
 // was using, all contexts are freed when wr_destroyState() is called,
@@ -212,6 +213,13 @@ void wr_loadStdLib( WRState* w ); // standard functions like sprintf/rand/
 void wr_loadFileLib( WRState* w ); // file funcs
 void wr_loadStringLib( WRState* w ); // string functions
 
+// arduino-specific functions, be sure to add arduino_lib.cpp to your
+// sketch. much thanks to Koepel for inspiring and writing this
+void wr_loadArduinoSTDLib( WRState* w ); 
+void wr_loadArduinoIOLib( WRState* w ); 
+void wr_loadArduinoLCDLib( WRState* w ); 
+
+void wr_loadAllArduinoLibs( WRState* w ); 
 
 /***************************************************************/
 /***************************************************************/
@@ -227,7 +235,7 @@ void wr_makeInt( WRValue* val, int i );
 void wr_makeFloat( WRValue* val, float f );
 void wr_makeCharArray( WRValue* val, const unsigned char* data, const int len );
 
-void wr_makeContainer( WRValue* val );
+void wr_makeContainer( WRValue* val, const uint16_t sizeHint =0 );
 void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value );
 void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value );
 void wr_addFloatToContainer( WRValue* container, const char* name, const float value );

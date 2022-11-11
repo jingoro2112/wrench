@@ -407,9 +407,9 @@ WRValue* wr_returnValueFromLastCall( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-WRFunction* wr_getFunction( WRState* w, WRContext* context, const char* functionName )
+WRFunction* wr_getFunction( WRContext* context, const char* functionName )
 {
-	return w->c_functionRegistry.getAsRawValueHashTable( wr_hashStr(functionName) ^ context->hashOffset )->wrf;
+	return context->w->c_functionRegistry.getAsRawValueHashTable( wr_hashStr(functionName) ^ context->hashOffset )->wrf;
 }
 
 //------------------------------------------------------------------------------
@@ -2957,52 +2957,28 @@ void wr_makeFloat( WRValue* val, float f )
 }
 
 //------------------------------------------------------------------------------
-void wr_makeContainer( WRValue* val )
+void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 {
 	val->p2 = INIT_AS_HASH_TABLE;
 	val->va = (WRGCObject*)malloc( sizeof(WRGCObject) );
-	val->va->init( 0, SV_HASH_TABLE );
+	val->va->init( sizeHint, SV_VOID_HASH_TABLE );
 	val->va->m_skipGC = 1;
 }
-
-
-//------------------------------------------------------------------------------
-WRValue* wr_getContainerEntryEx( WRValue* container, const char* name )
-{
-	if ( container->xtype != WR_EX_HASH_TABLE )
-	{
-		return 0;
-	}
-
-	uint32_t hash = wr_hashStr( name );
-
-	WRValue *entry = (WRValue *)container->va->get( hash );
-	(entry + 1)->p2 = INIT_AS_INT;
-	(entry + 1)->ui = hash;
-	return entry;
-}
-
 
 //------------------------------------------------------------------------------
 void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value )
 {
-	WRValue* entry = wr_getContainerEntryEx( container, name );
-	if ( entry )
-	{
-		entry->r = value;
-		entry->p2 = INIT_AS_REF;
-	}
+	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
+	entry->r = value;
+	entry->p2 = INIT_AS_REF;
 }
 
 //------------------------------------------------------------------------------
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array )
 {
-	WRValue* entry = wr_getContainerEntryEx( container, name );
-	if ( entry )
-	{
-		entry->c = array;
-		entry->p2 = INIT_AS_RAW_ARRAY;
-	}
+	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
+	entry->c = array;
+	entry->p2 = INIT_AS_RAW_ARRAY;
 }
 
 //------------------------------------------------------------------------------
