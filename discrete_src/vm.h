@@ -90,7 +90,6 @@ void wr_countOfArrayElement( WRValue* array, WRValue* target );
 
 typedef void (*WRVoidFunc)( WRValue* to, WRValue* from );
 extern WRVoidFunc wr_assign[16];
-
 extern WRVoidFunc wr_SubtractAssign[16];
 extern WRVoidFunc wr_AddAssign[16];
 extern WRVoidFunc wr_ModAssign[16];
@@ -104,6 +103,10 @@ extern WRVoidFunc wr_LeftShiftAssign[16];
 extern WRVoidFunc wr_postinc[4];
 extern WRVoidFunc wr_postdec[4];
 extern WRVoidFunc wr_pushIterator[4];
+
+
+typedef void (*WRVoidPlusFunc)( WRValue* to, WRValue* from, int add );
+extern WRVoidPlusFunc m_unaryPost[4];
 
 
 typedef int (*WRFuncIntCall)( int a, int b );

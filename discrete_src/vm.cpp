@@ -89,9 +89,9 @@ void WRContext::gc( WRValue* stackTop )
 		}
 	}
 
-	WRValue* globalSpace = (WRValue *)(this + 1);
-	
-	// mark context's global
+	// mark context's globals
+	WRValue* globalSpace = (WRValue *)(this + 1); // globals are allocated directly after this context
+
 	for( int i=0; i<globals; ++i, ++globalSpace )
 	{
 		if ( IS_EXARRAY_TYPE(globalSpace->xtype) && !(globalSpace->va->m_skipGC) )
@@ -113,19 +113,22 @@ void WRContext::gc( WRValue* stackTop )
 			current = current->m_next;
 		}
 		// otherwise free it as unreferenced
-		else if ( prev == 0 )
-		{
-			svAllocated = current->m_next;
-			current->clear();
-			free( current );
-			current = svAllocated;
-		}
 		else
 		{
-			prev->m_next = current->m_next;
 			current->clear();
-			free( current );
-			current = prev->m_next;
+
+			if ( prev == 0 )
+			{
+				svAllocated = current->m_next;
+				free( current );
+				current = svAllocated;
+			}
+			else
+			{
+				prev->m_next = current->m_next;
+				free( current );
+				current = prev->m_next;
+			}
 		}
 	}
 }
@@ -167,6 +170,7 @@ void wr_destroyState( WRState* w )
 	{
 		wr_destroyContext( w, w->contextList );
 	}
+	
 	w->c_functionRegistry.clear();
 
 	free( w );
@@ -244,15 +248,11 @@ void wr_destroyContext( WRState* w, WRContext* context )
 }
 
 //------------------------------------------------------------------------------
-int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr )
+void wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr )
 {
-	uint32_t hash = wr_hashStr( name );
-
-	WRValue* V = w->c_functionRegistry.getAsRawValueHashTable(hash);
+	WRValue* V = w->c_functionRegistry.getAsRawValueHashTable( wr_hashStr(name) );
 	V->usr = usr;
 	V->ccb = function;
-	
-	return 0;
 }
 
 //------------------------------------------------------------------------------
@@ -264,7 +264,6 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 //------------------------------------------------------------------------------
 int WRValue::asInt() const
 {
-	// this should be faster than a switch by checking the most common cases first
 	if ( type == WR_INT )
 	{
 		return i;
@@ -890,7 +889,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 	for(;;)
 	{
-		switch( *pc++)
+		switch( *pc++ )
 		{
 #endif
 			CASE(RegisterFunction):
@@ -906,6 +905,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 				context->localFunctions[findex].frameBaseAdjustment = 1
 																	  + context->localFunctions[ findex ].frameSpaceNeeded
 																	  + context->localFunctions[ findex ].arguments;
+				
 				w->c_functionRegistry.getAsRawValueHashTable(context->localFunctions[findex].hash ^ context->hashOffset)->wrf = context->localFunctions + findex;
 
 				CONTINUE;
@@ -1126,13 +1126,13 @@ callFunction:
 
 			CASE(AssignToObjectTableByOffset):
 			{
-				register0 = --stackTop;
-				register1 = (stackTop - 1);
+				register1 = --stackTop;
+				register0 = (stackTop - 1);
 				
-				if ( !IS_EXARRAY_TYPE(register1->xtype) || *pc < register1->va->m_size )
+				if ( !IS_EXARRAY_TYPE(register0->xtype) || *pc < register0->va->m_size )
 				{
-					register1 = register1->va->m_Vdata + *pc;
-					wr_assign[register1->type<<2|register0->type]( register1, register0 );
+					register0 = register0->va->m_Vdata + *pc++;
+					goto doAssignToLocalAndPop;
 				}
 
 				++pc;
@@ -1189,7 +1189,6 @@ callFunction:
 			{
 				(stackTop++)->init();
 			}
-			
 			CASE(Return):
 			{
 				register0 = stackTop - 2;
@@ -1397,7 +1396,7 @@ indexHash:
 				stackTop->i = *pc++;
 indexLiteral:
 				register0 = stackTop - 1;
-				wr_index[(WR_INT<<4)|register0->type]( context, stackTop, register0, register0 );
+				wr_index[(WR_INT<<2)|register0->type]( context, stackTop, register0, register0 );
 				CONTINUE;
 			}
 
@@ -1416,7 +1415,7 @@ indexTempLiteral:
 				(++stackTop)->i = *pc++;
 indexTempLiteralPostLoad:
 				stackTop->p2 = INIT_AS_INT;
-				wr_index[(WR_INT<<4)|register0->type]( context, stackTop, register0, stackTop - 1 );
+				wr_index[(WR_INT<<2)|register0->type]( context, stackTop, register0, stackTop - 1 );
 				CONTINUE;
 			}
 			
@@ -1490,20 +1489,6 @@ doAssignToLocalAndPop:
 				stackTop->i = READ_16_FROM_PC(pc);
 				pc += 2;
 				(stackTop++)->p2 = INIT_AS_INT;
-				CONTINUE;
-			}
-
-			CASE(PostIncrement):
-			{
-				register0 = stackTop - 1;
-				wr_postinc[ register0->type ]( register0, register0 );
-				CONTINUE;
-			}
-
-			CASE(PostDecrement):
-			{
-				register0 = stackTop - 1;
-				wr_postdec[ register0->type ]( register0, register0 );
 				CONTINUE;
 			}
 
@@ -1613,14 +1598,12 @@ NextIterator:
 				hash = (--stackTop)->getHash(); // hash has been loaded
 				hashLoc = pc + 4 + 6*(hash % (uint16_t)READ_16_FROM_PC(pc)); // jump into the table
 
-				if ( (uint32_t)READ_32_FROM_PC(hashLoc) == hash ) // hash match exactly?
+				if ( (uint32_t)READ_32_FROM_PC(hashLoc) != hash )
 				{
-					hashLoc += 4; // yup, point hashLoc to jump vector
+					hashLoc = pc - 2; // nope, point it at default vector
 				}
-				else
-				{
-					hashLoc = pc + 2; // nope, point it at default vector
-				}
+
+				hashLoc += 4; // yup, point hashLoc to jump vector
 				
 				pc += (uint16_t)READ_16_FROM_PC(hashLoc);
 				CONTINUE;
@@ -1643,6 +1626,20 @@ NextIterator:
 
 #ifdef WRENCH_COMPACT
 
+			CASE(PostIncrement):
+			{
+				register0 = stackTop - 1;
+				m_unaryPost[ register0->type ]( register0, register0, 1 );
+				CONTINUE;
+			}
+
+			CASE(PostDecrement):
+			{
+				register0 = stackTop - 1;
+				m_unaryPost[ register0->type ]( register0, register0, -1 );
+				CONTINUE;
+			}
+			
 			CASE(BinaryRightShiftSkipLoad): { intCall = rightShiftI; goto targetFuncOpSkipLoad; }
 			CASE(BinaryLeftShiftSkipLoad): { intCall = leftShiftI; goto targetFuncOpSkipLoad; }
 			CASE(BinaryAndSkipLoad): { intCall = andI; goto targetFuncOpSkipLoad; }
@@ -2320,6 +2317,20 @@ compactCompareGG8:
 			}
 	
 #else // ---------------------------- Non-Compact:
+
+			CASE(PostIncrement):
+			{
+				register0 = stackTop - 1;
+				wr_postinc[ register0->type ]( register0, register0 );
+				CONTINUE;
+			}
+
+			CASE(PostDecrement):
+			{
+				register0 = stackTop - 1;
+				wr_postdec[ register0->type ]( register0, register0 );
+				CONTINUE;
+			}
 
 			CASE(PreIncrement): { register0 = stackTop - 1; wr_preinc[ register0->type ]( register0 ); CONTINUE; }
 			CASE(PreDecrement): { register0 = stackTop - 1; wr_predec[ register0->type ]( register0 ); CONTINUE; }

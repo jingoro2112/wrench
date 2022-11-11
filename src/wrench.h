@@ -176,7 +176,7 @@ typedef void (*WR_C_CALLBACK)(WRState* w, const WRValue* argv, const int argn, W
 // name:     name of the function
 // function: callback (see typdef above)
 // usr:      opaque pointer that will be passed to the callback (optional)
-int wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr =0 );
+void wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr =0 );
 
 /***************************************************************/
 /***************************************************************/

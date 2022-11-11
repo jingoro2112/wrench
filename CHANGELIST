@@ -1,3 +1,7 @@
+1.82 ----------------------------------------------------------------------------------
+- changing release format to y.xx instead of y.x.z
+
+
 1.8.1 ----------------------------------------------------------------------------------
 - RAM on small devices is precious, and fragmentation is really a problem. wrench's
   hash tables are bad for this becuase they are very flat, grow-on-collide. So I added
