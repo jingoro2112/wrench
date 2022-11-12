@@ -1,9 +1,22 @@
 /*~ ~*/
 
 
+ff[] = { 1.2, 1.3, 1.4, 1.5 };
+if ( ff[0] != 1.2 ) { print("ff1"); }
+if ( ff[2] != 1.4 ) { print("ff2"); }
+ff[0] = 1.7;
+ff[2] = 45.76;
+if ( ff[0] != 1.7 ) { print("ff3"); }
+if ( ff[2] != 45.76 ) { print("ff4"); }
+ff[1] = ff[1] + ff[3];
+if ( ff[1] != 2.8 ) { print("ff5"); }
+a = 7.8;
+ff[1] = a;
+if ( ff[1] != 7.8 ) { print("ff6"); }
+
+
 aa[10];
 a[500] = { aa };
-
 if ( a[0]._count != 11 ) print("bad size2");
 if ( a._count!= 501 ) print("bad size");
 
@@ -106,7 +119,7 @@ function allocArray()
 	{
 		print("F bad d1");
 	}
-	
+
 	ab[500];
 	i = 2;
 	ab = { 0, 2, 3 };
@@ -160,7 +173,7 @@ function allocArray()
 			print( "oops_GL" );
 		}
 	}
-	
+
 	for( ::ggi=0; ::ggi<50; ++::ggi )
 	{
 		if ( ac[::ggi] != ::ggi+1 )

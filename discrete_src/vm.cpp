@@ -48,7 +48,7 @@ void WRContext::mark( WRValue* s )
 	WRGCObject* sva = s->va;
 
 	
-	if ( IS_SVA_VALUE_TYPE(sva) )
+	if ( IS_SVA_VALUE_TYPE(sva) && !(sva->m_size & 0x40000000) )
 	{
 		// this is an array of values, check them for array-ness too
 

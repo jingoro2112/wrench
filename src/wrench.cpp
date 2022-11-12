@@ -1177,7 +1177,9 @@ enum WROpcode
 	O_SwitchLinear,
 
 	O_GlobalStop,
-	
+
+//	O_ArraySizeSetAndClear, // make sure an array exists, is the right size and is clear
+
 	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,
 	O_FUNCTION_CALL_PLACEHOLDER,
@@ -5580,31 +5582,53 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					}
 				}
 
+
 				WRstr& token2 = expression.context[depth].token;
 				WRValue& value2 = expression.context[depth].value;
 
 				uint16_t initializer = 0;
 
+
+				// TODO - more effiecient way to do this, it allocates
+				// twice for the case of
+				// a[500] = { 1 };
+				
+/*
 				// make sure the array we are about to initialize is
-				// actually empty (set it to a noesense int value)
+				// actually empty (set it to a nonsense int value)
 				unsigned char offset[3];
 				offset[2] = 0xEE;
-				if ( expression.context[depth-1].global || (m_unitTop == 0) )
+
+				int target = depth - 1;
+				if ( (depth > 1)
+					 && expression.context[target].operation
+					 && !strncmp( expression.context[target].operation->token, "@[]", 3) )
+				{
+					--target;
+				}
+								
+				if ( expression.context[target].global || (m_unitTop == 0) )
 				{
 					offset[0] = O_LiteralInt8ToGlobal;
 					offset[1] = addGlobalSpaceLoad( expression.bytecode,
-													expression.context[depth-1].token,
+													expression.context[target].token,
 													true );
 				}
 				else
 				{
 					offset[0] = O_LiteralInt8ToLocal;
 					offset[1] = addLocalSpaceLoad( expression.bytecode,
-												   expression.context[depth-1].token,
+												   expression.context[target].token,
 												   true );
 				}
 
 				pushData( expression.context[depth].bytecode, offset, 3 );
+*/
+
+
+
+
+
 
 				for(;;)
 				{
@@ -8189,7 +8213,7 @@ void WRContext::mark( WRValue* s )
 	WRGCObject* sva = s->va;
 
 	
-	if ( IS_SVA_VALUE_TYPE(sva) )
+	if ( IS_SVA_VALUE_TYPE(sva) && !(sva->m_size & 0x40000000) )
 	{
 		// this is an array of values, check them for array-ness too
 
@@ -11207,23 +11231,23 @@ const char* WRValue::c_str( unsigned int* len ) const
 }
 
 //------------------------------------------------------------------------------
-void growValueArray( WRValue* v, int newSize )
+WRGCObject* growValueArray( WRGCObject* va, int newSize )
 {
 	WRGCObject* newArray = (WRGCObject*)malloc( sizeof(WRGCObject) );
-	newArray->init( newSize + 1, (WRGCObjectType)v->va->m_type );
+	newArray->init( newSize + 1, (WRGCObjectType)va->m_type );
 	
-	newArray->m_next = v->va->m_next;
-	v->va->m_next = newArray;
+	newArray->m_next = va->m_next;
+	va->m_next = newArray;
 
 	int size_of = sizeof(WRValue);
-	if ( v->va->m_type == SV_CHAR )
+	if ( va->m_type == SV_CHAR )
 	{
 		size_of = 1;
 	}
 	
-	memcpy( newArray->m_Cdata, v->va->m_Cdata, v->va->m_size * size_of );
-	memset( newArray->m_Cdata + (v->va->m_size*size_of), 0, (newArray->m_size - v->va->m_size) * size_of );
-	v->va = newArray;
+	memcpy( newArray->m_Cdata, va->m_Cdata, va->m_size * size_of );
+	memset( newArray->m_Cdata + (va->m_size*size_of), 0, (newArray->m_size - va->m_size) * size_of );
+	return newArray;
 }
 
 //------------------------------------------------------------------------------
@@ -11268,7 +11292,7 @@ void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 				return;
 			}
 			
-			growValueArray( array->r, s );
+			array->r->va = growValueArray( array->r->va, s );
 		}
 		*value = array->r->va->m_Vdata[s];
 	}
@@ -11309,6 +11333,36 @@ uint32_t WRValue::getHashEx() const
 	return 0;
 }
 
+
+//------------------------------------------------------------------------------
+void wr_valueToArray( const WRValue* array, WRValue* value )
+{
+	unsigned int s = ARRAY_ELEMENT_FROM_P2(array->p2);
+
+	if ( array->r->xtype == WR_EX_RAW_ARRAY )
+	{
+		array->r->c[s] = value->ui;
+	}
+	else if ( array->r->va->m_type == SV_CHAR)
+	{
+		if ( s < array->r->va->m_size ) 
+		{
+			array->r->va->m_Cdata[s] = value->ui;
+		}
+	}
+	else
+	{
+		if ( s >= array->r->va->m_size )
+		{
+			array->r->va = growValueArray(array->r->va, s);
+		}
+		WRValue* V = array->r->va->m_Vdata + s;
+		wr_assign[(V->type<<2)+value->type](V, value);
+	}
+}
+
+
+/*
 //------------------------------------------------------------------------------
 void wr_intValueToArray( const WRValue* array, int32_t intVal )
 {
@@ -11327,7 +11381,7 @@ void wr_intValueToArray( const WRValue* array, int32_t intVal )
 				return;
 			}
 			
-			growValueArray( array->r, s );
+			growValueArray( array->r->va, s );
 		}
 		WRValue* val = array->r->va->m_Vdata + s;
 		val->i = intVal;
@@ -11339,6 +11393,7 @@ void wr_intValueToArray( const WRValue* array, int32_t intVal )
 		array->r->va->m_Cdata[s] = intVal;
 	}
 }
+*/
 
 //------------------------------------------------------------------------------
 void wr_countOfArrayElement( WRValue* array, WRValue* target )
@@ -11412,7 +11467,7 @@ static void doAssign_E_F( WRValue* to, WRValue* from )
 {
 	if ( IS_REFARRAY(to->xtype) )
 	{
-		wr_intValueToArray( to, (int)from->f );
+		wr_valueToArray( to, from );
 	}
 	else
 	{
@@ -11423,7 +11478,7 @@ static void doAssign_E_I( WRValue* to, WRValue* from )
 {
 	if ( IS_REFARRAY(to->xtype) )
 	{
-		wr_intValueToArray( to, from->i );
+		wr_valueToArray( to, from );
 	}
 	else
 	{
@@ -11451,7 +11506,7 @@ static void doAssign_E_E( WRValue* to, WRValue* from )
 					return;
 				}
 
-				growValueArray( to->r, index );	
+				to->r->va = growValueArray( to->r->va, index );	
 			}
 
 			to->r->va->m_Vdata[index] = *from;
@@ -11499,7 +11554,7 @@ static void unaryPost_E( WRValue* value, WRValue* stack, int add )
 			{
 				if ( s >= value->r->va->m_size )
 				{
-					growValueArray( value->r, s );
+					value->r->va = growValueArray( value->r->va, s );
 				}
 				WRValue* val = value->r->va->m_Vdata + s;
 				m_unaryPost[ val->type ]( val, stack, add );
@@ -11543,7 +11598,7 @@ static void FuncAssign_E_I( WRValue* to, WRValue* from, WRFuncIntCall intCall, W
 
 		wr_FuncAssign[(element.type<<2)|WR_INT]( &element, from, intCall, floatCall );
 
-		wr_intValueToArray( to, element.i );
+		wr_valueToArray( to, &element );
 		*from = element;
 	}
 }
@@ -11556,7 +11611,7 @@ static void FuncAssign_E_F( WRValue* to, WRValue* from, WRFuncIntCall intCall, W
 
 		wr_FuncAssign[(element.type<<2)|WR_FLOAT]( &element, from, intCall, floatCall );
 
-		wr_intValueToArray( to, (int)element.f );
+		wr_valueToArray( to, &element );
 		*from = element;
 	}
 }
@@ -11863,7 +11918,7 @@ static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 		\
 		NAME##Assign[(element.type<<2)|WR_INT]( &element, from );\
 		\
-		wr_intValueToArray( to, element.i );\
+		wr_valueToArray( to, &element );\
 		*from = element;\
 	}\
 }\
@@ -11929,7 +11984,7 @@ static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 		\
 		NAME##Assign[(element.type<<2)|WR_INT]( &element, from );\
 		\
-		wr_intValueToArray( to, element.i );\
+		wr_valueToArray( to, &element );\
 		*from = element;\
 	}\
 }\
@@ -11942,7 +11997,7 @@ static void NAME##Assign_E_F( WRValue* to, WRValue* from )\
 		\
 		NAME##Assign[(element.type<<2)|WR_FLOAT]( &element, from );\
 		\
-		wr_intValueToArray( to, (int)element.f );\
+		wr_valueToArray( to, &element );\
 		*from = element;\
 	}\
 }\
@@ -12280,7 +12335,7 @@ static void NAME##_E( WRValue* value )\
 			{\
 				if ( s >= value->r->va->m_size )\
 				{\
-					growValueArray( value->r, s );\
+					value->r->va = growValueArray( value->r->va, s );\
 				}\
 				\
 				WRValue* val = (WRValue *)value->r->va->m_data + s;\
@@ -12318,7 +12373,7 @@ static void NAME##_E( WRValue* value, WRValue* stack )\
 						  {\
 							  if ( s >= value->r->va->m_size )\
 							  {\
-								  growValueArray( value->r, s );\
+								  value->r->va = growValueArray( value->r->va, s );\
 							  }\
 							  WRValue* val = value->r->va->m_Vdata + s;\
 							  NAME[ val->type ]( val, stack );\
@@ -12406,7 +12461,7 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 			return;
 		}
 
-		growValueArray( value, index->ui );
+		value->va = growValueArray( value->va, index->ui );
 	}
 
 skipBoundsCheck:
@@ -12452,7 +12507,7 @@ static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
 			unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
 			if ( s >= value->r->va->m_size )
 			{
-				growValueArray( value->r, s );
+				value->r->va = growValueArray( value->r->va, s );
 			}
 
 			WRValue* val = value->r->va->m_Vdata + s;
@@ -12516,7 +12571,7 @@ static void doNegate_E( WRValue* value )
 		{
 			if (s >= value->r->va->m_size)
 			{
-				growValueArray(value->r, s);
+				value->r->va = growValueArray(value->r->va, s);
 			}
 			WRValue* val = value->r->va->m_Vdata + s;
 			if (val->type == WR_INT)

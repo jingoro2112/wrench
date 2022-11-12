@@ -3401,31 +3401,53 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					}
 				}
 
+
 				WRstr& token2 = expression.context[depth].token;
 				WRValue& value2 = expression.context[depth].value;
 
 				uint16_t initializer = 0;
 
+
+				// TODO - more effiecient way to do this, it allocates
+				// twice for the case of
+				// a[500] = { 1 };
+				
+/*
 				// make sure the array we are about to initialize is
-				// actually empty (set it to a noesense int value)
+				// actually empty (set it to a nonsense int value)
 				unsigned char offset[3];
 				offset[2] = 0xEE;
-				if ( expression.context[depth-1].global || (m_unitTop == 0) )
+
+				int target = depth - 1;
+				if ( (depth > 1)
+					 && expression.context[target].operation
+					 && !strncmp( expression.context[target].operation->token, "@[]", 3) )
+				{
+					--target;
+				}
+								
+				if ( expression.context[target].global || (m_unitTop == 0) )
 				{
 					offset[0] = O_LiteralInt8ToGlobal;
 					offset[1] = addGlobalSpaceLoad( expression.bytecode,
-													expression.context[depth-1].token,
+													expression.context[target].token,
 													true );
 				}
 				else
 				{
 					offset[0] = O_LiteralInt8ToLocal;
 					offset[1] = addLocalSpaceLoad( expression.bytecode,
-												   expression.context[depth-1].token,
+												   expression.context[target].token,
 												   true );
 				}
 
 				pushData( expression.context[depth].bytecode, offset, 3 );
+*/
+
+
+
+
+
 
 				for(;;)
 				{

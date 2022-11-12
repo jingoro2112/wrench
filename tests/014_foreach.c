@@ -25,6 +25,7 @@ for( value : something )
 	{
 		print("f on 2");
 	}
+	break;
 }
 if ( on != 3 ) print( "f3");
 
