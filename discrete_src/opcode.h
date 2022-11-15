@@ -317,8 +317,9 @@ enum WROpcode
 
 	O_GlobalStop,
 
-//	O_ArraySizeSetAndClear, // make sure an array exists, is the right size and is clear
-
+	O_ToInt,
+	O_ToFloat,
+	
 	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,
 	O_FUNCTION_CALL_PLACEHOLDER,

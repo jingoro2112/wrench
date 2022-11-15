@@ -25,8 +25,8 @@ SOFTWARE.
 #define _WRENCH_H
 /*------------------------------------------------------------------------------*/
 
-#define WRENCH_VERSION_MAJOR 01
-#define WRENCH_VERSION_MINOR 81
+#define WRENCH_VERSION_MAJOR 02
+#define WRENCH_VERSION_MINOR 00
 
 /************************************************************************
 wrench's compiler was not designed to be memory or space efficient, for
@@ -58,16 +58,19 @@ this does NOT include global/array space which is allocated separately, just
 function calls. Unless you are using piles of local data AND recursing
 like crazy a modest size should be more than enough.
 
-This will consume 8 bytes per stack entry on a 32-bit system, 16 on 64.
+This will consume 8 bytes per stack entry on a 32-bit system
 */
 #define WRENCH_DEFAULT_STACK_SIZE 64
 /***********************************************************************/
 
 
 /************************************************************************
-set this to try compiling sys/stat.h for fstat and file operations.
+system specifics that makme total sense on pc-class systems but not on
+embedded
 */
-#define WRENCH_STD_FILE
+#define WRENCH_STD_FILE // fopen(), fclose(), fread(), fwrite(), fstat()
+#define WRENCH_STD_TIME // clock()
+
 /***********************************************************************/
 
 #include <stdint.h>
@@ -100,10 +103,11 @@ int wr_compile( const char* source, const int size, unsigned char** out, int* ou
 
 // w:          state (see wr_newState)
 // block:      location of bytecode
+// blockSize:  number of bytes in block
 
 // RETURNS:    a WRContext pointer to be passed to wr_callFunction
 //             'global' values are NOT SHARED between contexts
-WRContext* wr_run( WRState* w, const unsigned char* block );
+WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize );
 
 // after wr_run() this allows any function in the script to be
 // called with the given arguments, returning a single value
@@ -291,6 +295,8 @@ enum WRError
 	WR_ERR_switch_construction_error,
 	WR_ERR_switch_bad_case_hash,
 	WR_ERR_switch_duplicate_case,
+
+	WR_ERR_bad_bytecode_CRC,
 
 	WR_warning_enums_follow,
 

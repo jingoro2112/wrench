@@ -10,6 +10,23 @@ hello
 hello
 ~*/
 
+a = 0xFFFFFFFF;
+b = 4294967295;
+if ( a != b ) print("r1");
+a++;
+b++;
+if ( a != b ) print("r2");
+a = -2147483648;
+b = 0x80000000;
+if ( a != b ) print("r3");
+a++;
+b++;
+if ( a != b ) print("r4");
+
+if ( 0b010 != 2 ) print( "err bin" );
+if ( 0b != 0 ) print( "err bin2" );
+
+if ( 10f != 10.f ) { print("f1"); }
 
 // test floating/integer point string converter
 print( 0.0 );
@@ -48,6 +65,3 @@ if ( a != 5 ) print("err 1");
 a = 10/**//	/*h*/2;
 if ( a != 5 ) print("err 1");
 
-
-if ( 0b010 != 2 ) print( "err bin" );
-if ( 0b != 0 ) print( "err bin2" );

@@ -530,6 +530,12 @@ false == 0
 null == 0
 </code></pre>
 
+
+
+
+
+
+
 <p><b>enums</b>
 <p>enums are syntactic sugar, when invoked they introduce variables
 into the namespace with automatic initliazation
@@ -542,6 +548,9 @@ into the namespace with automatic initliazation
 
 // n1 is 0, n2 is 1 and n3 is 2
 </code></pre>
+
+
+
 
 <p><b>hash tables</b>
 <p>wrench uses hash tables internally so this language feature kind of
@@ -577,6 +586,20 @@ hashTable._exists( 2 ); // now false
 </code></pre>
 
 
+
+
+<p><b>casting/coersion</b>
+<p>it is often handy to force wrench to convert a float to an int or
+vice-versa, for example:
+<code><pre>divisor = 1000;
+result = 10 / divisor; // the result of this is '0' since divisor is an int
+
+result = 10 / (float)divisor; // now result will be 0.01
+
+// NOTE: divisor will also NOT be converted to a float.
+//       to accomplish that:
+divisor = (float)divisor;
+</code></pre>
 
 
 

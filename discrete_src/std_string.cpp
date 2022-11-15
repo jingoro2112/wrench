@@ -41,7 +41,6 @@ int wr_strlenEx( WRValue* val )
 //------------------------------------------------------------------------------
 void wr_strlen( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->p2 = INIT_AS_INT;
 	stackTop->i = argn == 1 ? wr_strlenEx( stackTop - 1 ) : 0;
 }
 
@@ -349,7 +348,6 @@ void wr_sprintf( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_isspace( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->p2 = INIT_AS_INT;
 	if ( argn == 1 )
 	{
 		stackTop->i = (int)isspace( (char)(stackTop - 1)->asInt() );
@@ -359,7 +357,6 @@ void wr_isspace( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_isalpha( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->p2 = INIT_AS_INT;
 	if ( argn == 1 )
 	{
 		stackTop->i = (int)isalpha( (char)(stackTop - 1)->asInt() );
@@ -369,7 +366,6 @@ void wr_isalpha( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_isdigit( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->p2 = INIT_AS_INT;
 	if ( argn == 1 )
 	{
 		stackTop->i = (int)isdigit( (char)(stackTop - 1)->asInt() );
@@ -379,7 +375,6 @@ void wr_isdigit( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_isalnum( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->p2 = INIT_AS_INT;
 	if ( argn == 1 )
 	{
 		stackTop->i = (int)isalnum( (char)(stackTop - 1)->asInt() );
@@ -425,7 +420,6 @@ void wr_mid( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_strchr( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->p2 = INIT_AS_INT;
 	stackTop->i = -1;
 
 	if ( argn < 2 )
@@ -452,7 +446,6 @@ void wr_strchr( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_tolower( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->p2 = INIT_AS_INT;
 	if ( argn == 1 )
 	{
 		stackTop->i = (int)tolower( (stackTop - 1)->asInt() );
@@ -462,10 +455,30 @@ void wr_tolower( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_toupper( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->p2 = INIT_AS_INT;
 	if ( argn == 1 )
 	{
 		stackTop->i = (int)toupper( (stackTop - 1)->asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_tol( WRValue* stackTop, const int argn, WRContext* c )
+{
+	if ( argn == 2 )
+	{
+		const char* str = stackTop[-2].c_str();
+		if ( str )
+		{
+			stackTop->i = (int)strtol( str, 0, stackTop[-1].asInt() );
+		}
+	}
+	else if ( argn == 1 )
+	{
+		const char* str = stackTop[-1].c_str();
+		if ( str )
+		{
+			stackTop->i = (int)strtol( str, 0, 10 );
+		}
 	}
 }
 
@@ -483,6 +496,5 @@ void wr_loadStringLib( WRState* w )
 	wr_registerLibraryFunction( w, "str::strchr", wr_strchr );
 	wr_registerLibraryFunction( w, "str::tolower", wr_tolower );
 	wr_registerLibraryFunction( w, "str::toupper", wr_toupper );
+	wr_registerLibraryFunction( w, "str::tol", wr_tol );
 }
-
-

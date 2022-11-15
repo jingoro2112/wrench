@@ -183,8 +183,16 @@ WRError wr_getLastError( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_run( WRState* w, const unsigned char* block )
+WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 {
+	const unsigned char* p = block + (blockSize - 4);
+	uint32_t hash = READ_32_FROM_PC( p );
+	if ( hash != wr_hash( block, (blockSize - 4)) )
+	{
+		w->err = WR_ERR_bad_bytecode_CRC;
+		return 0;
+	}
+	
 	int needed = sizeof(WRContext) // class
 				 + block[1] * sizeof(WRValue)  // globals
 				 + block[0] * sizeof(WRFunction); // local functions
@@ -817,7 +825,10 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&SwitchLinear,
 
 		&&GlobalStop,
-	};
+
+		&&ToInt,
+		&&ToFloat,
+};
 #endif
 
 	const unsigned char* pc;
@@ -891,6 +902,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 	{
 		switch( *pc++ )
 		{
+			
 #endif
 			CASE(RegisterFunction):
 			{
@@ -1200,11 +1212,37 @@ callFunction:
 				CONTINUE;
 			}
 
+			CASE(ToInt):
+			{
+				register0 = stackTop - 1;
+				register1 = register0;
+				wr_getValue[register1->type]( &register1 );
+				if ( register1->type == WR_FLOAT )
+				{
+					register0->p2 = INIT_AS_INT;
+					register0->i = (int)register1->f;
+				}
+				CONTINUE;
+			}
+
+			CASE(ToFloat):
+			{
+				register0 = stackTop - 1;
+				register1 = register0;
+				wr_getValue[register1->type]( &register1 );
+				if ( register1->type == WR_INT )
+				{
+					register0->p2 = INIT_AS_FLOAT;
+					register0->f = (float)register1->i;
+				}
+				CONTINUE;
+			}
+			
 			CASE(GlobalStop):
 			{
 				register0 = w->stack - 1;
 				++pc;
-			}
+			}			
 			CASE(Stop):
 			{
 				*w->stack = *(register0 + 1);
@@ -1560,7 +1598,7 @@ load32ToTemp:
 			CASE(GC_Command):
 			{
 				context->gcPauseCount = READ_16_FROM_PC(pc);
-				pc+=2;
+				pc += 2;
 				CONTINUE;
 			}
 			
@@ -1624,7 +1662,9 @@ NextIterator:
 				CONTINUE;
 			}
 
-#ifdef WRENCH_COMPACT
+//-------------------------------------------------------------------------------------------------------------
+#ifdef WRENCH_COMPACT //---------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
 
 			CASE(PostIncrement):
 			{
@@ -2315,9 +2355,13 @@ compactCompareGG8:
 				register0 = globalSpace + *pc++;
 				goto compactBLA8;
 			}
-	
-#else // ---------------------------- Non-Compact:
 
+			
+//-------------------------------------------------------------------------------------------------------------
+#else //-------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+
+			
 			CASE(PostIncrement):
 			{
 				register0 = stackTop - 1;
@@ -2945,8 +2989,13 @@ targetFuncStoreLocalOp:
 				targetFunc[(register0->type<<2)|register1->type]( register0, register1, frameBase + *pc++ );
 				CONTINUE;
 			}
-#endif		
-		
+
+			
+//-------------------------------------------------------------------------------------------------------------
+#endif//-------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
+
+
 #ifndef WRENCH_JUMPTABLE_INTERPRETER
 		}
 	}

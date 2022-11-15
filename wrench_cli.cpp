@@ -34,6 +34,54 @@ SOFTWARE.
 int runTests( int number =0 );
 void setup();
 
+const char* g_errStrings[]=
+{
+	"ERR_None",
+
+	"ERR_compiler_not_loaded",
+	"ERR_function_hash_signature_not_found",
+	"ERR_unknown_opcode",
+	"ERR_unexpected_EOF",
+	"ERR_unexpected_token",
+	"ERR_bad_expression",
+	"ERR_bad_label",
+	"ERR_statement_expected",
+	"ERR_unterminated_string_literal",
+	"ERR_newline_in_string_literal",
+	"ERR_bad_string_escape_sequence",
+	"ERR_tried_to_load_non_resolvable",
+	"ERR_break_keyword_not_in_looping_structure",
+	"ERR_continue_keyword_not_in_looping_structure",
+	"ERR_expected_while",
+	"ERR_compiler_panic",
+	"ERR_constant_refined",
+
+	"ERR_run_must_be_called_by_itself_first",
+	"ERR_hash_table_size_exceeded",
+	"ERR_wrench_function_not_found",
+	"ERR_array_must_be_indexed",
+	"ERR_context_not_found",
+
+	"ERR_usr_data_template_already_exists",
+	"ERR_usr_data_already_exists",
+	"ERR_usr_data_template_not_found",
+	"ERR_usr_data_refernce_not_found",
+
+	"ERR_bad_goto_label",
+	"ERR_bad_goto_location",
+	"ERR_goto_target_not_found",
+
+	"ERR_switch_with_no_cases",
+	"ERR_switch_case_or_default_expected",
+	"ERR_switch_construction_error",
+	"ERR_switch_bad_case_hash",
+	"ERR_switch_duplicate_case",
+
+	"warning_enums_follow",
+
+	"WARN_c_function_not_found",
+	"WARN_lib_function_not_found",
+};
 
 //------------------------------------------------------------------------------
 void blobToHeader( WRstr const& blob, WRstr const& variableName, WRstr& header )
@@ -190,7 +238,7 @@ int main( int argn, char* argv[] )
 			int err = wr_compile( infile, infile.size(), &out, &outLen );
 			if ( err )
 			{
-				printf( "compile error [%d]\n", err );
+				printf( "compile error [%s]\n", g_errStrings[err] );
 				return -1;
 			}
 
@@ -203,7 +251,7 @@ int main( int argn, char* argv[] )
 		wr_registerFunction( w, "printl", printl );
 		wr_registerFunction( w, "print", print );
 
-		wr_run( w, (const unsigned char *)bytes.c_str() );
+		wr_run( w, (const unsigned char *)bytes.c_str(), bytes.size() );
 		if ( wr_getLastError( w ) )
 		{
 			printf( "err: %d\n", (int)wr_getLastError(w) );
@@ -229,7 +277,7 @@ int main( int argn, char* argv[] )
 		int err = wr_compile( code, code.size(), &out, &outLen );
 		if ( err )
 		{
-			printf( "compile error [%d]\n", err );
+			printf( "compile error [%s]\n", g_errStrings[err] );
 			return 0;
 		}
 
@@ -361,7 +409,7 @@ int runTests( int number )
 				err = wr_compile( code, code.size(), &out, &outLen );
 				if ( err )
 				{
-					printf( "compile error [%d]\n", err );
+					printf( "compile error [%s]\n", g_errStrings[err] );
 					return -1;
 				}
 				
@@ -370,7 +418,7 @@ int runTests( int number )
 
 				WRValue* V = wr_returnValueFromLastCall(w);
 
-				WRContext* context = wr_run( w, out );
+				WRContext* context = wr_run( w, out, outLen );
 
 				if ( !wr_getLastError(w) )
 				{
@@ -464,7 +512,7 @@ void setup()
 	int err = wr_compile( wrenchCode, (int)strlen(wrenchCode), &outBytes, &outLen );
 	if ( err == 0 )
 	{
-		wr_run( w, outBytes ); // load and run the code!
+		wr_run( w, outBytes, outLen ); // load and run the code!
 		delete[] outBytes; // clean up 
 	}
 

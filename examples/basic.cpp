@@ -34,7 +34,7 @@ int main( int argn, char** argv )
 	int err = wr_compile( wrenchCode, strlen(wrenchCode), &outBytes, &outLen ); // compile it
 	if ( err == 0 )
 	{
-		wr_run( w, outBytes ); // load and run the code!
+		wr_run( w, outBytes, outLen ); // load and run the code!
 		delete[] outBytes; // clean up 
 	}
 

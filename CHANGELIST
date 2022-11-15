@@ -1,6 +1,12 @@
+2.00 ----------------------------------------------------------------------------------
+- wrench bytecode now expects a 32-bit CRC footer, this bytecode is checksummed before 
+  run to prevent crashes by bad/garbage data
+- wr_run now requires a size, so it can locate the CRC at the end and check the bytecode
+- found a bunch of space optimizations, knocked almost 3k off the flash size!
+- added (int) and (float) casting operators
+
 1.82 ----------------------------------------------------------------------------------
 - changing release format to y.xx instead of y.x.z
-
 
 1.8.1 ----------------------------------------------------------------------------------
 - RAM on small devices is precious, and fragmentation is really a problem. wrench's

@@ -4,7 +4,7 @@ OPT ?= -O3
 PERF ?=
 
 #FLAGS ?= $(OPT) $(PERF) -std=c++11
-FLAGS ?= $(OPT) $(PERF) -I.
+FLAGS ?= $(OPT) $(PERF) -I. $(COMPACT)
 
 #FLAGS = $(OPT) -pg
 #FLAGS = $(OPT) $(PERF)
@@ -38,11 +38,14 @@ clean:
 valgrind: $(OBJS) wrench_cli.cpp
 	g++ -o wrench_v $(FLAGS) -Wall -Werror -I. -Idiscrete_src -O3 -ggdb $(OBJS) wrench_cli.cpp 
 
+dev_wrench: $(OBJS) wrench_cli.cpp
+	g++ $(OBJS) -Wall -Werror wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_cli
+
 wrench: $(OBJS) wrench_cli.cpp
 	g++ $(OBJS) -Wall -Werror wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_cli
 	./wrench_cli release discrete_src src/.
 	-@rm wrench_cli
-	g++ -o wrench -Wall -Werror $(FLAGS) -DNDEBUG -Isrc src/wrench.cpp wrench_cli.cpp
+	g++ -o wrench -Wall -Werror $(FLAGS) -Isrc src/wrench.cpp wrench_cli.cpp
 
 $(OBJDIR)/cc.o: discrete_src/cc.cpp
 	$(CC) $@ $<
@@ -64,5 +67,3 @@ $(OBJDIR)/std_string.o: discrete_src/std_string.cpp
 
 $(OBJDIR)/std_math.o: discrete_src/std_math.cpp
 	$(CC) $@ $<
-
-

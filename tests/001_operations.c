@@ -51,9 +51,33 @@ hello world
 1.3
 ~*/
 
+
+
+// test casting
+ii = 10.5;
+j = (int)ii;
+if ( ii != 10.5 ) { print("j0"); }
+if ( j != 10 ) { print("j1"); }
+ii = 10 / 1000;
+if ( ii != 0 ) { print("ii 1"); }
+ii = (float)10 / 1000;
+if ( ii != .01 ) { print("ii 2"); }
+ii = 10 / (float)1000;
+if ( ii != .01 ) { print("ii 3"); }
+ii = 67.2;
+ii = (int)ii;
+if ( ii != 67 ) { print("ii 4"); }
+
+
+a[10] = { 10 };
+if ( a[0] / 1000 != 0 ) { print("ii 4"); }
+if ( (float)a[0] / 1000 != .01 ) { print("ii 5"); }
+if ( a[0] / (float)1000 != .01 ) { print("ii 5"); }
+
+
 not = 1;
 if ( !not ) print("n1");
-if ( not != 1 ) print("n1");
+if ( not != 1 ) print("n2");
 flip = 0x0000FFFF;
 if ( ~flip != 0xFFFF0000 ) print("flip1");
 if ( flip != 0x0000FFFF ) print("flip2");

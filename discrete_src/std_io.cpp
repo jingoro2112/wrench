@@ -121,6 +121,37 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 #endif
 }
 
+#ifdef WRENCH_STD_TIME
+#include <time.h>
+#ifdef _WIN32
+#include <Windows.h>
+#else
+#include <sys/time.h>
+#endif
+#endif
+
+//------------------------------------------------------------------------------
+void wr_clock( WRValue* stackTop, const int argn, WRContext* c )
+{
+#ifdef WRENCH_STD_TIME
+	stackTop->i = (int)clock();
+#endif
+}
+
+//------------------------------------------------------------------------------
+void wr_milliseconds(WRValue* stackTop, const int argn, WRContext* c )
+{
+#ifdef WRENCH_STD_TIME
+#ifdef _WIN32
+	stackTop->ui = (uint32_t)GetTickCount();
+#else
+	struct timeval tv;
+	gettimeofday( &tv, NULL );
+	stackTop->ui = (uint32_t)((tv.tv_usec/1000) + (tv.tv_sec * 1000));
+#endif
+#endif
+}
+
 //------------------------------------------------------------------------------
 void wr_loadFileLib( WRState* w )
 {
@@ -128,5 +159,8 @@ void wr_loadFileLib( WRState* w )
 	wr_registerLibraryFunction( w, "file::write", wr_write_file );
 
 	wr_registerLibraryFunction( w, "io::getline", wr_getline );
+
+	wr_registerLibraryFunction( w, "time::clock", wr_clock );
+	wr_registerLibraryFunction( w, "time::ms", wr_clock );
 }
 

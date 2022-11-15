@@ -415,7 +415,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 					}
 
 					char c = m_source[m_pos];
-					if (c == '\"') // terminating character
+					if (c == '\"' && !single ) // terminating character
 					{
 						if ( single )
 						{
@@ -425,7 +425,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 						++m_pos;
 						break;
 					}
-					else if ( c == '\'' )
+					else if ( c == '\'' && single )
 					{
 						if ( !single || (token.size() > 1) )
 						{
@@ -463,6 +463,10 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 						else if (c == '\"')
 						{
 							token += '\"';
+						}
+						else if (c == '\'')
+						{
+							token += '\'';
 						}
 						else if (c == 'n')
 						{
@@ -568,7 +572,7 @@ parseAsNumber:
 					}
 
 					value.p2 = INIT_AS_INT;
-					value.i = strtol( token, 0, 16 );
+					value.ui = strtoul( token, 0, 16 );
 				}
 				else if (token[0] == '0' && m_source[m_pos] == 'b' )
 				{
@@ -616,6 +620,12 @@ parseAsNumber:
 						}
 						else if ( !isdigit(m_source[m_pos]) )
 						{
+							if ( m_source[m_pos] == 'f' || m_source[m_pos] == 'F')
+							{
+								decimal = true;
+								m_pos++;
+							}
+
 							break;
 						}
 
@@ -630,7 +640,7 @@ parseAsNumber:
 					else
 					{
 						value.p2 = INIT_AS_INT;
-						value.i = (int32_t)strtoll( token, 0, 10 );
+						value.ui = (uint32_t)strtoul( token, 0, 10 );
 					}
 				}
 			}
@@ -653,7 +663,7 @@ parseAsNumber:
 
 					for (; m_pos < m_sourceLen; ++m_pos)
 					{
-						if ( m_source[m_pos] == ':' && m_source[m_pos + 1] == ':' && token.size() > 2 )
+						if ( m_source[m_pos] == ':' && m_source[m_pos + 1] == ':' && token.size() > 0 )
 						{
 							token += "::";
 							m_pos ++;
@@ -5539,6 +5549,11 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 	}
 
 
+	uint32_t hash = wr_hash( code, code.size() );
+
+	pack32( hash, data );
+	code.append( data, 4 );
+	
 	if ( !m_err )
 	{
 		*outLen = code.size();
@@ -5970,6 +5985,10 @@ const char* c_opcodeName[] =
 	"SwitchLinear",
 
 	"GlobalStop",
+
+	"ToInt",
+	"ToFloat",
+
 };
 #endif
 

@@ -261,7 +261,6 @@ void wr_math_deg2rad( WRValue* stackTop, const int argn, WRContext* c )
 	}
 }
 
-
 //------------------------------------------------------------------------------
 void wr_loadMathLib( WRState* w )
 {
