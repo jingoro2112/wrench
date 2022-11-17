@@ -493,7 +493,7 @@ void wr_loadStringLib( WRState* w )
 	wr_registerLibraryFunction( w, "str::isdigit", wr_isdigit );
 	wr_registerLibraryFunction( w, "str::isalpha", wr_isalpha );
 	wr_registerLibraryFunction( w, "str::mid", wr_mid );
-	wr_registerLibraryFunction( w, "str::strchr", wr_strchr );
+	wr_registerLibraryFunction( w, "str::chr", wr_strchr );
 	wr_registerLibraryFunction( w, "str::tolower", wr_tolower );
 	wr_registerLibraryFunction( w, "str::toupper", wr_toupper );
 	wr_registerLibraryFunction( w, "str::tol", wr_tol );

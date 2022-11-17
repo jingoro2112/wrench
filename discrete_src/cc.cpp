@@ -1624,13 +1624,13 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 					bytecode.all[ a - 2 ] = O_IncGlobal;
 										
 					bytecode.all.shave(1);
-					bytecode.opcodes.shave(1);
+					bytecode.opcodes.shave(2);
 				}
 				else if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromLocal )
 				{
 					bytecode.all[ a - 2 ] = O_IncLocal;
 					bytecode.all.shave(1);
-					bytecode.opcodes.shave(1);
+					bytecode.opcodes.shave(2);
 				}
 				else
 				{
@@ -1646,13 +1646,13 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				{
 					bytecode.all[ a - 2 ] = O_DecGlobal;
 					bytecode.all.shave(1);
-					bytecode.opcodes.shave(1);
+					bytecode.opcodes.shave(2);
 				}
 				else if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromLocal )
 				{
 					bytecode.all[ a - 2 ] = O_DecLocal;
 					bytecode.all.shave(1);
-					bytecode.opcodes.shave(1);
+					bytecode.opcodes.shave(2);
 				}
 				else
 				{
@@ -1670,11 +1670,17 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 					{
 						if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt8 )
 						{
+							// a - 4: O_literalInt8
+							// a - 3: val
+							// a - 2: load from global
+							// a - 1: index
+							// a -- assign
+
 							bytecode.all[ a - 4 ] = O_LiteralInt8ToGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt16 )
 						{
@@ -1683,7 +1689,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt32 )
 						{
@@ -1694,7 +1700,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
 						{
@@ -1705,7 +1711,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( (o > 1) && bytecode.opcodes[o-2] == O_LiteralZero )
 						{
@@ -1713,37 +1719,37 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all[ a - 1 ] = 0;
 							bytecode.all.shave(1);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryDivision )
 						{
 							bytecode.all[ a - 3 ] = O_BinaryDivisionAndStoreGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryAddition )
 						{
 							bytecode.all[ a - 3 ] = O_BinaryAdditionAndStoreGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryMultiplication )
 						{
 							bytecode.all[ a - 3 ] = O_BinaryMultiplicationAndStoreGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinarySubtraction )
 						{
 							bytecode.all[ a - 3 ] = O_BinarySubtractionAndStoreGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
-						else if ((o > 1) && bytecode.opcodes[o - 2] == O_FUNCTION_CALL_PLACEHOLDER )
+						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_FUNCTION_CALL_PLACEHOLDER )
 						{
 							//bytecode.all[a] = bytecode.all[a-1];
 							bytecode.all[a-2] = O_AssignToGlobalAndPop;
@@ -1767,7 +1773,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt16 )
 						{
@@ -1776,7 +1782,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt32 )
 						{
@@ -1787,7 +1793,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
 						{
@@ -1798,7 +1804,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralZero )
 						{
@@ -1806,35 +1812,35 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all[ a - 1 ] = 0;
 							bytecode.all.shave(1);
-							bytecode.opcodes.shave(1);
+							bytecode.opcodes.shave(3);
 						}
-						else if ( bytecode.opcodes[o - 2] == O_BinaryDivision )
+						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinaryDivision )
 						{
 							bytecode.all[a - 3] = O_BinaryDivisionAndStoreLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
-						else if ( bytecode.opcodes[o - 2] == O_BinaryAddition )
+						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinaryAddition )
 						{
 							bytecode.all[a - 3] = O_BinaryAdditionAndStoreLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
-						else if ( bytecode.opcodes[o - 2] == O_BinaryMultiplication )
+						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinaryMultiplication )
 						{
 							bytecode.all[a - 3] = O_BinaryMultiplicationAndStoreLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
-						else if ( bytecode.opcodes[o - 2] == O_BinarySubtraction )
+						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinarySubtraction )
 						{
 							bytecode.all[a - 3] = O_BinarySubtractionAndStoreLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else
 						{
@@ -2581,7 +2587,6 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 
 	resolveRelativeJumps( addMe );
 
-
 	bytecode.all += addMe.all;
 	bytecode.opcodes += addMe.opcodes;
 }
@@ -3126,6 +3131,7 @@ unsigned int WRCompilationContext::resolveExpressionEx( WRExpression& expression
 			break;
 		}
 	}
+	
 	return ret;
 }
 
@@ -4760,8 +4766,6 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 	bytecodeSnapshot = m_units[m_unitTop].bytecode;
 	m_units[m_unitTop].bytecode.clear();
 
-	D_STREAM( bytecodeSnapshot.all );
-
 	if ( !getToken(ex, "{") )
 	{
 		m_err = WR_ERR_unexpected_token;
@@ -5014,16 +5018,11 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 	}
 	// else 0 cases, skip switch parsing nothing happens!
 
-	D_STREAM( bytecodeSnapshot.all );
-	D_STREAM( m_units[m_unitTop].bytecode.all );
-
 	m_units[m_unitTop].bytecode = bytecodeSnapshot;
 		
 	m_breakTargets.pop();
 
 	resolveRelativeJumps( m_units[m_unitTop].bytecode ); // at least do the ones we added
-
-	D_STREAM( m_units[m_unitTop].bytecode.all );
 
 	return true;
 }
@@ -5405,10 +5404,6 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 	// append all the unit code
 	for( unsigned int u=0; u<m_units.count(); ++u )
 	{
-#ifdef _DUMP
-		streamDump( m_units[u].bytecode.all );
-#endif
-
 		if ( u > 0 ) // for the non-zero unit fill location into the jump table
 		{
 			int16_t offset = code.size();
@@ -5448,6 +5443,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 		}
 
 		int base = code.size();
+
 		code.append( m_units[u].bytecode.all, m_units[u].bytecode.all.size() );
 
 		// load new's
@@ -5548,12 +5544,11 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 		}
 	}
 
-
 	uint32_t hash = wr_hash( code, code.size() );
 
 	pack32( hash, data );
 	code.append( data, 4 );
-	
+
 	if ( !m_err )
 	{
 		*outLen = code.size();
@@ -5671,7 +5666,7 @@ WRError WRCompilationContext::compile( const char* source,
 		printf( "link error [%d]\n", m_err );
 		if ( errorMsg )
 		{
-			sprintf( errorMsg, "link error [%d]\n", m_err );
+			snprintf( errorMsg, 32, "link error [%d]\n", m_err );
 		}
 
 	}

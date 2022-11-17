@@ -1229,10 +1229,6 @@ SOFTWARE.
 
 #ifndef WRENCH_WITHOUT_COMPILER
 
-#if defined(_WIN32) && !defined(__MINGW32__)
-#pragma warning (disable : 4996) // remove Windows nagging
-#endif
-
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -3812,13 +3808,13 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 					bytecode.all[ a - 2 ] = O_IncGlobal;
 										
 					bytecode.all.shave(1);
-					bytecode.opcodes.shave(1);
+					bytecode.opcodes.shave(2);
 				}
 				else if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromLocal )
 				{
 					bytecode.all[ a - 2 ] = O_IncLocal;
 					bytecode.all.shave(1);
-					bytecode.opcodes.shave(1);
+					bytecode.opcodes.shave(2);
 				}
 				else
 				{
@@ -3834,13 +3830,13 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				{
 					bytecode.all[ a - 2 ] = O_DecGlobal;
 					bytecode.all.shave(1);
-					bytecode.opcodes.shave(1);
+					bytecode.opcodes.shave(2);
 				}
 				else if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromLocal )
 				{
 					bytecode.all[ a - 2 ] = O_DecLocal;
 					bytecode.all.shave(1);
-					bytecode.opcodes.shave(1);
+					bytecode.opcodes.shave(2);
 				}
 				else
 				{
@@ -3858,11 +3854,17 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 					{
 						if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt8 )
 						{
+							// a - 4: O_literalInt8
+							// a - 3: val
+							// a - 2: load from global
+							// a - 1: index
+							// a -- assign
+
 							bytecode.all[ a - 4 ] = O_LiteralInt8ToGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt16 )
 						{
@@ -3871,7 +3873,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt32 )
 						{
@@ -3882,7 +3884,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
 						{
@@ -3893,7 +3895,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( (o > 1) && bytecode.opcodes[o-2] == O_LiteralZero )
 						{
@@ -3901,37 +3903,37 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all[ a - 1 ] = 0;
 							bytecode.all.shave(1);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryDivision )
 						{
 							bytecode.all[ a - 3 ] = O_BinaryDivisionAndStoreGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryAddition )
 						{
 							bytecode.all[ a - 3 ] = O_BinaryAdditionAndStoreGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryMultiplication )
 						{
 							bytecode.all[ a - 3 ] = O_BinaryMultiplicationAndStoreGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinarySubtraction )
 						{
 							bytecode.all[ a - 3 ] = O_BinarySubtractionAndStoreGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
-						else if ((o > 1) && bytecode.opcodes[o - 2] == O_FUNCTION_CALL_PLACEHOLDER )
+						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_FUNCTION_CALL_PLACEHOLDER )
 						{
 							//bytecode.all[a] = bytecode.all[a-1];
 							bytecode.all[a-2] = O_AssignToGlobalAndPop;
@@ -3955,7 +3957,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt16 )
 						{
@@ -3964,7 +3966,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt32 )
 						{
@@ -3975,7 +3977,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
 						{
@@ -3986,7 +3988,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralZero )
 						{
@@ -3994,35 +3996,35 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all[ a - 1 ] = 0;
 							bytecode.all.shave(1);
-							bytecode.opcodes.shave(1);
+							bytecode.opcodes.shave(3);
 						}
-						else if ( bytecode.opcodes[o - 2] == O_BinaryDivision )
+						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinaryDivision )
 						{
 							bytecode.all[a - 3] = O_BinaryDivisionAndStoreLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
-						else if ( bytecode.opcodes[o - 2] == O_BinaryAddition )
+						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinaryAddition )
 						{
 							bytecode.all[a - 3] = O_BinaryAdditionAndStoreLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
-						else if ( bytecode.opcodes[o - 2] == O_BinaryMultiplication )
+						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinaryMultiplication )
 						{
 							bytecode.all[a - 3] = O_BinaryMultiplicationAndStoreLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
-						else if ( bytecode.opcodes[o - 2] == O_BinarySubtraction )
+						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinarySubtraction )
 						{
 							bytecode.all[a - 3] = O_BinarySubtractionAndStoreLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all.shave(2);
-							bytecode.opcodes.shave(2);
+							bytecode.opcodes.shave(3);
 						}
 						else
 						{
@@ -4769,7 +4771,6 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 
 	resolveRelativeJumps( addMe );
 
-
 	bytecode.all += addMe.all;
 	bytecode.opcodes += addMe.opcodes;
 }
@@ -5314,6 +5315,7 @@ unsigned int WRCompilationContext::resolveExpressionEx( WRExpression& expression
 			break;
 		}
 	}
+	
 	return ret;
 }
 
@@ -6948,8 +6950,6 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 	bytecodeSnapshot = m_units[m_unitTop].bytecode;
 	m_units[m_unitTop].bytecode.clear();
 
-	D_STREAM( bytecodeSnapshot.all );
-
 	if ( !getToken(ex, "{") )
 	{
 		m_err = WR_ERR_unexpected_token;
@@ -7202,16 +7202,11 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 	}
 	// else 0 cases, skip switch parsing nothing happens!
 
-	D_STREAM( bytecodeSnapshot.all );
-	D_STREAM( m_units[m_unitTop].bytecode.all );
-
 	m_units[m_unitTop].bytecode = bytecodeSnapshot;
 		
 	m_breakTargets.pop();
 
 	resolveRelativeJumps( m_units[m_unitTop].bytecode ); // at least do the ones we added
-
-	D_STREAM( m_units[m_unitTop].bytecode.all );
 
 	return true;
 }
@@ -7593,10 +7588,6 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 	// append all the unit code
 	for( unsigned int u=0; u<m_units.count(); ++u )
 	{
-#ifdef _DUMP
-		streamDump( m_units[u].bytecode.all );
-#endif
-
 		if ( u > 0 ) // for the non-zero unit fill location into the jump table
 		{
 			int16_t offset = code.size();
@@ -7636,6 +7627,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 		}
 
 		int base = code.size();
+
 		code.append( m_units[u].bytecode.all, m_units[u].bytecode.all.size() );
 
 		// load new's
@@ -7736,12 +7728,11 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 		}
 	}
 
-
 	uint32_t hash = wr_hash( code, code.size() );
 
 	pack32( hash, data );
 	code.append( data, 4 );
-	
+
 	if ( !m_err )
 	{
 		*outLen = code.size();
@@ -7859,7 +7850,7 @@ WRError WRCompilationContext::compile( const char* source,
 		printf( "link error [%d]\n", m_err );
 		if ( errorMsg )
 		{
-			sprintf( errorMsg, "link error [%d]\n", m_err );
+			snprintf( errorMsg, 32, "link error [%d]\n", m_err );
 		}
 
 	}
@@ -8218,8 +8209,6 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
 {
-	//printf("marking %p->%p: [%d:%p] 0x%08X\n", s, s->r, s->i, s->p, s->type);
-
 	if ( IS_REFARRAY(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
 	{
 		if ( !s->r->va->m_skipGC )
@@ -9880,8 +9869,9 @@ NextIterator:
 			{
 				intCall = modI;
 targetFuncOpSkipLoad:
-				register2 = stackTop++;
 				floatCall = blankF;
+targetFuncOpSkipLoadNoClobberF:
+				register2 = stackTop++;
 targetFuncOpSkipLoadAndReg2:
 				wr_funcBinary[(register1->type<<2)|register0->type]( register1,
 																	 register0,
@@ -10109,7 +10099,7 @@ compactBLA8:
 CompactGGFunc:
 				register0 = globalSpace + *pc++;
 				register1 = globalSpace + *pc++;
-				goto targetFuncOpSkipLoad;
+				goto targetFuncOpSkipLoadNoClobberF;
 			}
 
 			CASE(GLBinaryMultiplication):
@@ -10119,7 +10109,7 @@ CompactGGFunc:
 CompactGLFunc:
 				register0 = globalSpace + *pc++;
 				register1 = frameBase + *pc++;
-				goto targetFuncOpSkipLoad;
+				goto targetFuncOpSkipLoadNoClobberF;
 			}
 
 			CASE(LLBinaryMultiplication):
@@ -10129,7 +10119,7 @@ CompactGLFunc:
 CompactFFFunc:
 				register0 = frameBase + *pc++;
 				register1 = frameBase + *pc++;
-				goto targetFuncOpSkipLoad;
+				goto targetFuncOpSkipLoadNoClobberF;
 			}
 
 			CASE(GGBinaryAddition):
@@ -10174,7 +10164,7 @@ CompactFFFunc:
 CompactFGFunc:
 				register0 = frameBase + *pc++;
 				register1 = globalSpace + *pc++;
-				goto targetFuncOpSkipLoad;
+				goto targetFuncOpSkipLoadNoClobberF;
 			}
 
 			CASE(LLBinarySubtraction):
@@ -11490,168 +11480,6 @@ void wr_assignToHashTable( WRContext* c, WRValue* index, WRValue* value, WRValue
 }
 
 //------------------------------------------------------------------------------
-static void doAssign_X_E( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(from->xtype) )
-	{
-		WRValue element;
-		wr_arrayToValue( from, &element );
-		wr_assign[(WR_EX<<2)+element.type](to, &element);
-	}
-	else
-	{
-		*to = *from;
-	}
-}
-static void doAssign_E_F( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(to->xtype) )
-	{
-		wr_valueToArray( to, from );
-	}
-	else
-	{
-		*to = *from;
-	}
-}
-static void doAssign_E_I( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(to->xtype) )
-	{
-		wr_valueToArray( to, from );
-	}
-	else
-	{
-		*to = *from;
-	}
-}
-static void doAssign_E_E( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(from->xtype) )
-	{
-		WRValue element;
-		wr_arrayToValue( from, &element );
-		wr_assign[(WR_EX<<2)+element.type](to, &element);
-	}
-	else if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))
-	{
-		if ( to->r->va->m_type == SV_VALUE )
-		{
-			unsigned int index = ARRAY_ELEMENT_FROM_P2(to->p2);
-			
-			if ( index > to->r->va->m_size )
-			{
-				if ( to->r->va->m_skipGC )
-				{
-					return;
-				}
-
-				to->r->va = growValueArray( to->r->va, index );	
-			}
-
-			to->r->va->m_Vdata[index] = *from;
-		}
-		else
-		{
-			*to = *from;
-		}
-	}
-	else
-	{
-		*to = *from;
-	}
-}
-static void doAssign_R_E( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_EX](to->r, from); }
-static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
-static void doAssign_E_R( WRValue* to, WRValue* from ) { wr_assign[(WR_EX<<2)|from->r->type](to, from->r); }
-static void doAssign_R_X( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->type](to->r, from); }
-static void doAssign_X_R( WRValue* to, WRValue* from ) { wr_assign[(to->type<<2)|from->r->type](to, from->r); }
-static void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
-WRVoidFunc wr_assign[16] = 
-{
-	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
-	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
-	doAssign_R_X,  doAssign_R_X,  doAssign_R_R,  doAssign_R_E,
-	doAssign_E_I,  doAssign_E_F,  doAssign_E_R,  doAssign_E_E,
-};
-//==============================================================================
-
-static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	c->gc( target );
-
-	// all we know is the value is not an array, so make it one
-	target->r = value;
-	target->p2 = INIT_AS_REFARRAY;
-	ARRAY_ELEMENT_TO_P2( target->p2, index->i );
-
-	value->p2 = INIT_AS_ARRAY;
-	value->va = c->getSVA( index->i+1, SV_VALUE, true );
-}
-static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	if ( value->xtype == WR_EX_HASH_TABLE )
-	{
-		target->r = (WRValue*)value->va->get( index->ui );
-		target->p2 = INIT_AS_REF;
-		return;
-	}
-	else if ( value->xtype == WR_EX_RAW_ARRAY )
-	{
-		goto skipBoundsCheck;
-	}
-	else if ( !(value->xtype == WR_EX_ARRAY) )
-	{
-		c->gc( target );
-
-		// nope, make it one of this size and return a ref
-		value->p2 = INIT_AS_ARRAY;
-		value->va = c->getSVA( index->ui+1, SV_VALUE, true );
-	}
-
-	if ( index->ui >= value->va->m_size )
-	{
-		if ( value->va->m_skipGC )
-		{
-			target->init();
-			return;
-		}
-
-		value->va = growValueArray( value->va, index->ui );
-	}
-
-skipBoundsCheck:
-	target->r = value;
-	target->p2 = INIT_AS_REFARRAY;
-	ARRAY_ELEMENT_TO_P2( target->p2, index->ui );
-}
-static void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	// the specific case of a string indexing a hash table
-	if ( value->xtype == WR_EX_HASH_TABLE )
-	{
-		target->p2 = INIT_AS_REF;
-		target->r = (WRValue*)value->va->get( index->getHash() );
-	}
-}
-static void doIndex_I_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(WR_INT<<2)|value->r->type](c, index, value->r, target); }
-static void doIndex_R_I( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_INT](c, index->r, value, target); }
-static void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target); }
-static void doIndex_R_F( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_FLOAT](c, index->r, value, target); }
-static void doIndex_R_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_EX](c, index->r, value, target); }
-static void doIndex_E_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(WR_EX<<2)|value->r->type](c, index, value->r, target); }
-
-static void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) {}
-
-WRStateFunc wr_index[16] = 
-{
-	doIndex_I_X,     doIndex_I_X,     doIndex_I_R,     doIndex_I_E,
-	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
-	doIndex_R_I,     doIndex_R_F,     doIndex_R_R,     doIndex_R_E, 
-	doVoidIndexFunc, doVoidIndexFunc,     doIndex_E_R,     doIndex_E_E,
-};
-
-//------------------------------------------------------------------------------
 static void doIndexHash_X( WRValue* value, WRValue* target, uint32_t hash ) { target->init(); }
 static void doIndexHash_R( WRValue* value, WRValue* target, uint32_t hash ) { wr_IndexHash[ value->r->type ]( value->r, target, hash ); }
 static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
@@ -11826,6 +11654,150 @@ WRVoidFunc wr_pushIterator[4] =
 //==================================================================================
 
 #ifdef WRENCH_COMPACT
+
+
+//------------------------------------------------------------------------------
+static void doAssign_X_E( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_assign[(WR_EX<<2)+element.type](to, &element);
+	}
+	else
+	{
+		*to = *from;
+	}
+}
+static void doAssign_E_X( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(to->xtype) )
+	{
+		wr_valueToArray( to, from );
+	}
+	else
+	{
+		*to = *from;
+	}
+}
+static void doAssign_E_E( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_assign[(WR_EX<<2)+element.type](to, &element);
+		return;
+	}
+	else if ( IS_REFARRAY(to->xtype)
+			  && IS_EXARRAY_TYPE(to->r->xtype)
+			  && (to->r->va->m_type == SV_VALUE) )
+	{
+		unsigned int index = ARRAY_ELEMENT_FROM_P2(to->p2);
+
+		if ( index > to->r->va->m_size )
+		{
+			if ( to->r->va->m_skipGC )
+			{
+				return;
+			}
+
+			to->r->va = growValueArray( to->r->va, index );	
+		}
+
+		to->r->va->m_Vdata[index] = *from;
+		return;
+	}
+
+	*to = *from;
+}
+static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
+static void doAssign_R_X( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->type](to->r, from); }
+static void doAssign_X_R( WRValue* to, WRValue* from ) { wr_assign[(to->type<<2)|from->r->type](to, from->r); }
+static void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
+WRVoidFunc wr_assign[16] = 
+{
+	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
+	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
+	doAssign_R_X,  doAssign_R_X,  doAssign_R_R,  doAssign_R_X,
+	doAssign_E_X,  doAssign_E_X,  doAssign_X_R,  doAssign_E_E,
+};
+
+
+
+
+static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	c->gc( target );
+
+	// all we know is the value is not an array, so make it one
+	target->r = value;
+	target->p2 = INIT_AS_REFARRAY;
+	ARRAY_ELEMENT_TO_P2( target->p2, index->i );
+
+	value->p2 = INIT_AS_ARRAY;
+	value->va = c->getSVA( index->i+1, SV_VALUE, true );
+}
+static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	if ( value->xtype == WR_EX_HASH_TABLE )
+	{
+		target->r = (WRValue*)value->va->get( index->ui );
+		target->p2 = INIT_AS_REF;
+		return;
+	}
+	else if ( value->xtype == WR_EX_RAW_ARRAY )
+	{
+		goto skipBoundsCheck;
+	}
+	else if ( !(value->xtype == WR_EX_ARRAY) )
+	{
+		c->gc( target );
+
+		// nope, make it one of this size and return a ref
+		value->p2 = INIT_AS_ARRAY;
+		value->va = c->getSVA( index->ui+1, SV_VALUE, true );
+	}
+
+	if ( index->ui >= value->va->m_size )
+	{
+		if ( value->va->m_skipGC )
+		{
+			target->init();
+			return;
+		}
+
+		value->va = growValueArray( value->va, index->ui );
+	}
+
+skipBoundsCheck:
+	target->r = value;
+	target->p2 = INIT_AS_REFARRAY;
+	ARRAY_ELEMENT_TO_P2( target->p2, index->ui );
+}
+static void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	// the specific case of a string indexing a hash table
+	if ( value->xtype == WR_EX_HASH_TABLE )
+	{
+		target->p2 = INIT_AS_REF;
+		target->r = (WRValue*)value->va->get( index->getHash() );
+	}
+}
+static void doIndex_X_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->type<<2)|value->r->type](c, index, value->r, target); }
+static void doIndex_R_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->type](c, index->r, value, target); }
+static void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target); }
+
+static void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) {}
+
+WRStateFunc wr_index[16] = 
+{
+	doIndex_I_X,     doIndex_I_X,     doIndex_X_R,     doIndex_I_E,
+	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
+	doIndex_R_X,     doIndex_R_X,     doIndex_R_R,     doIndex_R_X, 
+	doVoidIndexFunc, doVoidIndexFunc, doIndex_X_R,     doIndex_E_E,
+};
 
 extern bool CompareEQI( int a, int b );
 extern bool CompareEQF( float a, float b );
@@ -12079,6 +12051,155 @@ WRBoolCallbackReturnFunc wr_Compare[16] =
 //==================================================================================
 //==================================================================================
 #else
+
+
+//------------------------------------------------------------------------------
+static void doAssign_X_E( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_assign[(WR_EX<<2)+element.type](to, &element);
+	}
+	else
+	{
+		*to = *from;
+	}
+}
+static void doAssign_E_X( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(to->xtype) )
+	{
+		wr_valueToArray( to, from );
+	}
+	else
+	{
+		*to = *from;
+	}
+}
+static void doAssign_E_E( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_assign[(WR_EX<<2)+element.type](to, &element);
+		return;
+	}
+	else if ( IS_REFARRAY(to->xtype)
+			  && IS_EXARRAY_TYPE(to->r->xtype)
+			  && (to->r->va->m_type == SV_VALUE) )
+	{
+		unsigned int index = ARRAY_ELEMENT_FROM_P2(to->p2);
+		
+		if ( index > to->r->va->m_size )
+		{
+			if ( to->r->va->m_skipGC )
+			{
+				return;
+			}
+			
+			to->r->va = growValueArray( to->r->va, index );	
+		}
+		
+		to->r->va->m_Vdata[index] = *from;
+		return;
+	}
+
+	*to = *from;
+}
+static void doAssign_R_E( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_EX](to->r, from); }
+static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
+static void doAssign_E_R( WRValue* to, WRValue* from ) { wr_assign[(WR_EX<<2)|from->r->type](to, from->r); }
+static void doAssign_R_I( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_INT](to->r, from); }
+static void doAssign_R_F( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_FLOAT](to->r, from); }
+static void doAssign_I_R( WRValue* to, WRValue* from ) { wr_assign[(WR_INT<<2)|from->r->type](to, from->r); }
+static void doAssign_F_R( WRValue* to, WRValue* from ) { wr_assign[(WR_FLOAT<<2)|from->r->type](to, from->r); }
+static void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
+WRVoidFunc wr_assign[16] = 
+{
+	doAssign_X_X,  doAssign_X_X,  doAssign_I_R,  doAssign_X_E,
+	doAssign_X_X,  doAssign_X_X,  doAssign_F_R,  doAssign_X_E,
+	doAssign_R_I,  doAssign_R_F,  doAssign_R_R,  doAssign_R_E,
+	doAssign_E_X,  doAssign_E_X,  doAssign_E_R,  doAssign_E_E,
+};
+
+
+static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	c->gc( target );
+
+	// all we know is the value is not an array, so make it one
+	target->r = value;
+	target->p2 = INIT_AS_REFARRAY;
+	ARRAY_ELEMENT_TO_P2( target->p2, index->i );
+
+	value->p2 = INIT_AS_ARRAY;
+	value->va = c->getSVA( index->i+1, SV_VALUE, true );
+}
+static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	if ( value->xtype == WR_EX_HASH_TABLE )
+	{
+		target->r = (WRValue*)value->va->get( index->ui );
+		target->p2 = INIT_AS_REF;
+		return;
+	}
+	else if ( value->xtype == WR_EX_RAW_ARRAY )
+	{
+		goto skipBoundsCheck;
+	}
+	else if ( !(value->xtype == WR_EX_ARRAY) )
+	{
+		c->gc( target );
+
+		// nope, make it one of this size and return a ref
+		value->p2 = INIT_AS_ARRAY;
+		value->va = c->getSVA( index->ui+1, SV_VALUE, true );
+	}
+
+	if ( index->ui >= value->va->m_size )
+	{
+		if ( value->va->m_skipGC )
+		{
+			target->init();
+			return;
+		}
+
+		value->va = growValueArray( value->va, index->ui );
+	}
+
+skipBoundsCheck:
+	target->r = value;
+	target->p2 = INIT_AS_REFARRAY;
+	ARRAY_ELEMENT_TO_P2( target->p2, index->ui );
+}
+static void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	// the specific case of a string indexing a hash table
+	if ( value->xtype == WR_EX_HASH_TABLE )
+	{
+		target->p2 = INIT_AS_REF;
+		target->r = (WRValue*)value->va->get( index->getHash() );
+	}
+}
+static void doIndex_I_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(WR_INT<<2)|value->r->type](c, index, value->r, target); }
+static void doIndex_R_I( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_INT](c, index->r, value, target); }
+static void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target); }
+static void doIndex_R_F( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_FLOAT](c, index->r, value, target); }
+static void doIndex_R_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_EX](c, index->r, value, target); }
+static void doIndex_E_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(WR_EX<<2)|value->r->type](c, index, value->r, target); }
+
+static void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) {}
+
+WRStateFunc wr_index[16] = 
+{
+	doIndex_I_X,     doIndex_I_X,     doIndex_I_R,     doIndex_I_E,
+	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
+	doIndex_R_I,     doIndex_R_F,     doIndex_R_R,     doIndex_R_E, 
+	doVoidIndexFunc, doVoidIndexFunc, doIndex_E_R,     doIndex_E_E,
+};
 
 static void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
 
@@ -13440,7 +13561,7 @@ void wr_loadStringLib( WRState* w )
 	wr_registerLibraryFunction( w, "str::isdigit", wr_isdigit );
 	wr_registerLibraryFunction( w, "str::isalpha", wr_isalpha );
 	wr_registerLibraryFunction( w, "str::mid", wr_mid );
-	wr_registerLibraryFunction( w, "str::strchr", wr_strchr );
+	wr_registerLibraryFunction( w, "str::chr", wr_strchr );
 	wr_registerLibraryFunction( w, "str::tolower", wr_tolower );
 	wr_registerLibraryFunction( w, "str::toupper", wr_toupper );
 	wr_registerLibraryFunction( w, "str::tol", wr_tol );

@@ -243,168 +243,6 @@ void wr_assignToHashTable( WRContext* c, WRValue* index, WRValue* value, WRValue
 }
 
 //------------------------------------------------------------------------------
-static void doAssign_X_E( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(from->xtype) )
-	{
-		WRValue element;
-		wr_arrayToValue( from, &element );
-		wr_assign[(WR_EX<<2)+element.type](to, &element);
-	}
-	else
-	{
-		*to = *from;
-	}
-}
-static void doAssign_E_F( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(to->xtype) )
-	{
-		wr_valueToArray( to, from );
-	}
-	else
-	{
-		*to = *from;
-	}
-}
-static void doAssign_E_I( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(to->xtype) )
-	{
-		wr_valueToArray( to, from );
-	}
-	else
-	{
-		*to = *from;
-	}
-}
-static void doAssign_E_E( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(from->xtype) )
-	{
-		WRValue element;
-		wr_arrayToValue( from, &element );
-		wr_assign[(WR_EX<<2)+element.type](to, &element);
-	}
-	else if ( IS_REFARRAY(to->xtype) && IS_EXARRAY_TYPE(to->r->xtype))
-	{
-		if ( to->r->va->m_type == SV_VALUE )
-		{
-			unsigned int index = ARRAY_ELEMENT_FROM_P2(to->p2);
-			
-			if ( index > to->r->va->m_size )
-			{
-				if ( to->r->va->m_skipGC )
-				{
-					return;
-				}
-
-				to->r->va = growValueArray( to->r->va, index );	
-			}
-
-			to->r->va->m_Vdata[index] = *from;
-		}
-		else
-		{
-			*to = *from;
-		}
-	}
-	else
-	{
-		*to = *from;
-	}
-}
-static void doAssign_R_E( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_EX](to->r, from); }
-static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
-static void doAssign_E_R( WRValue* to, WRValue* from ) { wr_assign[(WR_EX<<2)|from->r->type](to, from->r); }
-static void doAssign_R_X( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->type](to->r, from); }
-static void doAssign_X_R( WRValue* to, WRValue* from ) { wr_assign[(to->type<<2)|from->r->type](to, from->r); }
-static void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
-WRVoidFunc wr_assign[16] = 
-{
-	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
-	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
-	doAssign_R_X,  doAssign_R_X,  doAssign_R_R,  doAssign_R_E,
-	doAssign_E_I,  doAssign_E_F,  doAssign_E_R,  doAssign_E_E,
-};
-//==============================================================================
-
-static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	c->gc( target );
-
-	// all we know is the value is not an array, so make it one
-	target->r = value;
-	target->p2 = INIT_AS_REFARRAY;
-	ARRAY_ELEMENT_TO_P2( target->p2, index->i );
-
-	value->p2 = INIT_AS_ARRAY;
-	value->va = c->getSVA( index->i+1, SV_VALUE, true );
-}
-static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	if ( value->xtype == WR_EX_HASH_TABLE )
-	{
-		target->r = (WRValue*)value->va->get( index->ui );
-		target->p2 = INIT_AS_REF;
-		return;
-	}
-	else if ( value->xtype == WR_EX_RAW_ARRAY )
-	{
-		goto skipBoundsCheck;
-	}
-	else if ( !(value->xtype == WR_EX_ARRAY) )
-	{
-		c->gc( target );
-
-		// nope, make it one of this size and return a ref
-		value->p2 = INIT_AS_ARRAY;
-		value->va = c->getSVA( index->ui+1, SV_VALUE, true );
-	}
-
-	if ( index->ui >= value->va->m_size )
-	{
-		if ( value->va->m_skipGC )
-		{
-			target->init();
-			return;
-		}
-
-		value->va = growValueArray( value->va, index->ui );
-	}
-
-skipBoundsCheck:
-	target->r = value;
-	target->p2 = INIT_AS_REFARRAY;
-	ARRAY_ELEMENT_TO_P2( target->p2, index->ui );
-}
-static void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	// the specific case of a string indexing a hash table
-	if ( value->xtype == WR_EX_HASH_TABLE )
-	{
-		target->p2 = INIT_AS_REF;
-		target->r = (WRValue*)value->va->get( index->getHash() );
-	}
-}
-static void doIndex_I_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(WR_INT<<2)|value->r->type](c, index, value->r, target); }
-static void doIndex_R_I( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_INT](c, index->r, value, target); }
-static void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target); }
-static void doIndex_R_F( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_FLOAT](c, index->r, value, target); }
-static void doIndex_R_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_EX](c, index->r, value, target); }
-static void doIndex_E_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(WR_EX<<2)|value->r->type](c, index, value->r, target); }
-
-static void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) {}
-
-WRStateFunc wr_index[16] = 
-{
-	doIndex_I_X,     doIndex_I_X,     doIndex_I_R,     doIndex_I_E,
-	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
-	doIndex_R_I,     doIndex_R_F,     doIndex_R_R,     doIndex_R_E, 
-	doVoidIndexFunc, doVoidIndexFunc,     doIndex_E_R,     doIndex_E_E,
-};
-
-//------------------------------------------------------------------------------
 static void doIndexHash_X( WRValue* value, WRValue* target, uint32_t hash ) { target->init(); }
 static void doIndexHash_R( WRValue* value, WRValue* target, uint32_t hash ) { wr_IndexHash[ value->r->type ]( value->r, target, hash ); }
 static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
@@ -579,6 +417,150 @@ WRVoidFunc wr_pushIterator[4] =
 //==================================================================================
 
 #ifdef WRENCH_COMPACT
+
+
+//------------------------------------------------------------------------------
+static void doAssign_X_E( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_assign[(WR_EX<<2)+element.type](to, &element);
+	}
+	else
+	{
+		*to = *from;
+	}
+}
+static void doAssign_E_X( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(to->xtype) )
+	{
+		wr_valueToArray( to, from );
+	}
+	else
+	{
+		*to = *from;
+	}
+}
+static void doAssign_E_E( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_assign[(WR_EX<<2)+element.type](to, &element);
+		return;
+	}
+	else if ( IS_REFARRAY(to->xtype)
+			  && IS_EXARRAY_TYPE(to->r->xtype)
+			  && (to->r->va->m_type == SV_VALUE) )
+	{
+		unsigned int index = ARRAY_ELEMENT_FROM_P2(to->p2);
+
+		if ( index > to->r->va->m_size )
+		{
+			if ( to->r->va->m_skipGC )
+			{
+				return;
+			}
+
+			to->r->va = growValueArray( to->r->va, index );	
+		}
+
+		to->r->va->m_Vdata[index] = *from;
+		return;
+	}
+
+	*to = *from;
+}
+static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
+static void doAssign_R_X( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->type](to->r, from); }
+static void doAssign_X_R( WRValue* to, WRValue* from ) { wr_assign[(to->type<<2)|from->r->type](to, from->r); }
+static void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
+WRVoidFunc wr_assign[16] = 
+{
+	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
+	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
+	doAssign_R_X,  doAssign_R_X,  doAssign_R_R,  doAssign_R_X,
+	doAssign_E_X,  doAssign_E_X,  doAssign_X_R,  doAssign_E_E,
+};
+
+
+
+
+static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	c->gc( target );
+
+	// all we know is the value is not an array, so make it one
+	target->r = value;
+	target->p2 = INIT_AS_REFARRAY;
+	ARRAY_ELEMENT_TO_P2( target->p2, index->i );
+
+	value->p2 = INIT_AS_ARRAY;
+	value->va = c->getSVA( index->i+1, SV_VALUE, true );
+}
+static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	if ( value->xtype == WR_EX_HASH_TABLE )
+	{
+		target->r = (WRValue*)value->va->get( index->ui );
+		target->p2 = INIT_AS_REF;
+		return;
+	}
+	else if ( value->xtype == WR_EX_RAW_ARRAY )
+	{
+		goto skipBoundsCheck;
+	}
+	else if ( !(value->xtype == WR_EX_ARRAY) )
+	{
+		c->gc( target );
+
+		// nope, make it one of this size and return a ref
+		value->p2 = INIT_AS_ARRAY;
+		value->va = c->getSVA( index->ui+1, SV_VALUE, true );
+	}
+
+	if ( index->ui >= value->va->m_size )
+	{
+		if ( value->va->m_skipGC )
+		{
+			target->init();
+			return;
+		}
+
+		value->va = growValueArray( value->va, index->ui );
+	}
+
+skipBoundsCheck:
+	target->r = value;
+	target->p2 = INIT_AS_REFARRAY;
+	ARRAY_ELEMENT_TO_P2( target->p2, index->ui );
+}
+static void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	// the specific case of a string indexing a hash table
+	if ( value->xtype == WR_EX_HASH_TABLE )
+	{
+		target->p2 = INIT_AS_REF;
+		target->r = (WRValue*)value->va->get( index->getHash() );
+	}
+}
+static void doIndex_X_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->type<<2)|value->r->type](c, index, value->r, target); }
+static void doIndex_R_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->type](c, index->r, value, target); }
+static void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target); }
+
+static void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) {}
+
+WRStateFunc wr_index[16] = 
+{
+	doIndex_I_X,     doIndex_I_X,     doIndex_X_R,     doIndex_I_E,
+	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
+	doIndex_R_X,     doIndex_R_X,     doIndex_R_R,     doIndex_R_X, 
+	doVoidIndexFunc, doVoidIndexFunc, doIndex_X_R,     doIndex_E_E,
+};
 
 extern bool CompareEQI( int a, int b );
 extern bool CompareEQF( float a, float b );
@@ -832,6 +814,155 @@ WRBoolCallbackReturnFunc wr_Compare[16] =
 //==================================================================================
 //==================================================================================
 #else
+
+
+//------------------------------------------------------------------------------
+static void doAssign_X_E( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_assign[(WR_EX<<2)+element.type](to, &element);
+	}
+	else
+	{
+		*to = *from;
+	}
+}
+static void doAssign_E_X( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(to->xtype) )
+	{
+		wr_valueToArray( to, from );
+	}
+	else
+	{
+		*to = *from;
+	}
+}
+static void doAssign_E_E( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_assign[(WR_EX<<2)+element.type](to, &element);
+		return;
+	}
+	else if ( IS_REFARRAY(to->xtype)
+			  && IS_EXARRAY_TYPE(to->r->xtype)
+			  && (to->r->va->m_type == SV_VALUE) )
+	{
+		unsigned int index = ARRAY_ELEMENT_FROM_P2(to->p2);
+		
+		if ( index > to->r->va->m_size )
+		{
+			if ( to->r->va->m_skipGC )
+			{
+				return;
+			}
+			
+			to->r->va = growValueArray( to->r->va, index );	
+		}
+		
+		to->r->va->m_Vdata[index] = *from;
+		return;
+	}
+
+	*to = *from;
+}
+static void doAssign_R_E( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_EX](to->r, from); }
+static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
+static void doAssign_E_R( WRValue* to, WRValue* from ) { wr_assign[(WR_EX<<2)|from->r->type](to, from->r); }
+static void doAssign_R_I( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_INT](to->r, from); }
+static void doAssign_R_F( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_FLOAT](to->r, from); }
+static void doAssign_I_R( WRValue* to, WRValue* from ) { wr_assign[(WR_INT<<2)|from->r->type](to, from->r); }
+static void doAssign_F_R( WRValue* to, WRValue* from ) { wr_assign[(WR_FLOAT<<2)|from->r->type](to, from->r); }
+static void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
+WRVoidFunc wr_assign[16] = 
+{
+	doAssign_X_X,  doAssign_X_X,  doAssign_I_R,  doAssign_X_E,
+	doAssign_X_X,  doAssign_X_X,  doAssign_F_R,  doAssign_X_E,
+	doAssign_R_I,  doAssign_R_F,  doAssign_R_R,  doAssign_R_E,
+	doAssign_E_X,  doAssign_E_X,  doAssign_E_R,  doAssign_E_E,
+};
+
+
+static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	c->gc( target );
+
+	// all we know is the value is not an array, so make it one
+	target->r = value;
+	target->p2 = INIT_AS_REFARRAY;
+	ARRAY_ELEMENT_TO_P2( target->p2, index->i );
+
+	value->p2 = INIT_AS_ARRAY;
+	value->va = c->getSVA( index->i+1, SV_VALUE, true );
+}
+static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	if ( value->xtype == WR_EX_HASH_TABLE )
+	{
+		target->r = (WRValue*)value->va->get( index->ui );
+		target->p2 = INIT_AS_REF;
+		return;
+	}
+	else if ( value->xtype == WR_EX_RAW_ARRAY )
+	{
+		goto skipBoundsCheck;
+	}
+	else if ( !(value->xtype == WR_EX_ARRAY) )
+	{
+		c->gc( target );
+
+		// nope, make it one of this size and return a ref
+		value->p2 = INIT_AS_ARRAY;
+		value->va = c->getSVA( index->ui+1, SV_VALUE, true );
+	}
+
+	if ( index->ui >= value->va->m_size )
+	{
+		if ( value->va->m_skipGC )
+		{
+			target->init();
+			return;
+		}
+
+		value->va = growValueArray( value->va, index->ui );
+	}
+
+skipBoundsCheck:
+	target->r = value;
+	target->p2 = INIT_AS_REFARRAY;
+	ARRAY_ELEMENT_TO_P2( target->p2, index->ui );
+}
+static void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	// the specific case of a string indexing a hash table
+	if ( value->xtype == WR_EX_HASH_TABLE )
+	{
+		target->p2 = INIT_AS_REF;
+		target->r = (WRValue*)value->va->get( index->getHash() );
+	}
+}
+static void doIndex_I_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(WR_INT<<2)|value->r->type](c, index, value->r, target); }
+static void doIndex_R_I( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_INT](c, index->r, value, target); }
+static void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target); }
+static void doIndex_R_F( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_FLOAT](c, index->r, value, target); }
+static void doIndex_R_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_EX](c, index->r, value, target); }
+static void doIndex_E_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(WR_EX<<2)|value->r->type](c, index, value->r, target); }
+
+static void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) {}
+
+WRStateFunc wr_index[16] = 
+{
+	doIndex_I_X,     doIndex_I_X,     doIndex_I_R,     doIndex_I_E,
+	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
+	doIndex_R_I,     doIndex_R_F,     doIndex_R_R,     doIndex_R_E, 
+	doVoidIndexFunc, doVoidIndexFunc, doIndex_E_R,     doIndex_E_E,
+};
 
 static void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
 

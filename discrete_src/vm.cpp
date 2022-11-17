@@ -27,8 +27,6 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
 {
-	//printf("marking %p->%p: [%d:%p] 0x%08X\n", s, s->r, s->i, s->p, s->type);
-
 	if ( IS_REFARRAY(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
 	{
 		if ( !s->r->va->m_skipGC )
@@ -1689,8 +1687,9 @@ NextIterator:
 			{
 				intCall = modI;
 targetFuncOpSkipLoad:
-				register2 = stackTop++;
 				floatCall = blankF;
+targetFuncOpSkipLoadNoClobberF:
+				register2 = stackTop++;
 targetFuncOpSkipLoadAndReg2:
 				wr_funcBinary[(register1->type<<2)|register0->type]( register1,
 																	 register0,
@@ -1918,7 +1917,7 @@ compactBLA8:
 CompactGGFunc:
 				register0 = globalSpace + *pc++;
 				register1 = globalSpace + *pc++;
-				goto targetFuncOpSkipLoad;
+				goto targetFuncOpSkipLoadNoClobberF;
 			}
 
 			CASE(GLBinaryMultiplication):
@@ -1928,7 +1927,7 @@ CompactGGFunc:
 CompactGLFunc:
 				register0 = globalSpace + *pc++;
 				register1 = frameBase + *pc++;
-				goto targetFuncOpSkipLoad;
+				goto targetFuncOpSkipLoadNoClobberF;
 			}
 
 			CASE(LLBinaryMultiplication):
@@ -1938,7 +1937,7 @@ CompactGLFunc:
 CompactFFFunc:
 				register0 = frameBase + *pc++;
 				register1 = frameBase + *pc++;
-				goto targetFuncOpSkipLoad;
+				goto targetFuncOpSkipLoadNoClobberF;
 			}
 
 			CASE(GGBinaryAddition):
@@ -1983,7 +1982,7 @@ CompactFFFunc:
 CompactFGFunc:
 				register0 = frameBase + *pc++;
 				register1 = globalSpace + *pc++;
-				goto targetFuncOpSkipLoad;
+				goto targetFuncOpSkipLoadNoClobberF;
 			}
 
 			CASE(LLBinarySubtraction):

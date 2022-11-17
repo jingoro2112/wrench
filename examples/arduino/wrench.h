@@ -27,7 +27,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 02
-#define WRENCH_VERSION_MINOR 00
+#define WRENCH_VERSION_MINOR 01
 
 /************************************************************************
 wrench's compiler was not designed to be memory or space efficient, for
@@ -239,14 +239,16 @@ void wr_makeInt( WRValue* val, int i );
 void wr_makeFloat( WRValue* val, float f );
 void wr_makeCharArray( WRValue* val, const unsigned char* data, const int len );
 
+// turning a value into a container allocates a hash table which must
+// be released with destroy!
 void wr_makeContainer( WRValue* val, const uint16_t sizeHint =0 );
+void wr_destroyContainer( WRValue* val );
+
 void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value );
 void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value );
 void wr_addFloatToContainer( WRValue* container, const char* name, const float value );
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array );
 
-
-void wr_destroyContainer( WRValue* val );
 
 /***************************************************************/
 /***************************************************************/

@@ -1,3 +1,6 @@
+2.01 ----------------------------------------------------------------------------------
+- fixed nasty optimization bug around not forgetting opcodes deep enough
+
 2.00 ----------------------------------------------------------------------------------
 - wrench bytecode now expects a 32-bit CRC footer, this bytecode is checksummed before 
   run to prevent crashes by bad/garbage data

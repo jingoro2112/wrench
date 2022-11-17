@@ -27,10 +27,6 @@ SOFTWARE.
 
 #ifndef WRENCH_WITHOUT_COMPILER
 
-#if defined(_WIN32) && !defined(__MINGW32__)
-#pragma warning (disable : 4996) // remove Windows nagging
-#endif
-
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>

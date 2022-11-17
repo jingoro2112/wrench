@@ -53,6 +53,58 @@ hello world
 
 
 
+
+
+
+
+
+
+two = 0;
+s = 0xAABBCCDD;
+r = s + two;
+s = 0xA;
+r = s + two;
+s = 1.0;
+r = s + two;
+
+two = 0;
+s = 0xAABBCCDD;
+r = s + two;
+if ( r != 0xAABBCCDD ) { print("o1"); }
+s = 0xA;
+r = s + two;
+if ( r != 0xA ) print("o2");
+
+s = 1.0;
+r = s + two;
+if ( r != 1.0) print(r);
+
+loc();
+
+function loc()
+{
+	ltwo = 0;
+	ls = 0xAABBCCDD;
+	lr = ls + ltwo;
+	ls = 0xA;
+	lr = ls + ltwo;
+	ls = 1.0;
+	lr = ls + ltwo;
+
+	ltwo = 0;
+	ls = 0xAABBCCDD;
+	lr = ls + ltwo;
+	if ( lr != 0xAABBCCDD ) { print("l1"); }
+	ls = 0xA;
+	lr = ls + ltwo;
+	if ( lr != 0xA ) print("l2");
+	ls = 1.0;
+	lr = ls + ltwo;
+	if ( lr != 1.0) print("l3");
+}
+
+
+
 // test casting
 ii = 10.5;
 j = (int)ii;

@@ -194,9 +194,9 @@ if ( str::toupper('a') != 'A' ) print("toupper 1");
 if ( str::toupper('A') != 'A' ) print("toupper 2");
 
 s = "#()*+,-/:;<=>?@\\^";
-if ( str::strchr("#()*+,-/:;<=>?@\\^", '') != 17 ) print("strchr 2");
-if ( str::strchr(s, '#') != 0 ) print("strchr 1");
-if ( str::strchr("#()*+,-/:;<=>?@\\^", '\\') != 15 ) print("strchr 3");
-if ( str::strchr("#()*+,-/:;<=>?@\\^", '^') != 16 ) print("strchr 4");
-if ( str::strchr("#()*+,-/:;<=>?@\\^", 'A') != -1 ) print("strchr 5");
+if ( str::chr("#()*+,-/:;<=>?@\\^", '') != 17 ) print("strchr 2");
+if ( str::chr(s, '#') != 0 ) print("strchr 1");
+if ( str::chr("#()*+,-/:;<=>?@\\^", '\\') != 15 ) print("strchr 3");
+if ( str::chr("#()*+,-/:;<=>?@\\^", '^') != 16 ) print("strchr 4");
+if ( str::chr("#()*+,-/:;<=>?@\\^", 'A') != -1 ) print("strchr 5");
 
