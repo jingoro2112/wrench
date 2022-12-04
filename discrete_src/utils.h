@@ -400,7 +400,13 @@ enum WRGCObjectType
 #define ARRAY_ELEMENT_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define ARRAY_ELEMENT_TO_P2(P,E) { (P)&=0xE00000FF; (P)|=(E<<8); }
 
+#define IS_EXARRAY_TYPE(P)   ((P)&0x80)
+#define EX_RAW_ARRAY_SIZE_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
+
+#define EX_TYPE_MASK   0xE0
+
 #define IS_REFARRAY(X) (((X)&0xE0)==WR_EX_REFARRAY)
 #define IS_ITERATOR(X) (((X)&0xE0)==WR_EX_ITERATOR)
+#define IS_RAW_ARRAY(X) (((X)&0xE0)==WR_EX_RAW_ARRAY)
 
 #endif

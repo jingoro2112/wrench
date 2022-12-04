@@ -147,8 +147,10 @@ extern WRReturnFunc wr_LogicalAND[16];
 extern WRReturnFunc wr_LogicalOR[16];
 
 
+typedef void (*WRSingleTargetFunc)( WRValue* value, WRValue* target );
+extern WRSingleTargetFunc wr_negate[4];
+
 typedef void (*WRUnaryFunc)( WRValue* value );
-extern WRUnaryFunc wr_negate[4];
 extern WRUnaryFunc wr_preinc[4];
 extern WRUnaryFunc wr_predec[4];
 extern WRUnaryFunc wr_toInt[4];

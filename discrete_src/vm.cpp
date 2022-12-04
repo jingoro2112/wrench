@@ -41,7 +41,7 @@ void WRContext::mark( WRValue* s )
 		return;
 	}
 
-	assert( s->xtype != WR_EX_RAW_ARRAY );
+	assert( !IS_RAW_ARRAY(s->xtype) );
 
 	WRGCObject* sva = s->va;
 
@@ -185,7 +185,7 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 {
 	const unsigned char* p = block + (blockSize - 4);
 	uint32_t hash = READ_32_FROM_PC( p );
-	if ( hash != wr_hash( block, (blockSize - 4)) )
+	if ( hash != wr_hash(block, (blockSize - 4)) )
 	{
 		w->err = WR_ERR_bad_bytecode_CRC;
 		return 0;
@@ -322,23 +322,19 @@ char* WRValue::asString( char* string, size_t len ) const
 {
 	if ( xtype )
 	{
-		switch( xtype )
+		switch( xtype & EX_TYPE_MASK )
 		{
 			case WR_EX_ARRAY:
 			{
-				unsigned int s = 0;
-
-				size_t size = va->m_size > len ? len : va->m_size;
-				for( ; s<size; ++s )
+				if ( va->m_type == SV_CHAR )
 				{
-					switch( va->m_type)
+					unsigned int s = 0;
+					while( (string[s]=va->m_Cdata[s]) )
 					{
-						case SV_VALUE: string[s] = ((WRValue *)va->m_data)[s].i; break;
-						case SV_CHAR: string[s] = ((char *)va->m_data)[s]; break;
-						default: break;
+						s++;
 					}
+
 				}
-				string[s] = 0;
 				break;
 			}
 			
@@ -1416,7 +1412,7 @@ indexHash:
 			CASE(Negate):
 			{
 				register0 = stackTop - 1;
-				wr_negate[ register0->type ]( register0 );
+				wr_negate[ register0->type ]( register0, register0 );
 				CONTINUE;
 			}
 			
@@ -3033,11 +3029,13 @@ void wr_addValueToContainer( WRValue* container, const char* name, WRValue* valu
 }
 
 //------------------------------------------------------------------------------
-void wr_addArrayToContainer( WRValue* container, const char* name, char* array )
+void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size )
 {
+	assert( size <= 0x1FFFFF );
+	
 	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
 	entry->c = array;
-	entry->p2 = INIT_AS_RAW_ARRAY;
+	entry->p2 = INIT_AS_RAW_ARRAY | (size<<8);
 }
 
 //------------------------------------------------------------------------------

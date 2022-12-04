@@ -27,7 +27,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 02
-#define WRENCH_VERSION_MINOR 01
+#define WRENCH_VERSION_MINOR 02
 
 /************************************************************************
 wrench's compiler was not designed to be memory or space efficient, for
@@ -247,8 +247,7 @@ void wr_destroyContainer( WRValue* val );
 void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value );
 void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value );
 void wr_addFloatToContainer( WRValue* container, const char* name, const float value );
-void wr_addArrayToContainer( WRValue* container, const char* name, char* array );
-
+void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size );
 
 /***************************************************************/
 /***************************************************************/
@@ -348,7 +347,6 @@ enum WRExType
 	WR_EX_STRUCT     = 0xC0,  // 1100
 	WR_EX_HASH_TABLE = 0xE0,  // 1110
 };
-#define IS_EXARRAY_TYPE(P)   ((P)&0x80)
 
 
 //------------------------------------------------------------------------------

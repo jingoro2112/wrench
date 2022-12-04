@@ -401,8 +401,14 @@ enum WRGCObjectType
 #define ARRAY_ELEMENT_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define ARRAY_ELEMENT_TO_P2(P,E) { (P)&=0xE00000FF; (P)|=(E<<8); }
 
+#define IS_EXARRAY_TYPE(P)   ((P)&0x80)
+#define EX_RAW_ARRAY_SIZE_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
+
+#define EX_TYPE_MASK   0xE0
+
 #define IS_REFARRAY(X) (((X)&0xE0)==WR_EX_REFARRAY)
 #define IS_ITERATOR(X) (((X)&0xE0)==WR_EX_ITERATOR)
+#define IS_RAW_ARRAY(X) (((X)&0xE0)==WR_EX_RAW_ARRAY)
 
 #endif
 /*******************************************************************************
@@ -828,8 +834,10 @@ extern WRReturnFunc wr_LogicalAND[16];
 extern WRReturnFunc wr_LogicalOR[16];
 
 
+typedef void (*WRSingleTargetFunc)( WRValue* value, WRValue* target );
+extern WRSingleTargetFunc wr_negate[4];
+
 typedef void (*WRUnaryFunc)( WRValue* value );
-extern WRUnaryFunc wr_negate[4];
 extern WRUnaryFunc wr_preinc[4];
 extern WRUnaryFunc wr_predec[4];
 extern WRUnaryFunc wr_toInt[4];
@@ -8223,7 +8231,7 @@ void WRContext::mark( WRValue* s )
 		return;
 	}
 
-	assert( s->xtype != WR_EX_RAW_ARRAY );
+	assert( !IS_RAW_ARRAY(s->xtype) );
 
 	WRGCObject* sva = s->va;
 
@@ -8367,7 +8375,7 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 {
 	const unsigned char* p = block + (blockSize - 4);
 	uint32_t hash = READ_32_FROM_PC( p );
-	if ( hash != wr_hash( block, (blockSize - 4)) )
+	if ( hash != wr_hash(block, (blockSize - 4)) )
 	{
 		w->err = WR_ERR_bad_bytecode_CRC;
 		return 0;
@@ -8504,23 +8512,19 @@ char* WRValue::asString( char* string, size_t len ) const
 {
 	if ( xtype )
 	{
-		switch( xtype )
+		switch( xtype & EX_TYPE_MASK )
 		{
 			case WR_EX_ARRAY:
 			{
-				unsigned int s = 0;
-
-				size_t size = va->m_size > len ? len : va->m_size;
-				for( ; s<size; ++s )
+				if ( va->m_type == SV_CHAR )
 				{
-					switch( va->m_type)
+					unsigned int s = 0;
+					while( (string[s]=va->m_Cdata[s]) )
 					{
-						case SV_VALUE: string[s] = ((WRValue *)va->m_data)[s].i; break;
-						case SV_CHAR: string[s] = ((char *)va->m_data)[s]; break;
-						default: break;
+						s++;
 					}
+
 				}
-				string[s] = 0;
 				break;
 			}
 			
@@ -9598,7 +9602,7 @@ indexHash:
 			CASE(Negate):
 			{
 				register0 = stackTop - 1;
-				wr_negate[ register0->type ]( register0 );
+				wr_negate[ register0->type ]( register0, register0 );
 				CONTINUE;
 			}
 			
@@ -11215,11 +11219,13 @@ void wr_addValueToContainer( WRValue* container, const char* name, WRValue* valu
 }
 
 //------------------------------------------------------------------------------
-void wr_addArrayToContainer( WRValue* container, const char* name, char* array )
+void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size )
 {
+	assert( size <= 0x1FFFFF );
+	
 	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
 	entry->c = array;
-	entry->p2 = INIT_AS_RAW_ARRAY;
+	entry->p2 = INIT_AS_RAW_ARRAY | (size<<8);
 }
 
 //------------------------------------------------------------------------------
@@ -11319,7 +11325,13 @@ WRGCObject* growValueArray( WRGCObject* va, int newSize )
 void WRValue::arrayValue( WRValue* val ) const
 {
 	unsigned int s = ARRAY_ELEMENT_FROM_P2(p2);
-	if ( r->va->m_type == SV_VALUE )
+
+	if ( IS_RAW_ARRAY(r->xtype) )
+	{
+		val->p2 = INIT_AS_INT;
+		val->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? r->c[s] : 0;
+	}
+	else if ( r->va->m_type == SV_VALUE )
 	{
 		if ( s < r->va->m_size )
 		{
@@ -11340,12 +11352,12 @@ void WRValue::arrayValue( WRValue* val ) const
 //------------------------------------------------------------------------------
 void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 {
-	unsigned int s = index == -1 ? ARRAY_ELEMENT_FROM_P2(array->p2) : index;
+	uint32_t s = index == -1 ? ARRAY_ELEMENT_FROM_P2(array->p2) : index;
 
-	if ( array->r->xtype == WR_EX_RAW_ARRAY )
+	if ( IS_RAW_ARRAY(array->r->xtype) )
 	{
-		value->i = array->r->c[s];
 		value->p2 = INIT_AS_INT;
+		value->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(array->r->p2))) ? array->r->c[s] : 0;
 	}
 	else if( array->r->va->m_type == SV_VALUE )
 	{
@@ -11402,11 +11414,14 @@ uint32_t WRValue::getHashEx() const
 //------------------------------------------------------------------------------
 void wr_valueToArray( const WRValue* array, WRValue* value )
 {
-	unsigned int s = ARRAY_ELEMENT_FROM_P2(array->p2);
+	uint32_t s = ARRAY_ELEMENT_FROM_P2(array->p2);
 
-	if ( array->r->xtype == WR_EX_RAW_ARRAY )
+	if ( IS_RAW_ARRAY(array->r->xtype ) )
 	{
-		array->r->c[s] = value->ui;
+		if ( s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(array->r->p2)) )
+		{
+			array->r->c[s] = value->ui;
+		}
 	}
 	else if ( array->r->va->m_type == SV_CHAR)
 	{
@@ -11486,7 +11501,8 @@ static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
 {
 	if (IS_REFARRAY(value->xtype) )
 	{
-		if ( value->r->va->m_type == SV_VALUE )
+		if ( !IS_RAW_ARRAY(value->r->xtype)
+			 && (value->r->va->m_type == SV_VALUE) )
 		{
 			unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
 			if ( s >= value->r->va->m_size )
@@ -11543,39 +11559,46 @@ WRReturnSingleFunc wr_LogicalNot[4] =
 
 
 //------------------------------------------------------------------------------
-static void doNegate_I( WRValue* value ) { value->i = -value->i; }
-static void doNegate_F( WRValue* value ) { value->f = -value->f; }
-static void doNegate_E( WRValue* value )
+static void doNegate_I( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = -value->i; }
+static void doNegate_F( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = -value->f; }
+static void doNegate_E( WRValue* value, WRValue* target )
 {
 	if ( IS_REFARRAY(value->xtype) )
 	{
 		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
 
-		if (value->r->va->m_type == SV_VALUE)
+		if ( IS_RAW_ARRAY(value->r->xtype) )
+		{
+			target->p2 = INIT_AS_INT;
+			target->i = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(value->r->p2))) ? -value->r->c[s] : 0;
+		}
+		else if (value->r->va->m_type == SV_VALUE)
 		{
 			if ( s < value->r->va->m_size )
 			{
-				wr_negate[ (value->r->va->m_Vdata + s)->type ]( value->r->va->m_Vdata + s );
+				wr_negate[ (value->r->va->m_Vdata + s)->type ]( value->r->va->m_Vdata + s, target );
+			}
+			else
+			{
+				target->init();
 			}
 		}
 		else if ( value->r->va->m_type == SV_CHAR )
 		{
-			value->p2 = INIT_AS_INT;
-			value->i = (s >= value->r->va->m_size) ? 0 : (value->r->va->m_Cdata[s] = -value->r->va->m_Cdata[s]);
+			target->p2 = INIT_AS_INT;
+			target->i = (s < value->r->va->m_size) ? -value->r->va->m_Cdata[s] : 0;
 		}
 	}
 }
-static void doNegate_R( WRValue* value )
+static void doNegate_R( WRValue* value, WRValue* target )
 {
-	wr_negate[ value->r->type ]( value->r );
-	*value = *value->r;
+	wr_negate[ value->r->type ]( value->r, target );
 }
 
-WRUnaryFunc wr_negate[4] = 
+WRSingleTargetFunc wr_negate[4] = 
 {
 	doNegate_I,  doNegate_F,  doNegate_R,  doNegate_E
 };
-
 
 //------------------------------------------------------------------------------
 static void doGetValue_E( WRValue** value )
@@ -11584,7 +11607,15 @@ static void doGetValue_E( WRValue** value )
 	{
 		unsigned int s = ARRAY_ELEMENT_FROM_P2((*value)->p2);
 
-		if ((*value)->r->va->m_type == SV_VALUE)
+		if ( IS_RAW_ARRAY((*value)->r->xtype) )
+		{
+			if ( s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2((*value)->r->p2)) )
+			{
+				(*value)->p2 = INIT_AS_INT;
+				(*value)->i = (*value)->r->c[s];
+			}
+		}
+		else if ((*value)->r->va->m_type == SV_VALUE)
 		{
 			if ( s < (*value)->r->va->m_size )
 			{
@@ -11747,9 +11778,12 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 		target->p2 = INIT_AS_REF;
 		return;
 	}
-	else if ( value->xtype == WR_EX_RAW_ARRAY )
+	else if ( IS_RAW_ARRAY(value->xtype) )
 	{
-		goto skipBoundsCheck;
+		if ( index->ui >= (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(value->p2)) )
+		{
+			goto boundsFailedCompact;
+		}
 	}
 	else if ( !(value->xtype == WR_EX_ARRAY) )
 	{
@@ -11759,11 +11793,11 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 		value->p2 = INIT_AS_ARRAY;
 		value->va = c->getSVA( index->ui+1, SV_VALUE, true );
 	}
-
-	if ( index->ui >= value->va->m_size )
+	else if ( index->ui >= value->va->m_size )
 	{
 		if ( value->va->m_skipGC )
 		{
+boundsFailedCompact:
 			target->init();
 			return;
 		}
@@ -11771,7 +11805,6 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 		value->va = growValueArray( value->va, index->ui );
 	}
 
-skipBoundsCheck:
 	target->r = value;
 	target->p2 = INIT_AS_REFARRAY;
 	ARRAY_ELEMENT_TO_P2( target->p2, index->ui );
@@ -12050,8 +12083,9 @@ WRBoolCallbackReturnFunc wr_Compare[16] =
 //==================================================================================
 //==================================================================================
 //==================================================================================
-#else
+#else 
 
+// NOT COMPACT
 
 //------------------------------------------------------------------------------
 static void doAssign_X_E( WRValue* to, WRValue* from )
@@ -12146,9 +12180,12 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 		target->p2 = INIT_AS_REF;
 		return;
 	}
-	else if ( value->xtype == WR_EX_RAW_ARRAY )
+	else if ( IS_RAW_ARRAY(value->xtype) )
 	{
-		goto skipBoundsCheck;
+		if ( index->ui >= (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(value->p2)) )
+		{
+			goto boundsFailedCompact;
+		}
 	}
 	else if ( !(value->xtype == WR_EX_ARRAY) )
 	{
@@ -12158,11 +12195,11 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 		value->p2 = INIT_AS_ARRAY;
 		value->va = c->getSVA( index->ui+1, SV_VALUE, true );
 	}
-
-	if ( index->ui >= value->va->m_size )
+	else if ( index->ui >= value->va->m_size )
 	{
 		if ( value->va->m_skipGC )
 		{
+boundsFailedCompact:
 			target->init();
 			return;
 		}
@@ -12170,7 +12207,6 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 		value->va = growValueArray( value->va, index->ui );
 	}
 
-skipBoundsCheck:
 	target->r = value;
 	target->p2 = INIT_AS_REFARRAY;
 	ARRAY_ELEMENT_TO_P2( target->p2, index->ui );

@@ -1,3 +1,9 @@
+2.02 ----------------------------------------------------------------------------------
+- added bounds checking for raw arrays
+- fixed RAW_ARRAY access from c-side value lib
+- fixed error where "negate" operation changed the target value permemantly
+- added more RAW_ARRAY support
+
 2.01 ----------------------------------------------------------------------------------
 - fixed nasty optimization bug around not forgetting opcodes deep enough
 

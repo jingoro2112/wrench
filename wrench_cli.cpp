@@ -369,7 +369,15 @@ int runTests( int number )
 	wr_addValueToContainer( &container, "integer", &integer );
 
 	char someArray[10] = "hello";
-	wr_addArrayToContainer( &container, "name", someArray );
+	wr_addArrayToContainer( &container, "name", someArray, 10 );
+
+	char* someBigArray = new char[0x1FFFFF];
+	someBigArray[0] = 10;
+	someBigArray[10000] = 20;
+	someBigArray[100000] = 30;
+	someBigArray[0x1FFFFE] = 40;
+	
+	wr_addArrayToContainer( &container, "big", someBigArray, 0x1FFFFF );
 
 	FILE* tfile = fopen( "test_files.txt", "r" );
 	char buf[256];
@@ -469,6 +477,7 @@ int runTests( int number )
 
 	wr_destroyState( w );
 
+	delete[] someBigArray;
 	fclose( tfile );
 	return err;
 }
