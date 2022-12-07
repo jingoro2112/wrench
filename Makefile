@@ -22,6 +22,7 @@ OBJS = \
 	$(OBJDIR)/cc.o \
 	$(OBJDIR)/operations.o \
 	$(OBJDIR)/vm.o \
+	$(OBJDIR)/utils.o \
 	$(OBJDIR)/std.o \
 	$(OBJDIR)/std_io.o \
 	$(OBJDIR)/std_string.o \
@@ -54,6 +55,9 @@ $(OBJDIR)/operations.o: discrete_src/operations.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/vm.o: discrete_src/vm.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/utils.o: discrete_src/utils.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/std.o: discrete_src/std.cpp

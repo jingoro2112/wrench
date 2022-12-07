@@ -403,6 +403,7 @@ enum WRGCObjectType
 
 #define IS_EXARRAY_TYPE(P)   ((P)&0x80)
 #define EX_RAW_ARRAY_SIZE_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
+#define IS_EX_SINGLE_CHAR_RAW_P2(P) ((P) == (((uint32_t)WR_EX) | (((uint32_t)WR_EX_RAW_ARRAY<<24)) | (1<<8)))
 
 #define EX_TYPE_MASK   0xE0
 
@@ -833,7 +834,6 @@ extern WRReturnFunc wr_CompareLT[16];
 extern WRReturnFunc wr_LogicalAND[16];
 extern WRReturnFunc wr_LogicalOR[16];
 
-
 typedef void (*WRSingleTargetFunc)( WRValue* value, WRValue* target );
 extern WRSingleTargetFunc wr_negate[4];
 
@@ -845,7 +845,6 @@ extern WRUnaryFunc wr_toFloat[4];
 
 typedef void (*WRGetValueFunc)( WRValue** value );
 extern WRGetValueFunc wr_getValue[4];
-
 
 typedef uint32_t (*WRUint32Call)( WRValue* value );
 extern WRUint32Call wr_bitwiseNot[4];
@@ -8338,272 +8337,6 @@ WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 }
 
 //------------------------------------------------------------------------------
-WRState* wr_newState( int stackSize )
-{
-	WRState* state = (WRState *)malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
-	memset( (unsigned char*)state, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
-
-	state->stackSize = stackSize;
-	state->stack = (WRValue *)((unsigned char *)state + sizeof(WRState));
-
-	state->c_functionRegistry.init( 0, SV_VOID_HASH_TABLE );
-	
-	return state;
-}
-
-//------------------------------------------------------------------------------
-void wr_destroyState( WRState* w )
-{
-	while( w->contextList )
-	{
-		wr_destroyContext( w, w->contextList );
-	}
-	
-	w->c_functionRegistry.clear();
-
-	free( w );
-}
-
-//------------------------------------------------------------------------------
-WRError wr_getLastError( WRState* w )
-{
-	return (WRError)w->err;
-}
-
-//------------------------------------------------------------------------------
-WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
-{
-	const unsigned char* p = block + (blockSize - 4);
-	uint32_t hash = READ_32_FROM_PC( p );
-	if ( hash != wr_hash(block, (blockSize - 4)) )
-	{
-		w->err = WR_ERR_bad_bytecode_CRC;
-		return 0;
-	}
-	
-	int needed = sizeof(WRContext) // class
-				 + block[1] * sizeof(WRValue)  // globals
-				 + block[0] * sizeof(WRFunction); // local functions
-	
-	WRContext* C = (WRContext *)malloc( needed );
-	
-	memset((char*)C, 0, needed);
-
-	C->globals = block[1];
-	C->w = w;
-
-	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + block[1] * sizeof(WRValue));
-	
-	C->next = w->contextList;
-	C->bottom = block;
-	
-	w->contextList = C;
-
-	if ( wr_callFunction(w, C, (int32_t)0) )
-	{
-		wr_destroyContext( w, C );
-		return 0;
-	}
-
-	return C;
-}
-
-//------------------------------------------------------------------------------
-void wr_destroyContext( WRState* w, WRContext* context )
-{
-	WRContext* prev = 0;
-
-	// unlink it
-	for( WRContext* c = w->contextList; c; c = c->next )
-	{
-		if ( c == context )
-		{
-			if ( prev )
-			{
-				prev->next = c->next;
-			}
-			else
-			{
-				w->contextList = w->contextList->next;
-			}
-
-			while ( context->svAllocated )
-			{
-				WRGCObject* next = context->svAllocated->m_next;
-				context->svAllocated->clear();
-				free( context->svAllocated );
-				context->svAllocated = next;
-			}
-
-			free( context );
-			
-			break;
-		}
-		prev = c;
-	}
-}
-
-//------------------------------------------------------------------------------
-void wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr )
-{
-	WRValue* V = w->c_functionRegistry.getAsRawValueHashTable( wr_hashStr(name) );
-	V->usr = usr;
-	V->ccb = function;
-}
-
-//------------------------------------------------------------------------------
-void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLBACK function )
-{
-	w->c_functionRegistry.getAsRawValueHashTable(wr_hashStr(signature) )->lcb = function;
-}
-
-//------------------------------------------------------------------------------
-int WRValue::asInt() const
-{
-	if ( type == WR_INT )
-	{
-		return i;
-	}
-	if ( type == WR_REF )
-	{
-		return r->asInt();
-	}
-	if ( type == WR_FLOAT )
-	{
-		return (int)f;
-	}
-	if ( IS_REFARRAY(xtype) )
-	{
-		WRValue temp;
-		arrayValue( &temp );
-		return temp.asInt();
-	}
-
-	return 0;
-}
-
-//------------------------------------------------------------------------------
-float WRValue::asFloat() const
-{
-	if ( type == WR_FLOAT )
-	{
-		return f;
-	}
-	if ( type == WR_REF )
-	{
-		return r->asFloat();
-	}
-	if ( type == WR_INT )
-	{
-		return (float)i;
-	}
-	if ( IS_REFARRAY(xtype) )
-	{
-		WRValue temp;
-		arrayValue( &temp );
-		return temp.asFloat();
-	}
-
-	return 0;
-}
-
-//------------------------------------------------------------------------------
-char* WRValue::asString( char* string, size_t len ) const
-{
-	if ( xtype )
-	{
-		switch( xtype & EX_TYPE_MASK )
-		{
-			case WR_EX_ARRAY:
-			{
-				if ( va->m_type == SV_CHAR )
-				{
-					unsigned int s = 0;
-					while( (string[s]=va->m_Cdata[s]) )
-					{
-						s++;
-					}
-
-				}
-				break;
-			}
-			
-			case WR_EX_REFARRAY:
-			{
-				if ( IS_EXARRAY_TYPE(r->xtype) )
-				{
-					WRValue temp;
-					wr_arrayToValue(this, &temp);
-					return temp.asString(string, len);
-				}
-				else
-				{
-					return r->asString(string, len);
-				}
-			}
-
-			case WR_EX_RAW_ARRAY:
-			case WR_EX_STRUCT:
-			case WR_EX_NONE:
-			{
-				string[0] = 0;
-				break;
-			}
-		}
-	}
-	else
-	{
-		switch( type )
-		{
-			case WR_FLOAT: { wr_ftoa( f, string, len ); break; }
-			case WR_INT: { wr_itoa( i, string, len ); break; }
-			case WR_REF: { return r->asString( string, len ); }
-		}
-	}
-	
-	return string;
-}
-
-//------------------------------------------------------------------------------
-int wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv, const int argn )
-{
-	return wr_callFunction( w, context, wr_hashStr(functionName), argv, argn );
-}
-
-//------------------------------------------------------------------------------
-int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
-{
-	WRValue* cF = 0;
-	if ( hash )
-	{
-		if ( context->stopLocation == 0 )
-		{
-			return w->err = WR_ERR_run_must_be_called_by_itself_first;
-		}
-
-		cF = w->c_functionRegistry.getAsRawValueHashTable( hash ^ context->hashOffset );
-		if ( !cF->wrf )
-		{
-			return w->err = WR_ERR_wrench_function_not_found;
-		}
-	}
-
-	return wr_callFunction( w, context, cF ? cF->wrf : 0, argv, argn );
-}
-
-//------------------------------------------------------------------------------
-WRValue* wr_returnValueFromLastCall( WRState* w )
-{
-	return w->stack; // this is where it ends up
-}
-
-//------------------------------------------------------------------------------
-WRFunction* wr_getFunction( WRContext* context, const char* functionName )
-{
-	return context->w->c_functionRegistry.getAsRawValueHashTable( wr_hashStr(functionName) ^ context->hashOffset )->wrf;
-}
-
-//------------------------------------------------------------------------------
 inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 {
 	if ( !IS_ITERATOR(iterator->xtype) )
@@ -8621,11 +8354,11 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 		{
 			return false;
 		}
-		
+
 		ARRAY_ELEMENT_TO_P2( iterator->p2, (element + 1) );
-		
+
 		element <<= 1;
-		
+
 		value->p2 = INIT_AS_REF;
 		value->r = iterator->r->va->m_Vdata + element;
 		if ( key )
@@ -8640,13 +8373,13 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 		{
 			return false;
 		}
-		
+
 		if ( key )
 		{
 			key->p2 = INIT_AS_INT;
 			key->i = element;
 		}
-		
+
 		value->p2 = INIT_AS_REF;
 		value->r = iterator->r->va->m_Vdata + element;
 
@@ -9193,8 +8926,8 @@ literalZero:
 				function = context->localFunctions + *pc++;
 				pc += *pc;
 callFunction:				
-				// rectify arg count?
-				if ( args != function->arguments ) // expect correctness, so optimize that code path
+				// rectify arg count? hopefully not lets get calling!
+				if ( args != function->arguments )
 				{
 					if ( args > function->arguments )
 					{
@@ -9211,10 +8944,12 @@ callFunction:
 					}
 				}
 
-				// locals are NOT initialized.. but we have to make
-				// sure they have a non-collectable type or the gc can
-				// get confused.. shame though this would be SO much
-				// faster... TODO figure out how to use it!
+				// for speed locals are not guaranteed to be initialized.. but we have to make
+				// sure they are not randomly selected to a
+				// "collectable" type or the gc will iterate them in some corner cases (ask me how I know)
+				// A simple offset add would be so fast.. 
+				//           TODO figure out how to use it!
+				
 //				stackTop += function->frameSpaceNeeded;
 				for( int l=0; l<function->frameSpaceNeeded; ++l )
 				{
@@ -9617,6 +9352,7 @@ indexHash:
 			{
 				stackTop->i = *pc++;
 indexLiteral:
+				stackTop->p2 = INIT_AS_INT;
 				register0 = stackTop - 1;
 				wr_index[(WR_INT<<2)|register0->type]( context, stackTop, register0, register0 );
 				CONTINUE;
@@ -9952,6 +9688,7 @@ binaryTableOpAndPopBlankF:
 binaryTableOpAndPop:
 				register0 = --stackTop;
 				register1 = --stackTop;
+
 binaryTableOpAndPopCall:
 				wr_FuncAssign[(register0->type<<2)|register1->type]( register0, register1, intCall, floatCall );
 				CONTINUE;
@@ -10004,9 +9741,9 @@ compactPreIncrement:
 				floatCall = addF;
 
 compactIncrementWork:
-				stackTop->i = 1;
-				stackTop->p2 = INIT_AS_INT;
-				register1 = stackTop;
+				register1 = stackTop + 1;
+				register1->i = 1;
+				register1->p2 = INIT_AS_INT;
 				goto binaryTableOpAndPopCall;
 			}
 
@@ -11187,6 +10924,298 @@ targetFuncStoreLocalOp:
 #endif
 }
 
+/*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
+//------------------------------------------------------------------------------
+WRState* wr_newState( int stackSize )
+{
+	WRState* state = (WRState *)malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
+	memset( (unsigned char*)state, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
+
+	state->stackSize = stackSize;
+	state->stack = (WRValue *)((unsigned char *)state + sizeof(WRState));
+
+	state->c_functionRegistry.init( 0, SV_VOID_HASH_TABLE );
+
+	return state;
+}
+
+//------------------------------------------------------------------------------
+void wr_destroyState( WRState* w )
+{
+	while( w->contextList )
+	{
+		wr_destroyContext( w, w->contextList );
+	}
+
+	w->c_functionRegistry.clear();
+
+	free( w );
+}
+
+//------------------------------------------------------------------------------
+WRError wr_getLastError( WRState* w )
+{
+	return (WRError)w->err;
+}
+
+//------------------------------------------------------------------------------
+WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
+{
+	const unsigned char* p = block + (blockSize - 4);
+	uint32_t hash = READ_32_FROM_PC( p );
+	if ( hash != wr_hash(block, (blockSize - 4)) )
+	{
+		w->err = WR_ERR_bad_bytecode_CRC;
+		return 0;
+	}
+
+	int needed = sizeof(WRContext) // class
+				 + block[1] * sizeof(WRValue)  // globals
+				 + block[0] * sizeof(WRFunction); // local functions
+
+	WRContext* C = (WRContext *)malloc( needed );
+
+	memset((char*)C, 0, needed);
+
+	C->globals = block[1];
+	C->w = w;
+
+	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + block[1] * sizeof(WRValue));
+
+	C->next = w->contextList;
+	C->bottom = block;
+
+	w->contextList = C;
+
+	if ( wr_callFunction(w, C, (int32_t)0) )
+	{
+		wr_destroyContext( w, C );
+		return 0;
+	}
+
+	return C;
+}
+
+//------------------------------------------------------------------------------
+void wr_destroyContext( WRState* w, WRContext* context )
+{
+	WRContext* prev = 0;
+
+	// unlink it
+	for( WRContext* c = w->contextList; c; c = c->next )
+	{
+		if ( c == context )
+		{
+			if ( prev )
+			{
+				prev->next = c->next;
+			}
+			else
+			{
+				w->contextList = w->contextList->next;
+			}
+
+			while ( context->svAllocated )
+			{
+				WRGCObject* next = context->svAllocated->m_next;
+				context->svAllocated->clear();
+				free( context->svAllocated );
+				context->svAllocated = next;
+			}
+
+			free( context );
+
+			break;
+		}
+		prev = c;
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr )
+{
+	WRValue* V = w->c_functionRegistry.getAsRawValueHashTable( wr_hashStr(name) );
+	V->usr = usr;
+	V->ccb = function;
+}
+
+//------------------------------------------------------------------------------
+void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLBACK function )
+{
+	w->c_functionRegistry.getAsRawValueHashTable(wr_hashStr(signature) )->lcb = function;
+}
+
+//------------------------------------------------------------------------------
+const int WRValue::asInt() const
+{
+	if ( type == WR_INT )
+	{
+		return i;
+	}
+	if ( type == WR_REF )
+	{
+		return r->asInt();
+	}
+	if ( type == WR_FLOAT )
+	{
+		return (int)f;
+	}
+	if ( IS_REFARRAY(xtype) )
+	{
+		WRValue temp;
+		arrayValue( &temp );
+		return temp.asInt();
+	}
+
+	return 0;
+}
+
+//------------------------------------------------------------------------------
+const float WRValue::asFloat() const
+{
+	if ( type == WR_FLOAT )
+	{
+		return f;
+	}
+	if ( type == WR_REF )
+	{
+		return r->asFloat();
+	}
+	if ( type == WR_INT )
+	{
+		return (float)i;
+	}
+	if ( IS_REFARRAY(xtype) )
+	{
+		WRValue temp;
+		arrayValue( &temp );
+		return temp.asFloat();
+	}
+
+	return 0;
+}
+
+//------------------------------------------------------------------------------
+char* WRValue::asString( char* string, size_t len ) const
+{
+	if ( xtype )
+	{
+		switch( xtype & EX_TYPE_MASK )
+		{
+			case WR_EX_ARRAY:
+			{
+				if ( va->m_type == SV_CHAR )
+				{
+					unsigned int s = 0;
+					while( (string[s]=va->m_Cdata[s]) )
+					{
+						s++;
+					}
+
+				}
+				break;
+			}
+
+			case WR_EX_REFARRAY:
+			{
+				if ( IS_EXARRAY_TYPE(r->xtype) )
+				{
+					WRValue temp;
+					wr_arrayToValue(this, &temp);
+					return temp.asString(string, len);
+				}
+				else
+				{
+					return r->asString(string, len);
+				}
+			}
+
+			case WR_EX_RAW_ARRAY:
+			case WR_EX_STRUCT:
+			case WR_EX_NONE:
+			{
+				string[0] = 0;
+				break;
+			}
+		}
+	}
+	else
+	{
+		switch( type )
+		{
+			case WR_FLOAT: { wr_ftoa( f, string, len ); break; }
+			case WR_INT: { wr_itoa( i, string, len ); break; }
+			case WR_REF: { return r->asString( string, len ); }
+		}
+	}
+
+	return string;
+}
+
+//------------------------------------------------------------------------------
+int wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv, const int argn )
+{
+	return wr_callFunction( w, context, wr_hashStr(functionName), argv, argn );
+}
+
+//------------------------------------------------------------------------------
+int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
+{
+	WRValue* cF = 0;
+	if ( hash )
+	{
+		if ( context->stopLocation == 0 )
+		{
+			return w->err = WR_ERR_run_must_be_called_by_itself_first;
+		}
+
+		cF = w->c_functionRegistry.getAsRawValueHashTable( hash ^ context->hashOffset );
+		if ( !cF->wrf )
+		{
+			return w->err = WR_ERR_wrench_function_not_found;
+		}
+	}
+
+	return wr_callFunction( w, context, cF ? cF->wrf : 0, argv, argn );
+}
+
+//------------------------------------------------------------------------------
+WRValue* wr_returnValueFromLastCall( WRState* w )
+{
+	return w->stack; // this is where it ends up
+}
+
+//------------------------------------------------------------------------------
+WRFunction* wr_getFunction( WRContext* context, const char* functionName )
+{
+	return context->w->c_functionRegistry.getAsRawValueHashTable( wr_hashStr(functionName) ^ context->hashOffset )->wrf;
+}
+
 //------------------------------------------------------------------------------
 void wr_makeInt( WRValue* val, int i )
 {
@@ -11222,7 +11251,7 @@ void wr_addValueToContainer( WRValue* container, const char* name, WRValue* valu
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size )
 {
 	assert( size <= 0x1FFFFF );
-	
+
 	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
 	entry->c = array;
 	entry->p2 = INIT_AS_RAW_ARRAY | (size<<8);
@@ -11329,7 +11358,7 @@ void WRValue::arrayValue( WRValue* val ) const
 	if ( IS_RAW_ARRAY(r->xtype) )
 	{
 		val->p2 = INIT_AS_INT;
-		val->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? r->c[s] : 0;
+		val->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[s]) : 0;
 	}
 	else if ( r->va->m_type == SV_VALUE )
 	{
@@ -11341,7 +11370,7 @@ void WRValue::arrayValue( WRValue* val ) const
 	else if ( r->va->m_type == SV_CHAR )
 	{
 		val->p2 = INIT_AS_INT;
-		val->ui = (s < r->va->m_size) ? r->va->m_Cdata[s] : 0;
+		val->ui = (s < r->va->m_size) ? (uint32_t)(unsigned char)r->va->m_Cdata[s] : 0;
 	}
 	else
 	{
@@ -11357,7 +11386,7 @@ void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 	if ( IS_RAW_ARRAY(array->r->xtype) )
 	{
 		value->p2 = INIT_AS_INT;
-		value->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(array->r->p2))) ? array->r->c[s] : 0;
+		value->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(array->r->p2))) ? (uint32_t)(unsigned char)(array->r->c[s]) : 0;
 	}
 	else if( array->r->va->m_type == SV_VALUE )
 	{
@@ -11368,15 +11397,15 @@ void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 				value->init();
 				return;
 			}
-			
+
 			array->r->va = growValueArray( array->r->va, s );
 		}
 		*value = array->r->va->m_Vdata[s];
 	}
 	else if ( array->r->va->m_type == SV_CHAR )
 	{
-		value->i = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Cdata[s];
 		value->p2 = INIT_AS_INT;
+		value->i = (s < array->r->va->m_size) ? (uint32_t)(unsigned char)(array->r->va->m_Cdata[s]) : 0;
 	}
 	else
 	{
@@ -11530,8 +11559,15 @@ static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
 	}
 	else if ( value->xtype == WR_EX_HASH_TABLE )
 	{
-		target->r = (WRValue*)value->va->get(hash);
-		target->p2 = INIT_AS_REF;
+		if ( IS_EX_SINGLE_CHAR_RAW_P2( (target->r = (WRValue*)value->va->get(hash))->p2) )
+		{
+			target->p2 = INIT_AS_REFARRAY;
+			//ARRAY_ELEMENT_TO_P2( target->p2, 1 );
+		}
+		else
+		{
+			target->p2 = INIT_AS_REF;
+		}
 	}
 }
 WRIndexHashFunc wr_IndexHash[4] = 
@@ -11641,8 +11677,6 @@ WRGetValueFunc wr_getValue[4] =
 	doGetValue_X,  doGetValue_X,  doGetValue_R,  doGetValue_E
 };
 
-
-
 //------------------------------------------------------------------------------
 static uint32_t doBitwiseNot_I( WRValue* value ) { return ~value->ui; }
 static uint32_t doBitwiseNot_F( WRValue* value ) { return 0; }
@@ -11678,14 +11712,6 @@ WRVoidFunc wr_pushIterator[4] =
 {
 	pushIterator_X, pushIterator_X, pushIterator_R, pushIterator_E
 };
-
-//==================================================================================
-//==================================================================================
-//==================================================================================
-//==================================================================================
-
-#ifdef WRENCH_COMPACT
-
 
 //------------------------------------------------------------------------------
 static void doAssign_X_E( WRValue* to, WRValue* from )
@@ -11743,6 +11769,15 @@ static void doAssign_E_E( WRValue* to, WRValue* from )
 
 	*to = *from;
 }
+
+//==================================================================================
+//==================================================================================
+//==================================================================================
+//==================================================================================
+
+#ifdef WRENCH_COMPACT
+
+
 static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
 static void doAssign_R_X( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->type](to->r, from); }
 static void doAssign_X_R( WRValue* to, WRValue* from ) { wr_assign[(to->type<<2)|from->r->type](to, from->r); }
@@ -11840,28 +11875,12 @@ static void unaryPost_E( WRValue* value, WRValue* stack, int add )
 {
 	if ( IS_REFARRAY(value->xtype) )
 	{
-		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
-		switch( value->r->va->m_type )
-		{
-			case SV_VALUE:
-			{
-				if ( s >= value->r->va->m_size )
-				{
-					value->r->va = growValueArray( value->r->va, s );
-				}
-				WRValue* val = value->r->va->m_Vdata + s;
-				m_unaryPost[ val->type ]( val, stack, add );
-				break;
-			}
-
-			case SV_CHAR:
-			{
-				stack->p2 = INIT_AS_INT;
-				stack->i = (s >= value->r->va->m_size) ? 0 : value->r->va->m_Cdata[s];
-				value->r->va->m_Cdata[s] += add;
-				break;
-			}
-		}
+		WRValue element;
+		wr_arrayToValue( value, &element );
+		WRValue temp;
+		m_unaryPost[ element.type ]( &element, &temp, add );
+		wr_valueToArray( value, &element );
+		*stack = temp;
 	}
 }
 static void unaryPost_I( WRValue* value, WRValue* stack, int add ) { stack->p2 = INIT_AS_INT; stack->i = value->i; value->i += add; }
@@ -12026,7 +12045,7 @@ WRTargetCallbackFunc wr_funcBinary[16] =
 
 static bool Compare_E_E( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(to->xtype) )
+	if ( IS_REFARRAY(to->xtype) && IS_REFARRAY(from->xtype) )
 	{
 		WRValue element1;
 		wr_arrayToValue( to, &element1 );
@@ -12087,62 +12106,6 @@ WRBoolCallbackReturnFunc wr_Compare[16] =
 
 // NOT COMPACT
 
-//------------------------------------------------------------------------------
-static void doAssign_X_E( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(from->xtype) )
-	{
-		WRValue element;
-		wr_arrayToValue( from, &element );
-		wr_assign[(WR_EX<<2)+element.type](to, &element);
-	}
-	else
-	{
-		*to = *from;
-	}
-}
-static void doAssign_E_X( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(to->xtype) )
-	{
-		wr_valueToArray( to, from );
-	}
-	else
-	{
-		*to = *from;
-	}
-}
-static void doAssign_E_E( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(from->xtype) )
-	{
-		WRValue element;
-		wr_arrayToValue( from, &element );
-		wr_assign[(WR_EX<<2)+element.type](to, &element);
-		return;
-	}
-	else if ( IS_REFARRAY(to->xtype)
-			  && IS_EXARRAY_TYPE(to->r->xtype)
-			  && (to->r->va->m_type == SV_VALUE) )
-	{
-		unsigned int index = ARRAY_ELEMENT_FROM_P2(to->p2);
-		
-		if ( index > to->r->va->m_size )
-		{
-			if ( to->r->va->m_skipGC )
-			{
-				return;
-			}
-			
-			to->r->va = growValueArray( to->r->va, index );	
-		}
-		
-		to->r->va->m_Vdata[index] = *from;
-		return;
-	}
-
-	*to = *from;
-}
 static void doAssign_R_E( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_EX](to->r, from); }
 static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
 static void doAssign_E_R( WRValue* to, WRValue* from ) { wr_assign[(WR_EX<<2)|from->r->type](to, from->r); }
@@ -12676,26 +12639,12 @@ X_COMPARE( wr_CompareEQ, == );
 #define X_UNARY_PRE( NAME, OPERATION ) \
 static void NAME##_E( WRValue* value )\
 {\
-	if ( IS_REFARRAY(value->xtype) && IS_EXARRAY_TYPE(value->r->xtype))\
+	if ( IS_REFARRAY(value->xtype) )\
 	{\
-		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);\
-		switch( value->r->va->m_type )\
-		{\
-			case SV_VALUE:\
-			{\
-				if ( s >= value->r->va->m_size )\
-				{\
-					value->r->va = growValueArray( value->r->va, s );\
-				}\
-				\
-				WRValue* val = (WRValue *)value->r->va->m_data + s;\
-				NAME[ val->type ]( val );\
-				*value = *val;\
-				return;\
-			}\
-			\
-			case SV_CHAR: {	value->i = (s >= value->r->va->m_size) ? 0 : OPERATION value->r->va->m_Cdata[s]; value->p2 = INIT_AS_INT; return; }\
-		}\
+		WRValue element;\
+		wr_arrayToValue( value, &element );\
+		NAME [ element.type ]( &element );\
+		wr_valueToArray( value, &element );\
 	}\
 }\
 static void NAME##_I( WRValue* value ) { OPERATION value->i; }\
@@ -12709,34 +12658,18 @@ WRUnaryFunc NAME[4] = \
 X_UNARY_PRE( wr_preinc, ++ );
 X_UNARY_PRE( wr_predec, -- );
 
-
 //------------------------------------------------------------------------------
 #define X_UNARY_POST( NAME, OPERATION ) \
 static void NAME##_E( WRValue* value, WRValue* stack )\
 {\
 	if ( IS_REFARRAY(value->xtype) )\
 	{\
-		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);\
-		switch( value->r->va->m_type )\
-		{\
-			case SV_VALUE:\
-						  {\
-							  if ( s >= value->r->va->m_size )\
-							  {\
-								  value->r->va = growValueArray( value->r->va, s );\
-							  }\
-							  WRValue* val = value->r->va->m_Vdata + s;\
-							  NAME[ val->type ]( val, stack );\
-							  break;\
-						  }\
-						  \
-			case SV_CHAR:\
-						 {\
-							 stack->p2 = INIT_AS_INT;\
-							 stack->i = (s >= value->r->va->m_size) ? 0 : value->r->va->m_Cdata[s] OPERATION;\
-							 break;\
-						 }\
-		}\
+		WRValue element;\
+		wr_arrayToValue( value, &element );\
+		WRValue temp; \
+		NAME [ element.type ]( &element, &temp );\
+		wr_valueToArray( value, &element );\
+		*stack = temp; \
 	}\
 }\
 static void NAME##_I( WRValue* value, WRValue* stack ) { stack->p2 = INIT_AS_INT; stack->i = value->i OPERATION; }\
@@ -12750,9 +12683,7 @@ WRVoidFunc NAME[4] = \
 X_UNARY_POST( wr_postinc, ++ );
 X_UNARY_POST( wr_postdec, -- );
 
-
 #endif
-
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 

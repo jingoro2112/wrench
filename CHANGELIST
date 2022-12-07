@@ -1,3 +1,9 @@
+2.03 ----------------------------------------------------------------------------------
+- added .isFloat() and .isInt() to WRValue
+- fixed some array-centered pre/post inc/dec corners
+- wrench now understands "userdata.b" to be equivilant to "userdata.b[0]" for the
+  purposes of a raw array and wr_addArrayToContainer(...)
+
 2.02 ----------------------------------------------------------------------------------
 - added bounds checking for raw arrays
 - fixed RAW_ARRAY access from c-side value lib

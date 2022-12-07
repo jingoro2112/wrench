@@ -1,18 +1,16 @@
-            wrench v2.02
-
 http://northarc.com/wrench/www/
 
 A full-featured compiler+interpreter that uses a bare minimum of ram and program space.
 
-How little? The wrench interpreter compiles to ~30k on an Arduino, and
-uses less than 1k of ram to operate.
+How little? The wrench Virtual Machgine compiles to ~26k on an Arduino, and
+uses less than 700 Bytes of RAM to operate, it is fully functional on an Uno Mini.
 
 Highlights:
 
 - Weakly typed, supporting native 32-bit int, float and string.
   Code is easy to write and intuitive.
 
-- Fast
+- Optimizing compiler and very fast VM
 
 - Produces very compact endian-neutral bytecode compile
   anywhere-run-anywhere.
@@ -21,16 +19,18 @@ Highlights:
 
 - Multiple concurrent contexts suypported.
 
-- Code is easy to write, imagine c/c++ with the typenames removed
+- Code is easy to write, imagine c with the typenames removed
   and that's pretty much it.
 
-- Supports everything a good interpreter should: if/then/else/do/while/for/functions/operators/etc..
+- Supports everything a good interpreter should: if/then/else/do/while/for/switch/functions/operators/etc..
 
-- Can operate directly on native data/arrays, no thunking required.
+- Yes structs too
+
+- Can operate directly on native data without thunking
 
 - Can call back and forth to native code with minimal overhead
 
-- Easy to extend and write super-low-overhead library calls for
+- Easy to extend
 
 - Memory is garbage-collected but only for dynamic arrays. Unless
   you are allocating/de-allocating arrays the gc _never_ runs.

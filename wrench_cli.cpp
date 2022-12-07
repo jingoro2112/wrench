@@ -127,6 +127,7 @@ const char* sourceOrder[]=
 	"/cc.h",
 	"/cc.cpp",
 	"/vm.cpp",
+	"/utils.cpp",
 	"/operations.cpp",
 	"/std.cpp",
 	"/std_io.cpp",
@@ -376,7 +377,12 @@ int runTests( int number )
 	someBigArray[10000] = 20;
 	someBigArray[100000] = 30;
 	someBigArray[0x1FFFFE] = 40;
-	
+
+	char byte = (char)0x99;
+	char byte2 = (char)0x99;
+	wr_addArrayToContainer( &container, "b", &byte, 1 );
+	wr_addArrayToContainer( &container, "c", &byte2, 1 );
+		
 	wr_addArrayToContainer( &container, "big", someBigArray, 0x1FFFFF );
 
 	FILE* tfile = fopen( "test_files.txt", "r" );

@@ -27,7 +27,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 02
-#define WRENCH_VERSION_MINOR 02
+#define WRENCH_VERSION_MINOR 03
 
 /************************************************************************
 wrench's compiler was not designed to be memory or space efficient, for
@@ -172,6 +172,11 @@ typedef void (*WR_C_CALLBACK)(WRState* w, const WRValue* argv, const int argn, W
 // binary: .array( unsigned int* size, char* type );
 // string: .c_str( unsigned int* len );
 
+// tests:
+// .isFloat() fast check if this is a float value
+// .isInt() fast check if this is a float value
+
+
 // this will do its pest to represent the value as a string to the
 // supplied buffer, len is maximum size allowed
 // string: .asString(char* string, size_t len )
@@ -248,6 +253,7 @@ void wr_addValueToContainer( WRValue* container, const char* name, WRValue* valu
 void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value );
 void wr_addFloatToContainer( WRValue* container, const char* name, const float value );
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size );
+
 
 /***************************************************************/
 /***************************************************************/
@@ -356,9 +362,12 @@ struct WRValue
 	// never reference the data members directly, they are unions and
 	// bad things will happen. Always access them with one of these
 	// methods
-	int asInt() const;
-	float asFloat() const;
-	
+	const int asInt() const;
+	const float asFloat() const;
+
+	const bool isFloat() const { return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
+	const bool isInt() const { return type == WR_INT || (type == WR_REF && r->type == WR_INT); }
+
 	// string: must point to a buffer long enough to contain at least len bytes.
 	// the pointer will be passed back
 	char* asString( char* string, size_t len ) const;

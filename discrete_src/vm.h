@@ -146,7 +146,6 @@ extern WRReturnFunc wr_CompareLT[16];
 extern WRReturnFunc wr_LogicalAND[16];
 extern WRReturnFunc wr_LogicalOR[16];
 
-
 typedef void (*WRSingleTargetFunc)( WRValue* value, WRValue* target );
 extern WRSingleTargetFunc wr_negate[4];
 
@@ -158,7 +157,6 @@ extern WRUnaryFunc wr_toFloat[4];
 
 typedef void (*WRGetValueFunc)( WRValue** value );
 extern WRGetValueFunc wr_getValue[4];
-
 
 typedef uint32_t (*WRUint32Call)( WRValue* value );
 extern WRUint32Call wr_bitwiseNot[4];

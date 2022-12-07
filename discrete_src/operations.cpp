@@ -86,7 +86,7 @@ void WRValue::arrayValue( WRValue* val ) const
 	if ( IS_RAW_ARRAY(r->xtype) )
 	{
 		val->p2 = INIT_AS_INT;
-		val->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? r->c[s] : 0;
+		val->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[s]) : 0;
 	}
 	else if ( r->va->m_type == SV_VALUE )
 	{
@@ -98,7 +98,7 @@ void WRValue::arrayValue( WRValue* val ) const
 	else if ( r->va->m_type == SV_CHAR )
 	{
 		val->p2 = INIT_AS_INT;
-		val->ui = (s < r->va->m_size) ? r->va->m_Cdata[s] : 0;
+		val->ui = (s < r->va->m_size) ? (uint32_t)(unsigned char)r->va->m_Cdata[s] : 0;
 	}
 	else
 	{
@@ -114,7 +114,7 @@ void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 	if ( IS_RAW_ARRAY(array->r->xtype) )
 	{
 		value->p2 = INIT_AS_INT;
-		value->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(array->r->p2))) ? array->r->c[s] : 0;
+		value->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(array->r->p2))) ? (uint32_t)(unsigned char)(array->r->c[s]) : 0;
 	}
 	else if( array->r->va->m_type == SV_VALUE )
 	{
@@ -125,15 +125,15 @@ void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 				value->init();
 				return;
 			}
-			
+
 			array->r->va = growValueArray( array->r->va, s );
 		}
 		*value = array->r->va->m_Vdata[s];
 	}
 	else if ( array->r->va->m_type == SV_CHAR )
 	{
-		value->i = (s >= array->r->va->m_size) ? 0 : array->r->va->m_Cdata[s];
 		value->p2 = INIT_AS_INT;
+		value->i = (s < array->r->va->m_size) ? (uint32_t)(unsigned char)(array->r->va->m_Cdata[s]) : 0;
 	}
 	else
 	{
@@ -287,8 +287,15 @@ static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
 	}
 	else if ( value->xtype == WR_EX_HASH_TABLE )
 	{
-		target->r = (WRValue*)value->va->get(hash);
-		target->p2 = INIT_AS_REF;
+		if ( IS_EX_SINGLE_CHAR_RAW_P2( (target->r = (WRValue*)value->va->get(hash))->p2) )
+		{
+			target->p2 = INIT_AS_REFARRAY;
+			//ARRAY_ELEMENT_TO_P2( target->p2, 1 );
+		}
+		else
+		{
+			target->p2 = INIT_AS_REF;
+		}
 	}
 }
 WRIndexHashFunc wr_IndexHash[4] = 
@@ -398,8 +405,6 @@ WRGetValueFunc wr_getValue[4] =
 	doGetValue_X,  doGetValue_X,  doGetValue_R,  doGetValue_E
 };
 
-
-
 //------------------------------------------------------------------------------
 static uint32_t doBitwiseNot_I( WRValue* value ) { return ~value->ui; }
 static uint32_t doBitwiseNot_F( WRValue* value ) { return 0; }
@@ -435,14 +440,6 @@ WRVoidFunc wr_pushIterator[4] =
 {
 	pushIterator_X, pushIterator_X, pushIterator_R, pushIterator_E
 };
-
-//==================================================================================
-//==================================================================================
-//==================================================================================
-//==================================================================================
-
-#ifdef WRENCH_COMPACT
-
 
 //------------------------------------------------------------------------------
 static void doAssign_X_E( WRValue* to, WRValue* from )
@@ -500,6 +497,15 @@ static void doAssign_E_E( WRValue* to, WRValue* from )
 
 	*to = *from;
 }
+
+//==================================================================================
+//==================================================================================
+//==================================================================================
+//==================================================================================
+
+#ifdef WRENCH_COMPACT
+
+
 static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
 static void doAssign_R_X( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->type](to->r, from); }
 static void doAssign_X_R( WRValue* to, WRValue* from ) { wr_assign[(to->type<<2)|from->r->type](to, from->r); }
@@ -597,28 +603,12 @@ static void unaryPost_E( WRValue* value, WRValue* stack, int add )
 {
 	if ( IS_REFARRAY(value->xtype) )
 	{
-		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
-		switch( value->r->va->m_type )
-		{
-			case SV_VALUE:
-			{
-				if ( s >= value->r->va->m_size )
-				{
-					value->r->va = growValueArray( value->r->va, s );
-				}
-				WRValue* val = value->r->va->m_Vdata + s;
-				m_unaryPost[ val->type ]( val, stack, add );
-				break;
-			}
-
-			case SV_CHAR:
-			{
-				stack->p2 = INIT_AS_INT;
-				stack->i = (s >= value->r->va->m_size) ? 0 : value->r->va->m_Cdata[s];
-				value->r->va->m_Cdata[s] += add;
-				break;
-			}
-		}
+		WRValue element;
+		wr_arrayToValue( value, &element );
+		WRValue temp;
+		m_unaryPost[ element.type ]( &element, &temp, add );
+		wr_valueToArray( value, &element );
+		*stack = temp;
 	}
 }
 static void unaryPost_I( WRValue* value, WRValue* stack, int add ) { stack->p2 = INIT_AS_INT; stack->i = value->i; value->i += add; }
@@ -783,7 +773,7 @@ WRTargetCallbackFunc wr_funcBinary[16] =
 
 static bool Compare_E_E( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall )
 {
-	if ( IS_REFARRAY(to->xtype) )
+	if ( IS_REFARRAY(to->xtype) && IS_REFARRAY(from->xtype) )
 	{
 		WRValue element1;
 		wr_arrayToValue( to, &element1 );
@@ -844,62 +834,6 @@ WRBoolCallbackReturnFunc wr_Compare[16] =
 
 // NOT COMPACT
 
-//------------------------------------------------------------------------------
-static void doAssign_X_E( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(from->xtype) )
-	{
-		WRValue element;
-		wr_arrayToValue( from, &element );
-		wr_assign[(WR_EX<<2)+element.type](to, &element);
-	}
-	else
-	{
-		*to = *from;
-	}
-}
-static void doAssign_E_X( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(to->xtype) )
-	{
-		wr_valueToArray( to, from );
-	}
-	else
-	{
-		*to = *from;
-	}
-}
-static void doAssign_E_E( WRValue* to, WRValue* from )
-{
-	if ( IS_REFARRAY(from->xtype) )
-	{
-		WRValue element;
-		wr_arrayToValue( from, &element );
-		wr_assign[(WR_EX<<2)+element.type](to, &element);
-		return;
-	}
-	else if ( IS_REFARRAY(to->xtype)
-			  && IS_EXARRAY_TYPE(to->r->xtype)
-			  && (to->r->va->m_type == SV_VALUE) )
-	{
-		unsigned int index = ARRAY_ELEMENT_FROM_P2(to->p2);
-		
-		if ( index > to->r->va->m_size )
-		{
-			if ( to->r->va->m_skipGC )
-			{
-				return;
-			}
-			
-			to->r->va = growValueArray( to->r->va, index );	
-		}
-		
-		to->r->va->m_Vdata[index] = *from;
-		return;
-	}
-
-	*to = *from;
-}
 static void doAssign_R_E( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_EX](to->r, from); }
 static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
 static void doAssign_E_R( WRValue* to, WRValue* from ) { wr_assign[(WR_EX<<2)|from->r->type](to, from->r); }
@@ -1433,26 +1367,12 @@ X_COMPARE( wr_CompareEQ, == );
 #define X_UNARY_PRE( NAME, OPERATION ) \
 static void NAME##_E( WRValue* value )\
 {\
-	if ( IS_REFARRAY(value->xtype) && IS_EXARRAY_TYPE(value->r->xtype))\
+	if ( IS_REFARRAY(value->xtype) )\
 	{\
-		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);\
-		switch( value->r->va->m_type )\
-		{\
-			case SV_VALUE:\
-			{\
-				if ( s >= value->r->va->m_size )\
-				{\
-					value->r->va = growValueArray( value->r->va, s );\
-				}\
-				\
-				WRValue* val = (WRValue *)value->r->va->m_data + s;\
-				NAME[ val->type ]( val );\
-				*value = *val;\
-				return;\
-			}\
-			\
-			case SV_CHAR: {	value->i = (s >= value->r->va->m_size) ? 0 : OPERATION value->r->va->m_Cdata[s]; value->p2 = INIT_AS_INT; return; }\
-		}\
+		WRValue element;\
+		wr_arrayToValue( value, &element );\
+		NAME [ element.type ]( &element );\
+		wr_valueToArray( value, &element );\
 	}\
 }\
 static void NAME##_I( WRValue* value ) { OPERATION value->i; }\
@@ -1466,34 +1386,18 @@ WRUnaryFunc NAME[4] = \
 X_UNARY_PRE( wr_preinc, ++ );
 X_UNARY_PRE( wr_predec, -- );
 
-
 //------------------------------------------------------------------------------
 #define X_UNARY_POST( NAME, OPERATION ) \
 static void NAME##_E( WRValue* value, WRValue* stack )\
 {\
 	if ( IS_REFARRAY(value->xtype) )\
 	{\
-		unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);\
-		switch( value->r->va->m_type )\
-		{\
-			case SV_VALUE:\
-						  {\
-							  if ( s >= value->r->va->m_size )\
-							  {\
-								  value->r->va = growValueArray( value->r->va, s );\
-							  }\
-							  WRValue* val = value->r->va->m_Vdata + s;\
-							  NAME[ val->type ]( val, stack );\
-							  break;\
-						  }\
-						  \
-			case SV_CHAR:\
-						 {\
-							 stack->p2 = INIT_AS_INT;\
-							 stack->i = (s >= value->r->va->m_size) ? 0 : value->r->va->m_Cdata[s] OPERATION;\
-							 break;\
-						 }\
-		}\
+		WRValue element;\
+		wr_arrayToValue( value, &element );\
+		WRValue temp; \
+		NAME [ element.type ]( &element, &temp );\
+		wr_valueToArray( value, &element );\
+		*stack = temp; \
 	}\
 }\
 static void NAME##_I( WRValue* value, WRValue* stack ) { stack->p2 = INIT_AS_INT; stack->i = value->i OPERATION; }\
@@ -1507,6 +1411,4 @@ WRVoidFunc NAME[4] = \
 X_UNARY_POST( wr_postinc, ++ );
 X_UNARY_POST( wr_postdec, -- );
 
-
 #endif
-
