@@ -27,6 +27,7 @@ OBJS = \
 	$(OBJDIR)/std_io.o \
 	$(OBJDIR)/std_string.o \
 	$(OBJDIR)/std_math.o \
+	$(OBJDIR)/std_msg.o \
 
 clean:
 	-@rm -rf $(OBJDIR)
@@ -70,4 +71,7 @@ $(OBJDIR)/std_string.o: discrete_src/std_string.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/std_math.o: discrete_src/std_math.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/std_msg.o: discrete_src/std_msg.cpp
 	$(CC) $@ $<

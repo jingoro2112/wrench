@@ -890,6 +890,14 @@ file::read( name ); // returns an array representing the data
 file::write( name, data[] );
 
 io::getline(); // return a line of text input with fgetc(stdin)
+
+// messages are global to all contexts currently running, this allows
+// inter-context communication.
+msg::read( key, [clear default:false] )  // read a message, optionally clear
+msg::write( key, message )
+msg::clear( key )
+msg::peek( key ) // return true if the key has a message
+
 </code></pre>
 
 <hr><h1><a name="benchmarks"></a>5.0 Benchmarks</h1></hr>

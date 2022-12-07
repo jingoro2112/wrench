@@ -33,7 +33,7 @@ WRState* wr_newState( int stackSize )
 	state->stackSize = stackSize;
 	state->stack = (WRValue *)((unsigned char *)state + sizeof(WRState));
 
-	state->c_functionRegistry.init( 0, SV_VOID_HASH_TABLE );
+	state->globalRegistry.init( 0, SV_VOID_HASH_TABLE );
 
 	return state;
 }
@@ -43,10 +43,10 @@ void wr_destroyState( WRState* w )
 {
 	while( w->contextList )
 	{
-		wr_destroyContext( w, w->contextList );
+		wr_destroyContext( w->contextList );
 	}
 
-	w->c_functionRegistry.clear();
+	w->globalRegistry.clear();
 
 	free( w );
 }
@@ -81,37 +81,39 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 
 	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + block[1] * sizeof(WRValue));
 
-	C->next = w->contextList;
+	C->registry.init( 0, SV_VOID_HASH_TABLE );
+	C->registry.m_vNext = w->contextList;
 	C->bottom = block;
 
 	w->contextList = C;
 
 	if ( wr_callFunction(w, C, (int32_t)0) )
 	{
-		wr_destroyContext( w, C );
+		wr_destroyContext( C );
 		return 0;
 	}
 
 	return C;
 }
 
+
 //------------------------------------------------------------------------------
-void wr_destroyContext( WRState* w, WRContext* context )
+void wr_destroyContext( WRContext* context )
 {
 	WRContext* prev = 0;
 
 	// unlink it
-	for( WRContext* c = w->contextList; c; c = c->next )
+	for( WRContext* c = context->w->contextList; c; c = (WRContext*)c->registry.m_vNext )
 	{
 		if ( c == context )
 		{
 			if ( prev )
 			{
-				prev->next = c->next;
+				prev->registry.m_vNext = c->registry.m_vNext;
 			}
 			else
 			{
-				w->contextList = w->contextList->next;
+				context->w->contextList = (WRContext*)context->w->contextList->registry.m_vNext;
 			}
 
 			while ( context->svAllocated )
@@ -121,6 +123,8 @@ void wr_destroyContext( WRState* w, WRContext* context )
 				free( context->svAllocated );
 				context->svAllocated = next;
 			}
+
+			context->registry.clear();
 
 			free( context );
 
@@ -133,7 +137,7 @@ void wr_destroyContext( WRState* w, WRContext* context )
 //------------------------------------------------------------------------------
 void wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr )
 {
-	WRValue* V = w->c_functionRegistry.getAsRawValueHashTable( wr_hashStr(name) );
+	WRValue* V = w->globalRegistry.getAsRawValueHashTable( wr_hashStr(name) );
 	V->usr = usr;
 	V->ccb = function;
 }
@@ -141,7 +145,7 @@ void wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, 
 //------------------------------------------------------------------------------
 void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLBACK function )
 {
-	w->c_functionRegistry.getAsRawValueHashTable(wr_hashStr(signature) )->lcb = function;
+	w->globalRegistry.getAsRawValueHashTable(wr_hashStr(signature))->lcb = function;
 }
 
 //------------------------------------------------------------------------------
@@ -151,15 +155,15 @@ const int WRValue::asInt() const
 	{
 		return i;
 	}
-	if ( type == WR_REF )
+	else if ( type == WR_REF )
 	{
 		return r->asInt();
 	}
-	if ( type == WR_FLOAT )
+	else if ( type == WR_FLOAT )
 	{
 		return (int)f;
 	}
-	if ( IS_REFARRAY(xtype) )
+	else if ( IS_REFARRAY(xtype) )
 	{
 		WRValue temp;
 		arrayValue( &temp );
@@ -176,15 +180,15 @@ const float WRValue::asFloat() const
 	{
 		return f;
 	}
-	if ( type == WR_REF )
+	else if ( type == WR_REF )
 	{
 		return r->asFloat();
 	}
-	if ( type == WR_INT )
+	else if ( type == WR_INT )
 	{
 		return (float)i;
 	}
-	if ( IS_REFARRAY(xtype) )
+	else if ( IS_REFARRAY(xtype) )
 	{
 		WRValue temp;
 		arrayValue( &temp );
@@ -268,7 +272,7 @@ int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const W
 			return w->err = WR_ERR_run_must_be_called_by_itself_first;
 		}
 
-		cF = w->c_functionRegistry.getAsRawValueHashTable( hash ^ context->hashOffset );
+		cF = context->registry.getAsRawValueHashTable( hash );
 		if ( !cF->wrf )
 		{
 			return w->err = WR_ERR_wrench_function_not_found;
@@ -287,7 +291,7 @@ WRValue* wr_returnValueFromLastCall( WRState* w )
 //------------------------------------------------------------------------------
 WRFunction* wr_getFunction( WRContext* context, const char* functionName )
 {
-	return context->w->c_functionRegistry.getAsRawValueHashTable( wr_hashStr(functionName) ^ context->hashOffset )->wrf;
+	return context->registry.getAsRawValueHashTable(wr_hashStr(functionName))->wrf;
 }
 
 //------------------------------------------------------------------------------

@@ -133,6 +133,7 @@ const char* sourceOrder[]=
 	"/std_io.cpp",
 	"/std_string.cpp",
 	"/std_math.cpp",
+	"/std_msg.cpp",
 	""
 };
 

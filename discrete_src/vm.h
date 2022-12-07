@@ -26,9 +26,6 @@ SOFTWARE.
 #define _VM_H
 /*------------------------------------------------------------------------------*/
 
-int wr_itoa( int i, char* string, size_t len );
-int wr_ftoa( float f, char* string, size_t len );
-
 //------------------------------------------------------------------------------
 struct WRFunction
 {
@@ -47,25 +44,26 @@ struct WRFunction
 struct WRContext
 {
 	uint16_t gcPauseCount;
-	uint8_t globals;
+	uint16_t globals;
 
 	union
 	{
 		WRFunction* localFunctions;
-		uint32_t hashOffset;
+		uint32_t contextId;
 	};
 	
 	const unsigned char* bottom;
 	const unsigned char* stopLocation;
+	
 	WRGCObject* svAllocated;
 	
+	WRState* w;
+	
+	WRGCObject registry; // the 'next' pointer in this registry is used as the context LL next
+
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
 	WRGCObject* getSVA( int size, WRGCObjectType type, bool init );
-	
-	WRState* w;
-
-	WRContext* next;
 };
 
 //------------------------------------------------------------------------------
@@ -74,11 +72,11 @@ struct WRState
 	uint16_t stackSize;
 	int8_t err;
 
-	WRGCObject c_functionRegistry;
-
 	WRValue* stack;
 
 	WRContext* contextList;
+
+	WRGCObject globalRegistry;
 };
 
 

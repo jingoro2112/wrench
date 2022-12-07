@@ -8,6 +8,21 @@
 -4
 ~*/
 
+
+if ( msg::peek("test") ) print("m1");
+msg::write( "key1", 10 );
+msg::write( 0, 20 );
+msg::write( 1.4, 30 );
+if ( msg::read("none") ) print("m2");
+if ( msg::read("key1") != 10 ) print("m3");
+if ( msg::read("key1") != 10 ) print("m4");
+if ( msg::read("key1", true) != 10 ) print("m5");
+if ( msg::read("key1", true) == 10 ) print("m6");
+if ( !msg::peek(1.4) ) print("m7");
+msg::clear(1.4);
+if ( msg::peek(1.4) ) print("m8");
+
+
 math::floor();
 math::floor(1);
 math::floor(1,2);

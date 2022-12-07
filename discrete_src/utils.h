@@ -27,6 +27,9 @@ SOFTWARE.
 
 #ifndef WRENCH_WITHOUT_COMPILER
 
+int wr_itoa( int i, char* string, size_t len );
+int wr_ftoa( float f, char* string, size_t len );
+
 //-----------------------------------------------------------------------------
 template <class T> class WRarray
 {

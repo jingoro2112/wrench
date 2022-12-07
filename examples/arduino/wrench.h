@@ -144,9 +144,8 @@ WRFunction* wr_getFunction( WRContext* context, const char* functionName );
 
 // Destroy a context you no longer need and free up all the memory it
 // was using, all contexts are freed when wr_destroyState() is called,
-// so calling this is not necessary, but reccomended so the memory can
-// be re-used
-void wr_destroyContext( WRState* w, WRContext* context );
+// so calling this is not necessary
+void wr_destroyContext( WRContext* context );
 
 
 /***************************************************************/
@@ -221,6 +220,7 @@ void wr_loadMathLib( WRState* w ); // provides most of the calls in math.h
 void wr_loadStdLib( WRState* w ); // standard functions like sprintf/rand/
 void wr_loadFileLib( WRState* w ); // file funcs
 void wr_loadStringLib( WRState* w ); // string functions
+void wr_loadMessageLib( WRState* w ); // messaging between contexts
 
 // arduino-specific functions, be sure to add arduino_lib.cpp to your
 // sketch. much thanks to Koepel for inspiring and writing this
@@ -253,6 +253,7 @@ void wr_addValueToContainer( WRValue* container, const char* name, WRValue* valu
 void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value );
 void wr_addFloatToContainer( WRValue* container, const char* name, const float value );
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size );
+
 
 /***************************************************************/
 /***************************************************************/
@@ -353,9 +354,9 @@ enum WRExType
 	WR_EX_HASH_TABLE = 0xE0,  // 1110
 };
 
+class WRGCObject;
 
 //------------------------------------------------------------------------------
-class WRGCObject;
 struct WRValue
 {
 	// never reference the data members directly, they are unions and

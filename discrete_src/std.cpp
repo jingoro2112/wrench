@@ -179,5 +179,6 @@ void wr_loadAllLibs( WRState* w )
 	wr_loadStdLib( w );
 	wr_loadFileLib( w );
 	wr_loadStringLib( w );
+	wr_loadMessageLib( w );
 }
 

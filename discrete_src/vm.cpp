@@ -468,7 +468,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		&&RightShiftAssignAndPop,
 		&&LeftShiftAssignAndPop,
 
-		&&LogicalNot, //X
+		&&LogicalNot,
 		&&Negate,
 
 		&&LiteralInt8,
@@ -556,7 +556,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 		&&ToInt,
 		&&ToFloat,
-};
+	};
 #endif
 
 	const unsigned char* pc;
@@ -646,7 +646,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 																	  + context->localFunctions[ findex ].frameSpaceNeeded
 																	  + context->localFunctions[ findex ].arguments;
 				
-				w->c_functionRegistry.getAsRawValueHashTable(context->localFunctions[findex].hash ^ context->hashOffset)->wrf = context->localFunctions + findex;
+				context->registry.getAsRawValueHashTable(context->localFunctions[findex].hash)->wrf = context->localFunctions + findex;
 
 				CONTINUE;
 			}
@@ -696,7 +696,7 @@ literalZero:
 				register0->p = 0;
 				register0->p2 = INIT_AS_INT;
 
-				if ( (register1 = w->c_functionRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb )
+				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb )
 				{
 					register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
 				}
@@ -721,7 +721,7 @@ literalZero:
 			{
 				args = *pc++;
 
-				if ( (register1 = w->c_functionRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb )
+				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb )
 				{
 					register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
 				}
@@ -803,7 +803,7 @@ callFunction:
 
 				args = *pc++; // which have already been pushed
 
-				if ( (register1 = w->c_functionRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb )
+				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb )
 				{
 					register1->lcb( stackTop, args, context );
 				}

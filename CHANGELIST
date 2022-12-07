@@ -3,6 +3,19 @@
 - fixed some array-centered pre/post inc/dec corners
 - wrench now understands "userdata.b" to be equivilant to "userdata.b[0]" for the
   purposes of a raw array and wr_addArrayToContainer(...)
+- fixed some raw array compares
+- fixed small leak with re-opening multiple contexts, the fix
+- added std_msg a messeging lib for sending/receiving messages across contexts
+  a message is a key/value where the key can be anything but the value is only stored
+  numerically, if a complex type is given the hash will be stored, the implications for
+  passing allocated memory around is just to whacky
+
+ 	msg::read  -- read a message, optionally clear
+	msg::write -- write a message
+	msg::clear -- clear
+	msg::peek -- returns true if a message exists
+  load this with wr_LoadMessageLib(...) and it is included with wr_loadAllLibs(...)
+
 
 2.02 ----------------------------------------------------------------------------------
 - added bounds checking for raw arrays

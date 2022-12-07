@@ -498,27 +498,6 @@ static void doAssign_E_E( WRValue* to, WRValue* from )
 	*to = *from;
 }
 
-//==================================================================================
-//==================================================================================
-//==================================================================================
-//==================================================================================
-
-#ifdef WRENCH_COMPACT
-
-
-static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
-static void doAssign_R_X( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->type](to->r, from); }
-static void doAssign_X_R( WRValue* to, WRValue* from ) { wr_assign[(to->type<<2)|from->r->type](to, from->r); }
-static void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
-WRVoidFunc wr_assign[16] = 
-{
-	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
-	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
-	doAssign_R_X,  doAssign_R_X,  doAssign_R_R,  doAssign_R_X,
-	doAssign_E_X,  doAssign_E_X,  doAssign_X_R,  doAssign_E_E,
-};
-
-
 
 
 static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
@@ -533,6 +512,7 @@ static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 	value->p2 = INIT_AS_ARRAY;
 	value->va = c->getSVA( index->i+1, SV_VALUE, true );
 }
+
 static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
 	if ( value->xtype == WR_EX_HASH_TABLE )
@@ -545,7 +525,7 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 	{
 		if ( index->ui >= (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(value->p2)) )
 		{
-			goto boundsFailedCompact;
+			goto boundsFailed;
 		}
 	}
 	else if ( !(value->xtype == WR_EX_ARRAY) )
@@ -560,7 +540,7 @@ static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 	{
 		if ( value->va->m_skipGC )
 		{
-boundsFailedCompact:
+boundsFailed:
 			target->init();
 			return;
 		}
@@ -581,10 +561,30 @@ static void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* 
 		target->r = (WRValue*)value->va->get( index->getHash() );
 	}
 }
+
+//==================================================================================
+//==================================================================================
+//==================================================================================
+//==================================================================================
+
+#ifdef WRENCH_COMPACT
+
+
+static void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
+static void doAssign_R_X( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->type](to->r, from); }
+static void doAssign_X_R( WRValue* to, WRValue* from ) { wr_assign[(to->type<<2)|from->r->type](to, from->r); }
+static void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
+WRVoidFunc wr_assign[16] = 
+{
+	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
+	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
+	doAssign_R_X,  doAssign_R_X,  doAssign_R_R,  doAssign_R_X,
+	doAssign_E_X,  doAssign_E_X,  doAssign_X_R,  doAssign_E_E,
+};
+
 static void doIndex_X_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->type<<2)|value->r->type](c, index, value->r, target); }
 static void doIndex_R_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->type](c, index->r, value, target); }
 static void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target); }
-
 static void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) {}
 
 WRStateFunc wr_index[16] = 
@@ -737,31 +737,49 @@ static void FuncBinary_X_E( WRValue* to, WRValue* from, WRValue* target, WRFuncI
 	}
 }
 static void FuncBinary_E_R( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
-{ wr_funcBinary[(WR_EX<<2)|from->r->type](to, from->r, target, intCall, floatCall ); }
+{
+	wr_funcBinary[(WR_EX<<2)|from->r->type](to, from->r, target, intCall, floatCall );
+}
 
 static void FuncBinary_R_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
-{ wr_funcBinary[(to->r->type<<2)|WR_EX](to->r, from, target, intCall, floatCall ); }
+{
+	wr_funcBinary[(to->r->type<<2)|WR_EX](to->r, from, target, intCall, floatCall );
+}
 
 static void FuncBinary_X_R( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
-{ wr_funcBinary[(to->type<<2)+from->r->type](to, from->r, target, intCall, floatCall); }
+{
+	wr_funcBinary[(to->type<<2)+from->r->type](to, from->r, target, intCall, floatCall);
+}
 
 static void FuncBinary_R_X( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
-{ wr_funcBinary[(to->r->type<<2)|from->type](to->r, from, target, intCall, floatCall); }
+{
+	wr_funcBinary[(to->r->type<<2)|from->type](to->r, from, target, intCall, floatCall);
+}
 
 static void FuncBinary_R_R( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
-{ wr_funcBinary[(to->r->type<<2)|from->r->type](to->r, from->r, target, intCall, floatCall); }
+{
+	wr_funcBinary[(to->r->type<<2)|from->r->type](to->r, from->r, target, intCall, floatCall);
+}
 
 static void FuncBinary_I_I( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
-{ target->p2 = INIT_AS_INT; target->i = intCall( to->i, from->i ); }
+{
+	target->p2 = INIT_AS_INT; target->i = intCall( to->i, from->i );
+}
 
 static void FuncBinary_I_F( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
-{ target->p2 = INIT_AS_FLOAT; target->f = floatCall( (float)to->i, from->f ); }
+{
+	target->p2 = INIT_AS_FLOAT; target->f = floatCall( (float)to->i, from->f );
+}
 
 static void FuncBinary_F_I( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
-{ target->p2 = INIT_AS_FLOAT; target->f = floatCall( to->f, (float)from->i ); }
+{
+	target->p2 = INIT_AS_FLOAT; target->f = floatCall( to->f, (float)from->i );
+}
 
 static void FuncBinary_F_F( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
-{ target->p2 = INIT_AS_FLOAT; target->f = floatCall( to->f, from->f ); }
+{
+	target->p2 = INIT_AS_FLOAT; target->f = floatCall( to->f, from->f );
+}
 
 WRTargetCallbackFunc wr_funcBinary[16] = 
 {
@@ -850,67 +868,6 @@ WRVoidFunc wr_assign[16] =
 	doAssign_E_X,  doAssign_E_X,  doAssign_E_R,  doAssign_E_E,
 };
 
-
-static void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	c->gc( target );
-
-	// all we know is the value is not an array, so make it one
-	target->r = value;
-	target->p2 = INIT_AS_REFARRAY;
-	ARRAY_ELEMENT_TO_P2( target->p2, index->i );
-
-	value->p2 = INIT_AS_ARRAY;
-	value->va = c->getSVA( index->i+1, SV_VALUE, true );
-}
-static void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	if ( value->xtype == WR_EX_HASH_TABLE )
-	{
-		target->r = (WRValue*)value->va->get( index->ui );
-		target->p2 = INIT_AS_REF;
-		return;
-	}
-	else if ( IS_RAW_ARRAY(value->xtype) )
-	{
-		if ( index->ui >= (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(value->p2)) )
-		{
-			goto boundsFailedCompact;
-		}
-	}
-	else if ( !(value->xtype == WR_EX_ARRAY) )
-	{
-		c->gc( target );
-
-		// nope, make it one of this size and return a ref
-		value->p2 = INIT_AS_ARRAY;
-		value->va = c->getSVA( index->ui+1, SV_VALUE, true );
-	}
-	else if ( index->ui >= value->va->m_size )
-	{
-		if ( value->va->m_skipGC )
-		{
-boundsFailedCompact:
-			target->init();
-			return;
-		}
-
-		value->va = growValueArray( value->va, index->ui );
-	}
-
-	target->r = value;
-	target->p2 = INIT_AS_REFARRAY;
-	ARRAY_ELEMENT_TO_P2( target->p2, index->ui );
-}
-static void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	// the specific case of a string indexing a hash table
-	if ( value->xtype == WR_EX_HASH_TABLE )
-	{
-		target->p2 = INIT_AS_REF;
-		target->r = (WRValue*)value->va->get( index->getHash() );
-	}
-}
 static void doIndex_I_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(WR_INT<<2)|value->r->type](c, index, value->r, target); }
 static void doIndex_R_I( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|WR_INT](c, index->r, value, target); }
 static void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target); }
