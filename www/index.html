@@ -259,24 +259,27 @@ header .h code for super-easy addition to the source.
 
 
 <pre><code>#define WRENCH_COMPACT
+#define WRENCH_REALLY_COMPACT
 </pre></code>
 
-<p>This causes wrench to compile into the absolutely smallest program size
+<p>This causes wrench to compile into the smallest program size
 possible at the cost of some interpreter speed (due to the removal of
 unrolled loops, cache optimizations, and additional 'shared' code with
 some goto spaghetti)
+<p>REALLY_COMPACT switches the main message pump from computed-goto to
+a giant switch. This saves a few K of ram but is a constant
+performance hit so only use it if absolutely necessary
 
 
-
-<pre><code>#define WRENCH_DEFAULT_STACK_SIZE 90
+<pre><code>#define WRENCH_DEFAULT_STACK_SIZE 64
 </pre></code>
 <p>wrench allocates a static stack and does not bounds-check it, this
 is done for speed an simplicity. The stack is used only for function
 calls and local data so it need not be large, the default 90 should be
 more than enough.
 <p>Each stack entry consumes 8 bytes, so embedded devices that have
-very  limited ram (like the Uno Mini) should reduce this
-substantially. The arduino example provided has a stack of 32, which
+very limited ram (like the Uno Mini) might want to reduce this.
+The arduino example provided has a stack of 32, which
 should be plenty to run even a pretty intricate script.
 
 

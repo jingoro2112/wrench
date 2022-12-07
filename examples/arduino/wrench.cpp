@@ -11067,6 +11067,11 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 //------------------------------------------------------------------------------
 void wr_destroyContext( WRContext* context )
 {
+	if ( !context )
+	{
+		return;
+	}
+
 	WRContext* prev = 0;
 
 	// unlink it

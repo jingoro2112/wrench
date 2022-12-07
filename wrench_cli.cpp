@@ -433,7 +433,11 @@ int runTests( int number )
 
 				WRValue* V = wr_returnValueFromLastCall(w);
 
-				WRContext* context = wr_run( w, out, outLen );
+				wr_destroyContext( 0 ); // test tha this works
+
+				WRContext* context = 0;
+				wr_destroyContext( context );
+				context = wr_run( w, out, outLen );
 
 				if ( !wr_getLastError(w) )
 				{
@@ -448,7 +452,7 @@ int runTests( int number )
 						assert( someArray[1] == 'c' );
 					}
 				}
-				
+
 				if ( err )
 				{
 					printf( "execute error [%d]\n", err );
@@ -470,6 +474,7 @@ int runTests( int number )
 				}
 
 				delete[] out;
+				wr_destroyContext( context );
 			}
 			else if ( fileNumber != 0 )
 			{
