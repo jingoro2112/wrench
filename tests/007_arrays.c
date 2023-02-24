@@ -1,5 +1,15 @@
 /*~ ~*/
 
+array = { 20 };
+if ( array[0] != 20 ) print("lk1");
+for( a : array )
+{
+	if ( a != 20 ) print("lk2");
+	array = 0; // null the memory so it can be gc'ed (but shouldn't!)
+	s = "allocate memory";
+	if ( a != 20 ) print("lk2");
+}
+
 
 ff[] = { 1.2, 1.3, 1.4, 1.5 };
 if ( ff[0] != 1.2 ) { print("ff1"); }
@@ -203,3 +213,5 @@ function leakCheck( value )
 	if ( value != 20 ) print("B1");
 	if ( 20 != value ) print("B2");
 }
+
+

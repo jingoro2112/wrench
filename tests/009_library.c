@@ -9,8 +9,8 @@
 ~*/
 
 
-if ( msg::peek("test") ) print("m1");
 msg::write( "key1", 10 );
+if ( msg::peek("test") ) print("m1");
 msg::write( 0, 20 );
 msg::write( 1.4, 30 );
 if ( msg::read("none") ) print("m2");

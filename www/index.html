@@ -291,6 +291,91 @@ examples.
 <p>[TODO]-- actually document this instead of phoning it in :P
 
 
+<h2>Creating data to pass to wrench</h2>
+
+<p>Data can be created outsid eof wrench, this includes containers,
+structures and strings and values and such but care must be taken,
+since some values allocate memory that wrench expects to be garbage
+collected.
+<p>This is pretty easy to handle, just use the provided methods to
+create the values, and then destroy them after the script runs and you
+won't have any trouble.
+
+<p>Creating simple values allocates no memory and requires no cleanup:
+<code><pre>void wr_makeInt( WRValue* val, int i );
+void wr_makeFloat( WRValue* val, float f );
+</code></pre>
+
+<br> a string has to exist in a context so it can be worked with, but the
+memory is managed by the caller, so wr_freeString() must be called
+<code><pre>void wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len );
+void wr_freeString( WRValue* val );
+</code></pre>
+
+Turning a value into a container allocates a hash table which must be released with destroy!
+<code><pre>void wr_makeContainer( WRValue* val, const uint16_t sizeHint =0 );
+void wr_destroyContainer( WRValue* val );
+</code></pre>
+
+<code><pre>void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value );
+void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value );
+void wr_addFloatToContainer( WRValue* container, const char* name, const float value );
+void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size );
+</code></pre>
+
+<p>Example (as seen in wrench_cli.cpp test code):
+<code><pre>WRValue container;
+wr_makeContainer( &container );
+
+WRValue integer;
+wr_makeInt( &integer, 0 );
+wr_addValueToContainer( &container, "integer", &integer );
+
+char someArray[10] = "hello";
+wr_addArrayToContainer( &container, "name", someArray, 10 );
+
+char* someBigArray = new char[0x1FFFFF];
+someBigArray[0] = 10;
+someBigArray[10000] = 20;
+someBigArray[100000] = 30;
+someBigArray[0x1FFFFE] = 40;
+
+char byte = (char)0x99;
+char byte2 = (char)0x99;
+wr_addArrayToContainer( &container, "b", &byte, 1 );
+wr_addArrayToContainer( &container, "c", &byte2, 1 );
+		
+wr_addArrayToContainer( &container, "big", someBigArray, 0x1FFFFF );
+
+// at this point 'container' can be used inside wrench as if it were a
+// struct, refer to tests/008_userData.c for complete usage
+
+.
+.
+.
+
+   // create a state and get a calling context
+   WRState* w = wr_newState( 128 );
+   WRContext* context = wr_run( w, somScript, someScriptLen );
+
+   unsigned char testString[12] = "test string";  // create a string
+   WRValue val;
+   wr_makeString( context, &val, testString, 11 ); // this allocates structures inside context!
+   wr_callFunction( w, context, "stringCheck", &val, 1 ); // call the function 
+
+   // NOTE: we must know that stringCheck did not store the value
+   // locally or call a function that did, otherwise freeing
+   // it here could segfault when wrench is called again in the future
+   // (and tries to work with it).
+   // Since we're not using 'w' again this is 100% safe, we're not giving wrench a chance
+   // to behave badly :)
+
+   wr_freeString( &val );
+   wr_destroyState( w );
+</code></pre>
+
+
+
 
 
 <hr><h1><a name="language"></a>3.0 Language Reference</h1></hr>
@@ -685,7 +770,7 @@ with the built-in accessors:
 <p>For safety the return value should use the value constructors
 <p>void wr_makeInt( WRValue* val, int i );
 <br>void wr_makeFloat( WRValue* val, float f );
-<br>void wr_makeCharArray( WRValue* val, const unsigned char* data, const int len );
+
 
 
 <p>Also since functions in wrench can be called with any number of

@@ -116,6 +116,32 @@ void blobToHeader( WRstr const& blob, WRstr const& variableName, WRstr& header )
 }
 
 //------------------------------------------------------------------------------
+void blobToAssemblyInc( WRstr const& blob, WRstr const& variableName, WRstr& header )
+{
+	header.format( "\n;******* wrench bytcode automatically generated include file *******\n\n"
+				   ".export %s_bytecode\n"
+				   "%s_bytecode: .export %s_bytecode\n",
+				   variableName.c_str(),
+				   variableName.c_str(),
+				   variableName.c_str() );
+
+	unsigned int p=0;
+	while( p < blob.size() )
+	{
+		header += "\t.byte ";
+		for( int i=0; i<16 && p<blob.size() ; i++ )
+		{
+			header.appendFormat( "$%02X, ", (unsigned char)blob[p++] );
+		}
+
+		header.shave( 2 );
+		header.appendFormat( " ; %d\n", p );
+	}
+
+	header += "\n\n";
+}
+
+//------------------------------------------------------------------------------
 const char* sourceOrder[]=
 {
 	"/utils.h",
@@ -154,6 +180,11 @@ int usage()
 			"                               the exported constants will be:\n"
 			"                               const char* [name]_bytecode;\n"
 			"                               const int [name]_bytecodeSize;\n"
+			"ca [infile] [out file] [name]  compile infile and output as an inc file\n"
+			"                               for assembly of name \"out file\"\n"
+			"                               the exported constants will be:\n"
+			"                               [name]_bytecode and\n"
+			"                               [name]_bytecodeSize = $xxxx\n"
 			"\n"
 			"t                              run internal tests\n"
 			"\n"
@@ -259,7 +290,7 @@ int main( int argn, char* argv[] )
 			printf( "err: %d\n", (int)wr_getLastError(w) );
 		}
 	}
-	else if ( command == "c" || command == "ch" )
+	else if ( command == "c" || command == "ch" || command == "ca" )
 	{
 		if ( argn < 4 )
 		{
@@ -291,6 +322,10 @@ int main( int argn, char* argv[] )
 		else if ( command == "ch" && argn == 5 )
 		{
 			blobToHeader( WRstr((char *)out, outLen), argv[4], code );
+		}
+		else if ( command == "ca" && argn == 5 )
+		{
+			blobToAssemblyInc( WRstr((char *)out, outLen), argv[4], code );
 		}
 
 		if ( !code.bufferToFile(outname) )
@@ -433,7 +468,7 @@ int runTests( int number )
 
 				WRValue* V = wr_returnValueFromLastCall(w);
 
-				wr_destroyContext( 0 ); // test tha this works
+				wr_destroyContext( 0 ); // test that this works
 
 				WRContext* context = 0;
 				wr_destroyContext( context );
@@ -451,6 +486,12 @@ int runTests( int number )
 						assert( integer.i == 56789 );
 						assert( someArray[1] == 'c' );
 					}
+
+					unsigned char testString[12] = "test string";
+					WRValue val;
+					wr_makeString( context, &val, testString, 11 );
+					wr_callFunction( w, context, "stringCheck", &val, 1 );
+					wr_freeString( &val );
 				}
 
 				if ( err )

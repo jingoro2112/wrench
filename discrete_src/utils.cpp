@@ -314,6 +314,23 @@ void wr_makeFloat( WRValue* val, float f )
 }
 
 //------------------------------------------------------------------------------
+void wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len )
+{
+	val->p2 = INIT_AS_ARRAY;
+	val->va = (WRGCObject*)malloc( sizeof(WRGCObject) );
+	val->va->init( len, SV_CHAR );
+	val->va->m_skipGC = 1;
+	memcpy( (unsigned char *)val->va->m_data, data, len );
+}
+
+//------------------------------------------------------------------------------
+void wr_freeString( WRValue* val )
+{
+	val->va->clear();
+	free( val->va );
+}
+
+//------------------------------------------------------------------------------
 void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 {
 	val->p2 = INIT_AS_HASH_TABLE;

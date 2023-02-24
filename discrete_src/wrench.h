@@ -26,7 +26,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 02
-#define WRENCH_VERSION_MINOR 03
+#define WRENCH_VERSION_MINOR 04
 
 /************************************************************************
 wrench's compiler was not designed to be memory or space efficient, for
@@ -241,7 +241,15 @@ void wr_loadAllArduinoLibs( WRState* w );
 // load a value up and make it ready for calling a function
 void wr_makeInt( WRValue* val, int i );
 void wr_makeFloat( WRValue* val, float f );
-void wr_makeCharArray( WRValue* val, const unsigned char* data, const int len );
+
+// a string has to exist in a context so it can be worked with, but the
+// memory is managed by the caller, so wr_freeString() must be called
+void wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len );
+
+// WARNING: If the memory is used/saved inside the context then
+// deleting it here will cause a segfault. Be sure the script is done
+// using it before calling this.
+void wr_freeString( WRValue* val );
 
 // turning a value into a container allocates a hash table which must
 // be released with destroy!
@@ -345,8 +353,9 @@ enum WRExType
 {
 	WR_EX_NONE       = 0x00,  // 0000
 	WR_EX_RAW_ARRAY  = 0x20,  // 0010
+
+	// EX types have one of the upper two bits set
 	WR_EX_ITERATOR	 = 0x60,  // 0110
-	
 	WR_EX_REFARRAY   = 0x80,  // 1000
 	WR_EX_ARRAY      = 0xA0,  // 1010
 	WR_EX_STRUCT     = 0xC0,  // 1100

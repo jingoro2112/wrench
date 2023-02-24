@@ -31,7 +31,7 @@ int32_t wr_Seed;
 //------------------------------------------------------------------------------
 uint32_t wr_hash( const void *dat, const int len )
 {
-	// in-place implementation of murmer
+	// fnv-1
 	uint32_t hash = 0x811C9DC5;
 	const unsigned char* data = (const unsigned char *)dat;
 

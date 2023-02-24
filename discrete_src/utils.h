@@ -25,10 +25,10 @@ SOFTWARE.
 #define _UTILS_H
 /*------------------------------------------------------------------------------*/
 
-#ifndef WRENCH_WITHOUT_COMPILER
-
 int wr_itoa( int i, char* string, size_t len );
 int wr_ftoa( float f, char* string, size_t len );
+
+#ifndef WRENCH_WITHOUT_COMPILER
 
 //-----------------------------------------------------------------------------
 template <class T> class WRarray
@@ -403,7 +403,7 @@ enum WRGCObjectType
 #define ARRAY_ELEMENT_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define ARRAY_ELEMENT_TO_P2(P,E) { (P)&=0xE00000FF; (P)|=(E<<8); }
 
-#define IS_EXARRAY_TYPE(P)   ((P)&0x80)
+#define IS_EXARRAY_TYPE(P)   ((P)&0xC0)
 #define EX_RAW_ARRAY_SIZE_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define IS_EX_SINGLE_CHAR_RAW_P2(P) ((P) == (((uint32_t)WR_EX) | (((uint32_t)WR_EX_RAW_ARRAY<<24)) | (1<<8)))
 

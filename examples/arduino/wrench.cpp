@@ -26,10 +26,10 @@ SOFTWARE.
 #define _UTILS_H
 /*------------------------------------------------------------------------------*/
 
-#ifndef WRENCH_WITHOUT_COMPILER
-
 int wr_itoa( int i, char* string, size_t len );
 int wr_ftoa( float f, char* string, size_t len );
+
+#ifndef WRENCH_WITHOUT_COMPILER
 
 //-----------------------------------------------------------------------------
 template <class T> class WRarray
@@ -404,7 +404,7 @@ enum WRGCObjectType
 #define ARRAY_ELEMENT_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define ARRAY_ELEMENT_TO_P2(P,E) { (P)&=0xE00000FF; (P)|=(E<<8); }
 
-#define IS_EXARRAY_TYPE(P)   ((P)&0x80)
+#define IS_EXARRAY_TYPE(P)   ((P)&0xC0)
 #define EX_RAW_ARRAY_SIZE_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define IS_EX_SINGLE_CHAR_RAW_P2(P) ((P) == (((uint32_t)WR_EX) | (((uint32_t)WR_EX_RAW_ARRAY<<24)) | (1<<8)))
 
@@ -941,7 +941,7 @@ SOFTWARE.
 enum WROpcode
 {
 	O_RegisterFunction = 0,
-	
+
 	O_LiteralInt32,
 	O_LiteralZero,
 	O_LiteralFloat,
@@ -951,7 +951,7 @@ enum WROpcode
 	O_CallFunctionByHashAndPop,
 	O_CallFunctionByIndex,
 	O_PushIndexFunctionReturnValue,
-		
+
 	O_CallLibFunction,
 
 	O_NewObjectTable,
@@ -970,11 +970,11 @@ enum WROpcode
 	O_IndexSkipLoad,
 	O_CountOf,
 	O_HashOf,
-	
+
 	O_StackIndexHash,
 	O_GlobalIndexHash,
 	O_LocalIndexHash,
-	
+
 	O_StackSwap,
 	O_SwapTwoToTop,
 
@@ -992,7 +992,7 @@ enum WROpcode
 	O_BinaryOrSkipLoad,
 	O_BinaryXORSkipLoad,
 	O_BinaryModSkipLoad,
-	
+
 	O_BinaryMultiplication,
 	O_BinarySubtraction,
 	O_BinaryDivision,
@@ -1008,7 +1008,7 @@ enum WROpcode
 
 	O_RelativeJump,
 	O_RelativeJump8,
-	
+
 	O_BZ,
 	O_BZ8,
 
@@ -1027,14 +1027,14 @@ enum WROpcode
 	O_GGCompareLE,
 	O_GGCompareEQ, 
 	O_GGCompareNE, 
-	
+
 	O_LLCompareGT,
 	O_LLCompareGE,
 	O_LLCompareLT,
 	O_LLCompareLE,
 	O_LLCompareEQ, 
 	O_LLCompareNE, 
-	
+
 	O_GSCompareEQ,
 	O_LSCompareEQ, 
 	O_GSCompareNE, 
@@ -1080,7 +1080,7 @@ enum WROpcode
 	O_LLCompareGEBZ,
 	O_LLCompareEQBZ,
 	O_LLCompareNEBZ,
-	
+
 	O_GGCompareLTBZ,
 	O_GGCompareLEBZ,
 	O_GGCompareGTBZ,
@@ -1094,7 +1094,7 @@ enum WROpcode
 	O_LLCompareGEBZ8,
 	O_LLCompareEQBZ8,
 	O_LLCompareNEBZ8,
-	
+
 	O_GGCompareLTBZ8,
 	O_GGCompareLEBZ8,
 	O_GGCompareGTBZ8,
@@ -1109,7 +1109,7 @@ enum WROpcode
 
 	O_PreIncrementAndPop,
 	O_PreDecrementAndPop,
-	
+
 	O_IncGlobal,
 	O_DecGlobal,
 	O_IncLocal,
@@ -1185,7 +1185,7 @@ enum WROpcode
 	O_BLA8,
 	O_BLO,
 	O_BLO8,
-	
+
 	O_LiteralInt8ToGlobal,
 	O_LiteralInt16ToGlobal,
 	O_LiteralInt32ToLocal,
@@ -1194,11 +1194,11 @@ enum WROpcode
 	O_LiteralFloatToGlobal,
 	O_LiteralFloatToLocal,
 	O_LiteralInt32ToGlobal,
-	
+
 	O_GGBinaryMultiplication,
 	O_GLBinaryMultiplication,
 	O_LLBinaryMultiplication,
-	
+
 	O_GGBinaryAddition,
 	O_GLBinaryAddition,
 	O_LLBinaryAddition,
@@ -1231,11 +1231,13 @@ enum WROpcode
 
 	O_ToInt,
 	O_ToFloat,
-	
+
+	O_CallLibFunctionAndPop,
+
 	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,
 	O_FUNCTION_CALL_PLACEHOLDER,
-	
+
 	O_LAST,
 };
 
@@ -3842,6 +3844,12 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			{
 				bytecode.all.shave(2);
 				bytecode.opcodes.shave(1);
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CallLibFunction && (a > 4) )
+			{
+				bytecode.all[a-5] = O_CallLibFunctionAndPop;
+				bytecode.opcodes[o] = O_CallLibFunctionAndPop;
 				return;
 			}
 			else if ( bytecode.opcodes[o] == O_FUNCTION_CALL_PLACEHOLDER )
@@ -8216,6 +8224,7 @@ const char* c_opcodeName[] =
 	"ToInt",
 	"ToFloat",
 
+	"CallLibFunctionAndPop",
 };
 #endif
 
@@ -8259,14 +8268,12 @@ void WRContext::mark( WRValue* s )
 {
 	if ( IS_REFARRAY(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
 	{
-		if ( !s->r->va->m_skipGC )
-		{
-			mark( s->r );
-		}
+		// we don't c mark this type, but we might mark it's target
+		mark( s->r );
 		return;
 	}
 
-	if ( s->va->m_skipGC )
+	if ( !IS_EXARRAY_TYPE(s->xtype) || s->va->m_skipGC || (s->va->m_size & 0x40000000) )
 	{
 		return;
 	}
@@ -8275,7 +8282,6 @@ void WRContext::mark( WRValue* s )
 
 	WRGCObject* sva = s->va;
 
-	
 	if ( IS_SVA_VALUE_TYPE(sva) && !(sva->m_size & 0x40000000) )
 	{
 		// this is an array of values, check them for array-ness too
@@ -8283,10 +8289,7 @@ void WRContext::mark( WRValue* s )
 		WRValue* top = sva->m_Vdata + sva->m_size;
 		for( WRValue* V = sva->m_Vdata; V<top; ++V )
 		{
-			if ( IS_EXARRAY_TYPE(V->xtype) && !(V->va->m_skipGC) && !(V->va->m_size & 0x40000000) )
-			{
-				mark( V );
-			}
+			mark( V );
 		}
 	}
 
@@ -8311,10 +8314,7 @@ void WRContext::gc( WRValue* stackTop )
 	for( WRValue* s=w->stack; s<stackTop; ++s)
 	{
 		// an array in the chain?
-		if ( IS_EXARRAY_TYPE(s->xtype) && !(s->va->m_skipGC) )
-		{
-			mark( s );
-		}
+		mark( s );
 	}
 
 	// mark context's globals
@@ -8322,10 +8322,7 @@ void WRContext::gc( WRValue* stackTop )
 
 	for( int i=0; i<globals; ++i, ++globalSpace )
 	{
-		if ( IS_EXARRAY_TYPE(globalSpace->xtype) && !(globalSpace->va->m_skipGC) )
-		{
-			mark( globalSpace );
-		}
+		mark( globalSpace );
 	}
 
 	// sweep
@@ -8341,7 +8338,7 @@ void WRContext::gc( WRValue* stackTop )
 			current = current->m_next;
 		}
 		// otherwise free it as unreferenced
-		else
+		else if ( !current->m_skipGC )
 		{
 			current->clear();
 
@@ -8357,6 +8354,10 @@ void WRContext::gc( WRValue* stackTop )
 				free( current );
 				current = prev->m_next;
 			}
+		}
+		else
+		{
+			current = current->m_next;
 		}
 	}
 }
@@ -8387,11 +8388,11 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 
 	uint32_t element = ARRAY_ELEMENT_FROM_P2( iterator->p2 );
 
-	if ( iterator->r->va->m_type == SV_HASH_TABLE )
+	if ( iterator->va->m_type == SV_HASH_TABLE )
 	{
-		for( ; element<iterator->r->va->m_mod && !iterator->r->va->m_hashTable[element]; ++element );
+		for( ; element<iterator->va->m_mod && !iterator->va->m_hashTable[element]; ++element );
 
-		if ( element >= iterator->r->va->m_mod )
+		if ( element >= iterator->va->m_mod )
 		{
 			return false;
 		}
@@ -8401,16 +8402,16 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 		element <<= 1;
 
 		value->p2 = INIT_AS_REF;
-		value->r = iterator->r->va->m_Vdata + element;
+		value->r = iterator->va->m_Vdata + element;
 		if ( key )
 		{
 			key->p2 = INIT_AS_REF;
-			key->r = iterator->r->va->m_Vdata + element + 1;
+			key->r = iterator->va->m_Vdata + element + 1;
 		}
 	}
 	else
 	{
-		if ( element >= iterator->r->va->m_size )
+		if ( element >= iterator->va->m_size )
 		{
 			return false;
 		}
@@ -8422,7 +8423,7 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 		}
 
 		value->p2 = INIT_AS_REF;
-		value->r = iterator->r->va->m_Vdata + element;
+		value->r = iterator->va->m_Vdata + element;
 
 		ARRAY_ELEMENT_TO_P2( iterator->p2, ++element );
 	}
@@ -8786,6 +8787,8 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 		&&ToInt,
 		&&ToFloat,
+
+		&&CallLibFunctionAndPop,
 	};
 #endif
 
@@ -8941,7 +8944,7 @@ literalZero:
 				}
 				else
 				{
-					++stackTop; // register0 IS the stack top no other work needed
+					++stackTop;
 				}
 				pc += 4;
 				CONTINUE;
@@ -9039,9 +9042,38 @@ callFunction:
 				}
 				pc += 4;
 
+#ifdef WRENCH_COMPACT
+				// this "always works" but is not necessary if args is
+				// zero, just a simple stackTop increment is required
 				stackTop -= --args;
 				*(stackTop - 1) = *(stackTop + args);
+#else
+				if ( args )
+				{
+					stackTop -= --args;
+					*(stackTop - 1) = *(stackTop + args);
+				}
+				else
+				{
+					++stackTop;
+				}
+#endif
 
+				CONTINUE;
+			}
+
+			CASE(CallLibFunctionAndPop):
+			{
+				args = *pc++; // which have already been pushed
+
+				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb )
+				{
+					register1->lcb( stackTop, args, context );
+				}
+				pc += 4;
+
+				stackTop -= args;
+				
 				CONTINUE;
 			}
 
@@ -9324,7 +9356,7 @@ indexHash:
 			CASE(LoadFromGlobal):
 			{
 				stackTop->p = globalSpace + *pc++;
-				(stackTop++)->p2 = INIT_AS_REF;
+ 				(stackTop++)->p2 = INIT_AS_REF;
 				CONTINUE;
 			}
 
@@ -11281,6 +11313,23 @@ void wr_makeFloat( WRValue* val, float f )
 }
 
 //------------------------------------------------------------------------------
+void wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len )
+{
+	val->p2 = INIT_AS_ARRAY;
+	val->va = (WRGCObject*)malloc( sizeof(WRGCObject) );
+	val->va->init( len, SV_CHAR );
+	val->va->m_skipGC = 1;
+	memcpy( (unsigned char *)val->va->m_data, data, len );
+}
+
+//------------------------------------------------------------------------------
+void wr_freeString( WRValue* val )
+{
+	val->va->clear();
+	free( val->va );
+}
+
+//------------------------------------------------------------------------------
 void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 {
 	val->p2 = INIT_AS_HASH_TABLE;
@@ -11753,7 +11802,7 @@ void pushIterator_E( WRValue* on, WRValue* to )
 {
 	if ( on->xtype == WR_EX_ARRAY || on->xtype == WR_EX_HASH_TABLE )
 	{
-		to->r = on;
+		to->va = on->va;
 		to->p2 = INIT_AS_ITERATOR;
 	}
 }
@@ -12724,7 +12773,7 @@ int32_t wr_Seed;
 //------------------------------------------------------------------------------
 uint32_t wr_hash( const void *dat, const int len )
 {
-	// in-place implementation of murmer
+	// fnv-1
 	uint32_t hash = 0x811C9DC5;
 	const unsigned char* data = (const unsigned char *)dat;
 

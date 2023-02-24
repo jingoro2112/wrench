@@ -431,7 +431,7 @@ void pushIterator_E( WRValue* on, WRValue* to )
 {
 	if ( on->xtype == WR_EX_ARRAY || on->xtype == WR_EX_HASH_TABLE )
 	{
-		to->r = on;
+		to->va = on->va;
 		to->p2 = INIT_AS_ITERATOR;
 	}
 }

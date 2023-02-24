@@ -1612,6 +1612,12 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				bytecode.opcodes.shave(1);
 				return;
 			}
+			else if ( bytecode.opcodes[o] == O_CallLibFunction && (a > 4) )
+			{
+				bytecode.all[a-5] = O_CallLibFunctionAndPop;
+				bytecode.opcodes[o] = O_CallLibFunctionAndPop;
+				return;
+			}
 			else if ( bytecode.opcodes[o] == O_FUNCTION_CALL_PLACEHOLDER )
 			{
 				bytecode.all[ a ] = O_PopOne;
@@ -5984,6 +5990,7 @@ const char* c_opcodeName[] =
 	"ToInt",
 	"ToFloat",
 
+	"CallLibFunctionAndPop",
 };
 #endif
 

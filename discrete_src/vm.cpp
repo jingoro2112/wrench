@@ -29,14 +29,12 @@ void WRContext::mark( WRValue* s )
 {
 	if ( IS_REFARRAY(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
 	{
-		if ( !s->r->va->m_skipGC )
-		{
-			mark( s->r );
-		}
+		// we don't c mark this type, but we might mark it's target
+		mark( s->r );
 		return;
 	}
 
-	if ( s->va->m_skipGC )
+	if ( !IS_EXARRAY_TYPE(s->xtype) || s->va->m_skipGC || (s->va->m_size & 0x40000000) )
 	{
 		return;
 	}
@@ -45,7 +43,6 @@ void WRContext::mark( WRValue* s )
 
 	WRGCObject* sva = s->va;
 
-	
 	if ( IS_SVA_VALUE_TYPE(sva) && !(sva->m_size & 0x40000000) )
 	{
 		// this is an array of values, check them for array-ness too
@@ -53,10 +50,7 @@ void WRContext::mark( WRValue* s )
 		WRValue* top = sva->m_Vdata + sva->m_size;
 		for( WRValue* V = sva->m_Vdata; V<top; ++V )
 		{
-			if ( IS_EXARRAY_TYPE(V->xtype) && !(V->va->m_skipGC) && !(V->va->m_size & 0x40000000) )
-			{
-				mark( V );
-			}
+			mark( V );
 		}
 	}
 
@@ -81,10 +75,7 @@ void WRContext::gc( WRValue* stackTop )
 	for( WRValue* s=w->stack; s<stackTop; ++s)
 	{
 		// an array in the chain?
-		if ( IS_EXARRAY_TYPE(s->xtype) && !(s->va->m_skipGC) )
-		{
-			mark( s );
-		}
+		mark( s );
 	}
 
 	// mark context's globals
@@ -92,10 +83,7 @@ void WRContext::gc( WRValue* stackTop )
 
 	for( int i=0; i<globals; ++i, ++globalSpace )
 	{
-		if ( IS_EXARRAY_TYPE(globalSpace->xtype) && !(globalSpace->va->m_skipGC) )
-		{
-			mark( globalSpace );
-		}
+		mark( globalSpace );
 	}
 
 	// sweep
@@ -111,7 +99,7 @@ void WRContext::gc( WRValue* stackTop )
 			current = current->m_next;
 		}
 		// otherwise free it as unreferenced
-		else
+		else if ( !current->m_skipGC )
 		{
 			current->clear();
 
@@ -127,6 +115,10 @@ void WRContext::gc( WRValue* stackTop )
 				free( current );
 				current = prev->m_next;
 			}
+		}
+		else
+		{
+			current = current->m_next;
 		}
 	}
 }
@@ -157,11 +149,11 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 
 	uint32_t element = ARRAY_ELEMENT_FROM_P2( iterator->p2 );
 
-	if ( iterator->r->va->m_type == SV_HASH_TABLE )
+	if ( iterator->va->m_type == SV_HASH_TABLE )
 	{
-		for( ; element<iterator->r->va->m_mod && !iterator->r->va->m_hashTable[element]; ++element );
+		for( ; element<iterator->va->m_mod && !iterator->va->m_hashTable[element]; ++element );
 
-		if ( element >= iterator->r->va->m_mod )
+		if ( element >= iterator->va->m_mod )
 		{
 			return false;
 		}
@@ -171,16 +163,16 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 		element <<= 1;
 
 		value->p2 = INIT_AS_REF;
-		value->r = iterator->r->va->m_Vdata + element;
+		value->r = iterator->va->m_Vdata + element;
 		if ( key )
 		{
 			key->p2 = INIT_AS_REF;
-			key->r = iterator->r->va->m_Vdata + element + 1;
+			key->r = iterator->va->m_Vdata + element + 1;
 		}
 	}
 	else
 	{
-		if ( element >= iterator->r->va->m_size )
+		if ( element >= iterator->va->m_size )
 		{
 			return false;
 		}
@@ -192,7 +184,7 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 		}
 
 		value->p2 = INIT_AS_REF;
-		value->r = iterator->r->va->m_Vdata + element;
+		value->r = iterator->va->m_Vdata + element;
 
 		ARRAY_ELEMENT_TO_P2( iterator->p2, ++element );
 	}
@@ -556,6 +548,8 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 
 		&&ToInt,
 		&&ToFloat,
+
+		&&CallLibFunctionAndPop,
 	};
 #endif
 
@@ -711,7 +705,7 @@ literalZero:
 				}
 				else
 				{
-					++stackTop; // register0 IS the stack top no other work needed
+					++stackTop;
 				}
 				pc += 4;
 				CONTINUE;
@@ -809,9 +803,38 @@ callFunction:
 				}
 				pc += 4;
 
+#ifdef WRENCH_COMPACT
+				// this "always works" but is not necessary if args is
+				// zero, just a simple stackTop increment is required
 				stackTop -= --args;
 				*(stackTop - 1) = *(stackTop + args);
+#else
+				if ( args )
+				{
+					stackTop -= --args;
+					*(stackTop - 1) = *(stackTop + args);
+				}
+				else
+				{
+					++stackTop;
+				}
+#endif
 
+				CONTINUE;
+			}
+
+			CASE(CallLibFunctionAndPop):
+			{
+				args = *pc++; // which have already been pushed
+
+				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb )
+				{
+					register1->lcb( stackTop, args, context );
+				}
+				pc += 4;
+
+				stackTop -= args;
+				
 				CONTINUE;
 			}
 
@@ -1094,7 +1117,7 @@ indexHash:
 			CASE(LoadFromGlobal):
 			{
 				stackTop->p = globalSpace + *pc++;
-				(stackTop++)->p2 = INIT_AS_REF;
+ 				(stackTop++)->p2 = INIT_AS_REF;
 				CONTINUE;
 			}
 

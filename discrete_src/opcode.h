@@ -29,7 +29,7 @@ SOFTWARE.
 enum WROpcode
 {
 	O_RegisterFunction = 0,
-	
+
 	O_LiteralInt32,
 	O_LiteralZero,
 	O_LiteralFloat,
@@ -39,7 +39,7 @@ enum WROpcode
 	O_CallFunctionByHashAndPop,
 	O_CallFunctionByIndex,
 	O_PushIndexFunctionReturnValue,
-		
+
 	O_CallLibFunction,
 
 	O_NewObjectTable,
@@ -58,11 +58,11 @@ enum WROpcode
 	O_IndexSkipLoad,
 	O_CountOf,
 	O_HashOf,
-	
+
 	O_StackIndexHash,
 	O_GlobalIndexHash,
 	O_LocalIndexHash,
-	
+
 	O_StackSwap,
 	O_SwapTwoToTop,
 
@@ -80,7 +80,7 @@ enum WROpcode
 	O_BinaryOrSkipLoad,
 	O_BinaryXORSkipLoad,
 	O_BinaryModSkipLoad,
-	
+
 	O_BinaryMultiplication,
 	O_BinarySubtraction,
 	O_BinaryDivision,
@@ -96,7 +96,7 @@ enum WROpcode
 
 	O_RelativeJump,
 	O_RelativeJump8,
-	
+
 	O_BZ,
 	O_BZ8,
 
@@ -115,14 +115,14 @@ enum WROpcode
 	O_GGCompareLE,
 	O_GGCompareEQ, 
 	O_GGCompareNE, 
-	
+
 	O_LLCompareGT,
 	O_LLCompareGE,
 	O_LLCompareLT,
 	O_LLCompareLE,
 	O_LLCompareEQ, 
 	O_LLCompareNE, 
-	
+
 	O_GSCompareEQ,
 	O_LSCompareEQ, 
 	O_GSCompareNE, 
@@ -168,7 +168,7 @@ enum WROpcode
 	O_LLCompareGEBZ,
 	O_LLCompareEQBZ,
 	O_LLCompareNEBZ,
-	
+
 	O_GGCompareLTBZ,
 	O_GGCompareLEBZ,
 	O_GGCompareGTBZ,
@@ -182,7 +182,7 @@ enum WROpcode
 	O_LLCompareGEBZ8,
 	O_LLCompareEQBZ8,
 	O_LLCompareNEBZ8,
-	
+
 	O_GGCompareLTBZ8,
 	O_GGCompareLEBZ8,
 	O_GGCompareGTBZ8,
@@ -197,7 +197,7 @@ enum WROpcode
 
 	O_PreIncrementAndPop,
 	O_PreDecrementAndPop,
-	
+
 	O_IncGlobal,
 	O_DecGlobal,
 	O_IncLocal,
@@ -273,7 +273,7 @@ enum WROpcode
 	O_BLA8,
 	O_BLO,
 	O_BLO8,
-	
+
 	O_LiteralInt8ToGlobal,
 	O_LiteralInt16ToGlobal,
 	O_LiteralInt32ToLocal,
@@ -282,11 +282,11 @@ enum WROpcode
 	O_LiteralFloatToGlobal,
 	O_LiteralFloatToLocal,
 	O_LiteralInt32ToGlobal,
-	
+
 	O_GGBinaryMultiplication,
 	O_GLBinaryMultiplication,
 	O_LLBinaryMultiplication,
-	
+
 	O_GGBinaryAddition,
 	O_GLBinaryAddition,
 	O_LLBinaryAddition,
@@ -319,11 +319,13 @@ enum WROpcode
 
 	O_ToInt,
 	O_ToFloat,
-	
+
+	O_CallLibFunctionAndPop,
+
 	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,
 	O_FUNCTION_CALL_PLACEHOLDER,
-	
+
 	O_LAST,
 };
 

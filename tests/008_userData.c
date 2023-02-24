@@ -51,3 +51,10 @@ function userCheck( data )
 	
 	return 77;
 }
+
+function stringCheck( string )
+{
+	if ( string != "test string" ) print("bs1");
+	c = string;
+	if ( c != "test string" ) print ("bs2" );
+}
