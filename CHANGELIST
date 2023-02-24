@@ -1,3 +1,11 @@
+2.04 ----------------------------------------------------------------------------------
+- Adding CallLibFunctionAndPop since it's coming up a lot (appended so major version same)
+- fixed corner case where iterators did not hold references to their arrays so they
+  could be gc'ed while being iterated! hard to induce this case, you have to do
+  something silly like erasing the array while iterating but now it will just
+  be sill instead of segfaulting :)
+- Added string operation for constructing strings to call into wrench with
+
 2.03 ----------------------------------------------------------------------------------
 - added .isFloat() and .isInt() to WRValue
 - fixed some array-centered pre/post inc/dec corners

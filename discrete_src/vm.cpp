@@ -99,7 +99,7 @@ void WRContext::gc( WRValue* stackTop )
 			current = current->m_next;
 		}
 		// otherwise free it as unreferenced
-		else if ( !current->m_skipGC )
+		else
 		{
 			current->clear();
 
@@ -115,10 +115,6 @@ void WRContext::gc( WRValue* stackTop )
 				free( current );
 				current = prev->m_next;
 			}
-		}
-		else
-		{
-			current = current->m_next;
 		}
 	}
 }
