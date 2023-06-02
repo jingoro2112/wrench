@@ -221,7 +221,7 @@ int main( int argn, char** argv )
 	int err = wr_compile( wrenchCode, strlen(wrenchCode), &outBytes, &outLen ); // compile it
 	if ( err == 0 )
 	{
-		wr_run( w, outBytes ); // load and run the code!
+		wr_run( w, outBytes, outLen ); // load and run the code!
 		delete[] outBytes; // clean up 
 	}
 
@@ -1191,7 +1191,7 @@ by novice-to-intermediate programmers. Asking them to become familiar
 with FORTH (or any of the many other expressive minimalistic langauges
 I've encountered) would sink the project.
 
-<p><b>You say wrench is fast, LuaJITs is faster?</b><cr>
+<p><b>You say wrench is fast, but LuaJITs is faster!</b><cr>
 Yes, I know. If a JIT language solves your problem then of course use
 one! I am a big fan of c# personally. wrench is for when that's not an
 option.

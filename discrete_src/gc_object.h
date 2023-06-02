@@ -100,7 +100,7 @@ tryAgain:
 
 			for( int h=0; h<m_mod; ++h )
 			{
-				int tries = m_mod >> 3;
+				int tries = 3;
 				int newEntry = m_hashTable[h] % newMod;
 				for(;;)
 				{
@@ -212,7 +212,29 @@ tryAgain:
 	//------------------------------------------------------------------------------
 	WRValue* getAsRawValueHashTable( const uint32_t hash )
 	{
+#ifdef WRENCH_COMPACT
 		uint32_t index = getIndexOfHit( hash, false );
+		// m_Vdata MIGHT CHANGE and therefore the index has to be
+		// computed before the return, the obvious optimization of
+		// m_Vdata + getIndexOfHit( hash, false );
+		// will FAIL
+		return m_Vdata + index;
+#else
+		uint32_t index = hash % m_mod;
+		if ( m_hashTable[index] != hash )
+		{
+			if ( m_hashTable[(index = (index + 1) % m_mod)] != hash )
+			{
+				if ( m_hashTable[(index = (index + 1) % m_mod)] != hash )
+				{
+					if ( m_hashTable[(index = (index + 1) % m_mod)] != hash )
+					{
+						index = getIndexOfHit(hash, true);
+					}
+				}
+			}
+		}
+#endif
 		return m_Vdata + index;
 	}
 
@@ -230,7 +252,7 @@ checkReturn:
 			return m_Vdata + index;
 		}
 
-		int tries = m_mod >> 3;
+		int tries = 3;
 		do
 		{
 			index = (index + 1) % m_mod;
@@ -254,7 +276,7 @@ checkReturn:
 			return index; // immediate hits should be cheap
 		}
 
-		int tries = m_mod >> 3;
+		int tries = 3;
 		do
 		{
 			if ( insert && m_hashTable[index] == 0 )

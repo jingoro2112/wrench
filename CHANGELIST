@@ -1,3 +1,7 @@
+2.05 ----------------------------------------------------------------------------------
+- small gc optimization
+- fixed issue #9 with the optimizer
+
 2.04 ----------------------------------------------------------------------------------
 - Adding CallLibFunctionAndPop since it's coming up a lot (appended so major version same)
 - fixed corner case where iterators did not hold references to their arrays so they
