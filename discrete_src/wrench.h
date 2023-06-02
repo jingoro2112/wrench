@@ -26,7 +26,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 02
-#define WRENCH_VERSION_MINOR 04
+#define WRENCH_VERSION_MINOR 05
 
 /************************************************************************
 wrench's compiler was not designed to be memory or space efficient, for
