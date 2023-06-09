@@ -120,7 +120,7 @@ public:
 	{
 		if ( size > m_elementsTotal )
 		{
-			int newSize = size + (size/2) + 1;
+			unsigned int newSize = size + (size/2) + 1;
 			T* newArray = new T[newSize];
 
 			if ( m_list )
