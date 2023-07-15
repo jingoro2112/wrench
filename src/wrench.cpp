@@ -9939,8 +9939,8 @@ CompactGGFunc:
 				floatCall = multiplicationF;
 				intCall = multiplicationI;
 CompactGLFunc:
-				register0 = globalSpace + *pc++;
-				register1 = frameBase + *pc++;
+				register0 = frameBase + *pc++;
+				register1 = globalSpace + *pc++;
 				goto targetFuncOpSkipLoadNoClobberF;
 			}
 
@@ -10440,8 +10440,8 @@ compactCompareGG8:
 
 			CASE(GLBinaryMultiplication):
 			{
-				register1 = globalSpace + *pc++;
 				register0 = frameBase + *pc++;
+				register1 = globalSpace + *pc++;
 				wr_MultiplyBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
@@ -10520,8 +10520,8 @@ compactCompareGG8:
 
 			CASE(GLBinaryDivision):
 			{
-				register1 = globalSpace + *pc++;
 				register0 = frameBase + *pc++;
+				register1 = globalSpace + *pc++;
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
