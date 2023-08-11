@@ -9994,8 +9994,8 @@ CompactFFFunc:
 				floatCall = subtractionF;
 				intCall = subtractionI;
 CompactFGFunc:
-				register0 = frameBase + *pc++;
-				register1 = globalSpace + *pc++;
+				register0 = globalSpace + *pc++;
+				register1 = frameBase + *pc++;
 				goto targetFuncOpSkipLoadNoClobberF;
 			}
 
@@ -10430,6 +10430,7 @@ compactCompareGG8:
 				CONTINUE;
 			}
 
+			
 			CASE(GGBinaryMultiplication):
 			{
 				register1 = globalSpace + *pc++;
@@ -10440,8 +10441,8 @@ compactCompareGG8:
 
 			CASE(GLBinaryMultiplication):
 			{
-				register0 = frameBase + *pc++;
-				register1 = globalSpace + *pc++;
+				register1 = frameBase + *pc++;
+				register0 = globalSpace + *pc++;
 				wr_MultiplyBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
@@ -10454,6 +10455,7 @@ compactCompareGG8:
 				CONTINUE;
 			}
 
+			
 			CASE(GGBinaryAddition):
 			{
 				register1 = globalSpace + *pc++;
@@ -10478,6 +10480,7 @@ compactCompareGG8:
 				CONTINUE;
 			}
 
+			
 			CASE(GGBinarySubtraction):
 			{
 				register1 = globalSpace + *pc++;
@@ -10488,16 +10491,16 @@ compactCompareGG8:
 
 			CASE(GLBinarySubtraction):
 			{
-				register1 = globalSpace + *pc++;
-				register0 = frameBase + *pc++;
+				register1 = frameBase + *pc++;
+				register0 = globalSpace + *pc++;
 				wr_SubtractBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
 
 			CASE(LGBinarySubtraction):
 			{
-				register1 = frameBase + *pc++;
-				register0 = globalSpace + *pc++;
+				register1 = globalSpace + *pc++;
+				register0 = frameBase + *pc++;
 				wr_SubtractBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
@@ -10510,6 +10513,7 @@ compactCompareGG8:
 				CONTINUE;
 			}
 
+			
 			CASE(GGBinaryDivision):
 			{
 				register1 = globalSpace + *pc++;
@@ -10520,16 +10524,16 @@ compactCompareGG8:
 
 			CASE(GLBinaryDivision):
 			{
-				register0 = frameBase + *pc++;
-				register1 = globalSpace + *pc++;
+				register1 = frameBase + *pc++;
+				register0 = globalSpace + *pc++;
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
 
 			CASE(LGBinaryDivision):
 			{
-				register1 = frameBase + *pc++;
-				register0 = globalSpace + *pc++;
+				register1 = globalSpace + *pc++;
+				register0 = frameBase + *pc++;
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
@@ -10542,6 +10546,7 @@ compactCompareGG8:
 				CONTINUE;
 			}
 
+			
 			CASE(LogicalAnd): { returnFunc = wr_LogicalAND; goto returnFuncNormal; }
 			CASE(LogicalOr): { returnFunc = wr_LogicalOR; goto returnFuncNormal; }
 			CASE(CompareLE): { returnFunc = wr_CompareGT; goto returnFuncInverted; }

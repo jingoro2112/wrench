@@ -15,3 +15,4 @@ tests/013_files.c
 tests/014_foreach.c
 tests/015_switch.c
 tests/016_bug9.c
+tests/017_bug12.c

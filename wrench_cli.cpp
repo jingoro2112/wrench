@@ -430,6 +430,9 @@ int runTests( int number )
 
 	wr_loadAllLibs( w );
 
+
+
+
 	while( fgets(buf, 255, tfile) && (err==0) )
 	{
 		if ( !number || (number == fileNumber) )
@@ -462,7 +465,7 @@ int runTests( int number )
 					printf( "compile error [%s]\n", g_errStrings[err] );
 					return -1;
 				}
-				
+
 				WRstr logger;
 				wr_registerFunction( w, "print", emit, &logger );
 
@@ -522,7 +525,7 @@ int runTests( int number )
 				printf( "test [%d][%s]: FILE NOT FOUND\n", fileNumber, codeName.c_str() );
 			}
 		}
-
+		
 		fileNumber++;
 	}
 
