@@ -510,7 +510,32 @@ int runTests( int number )
 							"%s"
 							"\n"
 							"-----------------------------\n",
-							expect.c_str(), logger.c_str() );
+							expect.c_str(),
+							logger.c_str() );
+
+					for( unsigned i=0; !(i>=expect.size() && i>=logger.size()); ++i )
+					{
+						if ( (i < expect.size()) && (i < logger.size()) )
+						{
+							if ( expect[i] == logger[i] )
+							{
+								printf( "%c", expect[i] );
+							}
+							else
+							{
+								printf( "bad [%c != %c]\n", isspace(expect[i]) ? ' ' : expect[i], isspace(logger[i]) ? ' ' : logger[i] );
+							}
+						}
+						else if ( i >= expect.size() )
+						{
+							printf( "got more [%c]\n", isspace(logger[i]) ? ' ' : logger[i] );
+						}
+						else
+						{
+							printf( "expected less [%c]\n", isspace(expect[i]) ? ' ' : expect[i] );
+						}
+					}
+					
 				}
 				else
 				{

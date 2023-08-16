@@ -13226,6 +13226,10 @@ resetState:
 		{
 			flags |= negativeJustify;
 		}
+#ifdef WRENCH_FLOAT_SPRINTF
+		else if (c == '.') // ignore, we might be reading a floating point decimal position
+		{ }
+#endif
 		else if ( c == 'c' ) // character
 		{
 			if ( listPtr < argn )
@@ -13320,6 +13324,27 @@ copyToString:
 					flags |= parsingSigned;
 					goto parseDecimal;
 				}
+#ifdef WRENCH_FLOAT_SPRINTF
+				else if ( c == 'f' || c == 'g' )
+				{
+					char floatBuf[32];
+					int i = 30;
+					floatBuf[31] = 0;
+					const char *f = fmt;
+					for( ; *f != '%'; --f, --i )
+					{
+						floatBuf[i] = *f;
+					}
+					floatBuf[i] = '%';
+
+					const int chars = sprintf( buf, floatBuf + i, args[listPtr++].asFloat());
+					for( int j=0; j<chars; ++j )
+					{
+						*out++ = buf[j];
+					}
+					goto resetState;
+				}
+#endif
 				else if ( c == 'u' ) // decimal
 				{
 parseDecimal:

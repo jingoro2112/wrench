@@ -25,8 +25,8 @@ SOFTWARE.
 #define _WRENCH_H
 /*------------------------------------------------------------------------------*/
 
-#define WRENCH_VERSION_MAJOR 02
-#define WRENCH_VERSION_MINOR 07
+#define WRENCH_VERSION_MAJOR 2
+#define WRENCH_VERSION_MINOR 8
 
 /************************************************************************
 wrench's compiler was not designed to be memory or space efficient, for
@@ -70,6 +70,13 @@ embedded
 */
 #define WRENCH_STD_FILE // fopen(), fclose(), fread(), fwrite(), fstat()
 #define WRENCH_STD_TIME // clock()
+
+/************************************************************************
+if you WANT full sprintf support for floats (%f/%g) this adds it, ad
+the cost of using the standard c library for it, not for small embedded
+systems but larger ones? who cares.
+*/
+//#define WRENCH_FLOAT_SPRINTF
 
 /***********************************************************************/
 

@@ -9,6 +9,7 @@
 ~*/
 
 
+
 msg::write( "key1", 10 );
 if ( msg::peek("test") ) print("m1");
 msg::write( 0, 20 );
@@ -43,6 +44,8 @@ print( math::sqrt(25) );
 print( math::sqrt(72.25) );
 
 print( math::ceil(-4.1) );
+
+//str::sprintf( s, 			"%-10.4g", 12.45 );if ( s != "12.45" ) print("bad 1245 ");
 
 str::sprintf( s, 			"%0s", "x" );if ( s != "x" ) print("bad 001");
 str::sprintf( s, 			"%-0s", "x" );if ( s != "x" ) print("bad 002");

@@ -1,3 +1,8 @@
+2.08 ----------------------------------------------------------------------------------
+- added more debugging tools
+- added WRENCH_FLOAT_SPRINTF to grant full floating-point format support to str::sprintf
+- removed leading '0' from wrench version macro
+
 2.07 ----------------------------------------------------------------------------------
 - fixed order-of-operations problem with global/local division and subtraction
 
