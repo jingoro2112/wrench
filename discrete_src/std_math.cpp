@@ -261,85 +261,9 @@ void wr_math_deg2rad( WRValue* stackTop, const int argn, WRContext* c )
 	}
 }
 
-
-
-
-
-
-//------------------------------------------------------------------------------
-// from   : -1 or first led
-// to     : -1 or last led
-// r      : 0-255
-// g      : 0-255
-// b      : 0-255
-// r_step : red steps per led
-// g_step : green steps per led
-// b_step : blue steps per led
-void setRGB( WRValue* stackTop, const int argn, WRContext* c )
-{
-	if ( argn < 5 )
-	{
-		return;
-	}
-
-	WRValue* argv = stackTop - argn;
-	int start = argv[0].asInt();
-	int end = argv[1].asInt();
-	int size = 60;
-
-	if ( end < 0 || end >= size )
-	{
-		end = size - 1;
-	}
-
-	if ( start < 0 )
-	{
-		start = 0;
-	}
-	else if ( start >= size )
-	{
-		start = size - 1;
-	}
-
-	unsigned char r = argv[2].asInt();
-	unsigned char g = argv[3].asInt();
-	unsigned char b = argv[4].asInt();
-
-	if ( argn >= 8 )
-	{
-		unsigned char stepR = argv[5].asInt();
-		unsigned char stepG = argv[6].asInt();
-		unsigned char stepB = argv[7].asInt();
-
-		for( ; start <= end; ++start )
-		{
-//			R->set( start, r, g, b );
-			r += stepR;
-			g += stepG;
-			b += stepB;
-		}
-	}
-	else
-	{
-//		outln( "Setting RGB [%d->%d] to [%d:%d:%d]", start, end, r, g, b );
-
-		for( ; start <= end; ++start )
-		{
-//			R->set( start, r, g, b );
-		}
-	}
-}
-
-
-
-
-
 //------------------------------------------------------------------------------
 void wr_loadMathLib( WRState* w )
 {
-	wr_registerLibraryFunction( w, "math::setRGB", setRGB );
-
-	
 	wr_registerLibraryFunction( w, "math::sin", wr_math_sin );
 	wr_registerLibraryFunction( w, "math::cos", wr_math_cos );
 	wr_registerLibraryFunction( w, "math::tan", wr_math_tan );
