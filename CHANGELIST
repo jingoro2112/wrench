@@ -1,3 +1,10 @@
+2.09 ----------------------------------------------------------------------------------
+- removed 'const' from a few return types Arduino 2.x complained about
+- fixed compiler error around indexing arrays with variables (oof)
+- fixed "asString" for user-data arrays to be less stupid finding the values
+- added enum types supported by c++11 for ease of debugging but made sure
+  it is still fully compile-able under c++98
+
 2.08 ----------------------------------------------------------------------------------
 - added more debugging tools
 - added WRENCH_FLOAT_SPRINTF to grant full floating-point format support to str::sprintf

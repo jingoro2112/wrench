@@ -154,7 +154,7 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 }
 
 //------------------------------------------------------------------------------
-const int WRValue::asInt() const
+int WRValue::asInt() const
 {
 	if ( type == WR_INT )
 	{
@@ -179,7 +179,7 @@ const int WRValue::asInt() const
 }
 
 //------------------------------------------------------------------------------
-const float WRValue::asFloat() const
+float WRValue::asFloat() const
 {
 	if ( type == WR_FLOAT )
 	{
@@ -206,54 +206,60 @@ const float WRValue::asFloat() const
 //------------------------------------------------------------------------------
 char* WRValue::asString( char* string, size_t len ) const
 {
-	if ( xtype )
+	switch( type )
 	{
-		switch( xtype & EX_TYPE_MASK )
+		case WR_FLOAT: { wr_ftoa( f, string, len ); break; }
+		case WR_INT: { wr_itoa( i, string, len ); break; }
+		case WR_REF: { return r->asString( string, len ); }
+		case WR_EX:
 		{
-			case WR_EX_ARRAY:
+			switch( xtype & EX_TYPE_MASK )
 			{
-				if ( va->m_type == SV_CHAR )
+				case WR_EX_ARRAY:
 				{
-					unsigned int s = 0;
-					while( (string[s]=va->m_Cdata[s]) )
+					if ( va->m_type == SV_CHAR )
 					{
-						s++;
+						unsigned int s = 0;
+						while( (string[s]=va->m_Cdata[s]) )
+						{
+							s++;
+						}
+
+					}
+					break;
+				}
+
+				case WR_EX_REFARRAY:
+				{
+					if ( IS_EXARRAY_TYPE(r->xtype) )
+					{
+						WRValue temp;
+						wr_arrayToValue(this, &temp);
+						return temp.asString(string, len);
+					}
+					else if ( IS_RAW_ARRAY(r->xtype) )
+					{
+						uint32_t i = ARRAY_ELEMENT_FROM_P2(p2);
+						wr_itoa( (i < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[i]) : 0,
+								 string, 
+								 len);
+					}
+					else
+					{
+						return r->asString(string, len);
 					}
 
+					break;
 				}
-				break;
-			}
 
-			case WR_EX_REFARRAY:
-			{
-				if ( IS_EXARRAY_TYPE(r->xtype) )
+				case WR_EX_RAW_ARRAY:
+				case WR_EX_STRUCT:
+				case WR_EX_NONE:
 				{
-					WRValue temp;
-					wr_arrayToValue(this, &temp);
-					return temp.asString(string, len);
-				}
-				else
-				{
-					return r->asString(string, len);
+					string[0] = 0;
+					break;
 				}
 			}
-
-			case WR_EX_RAW_ARRAY:
-			case WR_EX_STRUCT:
-			case WR_EX_NONE:
-			{
-				string[0] = 0;
-				break;
-			}
-		}
-	}
-	else
-	{
-		switch( type )
-		{
-			case WR_FLOAT: { wr_ftoa( f, string, len ); break; }
-			case WR_INT: { wr_itoa( i, string, len ); break; }
-			case WR_REF: { return r->asString( string, len ); }
 		}
 	}
 

@@ -2465,6 +2465,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 		return;
 	}
 	else if ( bytecode.all.size() > 0
+			  && bytecode.opcodes.size() > 0
 			  && addMe.opcodes.size() == 2
 			  && addMe.gotoSource.count() == 0
 			  && addMe.all.size() == 3

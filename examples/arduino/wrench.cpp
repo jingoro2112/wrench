@@ -4721,6 +4721,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 		return;
 	}
 	else if ( bytecode.all.size() > 0
+			  && bytecode.opcodes.size() > 0
 			  && addMe.opcodes.size() == 2
 			  && addMe.gotoSource.count() == 0
 			  && addMe.all.size() == 3
@@ -9994,8 +9995,8 @@ CompactFFFunc:
 				floatCall = subtractionF;
 				intCall = subtractionI;
 CompactFGFunc:
-				register0 = frameBase + *pc++;
-				register1 = globalSpace + *pc++;
+				register0 = globalSpace + *pc++;
+				register1 = frameBase + *pc++;
 				goto targetFuncOpSkipLoadNoClobberF;
 			}
 
@@ -10430,6 +10431,7 @@ compactCompareGG8:
 				CONTINUE;
 			}
 
+			
 			CASE(GGBinaryMultiplication):
 			{
 				register1 = globalSpace + *pc++;
@@ -10440,8 +10442,8 @@ compactCompareGG8:
 
 			CASE(GLBinaryMultiplication):
 			{
-				register0 = frameBase + *pc++;
-				register1 = globalSpace + *pc++;
+				register1 = frameBase + *pc++;
+				register0 = globalSpace + *pc++;
 				wr_MultiplyBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
@@ -10454,6 +10456,7 @@ compactCompareGG8:
 				CONTINUE;
 			}
 
+			
 			CASE(GGBinaryAddition):
 			{
 				register1 = globalSpace + *pc++;
@@ -10478,6 +10481,7 @@ compactCompareGG8:
 				CONTINUE;
 			}
 
+			
 			CASE(GGBinarySubtraction):
 			{
 				register1 = globalSpace + *pc++;
@@ -10488,16 +10492,16 @@ compactCompareGG8:
 
 			CASE(GLBinarySubtraction):
 			{
-				register1 = globalSpace + *pc++;
-				register0 = frameBase + *pc++;
+				register1 = frameBase + *pc++;
+				register0 = globalSpace + *pc++;
 				wr_SubtractBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
 
 			CASE(LGBinarySubtraction):
 			{
-				register1 = frameBase + *pc++;
-				register0 = globalSpace + *pc++;
+				register1 = globalSpace + *pc++;
+				register0 = frameBase + *pc++;
 				wr_SubtractBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
@@ -10510,6 +10514,7 @@ compactCompareGG8:
 				CONTINUE;
 			}
 
+			
 			CASE(GGBinaryDivision):
 			{
 				register1 = globalSpace + *pc++;
@@ -10520,16 +10525,16 @@ compactCompareGG8:
 
 			CASE(GLBinaryDivision):
 			{
-				register0 = frameBase + *pc++;
-				register1 = globalSpace + *pc++;
+				register1 = frameBase + *pc++;
+				register0 = globalSpace + *pc++;
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
 
 			CASE(LGBinaryDivision):
 			{
-				register1 = frameBase + *pc++;
-				register0 = globalSpace + *pc++;
+				register1 = globalSpace + *pc++;
+				register0 = frameBase + *pc++;
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
@@ -10542,6 +10547,7 @@ compactCompareGG8:
 				CONTINUE;
 			}
 
+			
 			CASE(LogicalAnd): { returnFunc = wr_LogicalAND; goto returnFuncNormal; }
 			CASE(LogicalOr): { returnFunc = wr_LogicalOR; goto returnFuncNormal; }
 			CASE(CompareLE): { returnFunc = wr_CompareGT; goto returnFuncInverted; }
@@ -11171,7 +11177,7 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 }
 
 //------------------------------------------------------------------------------
-const int WRValue::asInt() const
+int WRValue::asInt() const
 {
 	if ( type == WR_INT )
 	{
@@ -11196,7 +11202,7 @@ const int WRValue::asInt() const
 }
 
 //------------------------------------------------------------------------------
-const float WRValue::asFloat() const
+float WRValue::asFloat() const
 {
 	if ( type == WR_FLOAT )
 	{
@@ -11223,54 +11229,60 @@ const float WRValue::asFloat() const
 //------------------------------------------------------------------------------
 char* WRValue::asString( char* string, size_t len ) const
 {
-	if ( xtype )
+	switch( type )
 	{
-		switch( xtype & EX_TYPE_MASK )
+		case WR_FLOAT: { wr_ftoa( f, string, len ); break; }
+		case WR_INT: { wr_itoa( i, string, len ); break; }
+		case WR_REF: { return r->asString( string, len ); }
+		case WR_EX:
 		{
-			case WR_EX_ARRAY:
+			switch( xtype & EX_TYPE_MASK )
 			{
-				if ( va->m_type == SV_CHAR )
+				case WR_EX_ARRAY:
 				{
-					unsigned int s = 0;
-					while( (string[s]=va->m_Cdata[s]) )
+					if ( va->m_type == SV_CHAR )
 					{
-						s++;
+						unsigned int s = 0;
+						while( (string[s]=va->m_Cdata[s]) )
+						{
+							s++;
+						}
+
+					}
+					break;
+				}
+
+				case WR_EX_REFARRAY:
+				{
+					if ( IS_EXARRAY_TYPE(r->xtype) )
+					{
+						WRValue temp;
+						wr_arrayToValue(this, &temp);
+						return temp.asString(string, len);
+					}
+					else if ( IS_RAW_ARRAY(r->xtype) )
+					{
+						uint32_t i = ARRAY_ELEMENT_FROM_P2(p2);
+						wr_itoa( (i < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[i]) : 0,
+								 string, 
+								 len);
+					}
+					else
+					{
+						return r->asString(string, len);
 					}
 
+					break;
 				}
-				break;
-			}
 
-			case WR_EX_REFARRAY:
-			{
-				if ( IS_EXARRAY_TYPE(r->xtype) )
+				case WR_EX_RAW_ARRAY:
+				case WR_EX_STRUCT:
+				case WR_EX_NONE:
 				{
-					WRValue temp;
-					wr_arrayToValue(this, &temp);
-					return temp.asString(string, len);
-				}
-				else
-				{
-					return r->asString(string, len);
+					string[0] = 0;
+					break;
 				}
 			}
-
-			case WR_EX_RAW_ARRAY:
-			case WR_EX_STRUCT:
-			case WR_EX_NONE:
-			{
-				string[0] = 0;
-				break;
-			}
-		}
-	}
-	else
-	{
-		switch( type )
-		{
-			case WR_FLOAT: { wr_ftoa( f, string, len ); break; }
-			case WR_INT: { wr_itoa( i, string, len ); break; }
-			case WR_REF: { return r->asString( string, len ); }
 		}
 	}
 
@@ -13221,6 +13233,10 @@ resetState:
 		{
 			flags |= negativeJustify;
 		}
+#ifdef WRENCH_FLOAT_SPRINTF
+		else if (c == '.') // ignore, we might be reading a floating point decimal position
+		{ }
+#endif
 		else if ( c == 'c' ) // character
 		{
 			if ( listPtr < argn )
@@ -13315,6 +13331,27 @@ copyToString:
 					flags |= parsingSigned;
 					goto parseDecimal;
 				}
+#ifdef WRENCH_FLOAT_SPRINTF
+				else if ( c == 'f' || c == 'g' )
+				{
+					char floatBuf[32];
+					int i = 30;
+					floatBuf[31] = 0;
+					const char *f = fmt;
+					for( ; *f != '%'; --f, --i )
+					{
+						floatBuf[i] = *f;
+					}
+					floatBuf[i] = '%';
+
+					const int chars = sprintf( buf, floatBuf + i, args[listPtr++].asFloat());
+					for( int j=0; j<chars; ++j )
+					{
+						*out++ = buf[j];
+					}
+					goto resetState;
+				}
+#endif
 				else if ( c == 'u' ) // decimal
 				{
 parseDecimal:

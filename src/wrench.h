@@ -1,6 +1,6 @@
 #define WRENCH_COMBINED
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -27,7 +27,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 2
-#define WRENCH_VERSION_MINOR 8
+#define WRENCH_VERSION_MINOR 9
 
 /************************************************************************
 wrench's compiler was not designed to be memory or space efficient, for
@@ -348,7 +348,11 @@ extern int32_t wr_Seed;
 // wave...
 
 //------------------------------------------------------------------------------
+#if __cplusplus <= 199711L
 enum WRValueType
+#else
+enum WRValueType : uint8_t
+#endif
 {
 	WR_INT =   0x00,
 	WR_FLOAT = 0x01,
@@ -357,7 +361,11 @@ enum WRValueType
 };
 
 //------------------------------------------------------------------------------
+#if __cplusplus <= 199711L
 enum WRExType
+#else
+enum WRExType : uint8_t
+#endif
 {
 	WR_EX_NONE       = 0x00,  // 0000
 	WR_EX_RAW_ARRAY  = 0x20,  // 0010
@@ -378,11 +386,11 @@ struct WRValue
 	// never reference the data members directly, they are unions and
 	// bad things will happen. Always access them with one of these
 	// methods
-	const int asInt() const;
-	const float asFloat() const;
+	int asInt() const;
+	float asFloat() const;
 
-	const bool isFloat() const { return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
-	const bool isInt() const { return type == WR_INT || (type == WR_REF && r->type == WR_INT); }
+	bool isFloat() const { return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
+	bool isInt() const { return type == WR_INT || (type == WR_REF && r->type == WR_INT); }
 
 	// string: must point to a buffer long enough to contain at least len bytes.
 	// the pointer will be passed back
@@ -429,10 +437,17 @@ struct WRValue
 	{
 		struct
 		{
+#if (__cplusplus <= 199711L)
 			uint8_t type; // carries the type
 			uint8_t padL; // pad carries an array pointer (up to 2megs using bottom 4 bits of xtype)
 			uint8_t padH;
 			uint8_t xtype; // carries the extra type (if it exists)
+#else
+			WRValueType type; // carries the type
+			uint8_t padL; // pad carries an array pointer (up to 2megs using bottom 4 bits of xtype)
+			uint8_t padH;
+			WRExType xtype; // carries the extra type (if it exists)
+#endif
 		};
 
 		uint32_t p2;
