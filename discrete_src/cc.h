@@ -183,6 +183,7 @@ struct WRBytecode
 		opcodes.clear();
 		isStructSpace = false;
 		localSpace.clear();
+		
 		functionSpace.clear();
 		unitObjectSpace.clear();
 		

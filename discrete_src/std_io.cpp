@@ -24,12 +24,21 @@ SOFTWARE.
 
 #include "wrench.h"
 
+#ifndef ARDUINO
+
+#include <time.h>
+
+#ifdef _WIN32
+#include <Windows.h>
+#else
+#include <sys/time.h>
+#endif
+
 //------------------------------------------------------------------------------
 void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
 
-#ifdef WRENCH_STD_FILE
 	if ( argn == 1 )
 	{
 		WRValue* arg = stackTop - 1;
@@ -60,14 +69,13 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 			fclose( infil );
 		}
 	}
-#endif
 }
 
 //------------------------------------------------------------------------------
 void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
-#ifdef WRENCH_STD_FILE
+
 	if ( argn == 2 )
 	{
 		WRValue* arg1 = stackTop - 2;
@@ -94,14 +102,12 @@ void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 		stackTop->i = (int)fwrite( data, len, 1, outfil );
 		fclose( outfil );
 	}
-#endif
 }
 
 //------------------------------------------------------------------------------
 void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
-#ifdef WRENCH_STD_FILE
 	char buf[256];
 	int pos = 0;
 	for (;;)
@@ -118,37 +124,23 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 
 		buf[pos++] = in;
 	}
-#endif
 }
-
-#ifdef WRENCH_STD_TIME
-#include <time.h>
-#ifdef _WIN32
-#include <Windows.h>
-#else
-#include <sys/time.h>
-#endif
-#endif
 
 //------------------------------------------------------------------------------
 void wr_clock( WRValue* stackTop, const int argn, WRContext* c )
 {
-#ifdef WRENCH_STD_TIME
 	stackTop->i = (int)clock();
-#endif
 }
 
 //------------------------------------------------------------------------------
 void wr_milliseconds(WRValue* stackTop, const int argn, WRContext* c )
 {
-#ifdef WRENCH_STD_TIME
 #ifdef _WIN32
 	stackTop->ui = (uint32_t)GetTickCount();
 #else
 	struct timeval tv;
 	gettimeofday( &tv, NULL );
 	stackTop->ui = (uint32_t)((tv.tv_usec/1000) + (tv.tv_sec * 1000));
-#endif
 #endif
 }
 
@@ -164,3 +156,13 @@ void wr_loadFileLib( WRState* w )
 	wr_registerLibraryFunction( w, "time::ms", wr_clock );
 }
 
+
+#else
+
+//------------------------------------------------------------------------------
+void wr_loadFileLib( WRState* w )
+{
+	// none of these methods make sense for an embeded system
+}
+
+#endif

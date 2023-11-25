@@ -27,10 +27,6 @@ function userCheck( data )
 	if ( data.name[i] != 'e' ) print("f5i");
 	if ( data.name[j] != 'e' ) print("f6j");
 
-	rem::setRGB( -1, -1, data.name[i], data.name[i], data.name[i] );
-
-	i = math::sin( data.name[i] );
-
 	if ( data.name[1] < 'd' ) print("f7");
 	if ( data.name[1] > 'f' ) print("f8");
 

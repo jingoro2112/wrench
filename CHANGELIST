@@ -1,3 +1,22 @@
+2.10
+- Improving Arduino support
+- Adding Esp32 support
+- Updated the win32 build to VS2022
+- separated the wr_run function into it's two parts: allocating the script
+  then initializing it by running "function 0" with:
+     // wr_run actually calls these two functions back-to back. If you want
+     // to separate the process you can call them on your own.
+     // !!!! WARNING: If wr_executeFunctionZero() FAILS you must destroy
+     // the context with wr_destroyContext() !!!!!!
+     WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize );
+     bool wr_executeFunctionZero( WRState* w, WRContext* context );
+- Fixed null switch-body crash (who does that? well.. if you comment them ALL out...)
+- Rewrote switch to properly handle local space, major bug that it wasn't before. This
+  Represents a difference in the way the switch VM functions but actually _is_ reverse compatible,
+  ...almost... the (Switch) case has a (uint16_t) cast which prevents it from functioning, so
+  I do need to bump the major version darnit. 
+
+
 2.09 ----------------------------------------------------------------------------------
 - removed 'const' from a few return types Arduino 2.x complained about
 - fixed compiler error around indexing arrays with variables (oof)

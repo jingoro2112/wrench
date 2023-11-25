@@ -1,3 +1,4 @@
+#define WRENCH_COMBINED
 /*******************************************************************************
 Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
 
@@ -26,28 +27,29 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 2
-#define WRENCH_VERSION_MINOR 9
+#define WRENCH_VERSION_MINOR 10
 
 /************************************************************************
-wrench's compiler was not designed to be memory or space efficient, for
-embedded systems it is strongly reccommeded (nay, required) that
+The compiler was not designed to be particularly memory or space efficient, for
+small embedded systems it is strongly reccommeded (nay, required) that
 only bytecode be executed. This flag allows the source code to be
-explicitly removed.
+explicitly unavailable. Esp32-class processors have no trouble compiling
+on-the-fly but ATMega/SAMD21 are a no-go here.
 */
-#define WRENCH_WITHOUT_COMPILER
+//#define WRENCH_WITHOUT_COMPILER
 /***********************************************************************/
 
 /***********************************************************************
-This causes wrench to compile into the smallest program size
-possible at the cost of some interpreter speed. The speed loss is from
-the removal of unrolled loops and inlined functionality, it also makes
+Cause the interpreter to compile into the smallest program size
+possible at the cost of some speed. This loss is from the removal of
+unrolled loops and inlined functionality, it also makes
 use of some goto spaghetti which can play havok with branch-prediction
 and actually slow down PC-class processors.
 WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
 interpreter in favor of a giant switch(). This saves ~6k at the cost
 of a chunk of speed so only use it if you need to.
 */
-#define WRENCH_COMPACT           // saves a lot, costs some speed
+//#define WRENCH_COMPACT           // saves a lot, costs some speed
 //#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 /***********************************************************************/
 
@@ -65,14 +67,7 @@ This will consume 8 bytes per stack entry
 
 
 /************************************************************************
-system specifics that makme total sense on pc-class systems but not on
-embedded
-*/
-//#define WRENCH_STD_FILE // fopen(), fclose(), fread(), fwrite(), fstat()
-//#define WRENCH_STD_TIME // clock()
-
-/************************************************************************
-if you WANT full sprintf support for floats (%f/%g) this adds it, ad
+if you WANT full sprintf support for floats (%f/%g) this adds it, at
 the cost of using the standard c library for it, not for small embedded
 systems but larger ones? who cares.
 */
@@ -115,6 +110,13 @@ int wr_compile( const char* source, const int size, unsigned char** out, int* ou
 // RETURNS:    a WRContext pointer to be passed to wr_callFunction
 //             'global' values are NOT SHARED between contexts
 WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize );
+
+// wr_run actually calls these two functions back-to back. If you want
+// to separate the process you can call them on your own.
+// !!!! WARNING: If wr_executeFunctionZero() FAILS you must destroy
+// the context with wr_destroyContext() !!!!!!
+WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize );
+bool wr_executeFunctionZero( WRState* w, WRContext* context );
 
 // after wr_run() this allows any function in the script to be
 // called with the given arguments, returning a single value
@@ -229,7 +231,7 @@ void wr_loadStringLib( WRState* w ); // string functions
 void wr_loadMessageLib( WRState* w ); // messaging between contexts
 
 // arduino-specific functions, be sure to add arduino_lib.cpp to your
-// sketch. much thanks to Koepel for inspiring and writing this
+// sketch. much thanks to Koepel for contributing
 void wr_loadArduinoSTDLib( WRState* w ); 
 void wr_loadArduinoIOLib( WRState* w ); 
 void wr_loadArduinoLCDLib( WRState* w ); 
@@ -319,6 +321,8 @@ enum WRError
 	WR_ERR_switch_duplicate_case,
 
 	WR_ERR_bad_bytecode_CRC,
+
+	WR_ERR_execute_function_zero_called_more_than_once,
 
 	WR_warning_enums_follow,
 
@@ -481,13 +485,11 @@ struct WRValue
 #include <stdio.h>
 #include <sys/stat.h>
 #include <cstdlib>
-#else
-#ifdef WRENCH_STD_FILE
-#undef WRENCH_STD_FILE
-#endif
-#include <Arduino.h>
 #endif
 
+#ifdef ARDUINO
+#include <Arduino.h>
+#endif
 
 #ifndef WRENCH_COMBINED
 #include "utils.h"

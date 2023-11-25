@@ -24,6 +24,8 @@ SOFTWARE.
 
 #include "wrench.h"
 
+#ifdef ARDUINO
+
 #include <Arduino.h>
 #include <Wire.h>
 
@@ -205,3 +207,5 @@ void wr_loadArduinoLib( WRState* w )
 	wr_loadArduinoSTDLib( w );
 	wr_loadArduinoWireLib( w );
 }
+
+#endif

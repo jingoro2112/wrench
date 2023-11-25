@@ -58,7 +58,7 @@ WRError wr_getLastError( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
+WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize )
 {
 	const unsigned char* p = block + (blockSize - 4);
 	uint32_t hash = READ_32_FROM_PC( p );
@@ -85,12 +85,38 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 	C->registry.m_vNext = w->contextList;
 	C->bottom = block;
 
-	w->contextList = C;
+	return (w->contextList = C);
+}
 
-	if ( wr_callFunction(w, C, (int32_t)0) )
+//------------------------------------------------------------------------------
+bool wr_executeFunctionZero( WRState* w, WRContext* context )
+{
+	if ( context->stopLocation )
 	{
-		wr_destroyContext( C );
-		return 0;
+		w->err = WR_ERR_execute_function_zero_called_more_than_once;
+		return false;
+	}
+	
+	if ( wr_callFunction(w, context, (int32_t)0) ) 
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+//------------------------------------------------------------------------------
+WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
+{
+	WRContext* C = wr_allocateNewScript( w, block, blockSize );
+
+	if ( C )
+	{
+		if ( !wr_executeFunctionZero(w, C) )
+		{
+			wr_destroyContext( C );
+			C = 0;
+		}
 	}
 
 	return C;

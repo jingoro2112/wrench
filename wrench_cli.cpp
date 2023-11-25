@@ -160,6 +160,8 @@ const char* sourceOrder[]=
 	"/std_string.cpp",
 	"/std_math.cpp",
 	"/std_msg.cpp",
+	"/esp32_lib.cpp",
+	"/arduino_lib.cpp",
 	""
 };
 

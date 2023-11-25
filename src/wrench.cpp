@@ -1948,6 +1948,7 @@ struct WRBytecode
 		opcodes.clear();
 		isStructSpace = false;
 		localSpace.clear();
+		
 		functionSpace.clear();
 		unitObjectSpace.clear();
 		
@@ -2283,6 +2284,7 @@ SOFTWARE.
 #include <assert.h>
 
 #define WR_COMPILER_LITERAL_STRING 0x10 
+#define KEYHOLE_OPTIMIZER
 
 //------------------------------------------------------------------------------
 const char* c_reserved[] =
@@ -3195,6 +3197,7 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 //------------------------------------------------------------------------------
 void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 {
+#ifdef KEYHOLE_OPTIMIZER
 	unsigned int o = bytecode.opcodes.size();
 	if ( o )
 	{
@@ -4186,7 +4189,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 			}
 		}
 	}
-
+#endif
 	bytecode.all += opcode;
 	bytecode.opcodes += opcode;
 }
@@ -4203,7 +4206,6 @@ void WRCompilationContext::setRelativeJumpTarget( WRBytecode& bytecode, int rela
 {
 	bytecode.jumpOffsetTargets[relativeJumpTarget].offset = bytecode.all.size();
 }
-
 
 //------------------------------------------------------------------------------
 void WRCompilationContext::addRelativeJumpSourceEx( WRBytecode& bytecode, WROpcode opcode, int relativeJumpTarget, const unsigned char* data, const int dataSize )
@@ -7003,31 +7005,24 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 	WRstr& token = ex.token;
 	WRValue& value = ex.value;
 
-	WRarray<WRSwitchCase> cases;
-	int16_t defaultOffset = -1;
-
 	if ( !getToken(ex, "(") )
 	{
 		m_err = WR_ERR_unexpected_token;
 		return false;
 	}
 	
-	WRExpression nex( m_units[m_unitTop].bytecode.localSpace, m_units[m_unitTop].bytecode.isStructSpace );
-	nex.context[0].token = token;
-	nex.context[0].value = value;
+	WRExpression selectionCriteria( m_units[m_unitTop].bytecode.localSpace, m_units[m_unitTop].bytecode.isStructSpace );
+	selectionCriteria.context[0].token = token;
+	selectionCriteria.context[0].value = value;
 	
-	if ( parseExpression(nex) != ')' )
+	if ( parseExpression(selectionCriteria) != ')' )
 	{
 		m_err = WR_ERR_unexpected_token;
 		return false;
 	}
 
-	appendBytecode( m_units[m_unitTop].bytecode, nex.bytecode );
+	appendBytecode( m_units[m_unitTop].bytecode, selectionCriteria.bytecode );
 
-	WRBytecode bytecodeSnapshot; // snapshot up to now
-
-	bytecodeSnapshot = m_units[m_unitTop].bytecode;
-	m_units[m_unitTop].bytecode.clear();
 
 	if ( !getToken(ex, "{") )
 	{
@@ -7035,10 +7030,19 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 		return false;
 	}
 
-	WRSwitchCase* swCase = 0;
+	WRarray<WRSwitchCase> cases;
+	int16_t defaultOffset = -1;
+	WRSwitchCase* swCase = 0; // current case
+
+	int defaultCaseJumpTarget = addRelativeJumpTarget( m_units[m_unitTop].bytecode );
 
 	*m_breakTargets.push() = addRelativeJumpTarget( m_units[m_unitTop].bytecode );
 
+	int selectionLogicPoint = addRelativeJumpTarget( m_units[m_unitTop].bytecode );
+	addRelativeJumpSource( m_units[m_unitTop].bytecode, O_RelativeJump, selectionLogicPoint );
+
+	unsigned int startingBytecodeMarker = m_units[m_unitTop].bytecode.all.size();
+	
 	for(;;)
 	{
 		if ( !getToken(ex) )
@@ -7051,18 +7055,19 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 		{
 			break;
 		}
-		else if ( token == "case" )
+
+		if ( token == "case" )
 		{
 			swCase = &cases.append();
 			swCase->jumpOffset = m_units[m_unitTop].bytecode.all.size();
 			swCase->hash = getSingleValueHash(":");
-			swCase->occupied = true;
-			swCase->defaultCase = false;
-
-			if (m_err)
+			if ( m_err )
 			{
 				return false;
 			}
+
+			swCase->occupied = true;
+			swCase->defaultCase = false;
 
 			if ( cases.count() > 1 )
 			{
@@ -7083,11 +7088,6 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 				m_err = WR_ERR_switch_duplicate_case;
 				return false;
 			}
-			
-			swCase = &cases.append();
-			swCase->jumpOffset = m_units[m_unitTop].bytecode.all.size();
-			swCase->occupied = true;
-			swCase->defaultCase = true;
 
 			if ( !getToken(ex, ":") )
 			{
@@ -7095,16 +7095,17 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 				return false;
 			}
 
-			defaultOffset = swCase->jumpOffset;
+			defaultOffset = m_units[m_unitTop].bytecode.all.size();
+			setRelativeJumpTarget( m_units[m_unitTop].bytecode, defaultCaseJumpTarget );
 		}
 		else
 		{
-			if (swCase == 0)
+			if ( swCase == 0 && defaultOffset == -1 )
 			{
 				m_err = WR_ERR_switch_case_or_default_expected;
 				return false;
 			}
-			
+
 			m_loadedToken = token;
 			m_loadedValue = value;
 
@@ -7115,181 +7116,192 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 		}
 	}
 
-	setRelativeJumpTarget( m_units[m_unitTop].bytecode, *m_breakTargets.tail() );
-
-	if ( cases.count() == 1 && defaultOffset != -1 )
+	if ( startingBytecodeMarker == m_units[m_unitTop].bytecode.all.size() )
 	{
-		// single default case? no switch here just always execute the default case
-		appendBytecode( bytecodeSnapshot, m_units[m_unitTop].bytecode );
+		// no code was added so this is one big null operation, go
+		// ahead and null it
+		m_units[m_unitTop].bytecode.all.shave(3);
+		m_units[m_unitTop].bytecode.opcodes.clear();
+			
+		pushOpcode(m_units[m_unitTop].bytecode, O_PopOne); // pop off the selection criteria
+
+		m_units[m_unitTop].bytecode.jumpOffsetTargets.pop();
+		m_breakTargets.pop();
+		return true;
 	}
-	else if ( cases.count() > 0 )
+	
+	// make sure the last instruction is a break (jump) so the
+	// selection logic is skipped at the end of the last case/default
+	if ( !m_units[m_unitTop].bytecode.opcodes.size() 
+		 || (m_units[m_unitTop].bytecode.opcodes.size() && m_units[m_unitTop].bytecode.opcodes[m_units[m_unitTop].bytecode.opcodes.size() - 1] != O_RelativeJump) )
 	{
-		// first try the easy way
+		addRelativeJumpSource( m_units[m_unitTop].bytecode, O_RelativeJump, *m_breakTargets.tail() );
+	}
 
-		// find the highest hash value, and size an array to that
-		unsigned int size = 0;
-		for( unsigned int d=0; d<cases.count(); ++d )
+	// selection logic jumps HERE
+	setRelativeJumpTarget( m_units[m_unitTop].bytecode, selectionLogicPoint );
+
+	// find the highest hash value, and size an array to that
+	unsigned int size = 0;
+	for( unsigned int d=0; d<cases.count(); ++d )
+	{
+		if ( cases[d].defaultCase )
 		{
-			if ( cases[d].defaultCase )
-			{
-				continue;
-			}
-
-			if ( cases[d].hash > size )
-			{
-				size = cases[d].hash;
-			}
-
-			if ( size >= 254 )
-			{
-				break;
-			}
+			continue;
 		}
 
-		// first try the easy way
-
-		++size;
-		
-		WRSwitchCase* table = 0;
-		unsigned char packbuf[4];
-		
-		if ( size < 254 )
+		if ( cases[d].hash > size )
 		{
-			pushOpcode( bytecodeSnapshot, O_SwitchLinear );
+			size = cases[d].hash;
+		}
 
-			packbuf[0] = size;
-			pushData( bytecodeSnapshot, packbuf, 1 );
+		if ( size >= 254 )
+		{
+			break;
+		}
+	}
 
-			table = new WRSwitchCase[size];
-			memset( table, 0, size*sizeof(WRSwitchCase) );
+	// first try the easy way
 
-			for( unsigned int i = 0; i<size; ++i ) // for each of the possible entries..
-			{
-				for( unsigned int hash = 0; hash<cases.count(); ++hash ) // if a hash matches it, populate that table entry
-				{
-					if ( cases[hash].occupied && !cases[hash].defaultCase && (cases[hash].hash == i) )
-					{
-						table[cases[hash].hash].jumpOffset = cases[hash].jumpOffset + 2*size + 2;
-						table[cases[hash].hash].occupied = true;
-						break;
-					}
-				}
-			}
+	++size;
 
-			// default case is jumping to the end of the code segment
-			if ( defaultOffset == -1 )
-			{
-				defaultOffset = m_units[m_unitTop].bytecode.all.size() + 2*size + 2;
-			}
-			else
-			{
-				defaultOffset += 2*size + 2;
-			}
+	WRSwitchCase* table = 0;
+	unsigned char packbuf[4];
 
-			pushData( bytecodeSnapshot, pack16(defaultOffset, packbuf), 2 );
+	if ( size < 254 ) // cases are labeled 0-254, just use a linear jump table
+	{
+		pushOpcode( m_units[m_unitTop].bytecode, O_SwitchLinear );
 
-			for( unsigned int i=0; i<size; ++i )
-			{
-				if ( table[i].occupied )
-				{
-					pushData( bytecodeSnapshot, pack16(table[i].jumpOffset, packbuf), 2 );
-				}
-				else
-				{
-					pushData( bytecodeSnapshot, pack16(defaultOffset, packbuf), 2 );
-				}
-			}
+		packbuf[0] = size;
+		pushData( m_units[m_unitTop].bytecode, packbuf, 1 ); // size
+
+		int currentPos = m_units[m_unitTop].bytecode.all.size();
+
+		if ( defaultOffset == -1 )
+		{
+			defaultOffset = size*2 + 2;
 		}
 		else
 		{
-			// find a suitable mod
-			uint16_t mod = 1;
-			for( ; mod<0x7FFE; ++mod )
+			defaultOffset -= currentPos;
+		}
+
+		table = new WRSwitchCase[size];
+		memset( table, 0, size*sizeof(WRSwitchCase) );
+
+		for( unsigned int i = 0; i<size; ++i ) // for each of the possible entries..
+		{
+			for( unsigned int hash = 0; hash<cases.count(); ++hash ) // if a hash matches it, populate that table entry
 			{
-				table = new WRSwitchCase[mod];
-				memset( table, 0, sizeof(WRSwitchCase)*mod );
-
-				unsigned int c=0;
-				for( ; c<cases.count(); ++c )
+				if ( cases[hash].occupied && !cases[hash].defaultCase && (cases[hash].hash == i) )
 				{
-					if ( cases[c].defaultCase )
-					{
-						continue;
-					}
-
-					if ( table[cases[c].hash % mod].occupied )
-					{
-						break;
-					}
-
-					table[cases[c].hash % mod].hash = cases[c].hash;
-					table[cases[c].hash % mod].jumpOffset = 2 + 2 + (mod * 6) + cases[c].jumpOffset;
-					table[cases[c].hash % mod].occupied = true;
-				}
-
-				if ( c >= cases.count() )
-				{
+					table[cases[hash].hash].jumpOffset = cases[hash].jumpOffset - currentPos;
+					table[cases[hash].hash].occupied = true;
 					break;
-				}
-				else
-				{
-					delete[] table;
-					table = 0;
-				} 
-			}
-
-			if ( mod >= 0x7FFE )
-			{
-				m_err = WR_ERR_switch_construction_error;
-				return false;
-			}
-
-			pushOpcode( bytecodeSnapshot, O_Switch ); // add switch command
-			unsigned char packbuf[4];
-
-			pushData( bytecodeSnapshot, pack16(mod, packbuf), 2 ); // mod value
-
-			if ( defaultOffset == -1 ) // no default case? point it to the end
-			{
-				defaultOffset = 2 + 2 + (mod * 6) + m_units[m_unitTop].bytecode.all.size();
-			}
-			else
-			{
-				defaultOffset += 2 + 2 + (mod * 6);
-			}
-
-			pushData( bytecodeSnapshot, pack16(defaultOffset, packbuf), 2 );
-
-			for( uint16_t m = 0; m<mod; ++m )
-			{
-				pushData( bytecodeSnapshot, pack32(table[m].hash, packbuf), 4 );
-
-				if ( !table[m].occupied )
-				{
-					pushData( bytecodeSnapshot, pack16(defaultOffset, packbuf), 2 );
-				}
-				else
-				{
-					pushData( bytecodeSnapshot, pack16(table[m].jumpOffset, packbuf), 2 );
 				}
 			}
 		}
 
-		appendBytecode( bytecodeSnapshot, m_units[m_unitTop].bytecode );
+		pushData( m_units[m_unitTop].bytecode, pack16(defaultOffset, packbuf), 2 );
 
-		delete[] table;
+		for( unsigned int i=0; i<size; ++i )
+		{
+			if ( table[i].occupied )
+			{
+				pushData( m_units[m_unitTop].bytecode, pack16(table[i].jumpOffset, packbuf), 2 );
+			}
+			else
+			{
+				pushData( m_units[m_unitTop].bytecode, pack16(defaultOffset, packbuf), 2 );
+			}
+		}
 	}
-	// else 0 cases, skip switch parsing nothing happens!
+	else
+	{
+		pushOpcode( m_units[m_unitTop].bytecode, O_Switch ); // add switch command
+		unsigned char packbuf[4];
 
-	m_units[m_unitTop].bytecode = bytecodeSnapshot;
-		
+		int currentPos = m_units[m_unitTop].bytecode.all.size();
+
+		// find a suitable mod
+		uint16_t mod = 1;
+		for( ; mod<0x7FFE; ++mod )
+		{
+			table = new WRSwitchCase[mod];
+			memset( table, 0, sizeof(WRSwitchCase)*mod );
+
+			unsigned int c=0;
+			for( ; c<cases.count(); ++c )
+			{
+				if ( cases[c].defaultCase )
+				{
+					continue;
+				}
+
+				if ( table[cases[c].hash % mod].occupied )
+				{
+					break;
+				}
+
+				table[cases[c].hash % mod].hash = cases[c].hash;
+				table[cases[c].hash % mod].jumpOffset = cases[c].jumpOffset - currentPos;
+				table[cases[c].hash % mod].occupied = true;
+			}
+
+			if ( c >= cases.count() )
+			{
+				break;
+			}
+			else
+			{
+				delete[] table;
+				table = 0;
+			} 
+		}
+
+		if ( mod >= 0x7FFE )
+		{
+			m_err = WR_ERR_switch_construction_error;
+			return false;
+		}
+
+		if ( defaultOffset == -1 )
+		{
+			defaultOffset = mod*6 + 4;
+		}
+		else
+		{
+			defaultOffset -= currentPos;
+		}
+
+		pushData( m_units[m_unitTop].bytecode, pack16(mod, packbuf), 2 ); // mod value
+		pushData( m_units[m_unitTop].bytecode, pack16(defaultOffset, packbuf), 2 ); // default offset
+
+		for( uint16_t m = 0; m<mod; ++m )
+		{
+			pushData( m_units[m_unitTop].bytecode, pack32(table[m].hash, packbuf), 4 );
+
+			if ( !table[m].occupied )
+			{
+				pushData( m_units[m_unitTop].bytecode, pack16(defaultOffset, packbuf), 2 );
+			}
+			else
+			{
+				pushData( m_units[m_unitTop].bytecode, pack16(table[m].jumpOffset, packbuf), 2 );
+			}
+		}
+	}
+
+	delete[] table;
+
+	setRelativeJumpTarget( m_units[m_unitTop].bytecode, *m_breakTargets.tail() );
+
+	resolveRelativeJumps( m_units[m_unitTop].bytecode );
+
 	m_breakTargets.pop();
-
-	resolveRelativeJumps( m_units[m_unitTop].bytecode ); // at least do the ones we added
 
 	return true;
 }
-
 
 //------------------------------------------------------------------------------
 bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn )
@@ -7933,7 +7945,11 @@ WRError WRCompilationContext::compile( const char* source,
 		}
 
 	}
-		 
+
+//	WRstr str;
+//	wr_asciiDump( *out, *outLen, str );
+//	printf( "%d:\n%s\n", *outLen, str.c_str() );
+
 	return m_err;
 }
 
@@ -8855,7 +8871,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 #endif
 
 	w->err = WR_ERR_None;
-
+	
 	if ( function )
 	{
 		stackTop->p = 0;
@@ -9655,21 +9671,22 @@ NextIterator:
 
 				hashLoc += 4; // yup, point hashLoc to jump vector
 				
-				pc += (uint16_t)READ_16_FROM_PC(hashLoc);
+				pc += READ_16_FROM_PC(hashLoc);
 				CONTINUE;
 			}
 
 			CASE(SwitchLinear):
 			{
 				hashLocInt = (--stackTop)->getHash(); // the "hashes" were all 0<=h<256
-				if ( hashLocInt < *pc++ ) // doesn't mean you switched() on one though ;) check against default top
+				
+				if ( hashLocInt < *pc++ ) // catch selecting > size
 				{
 					hashLoc = pc + (hashLocInt<<1) + 2; // jump to vector
-					pc += READ_16_FROM_PC(hashLoc); // and read it
+					pc += READ_16_FROM_PC( hashLoc ); // and read it
 				}
 				else
 				{
-					pc += READ_16_FROM_PC(pc); // already at default vector
+					pc += READ_16_FROM_PC( pc );
 				}
 				CONTINUE;
 			}
@@ -11081,7 +11098,7 @@ WRError wr_getLastError( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
+WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize )
 {
 	const unsigned char* p = block + (blockSize - 4);
 	uint32_t hash = READ_32_FROM_PC( p );
@@ -11108,12 +11125,38 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 	C->registry.m_vNext = w->contextList;
 	C->bottom = block;
 
-	w->contextList = C;
+	return (w->contextList = C);
+}
 
-	if ( wr_callFunction(w, C, (int32_t)0) )
+//------------------------------------------------------------------------------
+bool wr_executeFunctionZero( WRState* w, WRContext* context )
+{
+	if ( context->stopLocation )
 	{
-		wr_destroyContext( C );
-		return 0;
+		w->err = WR_ERR_execute_function_zero_called_more_than_once;
+		return false;
+	}
+	
+	if ( wr_callFunction(w, context, (int32_t)0) ) 
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+//------------------------------------------------------------------------------
+WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
+{
+	WRContext* C = wr_allocateNewScript( w, block, blockSize );
+
+	if ( C )
+	{
+		if ( !wr_executeFunctionZero(w, C) )
+		{
+			wr_destroyContext( C );
+			C = 0;
+		}
 	}
 
 	return C;
@@ -12980,12 +13023,21 @@ SOFTWARE.
 
 #include "wrench.h"
 
+#ifndef ARDUINO
+
+#include <time.h>
+
+#ifdef _WIN32
+#include <Windows.h>
+#else
+#include <sys/time.h>
+#endif
+
 //------------------------------------------------------------------------------
 void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
 
-#ifdef WRENCH_STD_FILE
 	if ( argn == 1 )
 	{
 		WRValue* arg = stackTop - 1;
@@ -13016,14 +13068,13 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 			fclose( infil );
 		}
 	}
-#endif
 }
 
 //------------------------------------------------------------------------------
 void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
-#ifdef WRENCH_STD_FILE
+
 	if ( argn == 2 )
 	{
 		WRValue* arg1 = stackTop - 2;
@@ -13050,14 +13101,12 @@ void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 		stackTop->i = (int)fwrite( data, len, 1, outfil );
 		fclose( outfil );
 	}
-#endif
 }
 
 //------------------------------------------------------------------------------
 void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
-#ifdef WRENCH_STD_FILE
 	char buf[256];
 	int pos = 0;
 	for (;;)
@@ -13074,37 +13123,23 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 
 		buf[pos++] = in;
 	}
-#endif
 }
-
-#ifdef WRENCH_STD_TIME
-#include <time.h>
-#ifdef _WIN32
-#include <Windows.h>
-#else
-#include <sys/time.h>
-#endif
-#endif
 
 //------------------------------------------------------------------------------
 void wr_clock( WRValue* stackTop, const int argn, WRContext* c )
 {
-#ifdef WRENCH_STD_TIME
 	stackTop->i = (int)clock();
-#endif
 }
 
 //------------------------------------------------------------------------------
 void wr_milliseconds(WRValue* stackTop, const int argn, WRContext* c )
 {
-#ifdef WRENCH_STD_TIME
 #ifdef _WIN32
 	stackTop->ui = (uint32_t)GetTickCount();
 #else
 	struct timeval tv;
 	gettimeofday( &tv, NULL );
 	stackTop->ui = (uint32_t)((tv.tv_usec/1000) + (tv.tv_sec * 1000));
-#endif
 #endif
 }
 
@@ -13120,6 +13155,16 @@ void wr_loadFileLib( WRState* w )
 	wr_registerLibraryFunction( w, "time::ms", wr_clock );
 }
 
+
+#else
+
+//------------------------------------------------------------------------------
+void wr_loadFileLib( WRState* w )
+{
+	// none of these methods make sense for an embeded system
+}
+
+#endif
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
@@ -14035,3 +14080,251 @@ void wr_loadMessageLib( WRState* w )
 	wr_registerLibraryFunction( w, "msg::clear", wr_mboxClear ); // remove if exists
 	wr_registerLibraryFunction( w, "msg::peek", wr_mboxPeek ); // does the message exist?
 }
+/*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#ifdef ARDUINO
+
+#include "wrench.h"
+
+#include <Arduino.h>
+#include <Wire.h>
+
+//------------------------------------------------------------------------------
+void wr_loadEsp32Lib( WRState* w )
+{
+}
+
+#endif
+/*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
+#ifdef ARDUINO
+
+#include <Arduino.h>
+#include <Wire.h>
+
+//------------------------------------------------------------------------------
+void wr_std_delay( WRValue* stackTop, const int argn, WRContext* c)
+{
+	// std::delay( milliseconds )
+	if( argn == 1)
+	{
+		delay( (unsigned long)stackTop[-1].asInt() ); // a signed int will work up to 25 days
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_io_pinMode( WRValue* stackTop, const int argn, WRContext* c)
+{
+	// io::pinMode( pin, <0 input, 1 output> )
+	if( argn == 2)
+	{
+		pinMode( stackTop[-2].asInt(), (stackTop[-1].asInt() == 0) ? INPUT : OUTPUT );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_io_digitalWrite( WRValue* stackTop, const int argn, WRContext* c)
+{
+	// io::digitalWrite( pin, value )
+	if( argn == 2)
+	{
+		digitalWrite(stackTop[-2].asInt(), stackTop[-1].asInt());
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_io_analogRead( WRValue* stackTop, const int argn, WRContext* c)
+{
+	// io::analogRead( pin )
+	if ( argn == 1)
+	{
+		stackTop->i = analogRead( stackTop[-1].asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_lcd_begin( WRValue* stackTop, const int argn, WRContext* c)
+{
+	// lcd::begin( columns, rows )
+	// returns status
+	if( argn == 2)
+	{
+//		stackTop->i = lcd.begin( stackTop[-2].asInt(), stackTop[-1].asInt());
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_lcd_setCursor( WRValue* stackTop, const int argn, WRContext* c)
+{
+	// lcd::setCursor( column, row )
+	if( argn == 2 )
+	{
+//		lcd.setCursor( stackTop[-2].asInt(), stackTop[-1].asInt());
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_lcd_print( WRValue* stackTop, const int argn, WRContext* c)
+{
+	// lcd::print( arg )
+	// returns number of chars printed
+	if( argn == 1 )
+	{
+		char buf[61];
+//		stackTop->i = lcd.print( stackTop[-1].asString(buf, sizeof(buf)-1));
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_wire_begin( WRValue* stackTop, const int argn, WRContext* c)
+{
+	Wire.begin();
+}
+
+//------------------------------------------------------------------------------
+void wr_wire_beginTransmission( WRValue* stackTop, const int argn, WRContext* c)
+{
+	if( argn == 1)
+	{
+		Wire.beginTransmission( stackTop[-1].asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_wire_write( WRValue* stackTop, const int argn, WRContext* c)
+{
+	if( argn == 1)
+	{
+		Wire.write( stackTop[-1].asInt() );
+	}
+	else if( argn == 2)
+	{
+		// To be added !
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_wire_endTransmission( WRValue* stackTop, const int argn, WRContext* c)
+{
+	if( argn == 0)
+	{
+		stackTop->i = Wire.endTransmission();
+	}
+	else if( argn == 1)
+	{
+		stackTop->i = Wire.endTransmission( stackTop[-1].asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_wire_requestFrom( WRValue* stackTop, const int argn, WRContext* c)
+{
+	// wire::requestFrom( address, bytes )
+	if( argn == 2)
+	{
+		stackTop->i = Wire.requestFrom( stackTop[-2].asInt(), stackTop[-1].asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_wire_available( WRValue* stackTop, const int argn, WRContext* c)
+{
+	stackTop->i = Wire.available();
+}
+
+//------------------------------------------------------------------------------
+void wr_wire_read( WRValue* stackTop, const int argn, WRContext* c)
+{
+	stackTop->i = Wire.read();
+}
+
+//------------------------------------------------------------------------------
+void wr_loadArduinoWireLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "wire::begin", wr_wire_begin);
+	wr_registerLibraryFunction( w, "wire::beginTransmission", wr_wire_beginTransmission);
+	wr_registerLibraryFunction( w, "wire::write", wr_wire_write);
+	wr_registerLibraryFunction( w, "wire::endTransmission", wr_wire_endTransmission);
+	wr_registerLibraryFunction( w, "wire::requestFrom", wr_wire_requestFrom);
+	wr_registerLibraryFunction( w, "wire::available", wr_wire_available);
+	wr_registerLibraryFunction( w, "wire::read", wr_wire_read);
+}
+
+//------------------------------------------------------------------------------
+void wr_loadArduinoSTDLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "std::delay", wr_std_delay );
+}
+
+//------------------------------------------------------------------------------
+void wr_loadArduinoIOLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "io::pinMode", wr_io_pinMode );
+	wr_registerLibraryFunction( w, "io::digitalWrite", wr_io_digitalWrite );
+	wr_registerLibraryFunction( w, "io::analogRead", wr_io_analogRead );
+}
+
+//------------------------------------------------------------------------------
+void wr_loadArduinoLCDLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "lcd::begin", wr_lcd_begin );
+	wr_registerLibraryFunction( w, "lcd::setCursor", wr_lcd_setCursor );
+	wr_registerLibraryFunction( w, "lcd::print", wr_lcd_print );
+}
+
+//------------------------------------------------------------------------------
+void wr_loadArduinoLib( WRState* w )
+{
+	wr_loadArduinoLCDLib( w );
+	wr_loadArduinoIOLib( w );
+	wr_loadArduinoSTDLib( w );
+	wr_loadArduinoWireLib( w );
+}
+
+#endif

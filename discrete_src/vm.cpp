@@ -593,7 +593,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 #endif
 
 	w->err = WR_ERR_None;
-
+	
 	if ( function )
 	{
 		stackTop->p = 0;
@@ -1393,21 +1393,22 @@ NextIterator:
 
 				hashLoc += 4; // yup, point hashLoc to jump vector
 				
-				pc += (uint16_t)READ_16_FROM_PC(hashLoc);
+				pc += READ_16_FROM_PC(hashLoc);
 				CONTINUE;
 			}
 
 			CASE(SwitchLinear):
 			{
 				hashLocInt = (--stackTop)->getHash(); // the "hashes" were all 0<=h<256
-				if ( hashLocInt < *pc++ ) // doesn't mean you switched() on one though ;) check against default top
+				
+				if ( hashLocInt < *pc++ ) // catch selecting > size
 				{
 					hashLoc = pc + (hashLocInt<<1) + 2; // jump to vector
-					pc += READ_16_FROM_PC(hashLoc); // and read it
+					pc += READ_16_FROM_PC( hashLoc ); // and read it
 				}
 				else
 				{
-					pc += READ_16_FROM_PC(pc); // already at default vector
+					pc += READ_16_FROM_PC( pc );
 				}
 				CONTINUE;
 			}
