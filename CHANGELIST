@@ -1,4 +1,7 @@
-2.10
+2.11
+- 
+
+2.10 ----------------------------------------------------------------------------------
 - Improving Arduino support
 - Adding Esp32 support
 - Updated the win32 build to VS2022

@@ -26,7 +26,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 2
-#define WRENCH_VERSION_MINOR 10
+#define WRENCH_VERSION_MINOR 11
 
 /************************************************************************
 The compiler was not designed to be particularly memory or space efficient, for
@@ -112,8 +112,8 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 
 // wr_run actually calls these two functions back-to back. If you want
 // to separate the process you can call them on your own.
-// !!!! WARNING: If wr_executeFunctionZero() FAILS you must destroy
-// the context with wr_destroyContext() !!!!!!
+// !!!! WARNING: If wr_executeFunctionZero() FAILS the context will
+// have automaticall been destroyed and may not be used further !!!!!!
 WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize );
 bool wr_executeFunctionZero( WRState* w, WRContext* context );
 
