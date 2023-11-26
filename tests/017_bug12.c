@@ -5,6 +5,7 @@
 -8
 8
 -18
+4
 ~*/
 
 b = 0.0;
@@ -31,3 +32,14 @@ function test( i,j )
 }
 
 test( 2.0, 20.0 );
+
+function faulty_func()
+{
+	t = 1.0;
+	x = t * 4.0;  // <-- any arithmetic operation involving a literal
+	// can be x = 1.0 + 2.0;
+	z = x * t; // <-- any binary operation on two variables
+	return z;
+}
+
+print( faulty_func() );

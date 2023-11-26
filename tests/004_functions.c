@@ -1,6 +1,11 @@
 /*~
 argtest
 1
+2
+3
+4
+5
+6
 6
 4000000
 20
@@ -65,7 +70,6 @@ if ( a != 20 ) { print("afail2"); }
 a = 10;
 a = print(1,2,3,4,5,6);
 if ( a != 20 ) { print("afail3"); }
-
 
 glob = 10;
 incGlob();

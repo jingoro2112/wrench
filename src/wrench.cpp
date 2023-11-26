@@ -10484,8 +10484,8 @@ compactCompareGG8:
 
 			CASE(GLBinaryAddition):
 			{
-				register1 = globalSpace + *pc++;
-				register0 = frameBase + *pc++;
+				register1 = frameBase + *pc++;
+				register0 = globalSpace + *pc++; 
 				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}

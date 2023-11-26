@@ -202,7 +202,7 @@ int usage()
 }
 
 //------------------------------------------------------------------------------
-static void printl( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+static void println( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
@@ -211,6 +211,8 @@ static void printl( WRState* w, const WRValue* argv, const int argn, WRValue& re
 		printf( "%s", outbuf );
 	}
 	printf( "\n" );
+
+	retVal.i = 20; // for argument-return testing
 }
 
 //------------------------------------------------------------------------------
@@ -222,8 +224,6 @@ static void print( WRState* w, const WRValue* argv, const int argn, WRValue& ret
 		argv[i].asString( outbuf, 64000 );
 		printf( "%s", outbuf );
 	}
-
-	retVal.i = 20;
 }
 
 //------------------------------------------------------------------------------
@@ -283,7 +283,7 @@ int main( int argn, char* argv[] )
 
 		WRState* w = wr_newState( 128 );
 		wr_loadAllLibs(w);
-		wr_registerFunction( w, "printl", printl );
+		wr_registerFunction( w, "println", println );
 		wr_registerFunction( w, "print", print );
 
 		wr_run( w, (const unsigned char *)bytes.c_str(), bytes.size() );
@@ -386,12 +386,25 @@ int main( int argn, char* argv[] )
 //------------------------------------------------------------------------------
 static void emit( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
-	if ( argn >= 1 )
+	for( int i=0; i<argn; ++i )
 	{
 		char buf[256];
-		((WRstr*)usr)->appendFormat( "%s\n", argv->asString(buf, 256) );
+		((WRstr*)usr)->appendFormat( "%s\n", argv[i].asString(buf, 256) );
 	}
-	retVal.i = 20;
+
+	retVal.i = 20; // for argument-return testing
+}
+
+//------------------------------------------------------------------------------
+static void emitln( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	for( int i=0; i<argn; ++i )
+	{
+		char buf[256];
+		((WRstr*)usr)->appendFormat( "%s\n", argv[i].asString(buf, 256) );
+	}
+
+	((WRstr*)usr)->append( "\n" );
 }
 
 //------------------------------------------------------------------------------
@@ -470,6 +483,7 @@ int runTests( int number )
 
 				WRstr logger;
 				wr_registerFunction( w, "print", emit, &logger );
+				wr_registerFunction( w, "println", emitln, &logger );
 
 				WRValue* V = wr_returnValueFromLastCall(w);
 

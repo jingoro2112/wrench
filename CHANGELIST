@@ -1,5 +1,7 @@
-2.11
-- 
+2.11 ----------------------------------------------------------------------------------
+- added ESP32 libraries to track some work I'm doing with that platform
+- fixed up arduino compile chain to be a bit more sensible
+- thought I'd seen the last of the global/local variable issues but another one cropped up
 
 2.10 ----------------------------------------------------------------------------------
 - Improving Arduino support
