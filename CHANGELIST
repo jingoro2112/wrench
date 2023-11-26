@@ -1,3 +1,6 @@
+2.11.1 (trivial release) --------------------------------------------------------------
+- fixed len checking in asString() for char arrays
+
 2.11 ----------------------------------------------------------------------------------
 - added ESP32 libraries to track some work I'm doing with that platform
 - fixed up arduino compile chain to be a bit more sensible

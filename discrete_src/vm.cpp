@@ -2253,7 +2253,7 @@ compactCompareGG8:
 				CONTINUE;
 			}
 
-			
+
 			CASE(GGBinaryDivision):
 			{
 				register1 = globalSpace + *pc++;

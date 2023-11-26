@@ -445,9 +445,6 @@ int runTests( int number )
 
 	wr_loadAllLibs( w );
 
-
-
-
 	while( fgets(buf, 255, tfile) && (err==0) )
 	{
 		if ( !number || (number == fileNumber) )

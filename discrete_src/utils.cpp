@@ -243,11 +243,16 @@ char* WRValue::asString( char* string, size_t len ) const
 					if ( va->m_type == SV_CHAR )
 					{
 						unsigned int s = 0;
-						while( (string[s]=va->m_Cdata[s]) )
+						while( (string[s] = va->m_Cdata[s]) )
 						{
-							s++;
+							if ( s >= len )
+							{
+								string[s] = '\0';
+								break;
+							}
+							
+							++s;
 						}
-
 					}
 					break;
 				}
