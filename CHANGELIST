@@ -1,3 +1,7 @@
+2.12 ----------------------------------------------------------------------------------
+- added global function symbols and method to access them via c:
+   WRValue* wr_getGlobalRef( WRContext* context, const char* label );
+
 2.11.1 (trivial release) --------------------------------------------------------------
 - fixed len checking in asString() for char arrays
 

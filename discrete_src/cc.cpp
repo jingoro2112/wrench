@@ -5389,12 +5389,12 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 }
 
 //------------------------------------------------------------------------------
-void WRCompilationContext::link( unsigned char** out, int* outLen )
+void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeSymbols )
 {
 	WROpcodeStream code;
 
-	code += (unsigned char)(m_units.count() - 1);
-	code += (unsigned char)(m_units[0].bytecode.localSpace.count());
+	code += (unsigned char)(m_units.count() - 1); // function count
+	code += (unsigned char)(m_units[0].bytecode.localSpace.count()); // globals count
 
 	unsigned char data[4];
 
@@ -5562,6 +5562,22 @@ void WRCompilationContext::link( unsigned char** out, int* outLen )
 		}
 	}
 
+
+	unsigned int globals = m_units[0].bytecode.localSpace.count();
+	if ( includeSymbols && globals )
+	{
+		uint32_t* symbolsBlock = new uint32_t[globals + 1];
+		for( unsigned int s = 0; s<globals; ++s )
+		{
+			pack32( m_units[0].bytecode.localSpace[s].hash, (unsigned char *)(symbolsBlock + s) );
+		}
+		
+		pack32( wr_hash(symbolsBlock, globals * sizeof(uint32_t)), (unsigned char *)(symbolsBlock + globals) );
+		code.append( (unsigned char *)symbolsBlock, (globals + 1) * sizeof(uint32_t) );
+		delete[] symbolsBlock;
+	}
+
+	
 	uint32_t hash = wr_hash( code, code.size() );
 
 	pack32( hash, data );
@@ -5579,7 +5595,8 @@ WRError WRCompilationContext::compile( const char* source,
 									   const int size,
 									   unsigned char** out,
 									   int* outLen,
-									   char* errorMsg )
+									   char* errorMsg,
+									   bool includeSymbols )
 {
 	m_source = source;
 	m_sourceLen = size;
@@ -5678,7 +5695,7 @@ WRError WRCompilationContext::compile( const char* source,
 
 	pushOpcode( m_units[0].bytecode, O_Stop );
 	
-	link( out, outLen );
+	link( out, outLen, includeSymbols );
 	if ( m_err )
 	{
 		printf( "link error [%d]\n", m_err );
@@ -5697,7 +5714,7 @@ WRError WRCompilationContext::compile( const char* source,
 }
 
 //------------------------------------------------------------------------------
-int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg )
+int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg, bool includeSymbols )
 {
 	assert( sizeof(float) == 4 );
 	assert( sizeof(int) == 4 );
@@ -5707,7 +5724,7 @@ int wr_compile( const char* source, const int size, unsigned char** out, int* ou
 	// create a compiler context that has all the necessary stuff so it's completely unloaded when complete
 	WRCompilationContext comp; 
 
-	return comp.compile( source, size, out, outLen, errMsg );
+	return comp.compile( source, size, out, outLen, errMsg, includeSymbols );
 }
 
 //------------------------------------------------------------------------------
@@ -6012,7 +6029,7 @@ const char* c_opcodeName[] =
 
 #else // WRENCH_WITHOUT_COMPILER
 
-int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg )
+int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg, bool includeSymbols )
 {
 	return WR_ERR_compiler_not_loaded;
 }

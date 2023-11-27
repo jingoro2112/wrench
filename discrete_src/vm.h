@@ -53,6 +53,7 @@ struct WRContext
 	};
 	
 	const unsigned char* bottom;
+	int bottomSize;
 	const unsigned char* stopLocation;
 	
 	WRGCObject* svAllocated;

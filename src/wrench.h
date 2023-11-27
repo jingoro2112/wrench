@@ -27,7 +27,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 2
-#define WRENCH_VERSION_MINOR 11
+#define WRENCH_VERSION_MINOR 12
 
 /************************************************************************
 The compiler was not designed to be particularly memory or space efficient, for
@@ -101,7 +101,16 @@ void wr_destroyState( WRState* w );
 // return value is a WRError
 // optionally an "errMsg" buffer can be passed which will output a
 //   human-readable string of what went wrong and where.
-int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg =0 );
+// includeSymbols - associates the globals with their name hashes and
+//                  stores that with the bytecode so
+//                  wr_getGlobalRef(...) can work, the overhead is 4
+//                  bytes per global                
+int wr_compile( const char* source,
+				const int size,
+				unsigned char** out,
+				int* outLen,
+				char* errMsg =0,
+				bool includeSymbols =true );
 
 // w:          state (see wr_newState)
 // block:      location of bytecode
@@ -149,6 +158,11 @@ WRValue* wr_returnValueFromLastCall( WRState* w );
 // pre-fetch a function pointer. This reduces the overhead of calling
 // that function to almost nothing.
 WRFunction* wr_getFunction( WRContext* context, const char* functionName );
+
+// want direct access to a global? okay then, if the code was compiled
+// with symbols (see compile(...) suite) then this will give you a
+// reference to it
+WRValue* wr_getGlobalRef( WRContext* context, const char* label );
 
 // Destroy a context you no longer need and free up all the memory it
 // was using, all contexts are freed when wr_destroyState() is called,

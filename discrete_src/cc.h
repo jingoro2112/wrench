@@ -366,7 +366,7 @@ struct WRUnitContext
 struct WRCompilationContext
 {
 public:
-	WRError compile( const char* data, const int size, unsigned char** out, int* outLen, char* erroMsg =0 );
+	WRError compile( const char* data, const int size, unsigned char** out, int* outLen, char* erroMsg =0, bool includeSymbols =true );
 	
 private:
 	
@@ -433,7 +433,7 @@ private:
 	bool parseStatement( int unitIndex, char end, bool& returnCalled, WROpcode opcodeToReturn );
 
 	void createLocalHashMap( WRUnitContext& unit, unsigned char** buf, int* size );
-	void link( unsigned char** out, int* outLen );
+	void link( unsigned char** out, int* outLen, bool includeSymbols );
 	
 	const char* m_source;
 	int m_sourceLen;

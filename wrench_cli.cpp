@@ -407,6 +407,10 @@ static void emitln( WRState* s, const WRValue* argv, const int argn, WRValue& re
 	((WRstr*)usr)->append( "\n" );
 }
 
+
+char globalTestCode[] = "global_one = 10; global_two = 20; global_three = 30; global_four = 40;";
+
+
 //------------------------------------------------------------------------------
 int runTests( int number )
 {
@@ -440,10 +444,44 @@ int runTests( int number )
 	char buf[256];
 	int fileNumber = 0;
 	int err = 0;
+	char errMsg[256];
+
+	unsigned char* out;
+	int outLen;
 
 	WRState* w = wr_newState( 128 );
 
+	err = wr_compile( globalTestCode, (int)strlen(globalTestCode), &out, &outLen, errMsg );
+	if ( err )
+	{
+		printf( "global test compile error [%s]\n", errMsg );
+		return -1;
+	}
+	WRContext* gc = wr_run( w, out, outLen );
+
+	WRValue* g = wr_getGlobalRef( gc, "does_note_exist" );
+	if ( g )
+	{
+		printf( "ERR should not have found that\n" );
+		return -1;
+	}
+
+	g = wr_getGlobalRef( gc, "global_one" );
+	if ( !g || g->i != 10 )	{ printf( "global_one err\n" ); }
+	g = wr_getGlobalRef( gc, "::global_two" );
+	if ( !g || g->i != 20 )	{ printf( "global_two err\n" ); }
+	g = wr_getGlobalRef( gc, "global_three" );
+	if ( !g || g->i != 30 )	{ printf( "global_three err\n" ); }
+	g = wr_getGlobalRef( gc, "::global_four" );
+	if ( !g || g->i != 40 )	{ printf( "global_four err\n" ); }
+	
+	delete[] out;
+
+	wr_destroyState( w );
+	w = wr_newState( 128 );
+
 	wr_loadAllLibs( w );
+	
 
 	while( fgets(buf, 255, tfile) && (err==0) )
 	{
@@ -468,13 +506,10 @@ int runTests( int number )
 
 				printf( "test [%d][%s]: ", fileNumber, codeName.c_str() );
 
-				unsigned char* out;
-				int outLen;
-
-				err = wr_compile( code, code.size(), &out, &outLen );
+				wr_compile( code, code.size(), &out, &outLen, errMsg );
 				if ( err )
 				{
-					printf( "compile error [%s]\n", g_errStrings[err] );
+					printf( "compile error [%s]\n", errMsg );
 					return -1;
 				}
 
@@ -579,7 +614,6 @@ int runTests( int number )
 
 // COMPLETE EXAMPLE MUST WORK
 
-
 #include "wrench.h"
 
 void log2( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
@@ -592,7 +626,6 @@ void log2( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, voi
 }
 
 const char* wrenchCode = 
-
 						"print( \"Hello World!\\n\" ); "
 						"for( i=0; i<10; i++ )       "
 						"{                           "
