@@ -76,6 +76,9 @@ const char* g_errStrings[]=
 	"ERR_switch_construction_error",
 	"ERR_switch_bad_case_hash",
 	"ERR_switch_duplicate_case",
+	"WR_ERR_bad_bytecode_CRC",
+
+	"WR_ERR_execute_function_zero_called_more_than_once",
 
 	"warning_enums_follow",
 
@@ -187,6 +190,8 @@ int usage()
 			"                               the exported constants will be:\n"
 			"                               [name]_bytecode and\n"
 			"                               [name]_bytecodeSize = $xxxx\n"
+			"cs chs cas                     same as above but \"stripped\" of global\n"
+			"                               symbol table\n"
 			"\n"
 			"t                              run internal tests\n"
 			"\n"
@@ -292,7 +297,8 @@ int main( int argn, char* argv[] )
 			printf( "err: %d\n", (int)wr_getLastError(w) );
 		}
 	}
-	else if ( command == "c" || command == "ch" || command == "ca" )
+	else if ( command == "c" || command == "ch" || command == "ca"
+			  || command == "cs" || command == "chs" || command == "cas" )
 	{
 		if ( argn < 4 )
 		{
@@ -309,7 +315,8 @@ int main( int argn, char* argv[] )
 			return usage();
 		}
 
-		int err = wr_compile( code, code.size(), &out, &outLen );
+		bool strip = command == "cs" || command == "chs" || command == "cas";
+		int err = wr_compile( code, code.size(), &out, &outLen, 0, strip );
 		if ( err )
 		{
 			printf( "compile error [%s]\n", g_errStrings[err] );
@@ -451,35 +458,6 @@ int runTests( int number )
 
 	WRState* w = wr_newState( 128 );
 
-	err = wr_compile( globalTestCode, (int)strlen(globalTestCode), &out, &outLen, errMsg );
-	if ( err )
-	{
-		printf( "global test compile error [%s]\n", errMsg );
-		return -1;
-	}
-	WRContext* gc = wr_run( w, out, outLen );
-
-	WRValue* g = wr_getGlobalRef( gc, "does_note_exist" );
-	if ( g )
-	{
-		printf( "ERR should not have found that\n" );
-		return -1;
-	}
-
-	g = wr_getGlobalRef( gc, "global_one" );
-	if ( !g || g->i != 10 )	{ printf( "global_one err\n" ); }
-	g = wr_getGlobalRef( gc, "::global_two" );
-	if ( !g || g->i != 20 )	{ printf( "global_two err\n" ); }
-	g = wr_getGlobalRef( gc, "global_three" );
-	if ( !g || g->i != 30 )	{ printf( "global_three err\n" ); }
-	g = wr_getGlobalRef( gc, "::global_four" );
-	if ( !g || g->i != 40 )	{ printf( "global_four err\n" ); }
-	
-	delete[] out;
-
-	wr_destroyState( w );
-	w = wr_newState( 128 );
-
 	wr_loadAllLibs( w );
 	
 
@@ -509,7 +487,7 @@ int runTests( int number )
 				wr_compile( code, code.size(), &out, &outLen, errMsg );
 				if ( err )
 				{
-					printf( "compile error [%s]\n", errMsg );
+					printf( "compile error [%s]\n", g_errStrings[err] );
 					return -1;
 				}
 
@@ -603,8 +581,41 @@ int runTests( int number )
 	}
 
 	wr_destroyContainer( &container );
+	
+	wr_destroyState( w );
+	w = wr_newState();
+
+	err = wr_compile( globalTestCode, (int)strlen(globalTestCode), &out, &outLen, errMsg );
+	if ( err )
+	{
+		printf( "compile error [%s]\n", g_errStrings[err] );
+		return -1;
+	}
+	WRContext* gc = wr_run( w, out, outLen );
+
+	WRValue* g = wr_getGlobalRef( gc, "does_note_exist" );
+	if ( g )
+	{
+		printf( "ERR should not have found that\n" );
+		return -1;
+	}
+
+	g = wr_getGlobalRef( gc, "global_one" );
+	if ( !g || g->i != 10 )	{ printf( "global_one err\n" ); return -1; }
+	g = wr_getGlobalRef( gc, "::global_two" );
+	if ( !g || g->i != 20 )	{ printf( "global_two err\n" ); return -1; }
+	g = wr_getGlobalRef( gc, "global_three" );
+	if ( !g || g->i != 30 )	{ printf( "global_three err\n" ); return -1; }
+	g = wr_getGlobalRef( gc, "::global_four" );
+	if ( !g || g->i != 40 )	{ printf( "global_four err\n" ); return -1; }
+
+	WrenchInt i1( gc, "global_one" );
+	if ( !i1.isValid() || *i1 != 10 || *i1.get() != 10 ) { printf( "bad f1\n" ); return -1; }
+
+	delete[] out;
 
 	wr_destroyState( w );
+
 
 	delete[] someBigArray;
 	fclose( tfile );

@@ -144,6 +144,8 @@ void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 //------------------------------------------------------------------------------
 uint32_t WRValue::getHashEx() const
 {
+	// QUICKLY return the easy answers, thats why this code looks a bit
+	// convoluted
 	if ( type <= (int)WR_FLOAT )
 	{
 		return ui;

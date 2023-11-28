@@ -5562,7 +5562,6 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 		}
 	}
 
-
 	unsigned int globals = m_units[0].bytecode.localSpace.count();
 	if ( includeSymbols && globals )
 	{
@@ -5576,7 +5575,6 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 		code.append( (unsigned char *)symbolsBlock, (globals + 1) * sizeof(uint32_t) );
 		delete[] symbolsBlock;
 	}
-
 	
 	uint32_t hash = wr_hash( code, code.size() );
 

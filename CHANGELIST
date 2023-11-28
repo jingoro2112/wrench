@@ -1,6 +1,10 @@
 2.12 ----------------------------------------------------------------------------------
 - added global function symbols and method to access them via c:
    WRValue* wr_getGlobalRef( WRContext* context, const char* label );
+- added Helper object WrenchInt and WrenchFloat to facilitate handling
+  wrench values in c
+- fixed err strings
+- added 'strip' options cs, cas, chs to cli to support removal of globals
 
 2.11.1 (trivial release) --------------------------------------------------------------
 - fixed len checking in asString() for char arrays

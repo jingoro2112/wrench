@@ -408,12 +408,6 @@ enum WRGCObjectType
 #define EX_RAW_ARRAY_SIZE_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define IS_EX_SINGLE_CHAR_RAW_P2(P) ((P) == (((uint32_t)WR_EX) | (((uint32_t)WR_EX_RAW_ARRAY<<24)) | (1<<8)))
 
-#define EX_TYPE_MASK   0xE0
-
-#define IS_REFARRAY(X) (((X)&0xE0)==WR_EX_REFARRAY)
-#define IS_ITERATOR(X) (((X)&0xE0)==WR_EX_ITERATOR)
-#define IS_RAW_ARRAY(X) (((X)&0xE0)==WR_EX_RAW_ARRAY)
-
 #endif
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
@@ -7820,7 +7814,6 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 		}
 	}
 
-
 	unsigned int globals = m_units[0].bytecode.localSpace.count();
 	if ( includeSymbols && globals )
 	{
@@ -7834,7 +7827,6 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 		code.append( (unsigned char *)symbolsBlock, (globals + 1) * sizeof(uint32_t) );
 		delete[] symbolsBlock;
 	}
-
 	
 	uint32_t hash = wr_hash( code, code.size() );
 
@@ -11659,6 +11651,8 @@ void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 //------------------------------------------------------------------------------
 uint32_t WRValue::getHashEx() const
 {
+	// QUICKLY return the easy answers, thats why this code looks a bit
+	// convoluted
 	if ( type <= (int)WR_FLOAT )
 	{
 		return ui;

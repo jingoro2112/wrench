@@ -1,3 +1,4 @@
+#define WRENCH_COMBINED
 /*******************************************************************************
 Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
 
@@ -35,7 +36,7 @@ only bytecode be executed. This flag allows the source code to be
 explicitly unavailable. Esp32-class processors have no trouble compiling
 on-the-fly but ATMega/SAMD21 are a no-go here.
 */
-//#define WRENCH_WITHOUT_COMPILER
+#define WRENCH_WITHOUT_COMPILER
 /***********************************************************************/
 
 /***********************************************************************
@@ -48,7 +49,7 @@ WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
 interpreter in favor of a giant switch(). This saves ~6k at the cost
 of a chunk of speed so only use it if you need to.
 */
-//#define WRENCH_COMPACT           // saves a lot, costs some speed
+#define WRENCH_COMPACT           // saves a lot, costs some speed
 //#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 /***********************************************************************/
 
@@ -387,12 +388,19 @@ enum WRExType : uint8_t
 	WR_EX_RAW_ARRAY  = 0x20,  // 0010
 
 	// EX types have one of the upper two bits set
+	WR_EX_RESERVED   = 0x40,  // 0100
 	WR_EX_ITERATOR	 = 0x60,  // 0110
 	WR_EX_REFARRAY   = 0x80,  // 1000
 	WR_EX_ARRAY      = 0xA0,  // 1010
 	WR_EX_STRUCT     = 0xC0,  // 1100
 	WR_EX_HASH_TABLE = 0xE0,  // 1110
 };
+
+#define EX_TYPE_MASK   0xE0
+#define IS_REFARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_REFARRAY)
+#define IS_ITERATOR(X) (((X)&EX_TYPE_MASK)==WR_EX_ITERATOR)
+#define IS_RAW_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_RAW_ARRAY)
+#define IS_HASH_TABLE(X) (((X)&EX_TYPE_MASK)==WR_EX_HASH_TABLE)
 
 class WRGCObject;
 
@@ -407,12 +415,22 @@ struct WRValue
 
 	bool isFloat() const { return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
 	bool isInt() const { return type == WR_INT || (type == WR_REF && r->type == WR_INT); }
+	bool isWrenchArray() const { return (type == WR_EX) && IS_REFARRAY(xtype); }
+	bool isRawArray() const { return (type == WR_EX) && IS_RAW_ARRAY(xtype); }
+	bool isHashTable() const { return (type == WR_EX) && IS_HASH_TABLE(xtype); }
 
+	// return the element called for, if it is the appropriate type
+	// create: if true, this value will be converted into the
+	// appropriate type and the element returned, this guarantees
+	// success
+	WRValue* indexWrenchArray( WRContext* context, const int index, const bool create );
+	WRValue* indexWrenchHash( WRContext* context, WRValue const& key, const bool create );
+	
 	// string: must point to a buffer long enough to contain at least len bytes.
 	// the pointer will be passed back
 	char* asString( char* string, size_t len ) const;
 
-	// return a raw pointer to the data array if this IS one, otherwise
+	// return a raw pointer to the raw data array if this is one, otherwise
 	// return null
 	void* array( unsigned int* len, char* arrayType =0 ) const; 
 	const char* c_str( unsigned int* len =0 ) const; 
@@ -476,6 +494,38 @@ struct WRValue
 	};
 
 	inline WRValue& operator= (const WRValue& V) { p = V.p; frame = V.frame; return *this; }
+};
+
+//------------------------------------------------------------------------------
+class WrenchInt
+{
+public:
+	WrenchInt( WRContext* context, const char* label ) : m_value(wr_getGlobalRef( context, label )) {}
+
+	bool isValid() const { return m_value ? true : false; }
+
+	operator int* () const { return get(); }
+
+	int* get() const { return m_value ? &(m_value->i) : 0; }
+
+private:
+	WRValue* m_value;
+};
+
+//------------------------------------------------------------------------------
+class WrenchFloat
+{
+public:
+	WrenchFloat( WRContext* context, const char* label ) : m_value(wr_getGlobalRef( context, label )) {}
+
+	bool isValid() const { return m_value ? true : false; }
+
+	operator float* () const { return get(); }
+
+	float* get() const { return m_value ? &(m_value->f) : 0; }
+
+private:
+	WRValue* m_value;
 };
 
 #ifdef WRENCH_REALLY_COMPACT

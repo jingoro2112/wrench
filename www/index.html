@@ -144,14 +144,14 @@ a ~1k memory footprint
 <li><p><b>Comprehensible:</b>c-like syntax, weakly typed, garbage
 collected.
 
-<li><p><b>Fast:</b>Two to three times faster than other interpreters
+<li><p><b>Fast:</b>as a comparison: fast as or faster than lua (non-JIT of course) 
 
 <li><p><b>Compact:</b>Bytecode images a small fraction of other
 interpreters
 <li><b>Easy To Integrate:</b>
  <ul>
   <li>two source files: <code>wrench.cpp and wrench.h</code>
-  <li>architecture neutral, compile anywhere run anywhere else
+  <li>architecture/endian neutral, compile anywhere run anywhere else
   <li>c++98 clean and compliant, nothing fancy.
   <li>no third-party libs, its all included.
  </ul>
@@ -294,7 +294,51 @@ examples.
 
 <h2>Creating data to pass to wrench</h2>
 
-<p>Data can be created outsid eof wrench, this includes containers,
+<p><b>globals</b>
+
+<p>globals are statically allocated in wrench, so can be accessed from
+c really easily, as long as they remain simple types using
+
+<pre><code>WRValue* wr_getGlobalRef( WRContext* context, const char* label );
+</pre></code>
+
+<p>two helper classes are available <i>but be super careful about
+using them, if the global changes type from int to float
+unexepectedly</i>
+
+<pre><code>class WrenchInt
+{
+public:
+	WrenchInt( WRContext* context, const char* label ) : m_value(wr_getGlobalRef( context, label )) {}
+
+	bool isValid() const { return m_value ? true : false; }
+
+	operator int* () const { return get(); }
+
+	int* get() const { return m_value ? &(m_value->i) : 0; }
+
+private:
+	WRValue* m_value;
+};
+
+class WrenchFloat
+{
+public:
+	WrenchFloat( WRContext* context, const char* label ) : m_value(wr_getGlobalRef( context, label )) {}
+
+	bool isValid() const { return m_value ? true : false; }
+
+	operator float* () const { return get(); }
+
+	float* get() const { return m_value ? &(m_value->f) : 0; }
+
+private:
+	WRValue* m_value;
+};
+</pre></code>
+
+
+<p>Data can be created outside of wrench, this includes containers,
 structures and strings and values and such but care must be taken,
 since some values allocate memory that wrench expects to be garbage
 collected.
@@ -381,10 +425,16 @@ wr_addArrayToContainer( &container, "big", someBigArray, 0x1FFFFF );
 
 <hr><h1><a name="language"></a>3.0 Language Reference</h1></hr>
 
+<h2>Everything is a Unit!</h2>
+<p><b>function?</b> : unit than is called and returns a value!
+<p><b>struct?</b> : unit with local variables, they are the members!
+<p><b>constructors?</b> : a unit that is called and its return value
+discarded
+<p><b>classes?</b> : yeah.. okay wrench doesn't have member functions sorry, but I have some ideas here so stay tuned
 
-
-Wrench is designed to be intuitive and c-like, the syntax should be
-very familiar.
+<p>Don't let this scare you! If you completely ignore the whole "unit"
+thing you'll be fine, wrench is intuitive and c-like, the syntax should be
+<i>very</i> familiar.
 
 <p><b>variables</b>
 <p>no special declaration is required to introduce a variable:
@@ -630,12 +680,15 @@ null == 0
 into the namespace with automatic initliazation
 <code><pre>enum
 {
+	n0,
 	n1,
-	n2,
-	n3
+	n2
 }
 
-// n1 is 0, n2 is 1 and n3 is 2
+// equivilant to:
+n0 = 0;
+n1 = 1;
+n2 = 2;
 </code></pre>
 
 
