@@ -101,7 +101,6 @@ bool wr_executeFunctionZero( WRState* w, WRContext* context )
 	
 	if ( wr_callFunction(w, context, (int32_t)0) ) 
 	{
-		wr_destroyContext( context );
 		return false;
 	}
 	
@@ -115,7 +114,8 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 
 	if ( C && !wr_executeFunctionZero(w, C) )
 	{
-		C = 0;
+		wr_destroyContext( C );
+		return 0;
 	}
 
 	return C;

@@ -5,6 +5,7 @@
   wrench values in c
 - fixed err strings
 - added 'strip' options cs, cas, chs to cli to support removal of globals
+- updated website, added some docs
 
 2.11.1 (trivial release) --------------------------------------------------------------
 - fixed len checking in asString() for char arrays
@@ -22,8 +23,6 @@
   then initializing it by running "function 0" with:
      // wr_run actually calls these two functions back-to back. If you want
      // to separate the process you can call them on your own.
-     // !!!! WARNING: If wr_executeFunctionZero() FAILS you must destroy
-     // the context with wr_destroyContext() !!!!!!
      WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize );
      bool wr_executeFunctionZero( WRState* w, WRContext* context );
 - Fixed null switch-body crash (who does that? well.. if you comment them ALL out...)
