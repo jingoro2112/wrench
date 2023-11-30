@@ -375,6 +375,8 @@ private:
 
 #endif
 
+WRGCObject* wr_growValueArray( WRGCObject* va, int newSize );
+
 //------------------------------------------------------------------------------
 enum WRGCObjectType
 {

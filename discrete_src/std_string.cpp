@@ -222,7 +222,12 @@ copyToString:
 					}
 					floatBuf[i] = '%';
 
-					const int chars = sprintf( buf, floatBuf + i, args[listPtr++].asFloat());
+					// suck in whatever lib we need for this
+					const int chars = snprintf( buf, 31, floatBuf + i, args[listPtr++].asFloat());
+
+					// your system not have snprintf? the unsafe version is:
+//					const int chars = sprintf( buf, floatBuf + i, args[listPtr++].asFloat());
+					
 					for( int j=0; j<chars; ++j )
 					{
 						*out++ = buf[j];

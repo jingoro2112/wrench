@@ -248,7 +248,7 @@ int16_t READ_16_FROM_PC( const unsigned char* P )
 #endif
 
 //------------------------------------------------------------------------------
-int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const WRValue* argv, const int argn )
+WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv, const int argn )
 {
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 	const void* opcodeJumptable[] =
@@ -565,6 +565,7 @@ int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const
 		uint16_t switchMod;
 	};
 	WRValue* frameBase = 0;
+	WRState* w = context->w;
 	WRValue* stackTop = w->stack;
 	WRValue* globalSpace = (WRValue *)(context + 1);
 
@@ -996,7 +997,7 @@ callFunction:
 			{
 				*w->stack = *(register0 + 1);
 				context->stopLocation = pc - 1;
-				return WR_ERR_None;
+				return w->stack;
 			}
 
 			CASE(Index):

@@ -1,3 +1,22 @@
+2.2 ----------------------------------------------------------------------------------
+- Major API change to wr_callfunction(...) !!!!!!!
+      No longer takes a "WRState*" since that is inside the context, this change was
+      made some time ago and the API never caught up with it.
+          The old calls are still in but deprecated, please update if you are using them
+      it no longer returns an integer 'err' it now returns the WRValue* that is the
+      return-value of the function. This means error-checks on it need to be
+      inverted.
+- WRValue::setInt( const int i )
+- WRValue::setFloat( const float i )
+- WrenchValue::operator int*()
+- int* WrenchValue::asInt()
+- WrenchValue::operator float*()
+- float* WrenchValue::asFloat()
+- WRValue& WrenchValue::operator[]( const int index )
+- WRValue* WrenchValue::asArrayMember( const int index )
+- int* WrenchValue::makeInt()
+- float* WrenchValue::makeFloat();
+
 2.12 ----------------------------------------------------------------------------------
 - added global function symbols and method to access them via c:
    WRValue* wr_getGlobalRef( WRContext* context, const char* label );

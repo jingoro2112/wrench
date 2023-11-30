@@ -59,7 +59,7 @@ const char* WRValue::c_str( unsigned int* len ) const
 }
 
 //------------------------------------------------------------------------------
-WRGCObject* growValueArray( WRGCObject* va, int newSize )
+WRGCObject* wr_growValueArray( WRGCObject* va, int newSize )
 {
 	WRGCObject* newArray = (WRGCObject*)malloc( sizeof(WRGCObject) );
 	newArray->init( newSize + 1, (WRGCObjectType)va->m_type );
@@ -126,7 +126,7 @@ void wr_arrayToValue( const WRValue* array, WRValue* value, int index )
 				return;
 			}
 
-			array->r->va = growValueArray( array->r->va, s );
+			array->r->va = wr_growValueArray( array->r->va, s );
 		}
 		*value = array->r->va->m_Vdata[s];
 	}
@@ -193,7 +193,7 @@ void wr_valueToArray( const WRValue* array, WRValue* value )
 	{
 		if ( s >= array->r->va->m_size )
 		{
-			array->r->va = growValueArray(array->r->va, s);
+			array->r->va = wr_growValueArray(array->r->va, s);
 		}
 		WRValue* V = array->r->va->m_Vdata + s;
 		wr_assign[(V->type<<2)+value->type](V, value);
@@ -266,7 +266,7 @@ static void doIndexHash_E( WRValue* value, WRValue* target, uint32_t hash )
 			unsigned int s = ARRAY_ELEMENT_FROM_P2(value->p2);
 			if ( s >= value->r->va->m_size )
 			{
-				value->r->va = growValueArray( value->r->va, s );
+				value->r->va = wr_growValueArray( value->r->va, s );
 			}
 
 			WRValue* val = value->r->va->m_Vdata + s;
@@ -490,7 +490,7 @@ static void doAssign_E_E( WRValue* to, WRValue* from )
 				return;
 			}
 
-			to->r->va = growValueArray( to->r->va, index );	
+			to->r->va = wr_growValueArray( to->r->va, index );	
 		}
 
 		to->r->va->m_Vdata[index] = *from;
@@ -547,7 +547,7 @@ boundsFailed:
 			return;
 		}
 
-		value->va = growValueArray( value->va, index->ui );
+		value->va = wr_growValueArray( value->va, index->ui );
 	}
 
 	target->r = value;

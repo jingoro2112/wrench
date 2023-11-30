@@ -27,7 +27,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 2
-#define WRENCH_VERSION_MINOR 12
+#define WRENCH_VERSION_MINOR 2
 
 /************************************************************************
 The compiler was not designed to be particularly memory or space efficient, for
@@ -83,6 +83,11 @@ struct WRValue;
 struct WRContext;
 struct WRFunction;
 
+// hashing function used inside wrench, it's a stripped down murmer,
+// not academically fantastic but very good and very fast
+uint32_t wr_hash( const void* dat, const int len );
+uint32_t wr_hashStr( const char* dat );
+
 /***************************************************************/
 /**************************************************************/
 //                       State Management
@@ -97,10 +102,10 @@ void wr_destroyState( WRState* w );
 //                        Running Code
 
 // compile source code and return a new'ed block of bytecode ready
-// for wr_run(), memory must be delete[]'ed
+// for wr_run(), this memory must be delete[]'ed
 // return value is a WRError
 // optionally an "errMsg" buffer can be passed which will output a
-//   human-readable string of what went wrong and where.
+//     human-readable string of what went wrong and where.
 // includeSymbols - associates the globals with their name hashes and
 //                  stores that with the bytecode so
 //                  wr_getGlobalRef(...) can work, the overhead is 4
@@ -114,18 +119,20 @@ int wr_compile( const char* source,
 
 // w:          state (see wr_newState)
 // block:      location of bytecode
-// blockSize:  number of bytes in block
+// blockSize:  number of bytes in the block
 
 // RETURNS:    a WRContext pointer to be passed to wr_callFunction
 //             'global' values are NOT SHARED between contexts
 WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize );
 
+// After wr_run(...) or wr_callFunction(...) has run, there is always a
+// return value (default 0) this function fetches it
+WRValue* wr_returnValueFromLastCall( WRState* w );
+
 // wr_run actually calls these two functions back-to back. If you want
 // to separate the process you can call them on your own.
-// !!!! WARNING: If wr_executeFunctionZero() FAILS the context will
-// have automaticall been destroyed and may not be used further !!!!!!
 WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize );
-bool wr_executeFunctionZero( WRState* w, WRContext* context );
+bool wr_executeFunctionZero( WRContext* context );
 
 // after wr_run() this allows any function in the script to be
 // called with the given arguments, returning a single value
@@ -135,24 +142,29 @@ bool wr_executeFunctionZero( WRState* w, WRContext* context );
 // argv:         array of WRValues to call the function with (optional)
 // argn:         how many arguments argv contains (optional, but if
 //               zero then argv will be ignored)
-
-// RETURNS:      zero for no error or WRError code
-int wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv =0, const int argn =0 );
+// RETURNS:      WRValue returned by the function/program, or NULL for
+//               error (see w->err for the code)
+WRValue* wr_callFunction( WRContext* context, const char* functionName, const WRValue* argv =0, const int argn =0 );
 
 // exactly the same as the above but the hash is supplied directly to
 // save compute time, us wr_hashStr(...) to obtain the hash of the
 // functionName
-int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv =0, const int argn =0 );
+WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue* argv =0, const int argn =0 );
 
 // The raw function pointer can be pre-loaded with wr_getFunction() and
 // passed directly
 // This method is exposed so functions can be called with an absolute
-// minmum of overhead
-int wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const WRValue* argv, const int argn );
+// minimum of overhead
+WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
 
-// After wr_run(...) or wr_callFunction(...) has run, there is always a
-// return value (default 0) this command fetches it
-WRValue* wr_returnValueFromLastCall( WRState* w );
+
+// !!DEPRECATED!!! [[deprecated]]
+WRValue* wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv =0, const int argn =0 );
+// !!DEPRECATED!!! [[deprecated]]
+WRValue* wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv =0, const int argn =0 );
+// !!DEPRECATED!!! [[deprecated]]
+WRValue* wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
+
 
 // once wr_run() is called the returned context object can be used to
 // pre-fetch a function pointer. This reduces the overhead of calling
@@ -165,8 +177,9 @@ WRFunction* wr_getFunction( WRContext* context, const char* functionName );
 WRValue* wr_getGlobalRef( WRContext* context, const char* label );
 
 // Destroy a context you no longer need and free up all the memory it
-// was using, all contexts are freed when wr_destroyState() is called,
-// so calling this is not necessary
+// was using
+// NOTE: all contexts ARE AUTOMATICALLY FREED when wr_destroyState(...)
+//       is called, it it NOT necessary to call this on each context
 void wr_destroyContext( WRContext* context );
 
 
@@ -353,11 +366,6 @@ WRError wr_getLastError( WRState* w );
 /******************************************************************/
 //                    "standard" functions
 
-// hashing function used inside wrench, it's a stripped down murmer,
-// not academically fantastic but very good and very fast
-uint32_t wr_hash( const void* dat, const int len );
-uint32_t wr_hashStr( const char* dat );
-
 extern int32_t wr_Seed;
 
 // inside-baseball time. This has to be here so stuff that includes
@@ -398,6 +406,7 @@ enum WRExType : uint8_t
 
 #define EX_TYPE_MASK   0xE0
 #define IS_REFARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_REFARRAY)
+#define IS_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_ARRAY)
 #define IS_ITERATOR(X) (((X)&EX_TYPE_MASK)==WR_EX_ITERATOR)
 #define IS_RAW_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_RAW_ARRAY)
 #define IS_HASH_TABLE(X) (((X)&EX_TYPE_MASK)==WR_EX_HASH_TABLE)
@@ -411,7 +420,10 @@ struct WRValue
 	// bad things will happen. Always access them with one of these
 	// methods
 	int asInt() const;
+	void setInt( const int val );
+	
 	float asFloat() const;
+	void setFloat( const float val );
 
 	bool isFloat() const { return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
 	bool isInt() const { return type == WR_INT || (type == WR_REF && r->type == WR_INT); }
@@ -497,34 +509,34 @@ struct WRValue
 };
 
 //------------------------------------------------------------------------------
-class WrenchInt
+// Helper class to represent a wrench value, in all cases it does NOT
+// manager the memory, but relies on a WRContext to do that
+class WrenchValue
 {
 public:
-	WrenchInt( WRContext* context, const char* label ) : m_value(wr_getGlobalRef( context, label )) {}
+		
+	WrenchValue( WRContext* context, const char* label ) : m_context(context), m_value( wr_getGlobalRef(context, label) ) {}
+	WrenchValue( WRContext* context, WRValue* value ) : m_context(context), m_value(value) {}
 
 	bool isValid() const { return m_value ? true : false; }
 
-	operator int* () const { return get(); }
+	// if the value is not the correct type it will be converted to
+	// that type, preserving the value as best it can
+	operator int* () { return asInt(); }
+	int* asInt() { return (m_value->type == WR_INT) ? &(m_value->i) : makeInt(); }
+	
+	operator float* () { return asFloat(); }
+	float* asFloat() { return (m_value->type == WR_FLOAT) ? &(m_value->f) : makeFloat(); }
 
-	int* get() const { return m_value ? &(m_value->i) : 0; }
+	WRValue& operator[] ( const int index ) { return *asArrayMember( index ); }
+	WRValue* asArrayMember( const int index );
 
-private:
-	WRValue* m_value;
-};
-
-//------------------------------------------------------------------------------
-class WrenchFloat
-{
-public:
-	WrenchFloat( WRContext* context, const char* label ) : m_value(wr_getGlobalRef( context, label )) {}
-
-	bool isValid() const { return m_value ? true : false; }
-
-	operator float* () const { return get(); }
-
-	float* get() const { return m_value ? &(m_value->f) : 0; }
+	// convert the value in-place and return a pointer to it
+	int* makeInt();
+	float* makeFloat();
 
 private:
+	WRContext* m_context;
 	WRValue* m_value;
 };
 

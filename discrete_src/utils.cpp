@@ -24,6 +24,70 @@ SOFTWARE.
 
 #include "wrench.h"
 
+// !!DEPRECATED!!! [[deprecated]]
+WRValue* wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv, const int argn )
+{
+	return wr_callFunction( context, functionName, argv, argn);
+}
+// !!DEPRECATED!!! [[deprecated]]
+WRValue* wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
+{
+	return wr_callFunction( context, hash, argv, argn);
+}
+// !!DEPRECATED!!! [[deprecated]]
+WRValue* wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const WRValue* argv, const int argn )
+{
+	return wr_callFunction( context, function, argv, argn);
+}
+
+//------------------------------------------------------------------------------
+int* WrenchValue::makeInt()
+{
+	wr_getValue[m_value->type]( &m_value ); // in case it is a reference or array value or something
+
+	if ( m_value->type == WR_FLOAT )
+	{
+		int i =(int)m_value->f;
+		m_value->i = i;
+	}
+	
+	m_value->p2 = INIT_AS_INT;
+	
+	return &(m_value->i);
+}
+
+//------------------------------------------------------------------------------
+float* WrenchValue::makeFloat()
+{
+	wr_getValue[m_value->type]( &m_value );
+	if ( m_value->type == WR_INT )
+	{
+		float f = (float)m_value->i;
+		m_value->f = f;
+	}
+
+	m_value->p2 = INIT_AS_FLOAT;
+
+	return &(m_value->f);
+}
+
+//------------------------------------------------------------------------------
+WRValue* WrenchValue::asArrayMember( const int index )
+{
+	if ( !IS_ARRAY(m_value->xtype) ) 
+	{
+		// then make it one!
+		m_value->p2 = INIT_AS_ARRAY;
+		m_value->va = m_context->getSVA( index + 1, SV_VALUE, true );
+	}
+	else if ( index >= (int)m_value->va->m_size )
+	{
+		m_value->va = wr_growValueArray( m_value->va, index );
+	}
+
+	return (WRValue*)m_value->va->get( index );
+}
+
 //------------------------------------------------------------------------------
 WRState* wr_newState( int stackSize )
 {
@@ -91,15 +155,16 @@ WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const i
 }
 
 //------------------------------------------------------------------------------
-bool wr_executeFunctionZero( WRState* w, WRContext* context )
+bool wr_executeFunctionZero( WRContext* context )
 {
+	WRState* w = context->w;
 	if ( context->stopLocation )
 	{
 		w->err = WR_ERR_execute_function_zero_called_more_than_once;
 		return false;
 	}
 	
-	if ( wr_callFunction(w, context, (int32_t)0) ) 
+	if ( !wr_callFunction( context, (int32_t)0) ) 
 	{
 		return false;
 	}
@@ -112,7 +177,7 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 {
 	WRContext* C = wr_allocateNewScript( w, block, blockSize );
 
-	if ( C && !wr_executeFunctionZero(w, C) )
+	if ( C && !wr_executeFunctionZero(C) )
 	{
 		wr_destroyContext( C );
 		return 0;
@@ -120,7 +185,6 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 
 	return C;
 }
-
 
 //------------------------------------------------------------------------------
 void wr_destroyContext( WRContext* context )
@@ -229,6 +293,34 @@ float WRValue::asFloat() const
 }
 
 //------------------------------------------------------------------------------
+void WRValue::setInt( const int val )
+{
+	if ( type == WR_REF )
+	{
+		r->setInt( val );
+	}
+	else
+	{
+		p2 = INIT_AS_INT;
+		i = val;
+	}
+}
+
+//------------------------------------------------------------------------------
+void WRValue::setFloat( const float val )
+{
+	if ( type == WR_REF )
+	{
+		r->setFloat( val );
+	}
+	else
+	{
+		p2 = INIT_AS_FLOAT;
+		f = val;
+	}
+}
+
+//------------------------------------------------------------------------------
 char* WRValue::asString( char* string, size_t len ) const
 {
 	switch( type )
@@ -297,30 +389,34 @@ char* WRValue::asString( char* string, size_t len ) const
 }
 
 //------------------------------------------------------------------------------
-int wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv, const int argn )
+WRValue* wr_callFunction( WRContext* context, const char* functionName, const WRValue* argv, const int argn )
 {
-	return wr_callFunction( w, context, wr_hashStr(functionName), argv, argn );
+	return wr_callFunction( context, wr_hashStr(functionName), argv, argn );
 }
 
 //------------------------------------------------------------------------------
-int wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
+WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
 {
 	WRValue* cF = 0;
+	WRState* w = context->w;
+
 	if ( hash )
 	{
 		if ( context->stopLocation == 0 )
 		{
-			return w->err = WR_ERR_run_must_be_called_by_itself_first;
+			w->err = WR_ERR_run_must_be_called_by_itself_first;
+			return 0;
 		}
 
 		cF = context->registry.getAsRawValueHashTable( hash );
 		if ( !cF->wrf )
 		{
-			return w->err = WR_ERR_wrench_function_not_found;
+			w->err = WR_ERR_wrench_function_not_found;
+			return 0;
 		}
 	}
 
-	return wr_callFunction( w, context, cF ? cF->wrf : 0, argv, argn );
+	return wr_callFunction( context, cF ? cF->wrf : 0, argv, argn );
 }
 
 //------------------------------------------------------------------------------

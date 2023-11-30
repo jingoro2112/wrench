@@ -30,10 +30,11 @@ SOFTWARE.
 
 #include "discrete_src/str.h"
 
-
 int runTests( int number =0 );
+void testGlobalValues( WRState* w );
 void setup();
 
+//------------------------------------------------------------------------------
 const char* g_errStrings[]=
 {
 	"ERR_None",
@@ -271,7 +272,6 @@ int main( int argn, char* argv[] )
 				return usage();
 			}
 
-
 			unsigned char* out;
 			int outLen;
 
@@ -414,10 +414,6 @@ static void emitln( WRState* s, const WRValue* argv, const int argn, WRValue& re
 	((WRstr*)usr)->append( "\n" );
 }
 
-
-char globalTestCode[] = "global_one = 10; global_two = 20; global_three = 30; global_four = 40;";
-
-
 //------------------------------------------------------------------------------
 int runTests( int number )
 {
@@ -495,8 +491,6 @@ int runTests( int number )
 				wr_registerFunction( w, "print", emit, &logger );
 				wr_registerFunction( w, "println", emitln, &logger );
 
-				WRValue* V = wr_returnValueFromLastCall(w);
-
 				wr_destroyContext( 0 ); // test that this works
 
 				WRContext* context = 0;
@@ -508,8 +502,7 @@ int runTests( int number )
 					integer.i = 2456;
 					someArray[1] = 'e';
 
-					wr_callFunction( w, context, "userCheck", &container, 1 );
-					V = wr_returnValueFromLastCall( w );
+					WRValue* V = wr_callFunction( context, "userCheck", &container, 1 );
 					if ( V && V->i == 77 )
 					{
 						assert( integer.i == 56789 );
@@ -519,7 +512,7 @@ int runTests( int number )
 					unsigned char testString[12] = "test string";
 					WRValue val;
 					wr_makeString( context, &val, testString, 11 );
-					wr_callFunction( w, context, "stringCheck", &val, 1 );
+					wr_callFunction( context, "stringCheck", &val, 1 );
 					wr_freeString( &val );
 				}
 
@@ -581,47 +574,104 @@ int runTests( int number )
 	}
 
 	wr_destroyContainer( &container );
-	
-	wr_destroyState( w );
-	w = wr_newState();
 
-	err = wr_compile( globalTestCode, (int)strlen(globalTestCode), &out, &outLen, errMsg );
-	if ( err )
-	{
-		printf( "compile error [%s]\n", g_errStrings[err] );
-		return -1;
-	}
-	WRContext* gc = wr_run( w, out, outLen );
-
-	WRValue* g = wr_getGlobalRef( gc, "does_note_exist" );
-	if ( g )
-	{
-		printf( "ERR should not have found that\n" );
-		return -1;
-	}
-
-	g = wr_getGlobalRef( gc, "global_one" );
-	if ( !g || g->i != 10 )	{ printf( "global_one err\n" ); return -1; }
-	g = wr_getGlobalRef( gc, "::global_two" );
-	if ( !g || g->i != 20 )	{ printf( "global_two err\n" ); return -1; }
-	g = wr_getGlobalRef( gc, "global_three" );
-	if ( !g || g->i != 30 )	{ printf( "global_three err\n" ); return -1; }
-	g = wr_getGlobalRef( gc, "::global_four" );
-	if ( !g || g->i != 40 )	{ printf( "global_four err\n" ); return -1; }
-
-	WrenchInt i1( gc, "global_one" );
-	if ( !i1.isValid() || *i1 != 10 || *i1.get() != 10 ) { printf( "bad f1\n" ); return -1; }
-
-	delete[] out;
+	testGlobalValues( w );
 
 	wr_destroyState( w );
-
 
 	delete[] someBigArray;
 	fclose( tfile );
 	return err;
 }
 
+//------------------------------------------------------------------------------
+void testGlobalValues( WRState* w )
+{
+	char globalTestCode[] = "global_one = 10;"
+							"global_two = 20;"
+							"global_three = 30;"
+							"global_four = 40;"
+							
+							"function test1() { global_two = 25; }"
+							"function test2() { return global_two == 35; }"
+							"function test3() { global_three = 5.3; }"
+							"function test4() { return global_three == 45; }"
+							"function test5() { return global_three == 4.5; }"
+							
+							"function test6() { return global_four[7] == 8; }"
+							"function test7() { return global_four[17] == 18; }"
+							"function test8() { return global_four[17] == 19.3; }"
+							"function test9() { return global_four[2] = 200; }"
+							"function test10() { return global_four[32] = 3200; }";
+
+	unsigned char* out;
+	int outLen;
+	char errMsg[256];
+	int err = wr_compile( globalTestCode, (int)strlen(globalTestCode), &out, &outLen, errMsg );
+	assert( !err );
+
+	WRContext* gc = wr_run( w, out, outLen );
+
+	WRValue* g = wr_getGlobalRef( gc, "does_not_exist" );
+	assert( !g );
+
+	g = wr_getGlobalRef( gc, "global_one" );
+	assert( g && g->i == 10 );
+	g = wr_getGlobalRef( gc, "::global_two" );
+	assert( g && g->i == 20 );
+	g = wr_getGlobalRef( gc, "global_three" );
+	assert( g && g->i == 30 );
+	g = wr_getGlobalRef( gc, "::global_four" );
+	assert( g && g->i == 40 );
+
+	WrenchValue wv1( gc, "global_one" );
+	assert( wv1.isValid()
+			&& *wv1.asInt() == 10
+			&& *(int *)wv1 == 10 );
+
+	WrenchValue wv2( gc, "global_two" );
+	wr_callFunction( gc, "test1" );
+	assert( *wv2.asInt() == 25 );
+	*wv2.asInt() = 35;
+	assert( wr_callFunction(gc, "test2")->i );
+
+	WrenchValue wv3( gc, "global_three" );
+	assert( *(int *)wv3 == 30 );
+	wr_callFunction(gc, "test3");
+	assert( *(float *)wv3 == 5.3f );
+
+	*(int *)wv3 = 45;
+	assert( wr_callFunction(gc, "test4")->i );
+	*(float *)wv3 = 4.5f;
+	assert( wr_callFunction(gc, "test5")->i );
+
+	*(float *)wv3 = 4.6f;
+	assert( wr_callFunction(gc, "test5")->i == 0 );
+
+	WrenchValue wv4( gc, "global_four" );
+	
+	assert( *(int *)wv4 == 40 );
+
+	wr_makeInt( wv4.asArrayMember(7), 8 );
+	assert( wr_callFunction(gc, "test6")->i );
+
+	wr_makeInt( wv4.asArrayMember(17), 18 );
+	assert( wr_callFunction(gc, "test7")->i );
+
+	wv4.asArrayMember(17)->setFloat( 19.3f );
+	assert( wr_callFunction(gc, "test8")->i );
+
+	wv4.asArrayMember(2)->setInt( 200 );
+	assert( wr_callFunction(gc, "test9") );
+
+	wv4.asArrayMember(32)->setInt( 3200 );
+	assert( wr_callFunction(gc, "test10") );
+	
+	delete[] out;
+
+	g = g;
+	err = err;
+}
 
 // COMPLETE EXAMPLE MUST WORK
 
