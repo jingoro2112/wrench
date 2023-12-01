@@ -521,8 +521,8 @@ public:
 
 	// if the value is not the correct type it will be converted to
 	// that type, preserving the value as best it can
-	operator int* () { return asInt(); }
-	int* asInt() { return (m_value->type == WR_INT) ? &(m_value->i) : makeInt(); }
+	operator int32_t* () { return asInt(); }
+	int32_t* asInt() { return (m_value->type == WR_INT) ? &(m_value->i) : makeInt(); }
 	
 	operator float* () { return asFloat(); }
 	float* asFloat() { return (m_value->type == WR_FLOAT) ? &(m_value->f) : makeFloat(); }
@@ -531,7 +531,7 @@ public:
 	WRValue* asArrayMember( const int index );
 
 	// convert the value in-place and return a pointer to it
-	int* makeInt();
+	int32_t* makeInt();
 	float* makeFloat();
 
 private:

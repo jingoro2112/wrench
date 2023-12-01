@@ -4,7 +4,7 @@ OPT ?= -O3
 PERF ?=
 
 #FLAGS ?= $(OPT) $(PERF) -std=c++11
-FLAGS ?= $(OPT) $(PERF) -I. $(COMPACT) -std=c++11
+FLAGS ?= $(OPT) $(PERF) -I. $(COMPACT) -std=c++98
 
 #FLAGS = $(OPT) -pg
 #FLAGS = $(OPT) $(PERF)

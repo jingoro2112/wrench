@@ -1,3 +1,7 @@
+2.21
+- fixed warning with int/int32_t pointer confusion in 64 bit land
+
+
 2.2 ----------------------------------------------------------------------------------
 - Major API change to wr_callfunction(...) !!!!!!!
       No longer takes a "WRState*" since that is inside the context, this change was

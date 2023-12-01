@@ -36,7 +36,7 @@ only bytecode be executed. This flag allows the source code to be
 explicitly unavailable. Esp32-class processors have no trouble compiling
 on-the-fly but ATMega/SAMD21 are a no-go here.
 */
-#define WRENCH_WITHOUT_COMPILER
+//#define WRENCH_WITHOUT_COMPILER
 /***********************************************************************/
 
 /***********************************************************************
@@ -49,7 +49,7 @@ WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
 interpreter in favor of a giant switch(). This saves ~6k at the cost
 of a chunk of speed so only use it if you need to.
 */
-#define WRENCH_COMPACT           // saves a lot, costs some speed
+//#define WRENCH_COMPACT           // saves a lot, costs some speed
 //#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 /***********************************************************************/
 
@@ -522,8 +522,8 @@ public:
 
 	// if the value is not the correct type it will be converted to
 	// that type, preserving the value as best it can
-	operator int* () { return asInt(); }
-	int* asInt() { return (m_value->type == WR_INT) ? &(m_value->i) : makeInt(); }
+	operator int32_t* () { return asInt(); }
+	int32_t* asInt() { return (m_value->type == WR_INT) ? &(m_value->i) : makeInt(); }
 	
 	operator float* () { return asFloat(); }
 	float* asFloat() { return (m_value->type == WR_FLOAT) ? &(m_value->f) : makeFloat(); }
@@ -532,7 +532,7 @@ public:
 	WRValue* asArrayMember( const int index );
 
 	// convert the value in-place and return a pointer to it
-	int* makeInt();
+	int32_t* makeInt();
 	float* makeFloat();
 
 private:

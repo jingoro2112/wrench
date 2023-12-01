@@ -9042,7 +9042,7 @@ callFunction:
 				// "collectable" type or the gc will iterate them in some corner cases (ask me how I know)
 				// A simple offset add would be so fast.. 
 				//           TODO figure out how to use it!
-				
+		
 //				stackTop += function->frameSpaceNeeded;
 				for( int l=0; l<function->frameSpaceNeeded; ++l )
 				{
@@ -11047,6 +11047,9 @@ targetFuncStoreLocalOp:
 
 
 #ifndef WRENCH_JUMPTABLE_INTERPRETER
+	#ifdef _MSC_VER
+			default: __assume(0); // tells the compiler to make this a jump-table
+	#endif
 		}
 	}
 #endif
@@ -11095,7 +11098,7 @@ WRValue* wr_callFunction( WRState* w, WRContext* context, WRFunction* function, 
 }
 
 //------------------------------------------------------------------------------
-int* WrenchValue::makeInt()
+int32_t* WrenchValue::makeInt()
 {
 	wr_getValue[m_value->type]( &m_value ); // in case it is a reference or array value or something
 
@@ -13161,7 +13164,6 @@ void wr_loadAllLibs( WRState* w )
 	wr_loadStringLib( w );
 	wr_loadMessageLib( w );
 }
-
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 

@@ -41,7 +41,7 @@ WRValue* wr_callFunction( WRState* w, WRContext* context, WRFunction* function, 
 }
 
 //------------------------------------------------------------------------------
-int* WrenchValue::makeInt()
+int32_t* WrenchValue::makeInt()
 {
 	wr_getValue[m_value->type]( &m_value ); // in case it is a reference or array value or something
 

@@ -751,7 +751,7 @@ callFunction:
 				// "collectable" type or the gc will iterate them in some corner cases (ask me how I know)
 				// A simple offset add would be so fast.. 
 				//           TODO figure out how to use it!
-				
+		
 //				stackTop += function->frameSpaceNeeded;
 				for( int l=0; l<function->frameSpaceNeeded; ++l )
 				{
@@ -2756,6 +2756,9 @@ targetFuncStoreLocalOp:
 
 
 #ifndef WRENCH_JUMPTABLE_INTERPRETER
+	#ifdef _MSC_VER
+			default: __assume(0); // tells the compiler to make this a jump-table
+	#endif
 		}
 	}
 #endif
