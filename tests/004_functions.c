@@ -62,14 +62,14 @@ argtest
 
 
 a = 10;
-a = print("argtest");
-if ( a != 20 ) { print("afail1"); }
+a = println("argtest");
+if ( a != 20 ) { println("afail1"); }
 a = 10;
-a = print();
-if ( a != 20 ) { print("afail2"); }
+a = println();
+if ( a != 20 ) { println("afail2"); }
 a = 10;
-a = print(1,2,3,4,5,6);
-if ( a != 20 ) { print("afail3"); }
+a = println(1,2,3,4,5,6);
+if ( a != 20 ) { println("afail3"); }
 
 glob = 10;
 incGlob();
@@ -77,7 +77,7 @@ function incGlob()
 {
 	glob++;
 }
-if ( glob != 11 ) print("g1");
+if ( glob != 11 ) println("g1");
 
 
 tle(tle());
@@ -91,25 +91,25 @@ f(f(0));
 a = 5;
 
 ++::a;
-print( a );
+println( a );
 
 test();
 
 function test()
 {
 	b = 4000000;
-	print( b );
+	println( b );
 	b = 20;
-	print( b );
+	println( b );
 	b = 0;
-	print( b );
+	println( b );
 	b = 1.2;
-	print( b );
+	println( b );
 
 	b = 10;
-	print( b );
+	println( b );
 	++::a;
-	print( ::a );
+	println( ::a );
 	
 }
 
@@ -118,11 +118,11 @@ test();
 
 function test2(a)
 {
-	print( a );
+	println( a );
 	a = 20;
-	print( a );
+	println( a );
 	
-	print( ::a );
+	println( ::a );
 }
 
 test2();
@@ -131,10 +131,10 @@ test2(2,3);
 
 function test3(a,b)
 {
-	print( a );
-	print( b );
+	println( a );
+	println( b );
 	b = 30;
-	print( b );
+	println( b );
 }
 
 test3();
@@ -158,7 +158,7 @@ function test5()
 	return 5;
 }
 
-print( test5() );
+println( test5() );
 
 function test6()
 {
@@ -167,13 +167,13 @@ function test6()
 	d = 4;
 	return c;
 }
-print( test6() );
+println( test6() );
 
 function test7()
 {
 	return ::a;
 }
-print( test7() );
+println( test7() );
 
 
 function fibonacci( n )
@@ -184,7 +184,7 @@ function fibonacci( n )
 
 for ( i = 0; i <= 10; ++i)
 {
-	print( fibonacci(i) );
+	println( fibonacci(i) );
 }
 
 
@@ -197,9 +197,9 @@ function g_fa()
 {
 	::a = 20;
 }
-print(a);
-print(::a);
+println(a);
+println(::a);
 fa();
-print(a);
+println(a);
 g_fa();
-print(a);
+println(a);

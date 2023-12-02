@@ -22,7 +22,7 @@ function U()
 
 	if ( value3 != 6.5 )
 	{
-		print("float");
+		println("float");
 	}
 	
 	enum
@@ -33,11 +33,11 @@ function U()
 		a322 = -500000,
 	}
 
-	print( value2 );
-	print( a16 );
-	print( a162 );
-	print( a32 );
-	print( a322 );
+	println( value2 );
+	println( a16 );
+	println( a162 );
+	println( a32 );
+	println( a322 );
 }
 
 enum
@@ -99,25 +99,25 @@ enum
 };
 
 
-if( name1 != 0 ) { print("bad 1"); }
-if( n1 != 0 ) { print("bad 2"); }
-if( n2 != 1 ) { print("bad 3"); }
-if( n3 != 2) { print("bad 4"); }
-if( name2 != 2 ) { print("bad 5"); }
-if( name3 != 3 ) { print("bad 6"); }
-if( name4 != 4 ) { print("bad 7"); }
-if( name5 != 5 ) { print("bad 8"); }
-if( name6 != 6 ) { print("bad 9"); }
-if( name7 != 7 ) { print("bad a"); }
-if( name8 != 8 ) { print("bad b"); }
-if( name9 != 9 ) { print("bad c"); }
-if( name10 != 6 ) { print("bad d"); }
-if( name11 != 6 ) { print("bad e"); }
-if( name12 != 7 ) { print("bad f"); }
-if( name13 != 8 ) { print("bad g"); }
-if( name14 != -1 ) { print("bad h"); }
-if( name15 != 0 ) { print("bad i"); }
-print( a16 );
-print( a162 );
-print( a32 );
-print( a322 );
+if( name1 != 0 ) { println("bad 1"); }
+if( n1 != 0 ) { println("bad 2"); }
+if( n2 != 1 ) { println("bad 3"); }
+if( n3 != 2) { println("bad 4"); }
+if( name2 != 2 ) { println("bad 5"); }
+if( name3 != 3 ) { println("bad 6"); }
+if( name4 != 4 ) { println("bad 7"); }
+if( name5 != 5 ) { println("bad 8"); }
+if( name6 != 6 ) { println("bad 9"); }
+if( name7 != 7 ) { println("bad a"); }
+if( name8 != 8 ) { println("bad b"); }
+if( name9 != 9 ) { println("bad c"); }
+if( name10 != 6 ) { println("bad d"); }
+if( name11 != 6 ) { println("bad e"); }
+if( name12 != 7 ) { println("bad f"); }
+if( name13 != 8 ) { println("bad g"); }
+if( name14 != -1 ) { println("bad h"); }
+if( name15 != 0 ) { println("bad i"); }
+println( a16 );
+println( a162 );
+println( a32 );
+println( a322 );

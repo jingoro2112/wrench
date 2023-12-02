@@ -20,89 +20,89 @@ yay3
 
 a = 8;
 b = 7;
-if ( a == b && 1 ) print("G1");
-if ( a != a && 1 ) print("G2");
-if ( a < b && 1 )  print("G3");
-if ( b > a && 1 )  print("G4");
-if ( b >= a && 1 ) print("G5");
-if ( a <= b && 1 ) print("G6");
+if ( a == b && 1 ) println("G1");
+if ( a != a && 1 ) println("G2");
+if ( a < b && 1 )  println("G3");
+if ( b > a && 1 )  println("G4");
+if ( b >= a && 1 ) println("G5");
+if ( a <= b && 1 ) println("G6");
 
 localIf();
 function localIf()
 {
 	a = 8;
 	b = 7;
-	if ( a == b && 1 ) print("L1");
-	if ( a != a && 1 ) print("L2");
-	if ( a < b && 1 )  print("L3");
-	if ( b > a && 1 )  print("L4");
-	if ( b >= a && 1 ) print("L5");
-	if ( a <= b && 1 ) print("L6");
+	if ( a == b && 1 ) println("L1");
+	if ( a != a && 1 ) println("L2");
+	if ( a < b && 1 )  println("L3");
+	if ( b > a && 1 )  println("L4");
+	if ( b >= a && 1 ) println("L5");
+	if ( a <= b && 1 ) println("L6");
 
-	if ( 11 < 10 ) print("La fail");
-	if ( 9 > 10 ) print("Lb fail");
-	if ( 11 <= 10 ) print("Lc fail");
-	if ( 9 >= 10 ) print("Ld fail");
-	if ( 9 == 10 ) print("Le fail");
-	if ( 10 != 10 ) print("Lf faile");
+	if ( 11 < 10 ) println("La fail");
+	if ( 9 > 10 ) println("Lb fail");
+	if ( 11 <= 10 ) println("Lc fail");
+	if ( 9 >= 10 ) println("Ld fail");
+	if ( 9 == 10 ) println("Le fail");
+	if ( 10 != 10 ) println("Lf faile");
 }
 
 if ( n != n )
 {
-	print( "null NOT okay" );
+	println( "null NOT okay" );
 }
 
-if ( 9 < 10 ) print("a");
-if ( 11 < 10 ) print("a fail");
-if ( 9 > 10 ) print("b fail");
-if ( 11 > 10 ) print("b");
-if ( 10 <= 10 ) print("c");
-if ( 11 <= 10 ) print("c fail");
-if ( 10 >= 10 ) print("d");
-if ( 9 >= 10 ) print("d fail");
-if ( 10 == 10 ) print("e");
-if ( 9 == 10 ) print("e fail");
-if ( 9 != 10 ) print("f");
-if ( 10 != 10 ) print("f fail");
+if ( 9 < 10 ) println("a");
+if ( 11 < 10 ) println("a fail");
+if ( 9 > 10 ) println("b fail");
+if ( 11 > 10 ) println("b");
+if ( 10 <= 10 ) println("c");
+if ( 11 <= 10 ) println("c fail");
+if ( 10 >= 10 ) println("d");
+if ( 9 >= 10 ) println("d fail");
+if ( 10 == 10 ) println("e");
+if ( 9 == 10 ) println("e fail");
+if ( 9 != 10 ) println("f");
+if ( 10 != 10 ) println("f fail");
 
 
 a = 10;
 
 
 if ( a == 10 )
-	print( "yes" );
+	println( "yes" );
 else
-	print( "no" );
+	println( "no" );
 
 
 if ( a != 10 )
-	print( "yes" );
+	println( "yes" );
 else
 {
-	print( "no" );
+	println( "no" );
 }
 
 if ( a != 10 )
 {
-	print( "yes" );
+	println( "yes" );
 }
 else
-	print( "no" );
+	println( "no" );
 
 if ( a == 10 )
-	print( "yes" );
+	println( "yes" );
 
-print("yes2");
+println("yes2");
 
 if ( n != n )
 {
-	print( "null NOT okay" );
+	println( "null NOT okay" );
 }
 
 c = 4;
 d = 6;
 
-print(8 + 3 + c++ - --d) ;
+println(8 + 3 + c++ - --d) ;
 
 			
 c = 4;
@@ -115,12 +115,12 @@ if ( a == 10 && b == 20 && ((8 + 3 + c++ - --d) == 10) )
 		if ( c = 5 )
 		{
 			if ( b + c == 10 )
-				print( "made it" );
+				println( "made it" );
 
-			print( "here too" );
+			println( "here too" );
 		}
 	else
-		print( "no" );
+		println( "no" );
 
 if ( a == 10 && b == 20 && ((8 + 3 + c++ - --d) == 1) )
 {
@@ -129,37 +129,37 @@ if ( a == 10 && b == 20 && ((8 + 3 + c++ - --d) == 1) )
 		if ( c = 5 )
 		{
 			if ( b + c == 10 )
-				print( "made it" );
-			print( "here too" );
+				println( "made it" );
+			println( "here too" );
 		}
 		else
-			print( "no" );
+			println( "no" );
 }
 else
 {
-	print( "yay" );
+	println( "yay" );
 }
 
 a = 10;
 b = 2.3;
 if ( !a || !b )
 {
-	print( "boo" );
+	println( "boo" );
 }
 
 a = 0;
 if ( !a || !b )
 {
-	print( "yay2" );
+	println( "yay2" );
 }
 
 if ( !a && !b )
 {
-	print( "boo" );
+	println( "boo" );
 }
 
 b = 0;
 if ( !a && !b )
 {
-	print( "yay3" );
+	println( "yay3" );
 }

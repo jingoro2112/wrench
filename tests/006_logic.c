@@ -48,43 +48,43 @@ c = 0;
 
 if ( 10 <= a ) { c += 0x1000; }
 if ( 10 >= a ) { c += 0x1000; }
-if ( 10 == b ) { print("CB1"); }
-if ( 10 != a ) { print("CB2"); }
-if ( 10 < b )  { print("CB3"); }
-if ( b > 10 )  { print("CB4"); }
-if ( 10 <= b ) { print("CB8"); }
-if ( b >= 10 ) { print("CB8"); }
+if ( 10 == b ) { println("CB1"); }
+if ( 10 != a ) { println("CB2"); }
+if ( 10 < b )  { println("CB3"); }
+if ( b > 10 )  { println("CB4"); }
+if ( 10 <= b ) { println("CB8"); }
+if ( b >= 10 ) { println("CB8"); }
 
 if ( 10 <= a && 10 <= a  ) { c += 0x10; }
 if ( 10 >= a && 10 >= a ) { c += 0x10; }
-if ( 10 == b && 10 == b ) { print("BB1"); }
-if ( 10 != a && 10 != a ) { print("BB2"); }
-if ( 10 < b && 10 < b ) { print("BB3"); }
-if ( b > 10 && b > 10 ) { print("BB4"); }
-if ( 10 <= b && 10 <= b ) { print("BB8"); }
-if ( b >= 10 && b >= 10 ) { print("BB8"); }
+if ( 10 == b && 10 == b ) { println("BB1"); }
+if ( 10 != a && 10 != a ) { println("BB2"); }
+if ( 10 < b && 10 < b ) { println("BB3"); }
+if ( b > 10 && b > 10 ) { println("BB4"); }
+if ( 10 <= b && 10 <= b ) { println("BB8"); }
+if ( b >= 10 && b >= 10 ) { println("BB8"); }
 
 if ( a <= a && a <= a  ) { c += 0x1; }
 if ( a >= a && a >= a ) { c += 0x1; }
-if ( a == b && a == b ) { print("AB1"); }
-if ( a != a && a != a ) { print("AB2"); }
-if ( a < b && a < b ) { print("AB3"); }
-if ( b > a && b > a ) { print("AB4"); }
-if ( a <= b && a <= b ) { print("AB8"); }
-if ( b >= a && b >= a ) { print("AB8"); }
+if ( a == b && a == b ) { println("AB1"); }
+if ( a != a && a != a ) { println("AB2"); }
+if ( a < b && a < b ) { println("AB3"); }
+if ( b > a && b > a ) { println("AB4"); }
+if ( a <= b && a <= b ) { println("AB8"); }
+if ( b >= a && b >= a ) { println("AB8"); }
 
 
 if ( a <= a ) { c += 0x100; }
 if ( a >= a ) { c += 0x100; }
-if ( a == b ) { print("CB1"); }
-if ( a != a ) { print("CB2"); }
-if ( a < b ) { print("CB3"); }
-if ( b > a ) { print("CB4"); }
-if ( a <= b ) { print("CB8"); }
-if ( b >= a ) { print("CB8"); }
+if ( a == b ) { println("CB1"); }
+if ( a != a ) { println("CB2"); }
+if ( a < b ) { println("CB3"); }
+if ( b > a ) { println("CB4"); }
+if ( a <= b ) { println("CB8"); }
+if ( b >= a ) { println("CB8"); }
 
 
-if ( c != 0x2222 ) { print("err C:"); print(c); }
+if ( c != 0x2222 ) { println("err C:"); println(c); }
 
 function abc()
 {
@@ -94,207 +94,207 @@ function abc()
 
 	if ( 10 <= aa ) { ca += 0x1000; }
 	if ( 10 >= aa ) { ca += 0x1000; }
-	if ( 10 == ba ) { print("L CB1"); }
-	if ( 10 != aa ) { print("L CB2"); }
-	if ( 10 < ba )  { print("L CB3"); }
-	if ( ba > 10 )  { print("L CB4"); }
-	if ( 10 <= ba ) { print("L CB8"); }
-	if ( ba >= 10 ) { print("L CB8"); }
+	if ( 10 == ba ) { println("L CB1"); }
+	if ( 10 != aa ) { println("L CB2"); }
+	if ( 10 < ba )  { println("L CB3"); }
+	if ( ba > 10 )  { println("L CB4"); }
+	if ( 10 <= ba ) { println("L CB8"); }
+	if ( ba >= 10 ) { println("L CB8"); }
 	
 	if ( 10 <= aa && 10 <= aa  ) { ca += 0x10; }
 	if ( 10 >= aa && 10 >= aa ) { ca += 0x10; }
-	if ( 10 == ba && 10 == ba ) { print("L BB1"); }
-	if ( 10 != aa && 10 != aa ) { print("L BB2"); }
-	if ( 10 < ba && 10 < ba ) { print("L BB3"); }
-	if ( ba > 10 && ba > 10 ) { print("L BB4"); }
-	if ( 10 <= ba && 10 <= ba ) { print("L BB8"); }
-	if ( ba >= 10 && ba >= 10 ) { print("L BB8"); }
+	if ( 10 == ba && 10 == ba ) { println("L BB1"); }
+	if ( 10 != aa && 10 != aa ) { println("L BB2"); }
+	if ( 10 < ba && 10 < ba ) { println("L BB3"); }
+	if ( ba > 10 && ba > 10 ) { println("L BB4"); }
+	if ( 10 <= ba && 10 <= ba ) { println("L BB8"); }
+	if ( ba >= 10 && ba >= 10 ) { println("L BB8"); }
 
 	if ( aa >= aa && aa >= aa ) { ca += 1; }
 	if ( aa <= aa && aa <= aa ) { ca += 1; }
-	if ( aa == ba && aa == ba ) { print("L AB1"); }
-	if ( aa != aa && aa != aa ) { print("L AB2"); }
-	if ( aa < ba && aa < ba ) { print("L AB3"); }
-	if ( ba > aa && ba > aa ) { print("L AB4"); }
-	if ( aa <= ba && aa <= ba ) { print("L AB8"); }
-	if ( ba >= aa && ba >= aa ) { print("L AB8"); }
+	if ( aa == ba && aa == ba ) { println("L AB1"); }
+	if ( aa != aa && aa != aa ) { println("L AB2"); }
+	if ( aa < ba && aa < ba ) { println("L AB3"); }
+	if ( ba > aa && ba > aa ) { println("L AB4"); }
+	if ( aa <= ba && aa <= ba ) { println("L AB8"); }
+	if ( ba >= aa && ba >= aa ) { println("L AB8"); }
 
 	if ( aa >= aa ) { ca += 0x100; }
 	if ( aa <= aa ) { ca += 0x100; }
-	if ( aa == ba ) { print("L AB1"); }
-	if ( aa != aa ) { print("L AB2"); }
-	if ( aa < ba ) { print("L AB3"); }
-	if ( ba > aa ) { print("L AB4"); }
-	if ( aa <= ba ) { print("L AB8"); }
-	if ( ba >= aa ) { print("L AB8"); }
+	if ( aa == ba ) { println("L AB1"); }
+	if ( aa != aa ) { println("L AB2"); }
+	if ( aa < ba ) { println("L AB3"); }
+	if ( ba > aa ) { println("L AB4"); }
+	if ( aa <= ba ) { println("L AB8"); }
+	if ( ba >= aa ) { println("L AB8"); }
 
-	if ( ca != 0x2222 ) { print("L err C:"); print(ca); }
+	if ( ca != 0x2222 ) { println("L err C:"); println(ca); }
 }
 
 a = 10.5;
-if ( 10.5 < 10 || 10.5 < 10 ) print("E T1");
-if ( 10.5 <= 10 || 10.5 <= 10 ) print("E T11");
-if ( 10 > 10.5 || 10 > 10.5 ) print("E T2");
-if ( 10 >= 10.5 || 10 >= 10.5 ) print("E T21");
-if ( 10.5 == 10 || 10.5 == 10 ) print("E 3");
-if ( 10 != 10 || 10 != 10 ) print("E 4");
-if ( !(10 <= 10 || 10 <= 10) ) print("E 5");
-if ( !(10 >= 10 || 10 >= 10) ) print("E 6");
+if ( 10.5 < 10 || 10.5 < 10 ) println("E T1");
+if ( 10.5 <= 10 || 10.5 <= 10 ) println("E T11");
+if ( 10 > 10.5 || 10 > 10.5 ) println("E T2");
+if ( 10 >= 10.5 || 10 >= 10.5 ) println("E T21");
+if ( 10.5 == 10 || 10.5 == 10 ) println("E 3");
+if ( 10 != 10 || 10 != 10 ) println("E 4");
+if ( !(10 <= 10 || 10 <= 10) ) println("E 5");
+if ( !(10 >= 10 || 10 >= 10) ) println("E 6");
 
 
 
 // float <- int
 f = .5;
 i = 3;
-print( f += i ); // 3.5
-print( f );
-print( i );
+println( f += i ); // 3.5
+println( f );
+println( i );
 
 // int <- int
 i = 10;
 j = 3;
-print( i += j ); // 13
-print( i );
-print( j );
+println( i += j ); // 13
+println( i );
+println( j );
 
 // int <- float
 i = 10;
 f = .5;
-print( i += f ); // 10.5
-print( i );
-print( f );
+println( i += f ); // 10.5
+println( i );
+println( f );
 
 // float <- float
 g = 10.2;
 f = .5;
-print( g += f ); // 10.7
-print( g );
-print( f );
+println( g += f ); // 10.7
+println( g );
+println( f );
 
 if ( !1 )
 {
-	print("1");
+	println("1");
 }
 
 a = 1;
 if ( a )
 {
-	print("T");
+	println("T");
 }
 else
 {
-	print("F");
+	println("F");
 }
 
 if ( !a )
 {
-	print("T");
+	println("T");
 }
 else
 {
-	print("F");
+	println("F");
 }
 
 
 
 a = 10.5;
-if ( a > 10 ) print("T1");
-if ( a < 11 ) print("T2");
-if ( a >= 10.5 ) print("T3");
-if ( a >= 10 ) print("T4");
-if ( a < 10.6 ) print("T5");
-if ( a <= 10.5 ) print("T6");
-if ( a <= 11 ) print("T7");
-if ( a == 10.5 ) print("T8");
-if ( a != 1) print("T9");
+if ( a > 10 ) println("T1");
+if ( a < 11 ) println("T2");
+if ( a >= 10.5 ) println("T3");
+if ( a >= 10 ) println("T4");
+if ( a < 10.6 ) println("T5");
+if ( a <= 10.5 ) println("T6");
+if ( a <= 11 ) println("T7");
+if ( a == 10.5 ) println("T8");
+if ( a != 1) println("T9");
 
-if ( a <= 10 ) print("B1");
-if ( a >= 11 ) print("B2");
-if ( a < 10.5 ) print("B3");
-if ( a < 10 ) print("B4");
-if ( a >= 10.6 ) print("B5");
-if ( a > 10.5 ) print("B6");
-if ( a > 11 ) print("B7");
-if ( a != 10.5 ) print("B8");
-if ( a == 1) print("B9");
+if ( a <= 10 ) println("B1");
+if ( a >= 11 ) println("B2");
+if ( a < 10.5 ) println("B3");
+if ( a < 10 ) println("B4");
+if ( a >= 10.6 ) println("B5");
+if ( a > 10.5 ) println("B6");
+if ( a > 11 ) println("B7");
+if ( a != 10.5 ) println("B8");
+if ( a == 1) println("B9");
 
 
 a = 1000;
-if ( a > 9000 ) print("B10");
-if ( a >= 9000 ) print("B11");
-if ( a < 900 ) print("B12");
-if ( a <= 900 ) print("B13");
-if ( a == 900 ) print("B14");
-if ( a != 1000 ) print("B15");
-if ( 9000 < a ) print("B101");
-if ( 9000 <= a ) print("B111");
-if ( 900 > a ) print("B121");
-if ( 900 >= a ) print("B131");
-if ( 900 == a ) print("B141");
-if ( 1000 != a ) print("B151");
+if ( a > 9000 ) println("B10");
+if ( a >= 9000 ) println("B11");
+if ( a < 900 ) println("B12");
+if ( a <= 900 ) println("B13");
+if ( a == 900 ) println("B14");
+if ( a != 1000 ) println("B15");
+if ( 9000 < a ) println("B101");
+if ( 9000 <= a ) println("B111");
+if ( 900 > a ) println("B121");
+if ( 900 >= a ) println("B131");
+if ( 900 == a ) println("B141");
+if ( 1000 != a ) println("B151");
 
 
 a = 100000;
-if ( a > 900000 ) print("B14");
-if ( a >= 900000 ) print("B15");
-if ( a < 90000 ) print("B16");
-if ( a <= 90000 ) print("B17");
-if ( a == 90000 ) print("B18");
-if ( a != 100000 ) print("B19");
-if ( 900000 < a ) print("C10");
-if ( 900000 <= a ) print("C11");
-if ( 90000 > a ) print("C12");
-if ( 90000 >= a ) print("C13");
-if ( 90000 == a ) print("C14");
-if ( 100000 != a ) print("C15");
+if ( a > 900000 ) println("B14");
+if ( a >= 900000 ) println("B15");
+if ( a < 90000 ) println("B16");
+if ( a <= 90000 ) println("B17");
+if ( a == 90000 ) println("B18");
+if ( a != 100000 ) println("B19");
+if ( 900000 < a ) println("C10");
+if ( 900000 <= a ) println("C11");
+if ( 90000 > a ) println("C12");
+if ( 90000 >= a ) println("C13");
+if ( 90000 == a ) println("C14");
+if ( 100000 != a ) println("C15");
 
 
 b = 0;
-if ( a && b ) print("ab");
-if ( b && a ) print("ab");
-if ( a && b ) print("ab"); else print("ba");
-if ( b && a ) print("ab"); else print("ba");
-if ( a || b ) print("a||b");
-if ( b || a ) print("a||b");
+if ( a && b ) println("ab");
+if ( b && a ) println("ab");
+if ( a && b ) println("ab"); else println("ba");
+if ( b && a ) println("ab"); else println("ba");
+if ( a || b ) println("a||b");
+if ( b || a ) println("a||b");
 
 a = 0;
 b = 1;
-if ( a && b ) print("ab");
-if ( b && a ) print("ab");
-if ( a && b ) print("ab"); else print("ba");
-if ( b && a ) print("ab"); else print("ba");
-if ( a || b ) print("a||b");
-if ( b || a ) print("a||b");
+if ( a && b ) println("ab");
+if ( b && a ) println("ab");
+if ( a && b ) println("ab"); else println("ba");
+if ( b && a ) println("ab"); else println("ba");
+if ( a || b ) println("a||b");
+if ( b || a ) println("a||b");
 
 b = 0;
-if ( a && b ) print("ab");
-if ( b && a ) print("ab");
-if ( a && b ) print("ab"); else print("ba");
-if ( b && a ) print("ab"); else print("ba");
-if ( a || b ) print("a||b");
-if ( b || a ) print("a||b");
+if ( a && b ) println("ab");
+if ( b && a ) println("ab");
+if ( a && b ) println("ab"); else println("ba");
+if ( b && a ) println("ab"); else println("ba");
+if ( a || b ) println("a||b");
+if ( b || a ) println("a||b");
 
 a = 1;
 b = 1;
-if ( a && b ) print("ab");
-if ( b && a ) print("ab");
-if ( a && b ) print("ab"); else print("ba");
-if ( b && a ) print("ab"); else print("ba");
+if ( a && b ) println("ab");
+if ( b && a ) println("ab");
+if ( a && b ) println("ab"); else println("ba");
+if ( b && a ) println("ab"); else println("ba");
 
 a = 0;
-if ( a && b ) print("ab");
-if ( b && a ) print("ab");
+if ( a && b ) println("ab");
+if ( b && a ) println("ab");
 
 a = 1;
 b = 0;
-if ( a && b ) print("ab");
-if ( b && a ) print("ab");
+if ( a && b ) println("ab");
+if ( b && a ) println("ab");
 
 a = 0;
-if ( a || b ) print("a||b");
-if ( b || a ) print("a||b");
+if ( a || b ) println("a||b");
+if ( b || a ) println("a||b");
 
 a = 1;
 b = 0;
-if ( a || b ) print("a||b");
-if ( b || a ) print("a||b");
+if ( a || b ) println("a||b");
+if ( b || a ) println("a||b");

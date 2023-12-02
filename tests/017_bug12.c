@@ -21,13 +21,13 @@ function init()
 
 function test( i,j )
 {
-	print( i / a );
-	print( a / i );
-	print( i / j );
+	println( i / a );
+	println( a / i );
+	println( i / j );
 
-	print( i - a );
-	print( a - i );
-	print( i - j );
+	println( i - a );
+	println( a - i );
+	println( i - j );
 
 }
 
@@ -42,4 +42,4 @@ function faulty_func()
 	return z;
 }
 
-print( faulty_func() );
+println( faulty_func() );

@@ -33,6 +33,7 @@ SOFTWARE.
 int runTests( int number =0 );
 void testGlobalValues( WRState* w );
 void setup();
+void ctest();
 
 //------------------------------------------------------------------------------
 const char* g_errStrings[]=
@@ -239,6 +240,8 @@ int main( int argn, char* argv[] )
 	assert( sizeof(float) == 4 );
 	assert( sizeof(unsigned char) == 1 );
 
+//	ctest();
+	
 	if ( argn <= 1 )
 	{
 		return usage();
@@ -315,8 +318,8 @@ int main( int argn, char* argv[] )
 			return usage();
 		}
 
-		bool strip = command == "cs" || command == "chs" || command == "cas";
-		int err = wr_compile( code, code.size(), &out, &outLen, 0, strip );
+		bool symbols = !(command == "cs" || command == "chs" || command == "cas");
+		int err = wr_compile( code, code.size(), &out, &outLen, 0, symbols );
 		if ( err )
 		{
 			printf( "compile error [%s]\n", g_errStrings[err] );
@@ -324,15 +327,15 @@ int main( int argn, char* argv[] )
 		}
 
 		WRstr outname( argv[3] );
-		if ( command == "c" && argn == 4)
+		if ( (command == "c"|| command == "cs") && argn == 4)
 		{
 			code.set( (char *)out, outLen );
 		}
-		else if ( command == "ch" && argn == 5 )
+		else if ( (command == "ch" || command == "chs") && argn == 5 )
 		{
 			blobToHeader( WRstr((char *)out, outLen), argv[4], code );
 		}
-		else if ( command == "ca" && argn == 5 )
+		else if ( (command == "ca" || command == "cas") && argn == 5 )
 		{
 			blobToAssemblyInc( WRstr((char *)out, outLen), argv[4], code );
 		}
@@ -396,7 +399,7 @@ static void emit( WRState* s, const WRValue* argv, const int argn, WRValue& retV
 	for( int i=0; i<argn; ++i )
 	{
 		char buf[256];
-		((WRstr*)usr)->appendFormat( "%s\n", argv[i].asString(buf, 256) );
+		((WRstr*)usr)->appendFormat( "%s", argv[i].asString(buf, 256) );
 	}
 
 	retVal.i = 20; // for argument-return testing
@@ -411,7 +414,38 @@ static void emitln( WRState* s, const WRValue* argv, const int argn, WRValue& re
 		((WRstr*)usr)->appendFormat( "%s\n", argv[i].asString(buf, 256) );
 	}
 
-	((WRstr*)usr)->append( "\n" );
+	retVal.i = 20; // for argument-return testing
+}
+
+//------------------------------------------------------------------------------
+void ctest()
+{
+	WRstr code;
+	code.fileToBuffer( "test_code.w" );
+
+
+	unsigned char* w_obj_p;
+	int w_obj_len;
+	wr_compile( code, code.size(), &w_obj_p, &w_obj_len );
+
+	
+	WRState* g_wrench = wr_newState();
+	wr_registerFunction( g_wrench, "msg", println );
+
+	WRContext* g_wr_context = wr_run( g_wrench, w_obj_p, w_obj_len );
+	
+
+	WRValue* w_test_value = wr_getGlobalRef( g_wr_context, "test_value");
+	if (!w_test_value)
+		printf("test_value not defined in wrench context");
+	else
+		printf("w_test_value = %f", *(float*)w_test_value);
+
+	
+	wr_callFunction( g_wrench, g_wr_context, "setup", NULL, 0 );
+
+	delete[] w_obj_p;
+	wr_destroyState( g_wrench );
 }
 
 //------------------------------------------------------------------------------
@@ -542,16 +576,16 @@ int runTests( int number )
 							}
 							else
 							{
-								printf( "bad [%c != %c]\n", isspace(expect[i]) ? ' ' : expect[i], isspace(logger[i]) ? ' ' : logger[i] );
+//								printf( "bad [%c != %c]\n", isspace(expect[i]) ? ' ' : expect[i], isspace(logger[i]) ? ' ' : logger[i] );
 							}
 						}
 						else if ( i >= expect.size() )
 						{
-							printf( "got more [%c]\n", isspace(logger[i]) ? ' ' : logger[i] );
+//							printf( "got more [%c]\n", isspace(logger[i]) ? ' ' : logger[i] );
 						}
 						else
 						{
-							printf( "expected less [%c]\n", isspace(expect[i]) ? ' ' : expect[i] );
+//							printf( "expected less [%c]\n", isspace(expect[i]) ? ' ' : expect[i] );
 						}
 					}
 					

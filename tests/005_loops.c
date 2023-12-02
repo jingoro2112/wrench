@@ -123,11 +123,11 @@ label2:
 goto label;
 
 
-print("nope");
+println("nope");
 
 label:
 a += 1;
-print("hi");
+println("hi");
 
 if ( a > 2 )
 {
@@ -137,7 +137,7 @@ if ( a > 2 )
 goto label;
 out:
 
-if ( a != 3 ) print("a 0");
+if ( a != 3 ) println("a 0");
 
 
 tle();
@@ -171,8 +171,8 @@ for( i=0; i<10; ++i)
 
 for( i=0,j=0; i<2; ++i,j-- )
 {
-	print(i);
-	print(j);
+	println(i);
+	println(j);
 }
 
 a = 10;
@@ -180,26 +180,26 @@ while( ++a < 14)
 {
 	if ( a < 12 )
 	{
-		print( "out 1" );
-		print( a );
+		println( "out 1" );
+		println( a );
 		continue;
 	}
 
-	print( "out 2" );
-	print( a );
+	println( "out 2" );
+	println( a );
 }
 
 a = 10;
 while( a < 20)
 {
-	print( "loop" );
-	print( a );
+	println( "loop" );
+	println( a );
 	++a;
 	a += 1;
 	a = a + 1;
 }
 
-print(f1());
+println(f1());
 
 function f1()
 {
@@ -221,43 +221,43 @@ while( --a > 5 )
 		{
 			if ( a < 17 )
 			{
-				print( "b17" );
+				println( "b17" );
 				break;
 			}
 			else
 			{
-				print( "c17" );
+				println( "c17" );
 				continue;
 			}
 
-			print( "better not" );
+			println( "better not" );
 		}
 
 		if ( a < 14 )
 		{
-			print( "b14" );
+			println( "b14" );
 			break;
 		}
 
-		print( "c14" );
+		println( "c14" );
 	}
 
-	print( "c10" );
+	println( "c10" );
 }
 
-print( "out" );
+println( "out" );
 
 i = 5;
 do
 {
-	print( i );
+	println( i );
 	++i;
 } while ( i < 13 );
 
 do
 	--i;
 while( i >10 );
-print(i);
+println(i);
 
 i = 5;
 do
@@ -265,7 +265,7 @@ do
 	break;
 	++i;
 } while ( i < 13 );
-print(i);
+println(i);
 
 i = 5;
 do
@@ -275,26 +275,26 @@ do
 	{
 		i++;
 		break;
-		print( "nope" );
+		println( "nope" );
 	} while( i < 20 );
 	
-	print("yup");
+	println("yup");
 	continue;
-	print("nope2");
+	println("nope2");
 } while ( i < 13 );
-print(i);
+println(i);
 
 for( i=0; i<10; ++i )
-	print(i);
-print(i);
+	println(i);
+println(i);
 
 
 for( tristan = 1; tristan <= 7; tristan++ )
 {
-	print( tristan );
+	println( tristan );
 	if ( tristan <= 6 )
 	{
-		print( "lt6!");
+		println( "lt6!");
 	}
 }
 
@@ -307,7 +307,7 @@ for(;;)
 		break;
 	}
 }
-print(i);
+println(i);
 
 for( i=100;;)
 {
@@ -316,13 +316,13 @@ for( i=100;;)
 		break;
 	}
 }
-print(i);
+println(i);
 
 for(;i<120;)
 {
 	++i;
 }
-print(i);
+println(i);
 
 for(;;++i)
 {
@@ -331,23 +331,23 @@ for(;;++i)
 		break;
 	}
 }
-print(i);
+println(i);
 
 for( i=1, j=2, k=3; i<10; ++i, ++j, k = j + i )
 {
-	print(i);
-	print(j);
-	print(k);
+	println(i);
+	println(j);
+	println(k);
 }
 
 for( i=0; i<10; ++i )
-	print(i);
-print(i);
+	println(i);
+println(i);
 	
-print(i);
+println(i);
 
-print(f2());
-print(f3());
+println(f2());
+println(f3());
 
 function f2()
 {
