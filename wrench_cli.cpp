@@ -318,7 +318,7 @@ int main( int argn, char* argv[] )
 			return usage();
 		}
 
-		bool symbols = command == "cs" || command == "chs" || command == "cas";
+		bool symbols = !(command == "cs" || command == "chs" || command == "cas");
 		int err = wr_compile( code, code.size(), &out, &outLen, 0, symbols );
 		if ( err )
 		{
