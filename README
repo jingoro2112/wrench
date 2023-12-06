@@ -24,7 +24,7 @@ Highlights:
 
 - Yes structs too
 
-- Yes switch (and NO it's not for-else sugar)
+- Yes switch (and NO it's not if-else sugar)
 
 - Can operate directly on data and exposes all static values
   to be manipulated externally and directly.
