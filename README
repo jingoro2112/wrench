@@ -2,19 +2,19 @@ https://home.workshopfriends.com/wrench/www
 
 A full-featured compiler+interpreter that uses a bare minimum of ram and program space.
 
-How little? The wrench Virtual Machine compiles to ~26k on an Arduino, and
+How little? The wrench Virtual Machine compiles to ~28k on an Arduino, and
 uses less than 700 Bytes of RAM to operate, it is fully functional on an Uno Mini.
 
 Highlights:
 
 - Weakly typed, supporting native 32-bit int, float and string.
-  Code is easy to write and intuitive.
+  Code is easy to write with familiar c-syntax
 
 - Optimizing compiler and very fast VM
 
 - Produces very compact endian-neutral bytecode: compile-anywhere-run-anywhere.
 
-- Executes from ROM, no local copy of the code is made
+- Can execute from ROM, no local copy of the code is made
 
 - Multiple concurrent contexts supported
 
@@ -24,11 +24,14 @@ Highlights:
 
 - Yes structs too
 
-- Can operate directly on native data without thunking
+- Yes switch (and NO it's not for-else sugar)
+
+- Can operate directly on data and exposes all static values
+  to be manipulated externally and directly.
 
 - Can call back and forth to native code with minimal overhead
 
-- API is designed to be extended, that's the whole point
+- API is designed to be easily extended, that's the whole point!
 
 - Memory is garbage-collected but only for dynamic arrays. Unless
   you are allocating/de-allocating arrays the gc _never_ runs.

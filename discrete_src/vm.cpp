@@ -25,6 +25,307 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
+//#define DEBUG_OPCODE_NAMES
+#ifdef DEBUG_OPCODE_NAMES
+const char* c_opcodeName[] = 
+{
+	"RegisterFunction",
+
+	"LiteralInt32",
+	"LiteralZero",
+	"LiteralFloat",
+	"LiteralString",
+
+	"CallFunctionByHash",
+	"CallFunctionByHashAndPop",
+	"CallFunctionByIndex",
+	"PushIndexFunctionReturnValue",
+
+	"CallLibFunction",
+	"CallLibFunctionAndPop",
+
+	"NewObjectTable",
+	"AssignToObjectTableByOffset",
+
+	"AssignToHashTableAndPop",
+	"RemoveFromHashTable",
+	"HashEntryExists",
+
+	"PopOne",
+	"ReturnZero",
+	"Return",
+	"Stop",
+
+	"Dereference",
+	"Index",
+	"IndexSkipLoad",
+	"CountOf",
+	"HashOf",
+
+	"StackIndexHash",
+	"GlobalIndexHash",
+	"LocalIndexHash",
+
+	"StackSwap",
+	"SwapTwoToTop",
+
+	"LoadFromLocal",
+	"LoadFromGlobal",
+
+	"LLValues",
+	"LGValues",
+	"GLValues",
+	"GGValues",
+
+	"BinaryRightShiftSkipLoad",
+	"BinaryLeftShiftSkipLoad",
+	"BinaryAndSkipLoad",
+	"BinaryOrSkipLoad",
+	"BinaryXORSkipLoad",
+	"BinaryModSkipLoad",
+
+	"BinaryMultiplication",
+	"BinarySubtraction",
+	"BinaryDivision",
+	"BinaryRightShift",
+	"BinaryLeftShift",
+	"BinaryMod",
+	"BinaryOr",
+	"BinaryXOR",
+	"BinaryAnd",
+	"BinaryAddition",
+
+	"BitwiseNOT",
+
+	"RelativeJump",
+	"RelativeJump8",
+
+	"BZ",
+	"BZ8",
+
+	"LogicalAnd",
+	"LogicalOr",
+	"CompareLE",
+	"CompareGE",
+	"CompareGT",
+	"CompareLT",
+	"CompareEQ",
+	"CompareNE",
+
+	"GGCompareGT",
+	"GGCompareGE",
+	"GGCompareLT",
+	"GGCompareLE",
+	"GGCompareEQ", 
+	"GGCompareNE", 
+
+	"LLCompareGT",
+	"LLCompareGE",
+	"LLCompareLT",
+	"LLCompareLE",
+	"LLCompareEQ", 
+	"LLCompareNE", 
+
+	"GSCompareEQ",
+	"LSCompareEQ", 
+	"GSCompareNE", 
+	"LSCompareNE", 
+	"GSCompareGE",
+	"LSCompareGE",
+	"GSCompareLE",
+	"LSCompareLE",
+	"GSCompareGT",
+	"LSCompareGT",
+	"GSCompareLT",
+	"LSCompareLT",
+
+	"GSCompareEQBZ", 
+	"LSCompareEQBZ", 
+	"GSCompareNEBZ", 
+	"LSCompareNEBZ", 
+	"GSCompareGEBZ",
+	"LSCompareGEBZ",
+	"GSCompareLEBZ",
+	"LSCompareLEBZ",
+	"GSCompareGTBZ",
+	"LSCompareGTBZ",
+	"GSCompareLTBZ",
+	"LSCompareLTBZ",
+
+	"GSCompareEQBZ8",
+	"LSCompareEQBZ8",
+	"GSCompareNEBZ8",
+	"LSCompareNEBZ8",
+	"GSCompareGEBZ8",
+	"LSCompareGEBZ8",
+	"GSCompareLEBZ8",
+	"LSCompareLEBZ8",
+	"GSCompareGTBZ8",
+	"LSCompareGTBZ8",
+	"GSCompareLTBZ8",
+	"LSCompareLTBZ8",
+
+	"LLCompareLTBZ",
+	"LLCompareLEBZ",
+	"LLCompareGTBZ",
+	"LLCompareGEBZ",
+	"LLCompareEQBZ",
+	"LLCompareNEBZ",
+
+	"GGCompareLTBZ",
+	"GGCompareLEBZ",
+	"GGCompareGTBZ",
+	"GGCompareGEBZ",
+	"GGCompareEQBZ",
+	"GGCompareNEBZ",
+
+	"LLCompareLTBZ8",
+	"LLCompareLEBZ8",
+	"LLCompareGTBZ8",
+	"LLCompareGEBZ8",
+	"LLCompareEQBZ8",
+	"LLCompareNEBZ8",
+
+	"GGCompareLTBZ8",
+	"GGCompareLEBZ8",
+	"GGCompareGTBZ8",
+	"GGCompareGEBZ8",
+	"GGCompareEQBZ8",
+	"GGCompareNEBZ8",
+
+	"PostIncrement",
+	"PostDecrement",
+	"PreIncrement",
+	"PreDecrement",
+
+	"PreIncrementAndPop",
+	"PreDecrementAndPop",
+
+	"IncGlobal",
+	"DecGlobal",
+	"IncLocal",
+	"DecLocal",
+
+	"Assign",
+	"AssignAndPop",
+	"AssignToGlobalAndPop",
+	"AssignToLocalAndPop",
+	"AssignToArrayAndPop",
+
+	"SubtractAssign",
+	"AddAssign",
+	"ModAssign",
+	"MultiplyAssign",
+	"DivideAssign",
+	"ORAssign",
+	"ANDAssign",
+	"XORAssign",
+	"RightShiftAssign",
+	"LeftShiftAssign",
+
+	"SubtractAssignAndPop",
+	"AddAssignAndPop",
+	"ModAssignAndPop",
+	"MultiplyAssignAndPop",
+	"DivideAssignAndPop",
+	"ORAssignAndPop",
+	"ANDAssignAndPop",
+	"XORAssignAndPop",
+	"RightShiftAssignAndPop",
+	"LeftShiftAssignAndPop",
+
+	"LogicalNot", //X
+	"Negate",
+
+	"LiteralInt8",
+	"LiteralInt16",
+
+	"IndexLiteral8",
+	"IndexLiteral16",
+
+	"IndexLocalLiteral8",
+	"IndexGlobalLiteral8",
+	"IndexLocalLiteral16",
+	"IndexGlobalLiteral16",
+
+	"BinaryAdditionAndStoreGlobal",
+	"BinarySubtractionAndStoreGlobal",
+	"BinaryMultiplicationAndStoreGlobal",
+	"BinaryDivisionAndStoreGlobal",
+
+	"BinaryAdditionAndStoreLocal",
+	"BinarySubtractionAndStoreLocal",
+	"BinaryMultiplicationAndStoreLocal",
+	"BinaryDivisionAndStoreLocal",
+
+	"CompareBEQ",
+	"CompareBNE",
+	"CompareBGE",
+	"CompareBLE",
+	"CompareBGT",
+	"CompareBLT",
+
+	"CompareBEQ8",
+	"CompareBNE8",
+	"CompareBGE8",
+	"CompareBLE8",
+	"CompareBGT8",
+	"CompareBLT8",
+
+	"BLA",
+	"BLA8",
+	"BLO",
+	"BLO8",
+
+	"LiteralInt8ToGlobal",
+	"LiteralInt16ToGlobal",
+	"LiteralInt32ToLocal",
+	"LiteralInt8ToLocal",
+	"LiteralInt16ToLocal",
+	"LiteralFloatToGlobal",
+	"LiteralFloatToLocal",
+	"LiteralInt32ToGlobal",
+
+	"GGBinaryMultiplication",
+	"GLBinaryMultiplication",
+	"LLBinaryMultiplication",
+
+	"GGBinaryAddition",
+	"GLBinaryAddition",
+	"LLBinaryAddition",
+
+	"GGBinarySubtraction",
+	"GLBinarySubtraction",
+	"LGBinarySubtraction",
+	"LLBinarySubtraction",
+
+	"GGBinaryDivision",
+	"GLBinaryDivision",
+	"LGBinaryDivision",
+	"LLBinaryDivision",
+
+	"GC_Command",
+
+	"GPushIterator",
+	"LPushIterator",
+	"GGNextKeyValueOrJump",
+	"GLNextKeyValueOrJump",
+	"LGNextKeyValueOrJump",
+	"LLNextKeyValueOrJump",
+	"GNextValueOrJump",
+	"LNextValueOrJump",
+
+	"Switch",
+	"SwitchLinear",
+
+	"GlobalStop",
+
+	"ToInt",
+	"ToFloat",
+};
+#endif
+
+//------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
 {
 	if ( IS_REFARRAY(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
@@ -188,6 +489,7 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	return true;
 }
 
+//#define D_OPCODE
 #ifdef D_OPCODE
 #define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)*pc, c_opcodeName[*pc]);
 #else
@@ -235,15 +537,34 @@ bool CompareEQF( float a, float b ) { return a == b; }
 static bool CompareBlankF( float a, float b ) { return false; }
 static float blankF( float a, float b ) { return 0; }
 
+#ifndef READ_32_FROM_PC
 int32_t READ_32_FROM_PC( const unsigned char* P )
 {
-	return ( (((int32_t)*(P)) << 24) | (((int32_t)*((P)+1)) << 16) | (((int32_t)*((P)+2)) << 8) | ((int32_t)*((P)+3)) );
+#if defined( WRENCH_NATIVE_BIG_ENDIAN )
+	return ( (((int32_t)*(P)) << 24)
+			 | (((int32_t)*((P)+1)) << 16)
+			 | (((int32_t)*((P)+2)) << 8)
+			 | (((int32_t)*((P)+3)) ) );
+	
+#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
+	return ( (((int32_t)*(P)) )
+			 | (((int32_t)*((P)+1)) << 8)
+			 | (((int32_t)*((P)+2)) << 16)
+			 | (((int32_t)*((P)+3)) << 24) );
+#endif
 }
 
 int16_t READ_16_FROM_PC( const unsigned char* P )
 {
-	return ( ((int16_t)*(P)) << 8) | ((int16_t)*(P+1) );
+#if defined( WRENCH_NATIVE_BIG_ENDIAN )
+	return ( ((int16_t)*(P)) << 8)
+			| ((int16_t)*(P+1) );
+#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
+	return ( ((int16_t)*(P)) )
+			| ((int16_t)*(P+1) << 8 );
+#endif
 }
+#endif
 
 #endif
 
@@ -266,6 +587,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&PushIndexFunctionReturnValue,
 
 		&&CallLibFunction,
+		&&CallLibFunctionAndPop,
 
 		&&NewObjectTable,
 		&&AssignToObjectTableByOffset,
@@ -279,6 +601,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&Return,
 		&&Stop,
 
+		&&Dereference,
 		&&Index,
 		&&IndexSkipLoad,
 		&&CountOf,
@@ -545,7 +868,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&ToInt,
 		&&ToFloat,
 
-		&&CallLibFunctionAndPop,
 	};
 #endif
 
@@ -559,11 +881,8 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		uint32_t hashLocInt;
 	};
 	
-	union
-	{
-		WRValue* register1;
-		uint16_t switchMod;
-	};
+	WRValue* register1;
+	
 	WRValue* frameBase = 0;
 	WRState* w = context->w;
 	WRValue* stackTop = w->stack;
@@ -621,16 +940,17 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	{
 		switch( *pc++ )
 		{
-			
 #endif
 			CASE(RegisterFunction):
 			{
 				hash = (stackTop -= 3)->i;
-				findex = hash;
 
+				findex = hash;
 				context->localFunctions[findex].arguments = (unsigned char)(hash>>8);
 				context->localFunctions[findex].frameSpaceNeeded = (unsigned char)(hash>>16);
+
 				context->localFunctions[findex].hash = (stackTop + 1)->i;
+
 				context->localFunctions[findex].offset = context->bottom + (stackTop + 2)->i;
 
 				context->localFunctions[findex].frameBaseAdjustment = 1
@@ -998,6 +1318,12 @@ callFunction:
 				*w->stack = *(register0 + 1);
 				context->stopLocation = pc - 1;
 				return w->stack;
+			}
+
+			CASE(Dereference):
+			{
+				(stackTop - 1)->arrayValue( stackTop - 1 );
+				CONTINUE;
 			}
 
 			CASE(Index):

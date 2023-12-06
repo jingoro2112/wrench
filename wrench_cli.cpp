@@ -30,6 +30,8 @@ SOFTWARE.
 
 #include "discrete_src/str.h"
 
+#define DUMP_BIN
+
 int runTests( int number =0 );
 void testGlobalValues( WRState* w );
 void setup();
@@ -236,7 +238,7 @@ static void print( WRState* w, const WRValue* argv, const int argn, WRValue& ret
 //------------------------------------------------------------------------------
 int main( int argn, char* argv[] )
 {
-	assert( sizeof(WRValue) == sizeof(void*)*2 );
+	assert( sizeof(WRValue) == 2*sizeof(void*) );
 	assert( sizeof(float) == 4 );
 	assert( sizeof(unsigned char) == 1 );
 
@@ -326,6 +328,12 @@ int main( int argn, char* argv[] )
 			return 0;
 		}
 
+#ifdef DUMP_BIN
+		WRstr str;
+		wr_asciiDump( out, outLen, str );
+		printf( "%d:\n%s\n", outLen, str.c_str() );
+#endif
+		
 		WRstr outname( argv[3] );
 		if ( (command == "c"|| command == "cs") && argn == 4)
 		{
@@ -339,7 +347,11 @@ int main( int argn, char* argv[] )
 		{
 			blobToAssemblyInc( WRstr((char *)out, outLen), argv[4], code );
 		}
-
+		else
+		{
+			return usage();
+		}
+		
 		if ( !code.bufferToFile(outname) )
 		{
 			printf( "could not write to [%s]\n", outname.c_str() );
@@ -666,6 +678,7 @@ void testGlobalValues( WRState* w )
 	WrenchValue wv2( gc, "global_two" );
 	wr_callFunction( gc, "test1" );
 	assert( *wv2.asInt() == 25 );
+
 	*wv2.asInt() = 35;
 	assert( wr_callFunction(gc, "test2")->i );
 
@@ -700,7 +713,7 @@ void testGlobalValues( WRState* w )
 
 	wv4.asArrayMember(32)->setInt( 3200 );
 	assert( wr_callFunction(gc, "test10") );
-	
+
 	delete[] out;
 
 	g = g;

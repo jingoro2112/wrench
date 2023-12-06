@@ -57,48 +57,14 @@ const char* c_reserved[] =
 	""
 };
 
-//#define _DUMP
-#ifdef _DUMP
-#define D_STREAM(a) streamDump(a)
+
 //------------------------------------------------------------------------------
-const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str )
-{
-	const unsigned char* data = (char unsigned *)d;
-	str.clear();
-	for( unsigned int i=0; i<len; i++ )
-	{
-		str.appendFormat( "0x%08X: ", i );
-		char dump[24];
-		unsigned int j;
-		for( j=0; j<16 && i<len; j++, i++ )
-		{
-			dump[j] = isgraph((unsigned char)data[i]) ? data[i] : '.';
-			dump[j+1] = 0;
-			str.appendFormat( "%02X ", (unsigned char)data[i] );
-		}
-
-		for( ; j<16; j++ )
-		{
-			str.appendFormat( "   " );
-		}
-		i--;
-		str += ": ";
-		str += dump;
-		str += "\n";
-	}
-
-	return str;
-}
 void streamDump( WROpcodeStream const& stream )
 {
 	WRstr str;
 	wr_asciiDump( stream, stream.size(), str );
 	printf( "%d:\n%s\n", stream.size(), str.c_str() );
 }
-
-#else
-#define D_STREAM(a)
-#endif
 
 //------------------------------------------------------------------------------
 bool WRCompilationContext::isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix )
@@ -721,7 +687,7 @@ bool WRCompilationContext::CheckSkipLoad( WROpcode opcode, WRBytecode& bytecode,
 		bytecode.all[a-1] = bytecode.all[a];
 		bytecode.all[a] = opcode;
 		bytecode.opcodes.shave(2);
-		bytecode.opcodes += O_IndexSkipLoad;
+		bytecode.opcodes += opcode;
 		return true;
 	}
 	else if ( bytecode.opcodes[o] == O_LoadFromGlobal
@@ -935,6 +901,38 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 	}
 
 	return false;
+}
+
+//------------------------------------------------------------------------------
+unsigned char* WRCompilationContext::pack16( int16_t i, unsigned char* buf )
+{
+#if defined( WRENCH_NATIVE_BIG_ENDIAN )
+	*buf = (i>>8) & 0xFF;
+	*(buf + 1) = i & 0xFF;
+#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
+	*buf = i & 0xFF;
+	*(buf + 1) = (i>>8) & 0xFF;
+#else
+#error
+#endif
+	return buf;
+}
+unsigned char* WRCompilationContext::pack32( int32_t l, unsigned char* buf )
+{
+#if defined( WRENCH_NATIVE_BIG_ENDIAN )
+	*buf = (l>>24) & 0xFF;
+	*(buf + 1) = (l>>16) & 0xFF;
+	*(buf + 2) = (l>>8) & 0xFF;
+	*(buf + 3) = l & 0xFF;
+#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
+	*buf = l & 0xFF;
+	*(buf + 1) = (l>>8) & 0xFF;
+	*(buf + 2) = (l>>16) & 0xFF;
+	*(buf + 3) = (l>>24) & 0xFF;
+#else
+#error
+#endif
+	return buf;
 }
 
 //------------------------------------------------------------------------------
@@ -2603,6 +2601,8 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContext& context )
 {
 	WRValue& value = context.value;
+	unsigned char data[2];
+	
 	if ( value.type == WR_INT && value.i == 0 )
 	{
 		pushOpcode( bytecode, O_LiteralZero );
@@ -2618,10 +2618,8 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 		else if ( (value.i <= 32767) && (value.i >= -32768) )
 		{
 			pushOpcode( bytecode, O_LiteralInt16 );
-			unsigned char be = (char)(value.i>>8);
-			pushData( bytecode, &be, 1 );
-			be = (char)value.i;
-			pushData( bytecode, &be, 1 );
+			int16_t be = value.i;
+			pushData( bytecode, pack16(be, data), 2 );
 		}
 		else
 		{
@@ -2633,7 +2631,6 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 	else if ( value.type == WR_COMPILER_LITERAL_STRING )
 	{
 		pushOpcode( bytecode, O_LiteralString );
-		unsigned char data[2];
 		int16_t be = context.literalString.size();
 		pushData( bytecode, pack16(be, data), 2 );
 		for( unsigned int i=0; i<context.literalString.size(); ++i )
@@ -3208,6 +3205,23 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 
 			char end = parseExpression( nex );
 
+			if ( nex.bytecode.opcodes.size() > 0 )
+			{
+				char op = nex.bytecode.opcodes[nex.bytecode.opcodes.size() - 1];
+				if ( op == O_Index
+					 || op == O_IndexSkipLoad
+					 || op == O_IndexLiteral8
+					 || op == O_IndexLiteral16
+					 || op == O_IndexLocalLiteral8
+					 || op == O_IndexGlobalLiteral8
+					 || op == O_IndexLocalLiteral16
+					 || op == O_IndexGlobalLiteral16 )
+				{
+					nex.bytecode.opcodes += O_Dereference;
+					nex.bytecode.all += O_Dereference;
+				}
+			}
+
 			appendBytecode( expression.context[depth].bytecode, nex.bytecode );
 
 			if ( end == ')' )
@@ -3435,6 +3449,8 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				// TODO - more effiecient way to do this, it allocates
 				// twice for the case of
 				// a[500] = { 1 };
+
+				// um... I don't remember what this was for.. :P
 				
 /*
 				// make sure the array we are about to initialize is
@@ -5375,15 +5391,14 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	
 	*size = 2;
 	*buf = new unsigned char[ (offsets.m_mod * 5) + 4 ];
-	(*buf)[(*size)++] = (offsets.m_mod>>8) & 0xFF;
-	(*buf)[(*size)++] = offsets.m_mod & 0xFF;
+
+	pack16( offsets.m_mod, *buf + *size );
+	*size += 2;
 
 	for( int i=0; i<offsets.m_mod; ++i )
 	{
-		(*buf)[(*size)++] = (offsets.m_list[i].hash>>24) & 0xFF;
-		(*buf)[(*size)++] = (offsets.m_list[i].hash>>16) & 0xFF;
-		(*buf)[(*size)++] = (offsets.m_list[i].hash>>8) & 0xFF;
-		(*buf)[(*size)++] = offsets.m_list[i].hash & 0xFF;
+		pack32( offsets.m_list[i].hash, *buf + *size );
+		*size += 4;
 		(*buf)[(*size)++] = offsets.m_list[i].hash ? offsets.m_list[i].value : (unsigned char)-1;
 	}
 }
@@ -5401,12 +5416,12 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 	// register the function signatures
 	for( unsigned int u=1; u<m_units.count(); ++u )
 	{
-		data[3] = u - 1; // index
-		data[2] = m_units[u].arguments; // args
-		data[1] = m_units[u].bytecode.localSpace.count(); // local frame size
-		data[0] = 0;
+		uint32_t signature =  (u - 1) // index
+							  | ((m_units[u].bytecode.localSpace.count()) << 8) // local frame size
+							  | ((m_units[u].arguments << 16));
+		
 		code += O_LiteralInt32;
-		code.append( data, 4 ); // placeholder, it doesn't matter
+		code.append( pack32(signature, data), 4 );
 
 		code += O_LiteralInt32; // hash
 		code.append( pack32(m_units[u].hash, data), 4 );
@@ -5500,8 +5515,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 					{
 						int index = base + N.references[r];
 
-						code[index] = (m_units[u2].offsetOfLocalHashMap>>8) & 0xFF;
-						code[index+1] = m_units[u2].offsetOfLocalHashMap & 0xFF;
+						pack16( m_units[u2].offsetOfLocalHashMap, code.p_str(index) );
 					}
 
 					break;
@@ -5724,306 +5738,6 @@ int wr_compile( const char* source, const int size, unsigned char** out, int* ou
 
 	return comp.compile( source, size, out, outLen, errMsg, includeSymbols );
 }
-
-//------------------------------------------------------------------------------
-#ifdef DEBUG_OPCODE_NAMES
-const char* c_opcodeName[] = 
-{
-	"RegisterFunction",
-
-	"LiteralInt32",
-	"LiteralZero",
-	"LiteralFloat",
-	"LiteralString",
-
-	"CallFunctionByHash",
-	"CallFunctionByHashAndPop",
-	"CallFunctionByIndex",
-	"PushIndexFunctionReturnValue",
-
-	"CallLibFunction",
-
-	"NewObjectTable",
-	"AssignToObjectTableByOffset",
-
-	"AssignToHashTableAndPop",
-	"RemoveFromHashTable",
-	"HashEntryExists",
-
-	"PopOne",
-	"ReturnZero",
-	"Return",
-	"Stop",
-
-	"Index",
-	"IndexSkipLoad",
-	"CountOf",
-	"HashOf",
-
-	"StackIndexHash",
-	"GlobalIndexHash",
-	"LocalIndexHash",
-
-	"StackSwap",
-	"SwapTwoToTop",
-
-	"LoadFromLocal",
-	"LoadFromGlobal",
-
-	"LLValues",
-	"LGValues",
-	"GLValues",
-	"GGValues",
-
-	"BinaryRightShiftSkipLoad",
-	"BinaryLeftShiftSkipLoad",
-	"BinaryAndSkipLoad",
-	"BinaryOrSkipLoad",
-	"BinaryXORSkipLoad",
-	"BinaryModSkipLoad",
-
-	"BinaryMultiplication",
-	"BinarySubtraction",
-	"BinaryDivision",
-	"BinaryRightShift",
-	"BinaryLeftShift",
-	"BinaryMod",
-	"BinaryOr",
-	"BinaryXOR",
-	"BinaryAnd",
-	"BinaryAddition",
-
-	"BitwiseNOT",
-
-	"RelativeJump",
-	"RelativeJump8",
-
-	"BZ",
-	"BZ8",
-
-	"LogicalAnd",
-	"LogicalOr",
-	"CompareLE",
-	"CompareGE",
-	"CompareGT",
-	"CompareLT",
-	"CompareEQ",
-	"CompareNE",
-
-	"GGCompareGT",
-	"GGCompareGE",
-	"GGCompareLT",
-	"GGCompareLE",
-	"GGCompareEQ", 
-	"GGCompareNE", 
-
-	"LLCompareGT",
-	"LLCompareGE",
-	"LLCompareLT",
-	"LLCompareLE",
-	"LLCompareEQ", 
-	"LLCompareNE", 
-
-	"GSCompareEQ",
-	"LSCompareEQ", 
-	"GSCompareNE", 
-	"LSCompareNE", 
-	"GSCompareGE",
-	"LSCompareGE",
-	"GSCompareLE",
-	"LSCompareLE",
-	"GSCompareGT",
-	"LSCompareGT",
-	"GSCompareLT",
-	"LSCompareLT",
-
-	"GSCompareEQBZ", 
-	"LSCompareEQBZ", 
-	"GSCompareNEBZ", 
-	"LSCompareNEBZ", 
-	"GSCompareGEBZ",
-	"LSCompareGEBZ",
-	"GSCompareLEBZ",
-	"LSCompareLEBZ",
-	"GSCompareGTBZ",
-	"LSCompareGTBZ",
-	"GSCompareLTBZ",
-	"LSCompareLTBZ",
-
-	"GSCompareEQBZ8",
-	"LSCompareEQBZ8",
-	"GSCompareNEBZ8",
-	"LSCompareNEBZ8",
-	"GSCompareGEBZ8",
-	"LSCompareGEBZ8",
-	"GSCompareLEBZ8",
-	"LSCompareLEBZ8",
-	"GSCompareGTBZ8",
-	"LSCompareGTBZ8",
-	"GSCompareLTBZ8",
-	"LSCompareLTBZ8",
-
-	"LLCompareLTBZ",
-	"LLCompareLEBZ",
-	"LLCompareGTBZ",
-	"LLCompareGEBZ",
-	"LLCompareEQBZ",
-	"LLCompareNEBZ",
-
-	"GGCompareLTBZ",
-	"GGCompareLEBZ",
-	"GGCompareGTBZ",
-	"GGCompareGEBZ",
-	"GGCompareEQBZ",
-	"GGCompareNEBZ",
-
-	"LLCompareLTBZ8",
-	"LLCompareLEBZ8",
-	"LLCompareGTBZ8",
-	"LLCompareGEBZ8",
-	"LLCompareEQBZ8",
-	"LLCompareNEBZ8",
-
-	"GGCompareLTBZ8",
-	"GGCompareLEBZ8",
-	"GGCompareGTBZ8",
-	"GGCompareGEBZ8",
-	"GGCompareEQBZ8",
-	"GGCompareNEBZ8",
-
-	"PostIncrement",
-	"PostDecrement",
-	"PreIncrement",
-	"PreDecrement",
-
-	"PreIncrementAndPop",
-	"PreDecrementAndPop",
-
-	"IncGlobal",
-	"DecGlobal",
-	"IncLocal",
-	"DecLocal",
-
-	"Assign",
-	"AssignAndPop",
-	"AssignToGlobalAndPop",
-	"AssignToLocalAndPop",
-	"AssignToArrayAndPop",
-
-	"SubtractAssign",
-	"AddAssign",
-	"ModAssign",
-	"MultiplyAssign",
-	"DivideAssign",
-	"ORAssign",
-	"ANDAssign",
-	"XORAssign",
-	"RightShiftAssign",
-	"LeftShiftAssign",
-
-	"SubtractAssignAndPop",
-	"AddAssignAndPop",
-	"ModAssignAndPop",
-	"MultiplyAssignAndPop",
-	"DivideAssignAndPop",
-	"ORAssignAndPop",
-	"ANDAssignAndPop",
-	"XORAssignAndPop",
-	"RightShiftAssignAndPop",
-	"LeftShiftAssignAndPop",
-
-	"LogicalNot", //X
-	"Negate",
-
-	"LiteralInt8",
-	"LiteralInt16",
-
-	"IndexLiteral8",
-	"IndexLiteral16",
-
-	"IndexLocalLiteral8",
-	"IndexGlobalLiteral8",
-	"IndexLocalLiteral16",
-	"IndexGlobalLiteral16",
-
-	"BinaryAdditionAndStoreGlobal",
-	"BinarySubtractionAndStoreGlobal",
-	"BinaryMultiplicationAndStoreGlobal",
-	"BinaryDivisionAndStoreGlobal",
-
-	"BinaryAdditionAndStoreLocal",
-	"BinarySubtractionAndStoreLocal",
-	"BinaryMultiplicationAndStoreLocal",
-	"BinaryDivisionAndStoreLocal",
-
-	"CompareBEQ",
-	"CompareBNE",
-	"CompareBGE",
-	"CompareBLE",
-	"CompareBGT",
-	"CompareBLT",
-
-	"CompareBEQ8",
-	"CompareBNE8",
-	"CompareBGE8",
-	"CompareBLE8",
-	"CompareBGT8",
-	"CompareBLT8",
-
-	"BLA",
-	"BLA8",
-	"BLO",
-	"BLO8",
-
-	"LiteralInt8ToGlobal",
-	"LiteralInt16ToGlobal",
-	"LiteralInt32ToLocal",
-	"LiteralInt8ToLocal",
-	"LiteralInt16ToLocal",
-	"LiteralFloatToGlobal",
-	"LiteralFloatToLocal",
-	"LiteralInt32ToGlobal",
-
-	"GGBinaryMultiplication",
-	"GLBinaryMultiplication",
-	"LLBinaryMultiplication",
-
-	"GGBinaryAddition",
-	"GLBinaryAddition",
-	"LLBinaryAddition",
-
-	"GGBinarySubtraction",
-	"GLBinarySubtraction",
-	"LGBinarySubtraction",
-	"LLBinarySubtraction",
-
-	"GGBinaryDivision",
-	"GLBinaryDivision",
-	"LGBinaryDivision",
-	"LLBinaryDivision",
-
-	"GC_Command",
-
-	"GPushIterator",
-	"LPushIterator",
-	"GGNextKeyValueOrJump",
-	"GLNextKeyValueOrJump",
-	"LGNextKeyValueOrJump",
-	"LLNextKeyValueOrJump",
-	"GNextValueOrJump",
-	"LNextValueOrJump",
-
-	"Switch",
-	"SwitchLinear",
-
-	"GlobalStop",
-
-	"ToInt",
-	"ToFloat",
-
-	"CallLibFunctionAndPop",
-};
-#endif
 
 #else // WRENCH_WITHOUT_COMPILER
 

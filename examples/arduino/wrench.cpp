@@ -26,6 +26,7 @@ SOFTWARE.
 #define _UTILS_H
 /*------------------------------------------------------------------------------*/
 
+
 int wr_itoa( int i, char* string, size_t len );
 int wr_ftoa( float f, char* string, size_t len );
 
@@ -196,7 +197,6 @@ public:
 	~WRarray() { delete[] m_list; }
 };
 class WRstr;
-const char* wr_asciiDump( const void* d, unsigned int len, WRstr* str =0 );
 
 #endif // WRENCH_WITHOUT_COMPILER
 
@@ -920,12 +920,24 @@ void wr_removeFromHashTable( WRContext* c, WRValue* index, WRValue* table );
 
 extern WRReturnFunc wr_CompareEQ[16];
 
-#ifdef WRENCH_COMPACT
-int32_t READ_32_FROM_PC( const unsigned char* P );
-int16_t READ_16_FROM_PC( const unsigned char* P );
+// if the current + native match then great it's a simple read, it's
+// only when they differ that we need bitshiftiness
+#if (defined(WRENCH_LITTLE_ENDIAN) && defined(WRENCH_NATIVE_LITTLE_ENDIAN))	|| (defined(WRENCH_BIG_ENDIAN) && defined(WRENCH_NATIVE_BIG_ENDIAN))
+ #define READ_32_FROM_PC(P) (int32_t)(*(int32_t *)(P))
+ #define READ_16_FROM_PC(P) (int16_t)(*(int16_t *)(P))
 #else
-#define READ_32_FROM_PC(P) ((((int32_t)*(P)) << 24) | (((int32_t)*((P)+1)) << 16) | (((int32_t)*((P)+2)) << 8) | ((int32_t)*((P)+3))) 
-#define READ_16_FROM_PC(P) ((int16_t)((((int16_t)*(P)) << 8) | ((int16_t)*(P+1))))
+ #ifdef WRENCH_COMPACT
+  int32_t READ_32_FROM_PC( const unsigned char* P );
+  int16_t READ_16_FROM_PC( const unsigned char* P );
+ #else
+  #if defined( WRENCH_NATIVE_BIG_ENDIAN )
+   #define READ_32_FROM_PC(P) (int32_t)((int32_t)*(P+3) | ((int32_t)*(P+2))<<8 | ((int32_t)*(P+1))<<16 | ((int32_t)*(P))<<24)
+   #define READ_16_FROM_PC(P) (int16_t)((int16_t)*(P+1) | ((int16_t)*(P))<<8)
+  #elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
+   #define READ_32_FROM_PC(P) (int32_t)((int32_t)*(P) | ((int32_t)*(P+1))<<8 | ((int32_t)*(P+2))<<16 | ((int32_t)*(P+3))<<24)
+   #define READ_16_FROM_PC(P) (int16_t)((int16_t)*(P) | ((int16_t)*(P+1))<<8)
+  #endif
+ #endif
 #endif
 
 #endif
@@ -972,6 +984,7 @@ enum WROpcode
 	O_PushIndexFunctionReturnValue,
 
 	O_CallLibFunction,
+	O_CallLibFunctionAndPop,
 
 	O_NewObjectTable,
 	O_AssignToObjectTableByOffset,
@@ -985,6 +998,7 @@ enum WROpcode
 	O_Return,
 	O_Stop,
 
+	O_Dereference,
 	O_Index,
 	O_IndexSkipLoad,
 	O_CountOf,
@@ -1251,8 +1265,6 @@ enum WROpcode
 	O_ToInt,
 	O_ToFloat,
 
-	O_CallLibFunctionAndPop,
-
 	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,
 	O_FUNCTION_CALL_PLACEHOLDER,
@@ -1260,15 +1272,7 @@ enum WROpcode
 	O_LAST,
 };
 
-//#define DEBUG_OPCODE_NAMES
-#ifdef DEBUG_OPCODE_NAMES
-#define D_OPCODE
-extern const char* c_opcodeName[];
-#else
 #endif
-
-#endif
-
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
@@ -1649,6 +1653,8 @@ WRstr& WRstr::append( const char c )
 
 	return *this;
 }
+
+const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte =-1 );
 
 #endif
 #endif
@@ -2141,22 +2147,10 @@ private:
 	static bool CheckFastLoad( WROpcode opcode, WRBytecode& bytecode, int a, int o );
 	static bool IsLiteralLoadOpcode( unsigned char opcode );
 	static bool CheckCompareReplace( WROpcode LS, WROpcode GS, WROpcode ILS, WROpcode IGS, WRBytecode& bytecode, unsigned int a, unsigned int o );
-	
-	unsigned char* pack16( int16_t i, unsigned char* buf )
-	{
-		*buf = (i>>8) & 0xFF;
-		*(buf + 1) = i & 0xFF;
-		return buf;
-	}
-	unsigned char* pack32( int32_t l, unsigned char* buf )
-	{
-		*buf = (l>>24) & 0xFF;
-		*(buf + 1) = (l>>16) & 0xFF;
-		*(buf + 2) = (l>>8) & 0xFF;
-		*(buf + 3) = l & 0xFF;
-		return buf;
-	}
 
+	unsigned char* pack16( int16_t i, unsigned char* buf );
+	unsigned char* pack32( int32_t l, unsigned char* buf );
+	
 	friend class WRExpression;
 	static void pushOpcode( WRBytecode& bytecode, WROpcode opcode );
 	static void pushData( WRBytecode& bytecode, const unsigned char* data, const int len ) { bytecode.all.append( data, len ); }
@@ -2312,48 +2306,14 @@ const char* c_reserved[] =
 	""
 };
 
-//#define _DUMP
-#ifdef _DUMP
-#define D_STREAM(a) streamDump(a)
+
 //------------------------------------------------------------------------------
-const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str )
-{
-	const unsigned char* data = (char unsigned *)d;
-	str.clear();
-	for( unsigned int i=0; i<len; i++ )
-	{
-		str.appendFormat( "0x%08X: ", i );
-		char dump[24];
-		unsigned int j;
-		for( j=0; j<16 && i<len; j++, i++ )
-		{
-			dump[j] = isgraph((unsigned char)data[i]) ? data[i] : '.';
-			dump[j+1] = 0;
-			str.appendFormat( "%02X ", (unsigned char)data[i] );
-		}
-
-		for( ; j<16; j++ )
-		{
-			str.appendFormat( "   " );
-		}
-		i--;
-		str += ": ";
-		str += dump;
-		str += "\n";
-	}
-
-	return str;
-}
 void streamDump( WROpcodeStream const& stream )
 {
 	WRstr str;
 	wr_asciiDump( stream, stream.size(), str );
 	printf( "%d:\n%s\n", stream.size(), str.c_str() );
 }
-
-#else
-#define D_STREAM(a)
-#endif
 
 //------------------------------------------------------------------------------
 bool WRCompilationContext::isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix )
@@ -2976,7 +2936,7 @@ bool WRCompilationContext::CheckSkipLoad( WROpcode opcode, WRBytecode& bytecode,
 		bytecode.all[a-1] = bytecode.all[a];
 		bytecode.all[a] = opcode;
 		bytecode.opcodes.shave(2);
-		bytecode.opcodes += O_IndexSkipLoad;
+		bytecode.opcodes += opcode;
 		return true;
 	}
 	else if ( bytecode.opcodes[o] == O_LoadFromGlobal
@@ -3190,6 +3150,38 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 	}
 
 	return false;
+}
+
+//------------------------------------------------------------------------------
+unsigned char* WRCompilationContext::pack16( int16_t i, unsigned char* buf )
+{
+#if defined( WRENCH_NATIVE_BIG_ENDIAN )
+	*buf = (i>>8) & 0xFF;
+	*(buf + 1) = i & 0xFF;
+#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
+	*buf = i & 0xFF;
+	*(buf + 1) = (i>>8) & 0xFF;
+#else
+#error
+#endif
+	return buf;
+}
+unsigned char* WRCompilationContext::pack32( int32_t l, unsigned char* buf )
+{
+#if defined( WRENCH_NATIVE_BIG_ENDIAN )
+	*buf = (l>>24) & 0xFF;
+	*(buf + 1) = (l>>16) & 0xFF;
+	*(buf + 2) = (l>>8) & 0xFF;
+	*(buf + 3) = l & 0xFF;
+#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
+	*buf = l & 0xFF;
+	*(buf + 1) = (l>>8) & 0xFF;
+	*(buf + 2) = (l>>16) & 0xFF;
+	*(buf + 3) = (l>>24) & 0xFF;
+#else
+#error
+#endif
+	return buf;
 }
 
 //------------------------------------------------------------------------------
@@ -4858,6 +4850,8 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContext& context )
 {
 	WRValue& value = context.value;
+	unsigned char data[2];
+	
 	if ( value.type == WR_INT && value.i == 0 )
 	{
 		pushOpcode( bytecode, O_LiteralZero );
@@ -4873,10 +4867,8 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 		else if ( (value.i <= 32767) && (value.i >= -32768) )
 		{
 			pushOpcode( bytecode, O_LiteralInt16 );
-			unsigned char be = (char)(value.i>>8);
-			pushData( bytecode, &be, 1 );
-			be = (char)value.i;
-			pushData( bytecode, &be, 1 );
+			int16_t be = value.i;
+			pushData( bytecode, pack16(be, data), 2 );
 		}
 		else
 		{
@@ -4888,7 +4880,6 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 	else if ( value.type == WR_COMPILER_LITERAL_STRING )
 	{
 		pushOpcode( bytecode, O_LiteralString );
-		unsigned char data[2];
 		int16_t be = context.literalString.size();
 		pushData( bytecode, pack16(be, data), 2 );
 		for( unsigned int i=0; i<context.literalString.size(); ++i )
@@ -5463,6 +5454,23 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 
 			char end = parseExpression( nex );
 
+			if ( nex.bytecode.opcodes.size() > 0 )
+			{
+				char op = nex.bytecode.opcodes[nex.bytecode.opcodes.size() - 1];
+				if ( op == O_Index
+					 || op == O_IndexSkipLoad
+					 || op == O_IndexLiteral8
+					 || op == O_IndexLiteral16
+					 || op == O_IndexLocalLiteral8
+					 || op == O_IndexGlobalLiteral8
+					 || op == O_IndexLocalLiteral16
+					 || op == O_IndexGlobalLiteral16 )
+				{
+					nex.bytecode.opcodes += O_Dereference;
+					nex.bytecode.all += O_Dereference;
+				}
+			}
+
 			appendBytecode( expression.context[depth].bytecode, nex.bytecode );
 
 			if ( end == ')' )
@@ -5690,6 +5698,8 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				// TODO - more effiecient way to do this, it allocates
 				// twice for the case of
 				// a[500] = { 1 };
+
+				// um... I don't remember what this was for.. :P
 				
 /*
 				// make sure the array we are about to initialize is
@@ -7630,15 +7640,14 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	
 	*size = 2;
 	*buf = new unsigned char[ (offsets.m_mod * 5) + 4 ];
-	(*buf)[(*size)++] = (offsets.m_mod>>8) & 0xFF;
-	(*buf)[(*size)++] = offsets.m_mod & 0xFF;
+
+	pack16( offsets.m_mod, *buf + *size );
+	*size += 2;
 
 	for( int i=0; i<offsets.m_mod; ++i )
 	{
-		(*buf)[(*size)++] = (offsets.m_list[i].hash>>24) & 0xFF;
-		(*buf)[(*size)++] = (offsets.m_list[i].hash>>16) & 0xFF;
-		(*buf)[(*size)++] = (offsets.m_list[i].hash>>8) & 0xFF;
-		(*buf)[(*size)++] = offsets.m_list[i].hash & 0xFF;
+		pack32( offsets.m_list[i].hash, *buf + *size );
+		*size += 4;
 		(*buf)[(*size)++] = offsets.m_list[i].hash ? offsets.m_list[i].value : (unsigned char)-1;
 	}
 }
@@ -7656,12 +7665,12 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 	// register the function signatures
 	for( unsigned int u=1; u<m_units.count(); ++u )
 	{
-		data[3] = u - 1; // index
-		data[2] = m_units[u].arguments; // args
-		data[1] = m_units[u].bytecode.localSpace.count(); // local frame size
-		data[0] = 0;
+		uint32_t signature =  (u - 1) // index
+							  | ((m_units[u].bytecode.localSpace.count()) << 8) // local frame size
+							  | ((m_units[u].arguments << 16));
+		
 		code += O_LiteralInt32;
-		code.append( data, 4 ); // placeholder, it doesn't matter
+		code.append( pack32(signature, data), 4 );
 
 		code += O_LiteralInt32; // hash
 		code.append( pack32(m_units[u].hash, data), 4 );
@@ -7755,8 +7764,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 					{
 						int index = base + N.references[r];
 
-						code[index] = (m_units[u2].offsetOfLocalHashMap>>8) & 0xFF;
-						code[index+1] = m_units[u2].offsetOfLocalHashMap & 0xFF;
+						pack16( m_units[u2].offsetOfLocalHashMap, code.p_str(index) );
 					}
 
 					break;
@@ -7980,7 +7988,43 @@ int wr_compile( const char* source, const int size, unsigned char** out, int* ou
 	return comp.compile( source, size, out, outLen, errMsg, includeSymbols );
 }
 
+#else // WRENCH_WITHOUT_COMPILER
+
+int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg, bool includeSymbols )
+{
+	return WR_ERR_compiler_not_loaded;
+}
+
+	
+#endif
+/*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
 //------------------------------------------------------------------------------
+//#define DEBUG_OPCODE_NAMES
 #ifdef DEBUG_OPCODE_NAMES
 const char* c_opcodeName[] = 
 {
@@ -7997,6 +8041,7 @@ const char* c_opcodeName[] =
 	"PushIndexFunctionReturnValue",
 
 	"CallLibFunction",
+	"CallLibFunctionAndPop",
 
 	"NewObjectTable",
 	"AssignToObjectTableByOffset",
@@ -8010,6 +8055,7 @@ const char* c_opcodeName[] =
 	"Return",
 	"Stop",
 
+	"Dereference",
 	"Index",
 	"IndexSkipLoad",
 	"CountOf",
@@ -8275,45 +8321,8 @@ const char* c_opcodeName[] =
 
 	"ToInt",
 	"ToFloat",
-
-	"CallLibFunctionAndPop",
 };
 #endif
-
-#else // WRENCH_WITHOUT_COMPILER
-
-int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg, bool includeSymbols )
-{
-	return WR_ERR_compiler_not_loaded;
-}
-
-	
-#endif
-/*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
-
-MIT Licence
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*******************************************************************************/
-
-#include "wrench.h"
 
 //------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
@@ -8479,6 +8488,7 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	return true;
 }
 
+//#define D_OPCODE
 #ifdef D_OPCODE
 #define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)*pc, c_opcodeName[*pc]);
 #else
@@ -8526,15 +8536,34 @@ bool CompareEQF( float a, float b ) { return a == b; }
 static bool CompareBlankF( float a, float b ) { return false; }
 static float blankF( float a, float b ) { return 0; }
 
+#ifndef READ_32_FROM_PC
 int32_t READ_32_FROM_PC( const unsigned char* P )
 {
-	return ( (((int32_t)*(P)) << 24) | (((int32_t)*((P)+1)) << 16) | (((int32_t)*((P)+2)) << 8) | ((int32_t)*((P)+3)) );
+#if defined( WRENCH_NATIVE_BIG_ENDIAN )
+	return ( (((int32_t)*(P)) << 24)
+			 | (((int32_t)*((P)+1)) << 16)
+			 | (((int32_t)*((P)+2)) << 8)
+			 | (((int32_t)*((P)+3)) ) );
+	
+#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
+	return ( (((int32_t)*(P)) )
+			 | (((int32_t)*((P)+1)) << 8)
+			 | (((int32_t)*((P)+2)) << 16)
+			 | (((int32_t)*((P)+3)) << 24) );
+#endif
 }
 
 int16_t READ_16_FROM_PC( const unsigned char* P )
 {
-	return ( ((int16_t)*(P)) << 8) | ((int16_t)*(P+1) );
+#if defined( WRENCH_NATIVE_BIG_ENDIAN )
+	return ( ((int16_t)*(P)) << 8)
+			| ((int16_t)*(P+1) );
+#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
+	return ( ((int16_t)*(P)) )
+			| ((int16_t)*(P+1) << 8 );
+#endif
 }
+#endif
 
 #endif
 
@@ -8557,6 +8586,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&PushIndexFunctionReturnValue,
 
 		&&CallLibFunction,
+		&&CallLibFunctionAndPop,
 
 		&&NewObjectTable,
 		&&AssignToObjectTableByOffset,
@@ -8570,6 +8600,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&Return,
 		&&Stop,
 
+		&&Dereference,
 		&&Index,
 		&&IndexSkipLoad,
 		&&CountOf,
@@ -8836,7 +8867,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&ToInt,
 		&&ToFloat,
 
-		&&CallLibFunctionAndPop,
 	};
 #endif
 
@@ -8850,11 +8880,8 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		uint32_t hashLocInt;
 	};
 	
-	union
-	{
-		WRValue* register1;
-		uint16_t switchMod;
-	};
+	WRValue* register1;
+	
 	WRValue* frameBase = 0;
 	WRState* w = context->w;
 	WRValue* stackTop = w->stack;
@@ -8912,16 +8939,17 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	{
 		switch( *pc++ )
 		{
-			
 #endif
 			CASE(RegisterFunction):
 			{
 				hash = (stackTop -= 3)->i;
-				findex = hash;
 
+				findex = hash;
 				context->localFunctions[findex].arguments = (unsigned char)(hash>>8);
 				context->localFunctions[findex].frameSpaceNeeded = (unsigned char)(hash>>16);
+
 				context->localFunctions[findex].hash = (stackTop + 1)->i;
+
 				context->localFunctions[findex].offset = context->bottom + (stackTop + 2)->i;
 
 				context->localFunctions[findex].frameBaseAdjustment = 1
@@ -9289,6 +9317,12 @@ callFunction:
 				*w->stack = *(register0 + 1);
 				context->stopLocation = pc - 1;
 				return w->stack;
+			}
+
+			CASE(Dereference):
+			{
+				(stackTop - 1)->arrayValue( stackTop - 1 );
+				CONTINUE;
 			}
 
 			CASE(Index):
@@ -11267,13 +11301,10 @@ void wr_destroyContext( WRContext* context )
 				context->w->contextList = (WRContext*)context->w->contextList->registry.m_vNext;
 			}
 
-			while ( context->svAllocated )
-			{
-				WRGCObject* next = context->svAllocated->m_next;
-				context->svAllocated->clear();
-				free( context->svAllocated );
-				context->svAllocated = next;
-			}
+			// free all memory allocations by forcing the gc to collect everything
+			context->gcPauseCount = 0; 
+			context->globals = 0;
+			context->gc( 0 );
 
 			context->registry.clear();
 
@@ -11608,6 +11639,47 @@ void wr_destroyContainer( WRValue* val )
 	val->init();
 }
 
+#ifndef WRENCH_WITHOUT_COMPILER
+
+//------------------------------------------------------------------------------
+const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte )
+{
+	const unsigned char* data = (char unsigned *)d;
+	str.clear();
+	for( unsigned int i=0; i<len; i++ )
+	{
+		str.appendFormat( "0x%08X: ", i );
+		char dump[24];
+		unsigned int j;
+		for( j=0; j<16 && i<len; j++, i++ )
+		{
+			dump[j] = isgraph((unsigned char)data[i]) ? data[i] : '.';
+			dump[j+1] = 0;
+			if ( i == (unsigned int)markByte )
+			{
+				str.shave(1);
+				str.appendFormat( "[%02X]", (unsigned char)data[i] );
+			}
+			else
+			{
+				str.appendFormat( "%02X ", (unsigned char)data[i] );
+			}
+		}
+
+		for( ; j<16; j++ )
+		{
+			str.appendFormat( "   " );
+		}
+		i--;
+		str += ": ";
+		str += dump;
+		str += "\n";
+	}
+
+	return str;
+}
+
+#endif
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
@@ -11695,20 +11767,21 @@ void WRValue::arrayValue( WRValue* val ) const
 
 	if ( IS_RAW_ARRAY(r->xtype) )
 	{
-		val->p2 = INIT_AS_INT;
 		val->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[s]) : 0;
+		val->p2 = INIT_AS_INT;
 	}
 	else if ( r->va->m_type == SV_VALUE )
 	{
 		if ( s < r->va->m_size )
 		{
-			*val = r->va->m_Vdata[s];
+			WRValue* R = r;
+			*val = R->va->m_Vdata[s];
 		}
 	}
 	else if ( r->va->m_type == SV_CHAR )
 	{
-		val->p2 = INIT_AS_INT;
 		val->ui = (s < r->va->m_size) ? (uint32_t)(unsigned char)r->va->m_Cdata[s] : 0;
+		val->p2 = INIT_AS_INT;
 	}
 	else
 	{

@@ -25,6 +25,7 @@ SOFTWARE.
 #define _UTILS_H
 /*------------------------------------------------------------------------------*/
 
+
 int wr_itoa( int i, char* string, size_t len );
 int wr_ftoa( float f, char* string, size_t len );
 
@@ -195,7 +196,6 @@ public:
 	~WRarray() { delete[] m_list; }
 };
 class WRstr;
-const char* wr_asciiDump( const void* d, unsigned int len, WRstr* str =0 );
 
 #endif // WRENCH_WITHOUT_COMPILER
 

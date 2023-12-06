@@ -379,5 +379,7 @@ WRstr& WRstr::append( const char c )
 	return *this;
 }
 
+const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte =-1 );
+
 #endif
 #endif

@@ -379,22 +379,10 @@ private:
 	static bool CheckFastLoad( WROpcode opcode, WRBytecode& bytecode, int a, int o );
 	static bool IsLiteralLoadOpcode( unsigned char opcode );
 	static bool CheckCompareReplace( WROpcode LS, WROpcode GS, WROpcode ILS, WROpcode IGS, WRBytecode& bytecode, unsigned int a, unsigned int o );
-	
-	unsigned char* pack16( int16_t i, unsigned char* buf )
-	{
-		*buf = (i>>8) & 0xFF;
-		*(buf + 1) = i & 0xFF;
-		return buf;
-	}
-	unsigned char* pack32( int32_t l, unsigned char* buf )
-	{
-		*buf = (l>>24) & 0xFF;
-		*(buf + 1) = (l>>16) & 0xFF;
-		*(buf + 2) = (l>>8) & 0xFF;
-		*(buf + 3) = l & 0xFF;
-		return buf;
-	}
 
+	unsigned char* pack16( int16_t i, unsigned char* buf );
+	unsigned char* pack32( int32_t l, unsigned char* buf );
+	
 	friend class WRExpression;
 	static void pushOpcode( WRBytecode& bytecode, WROpcode opcode );
 	static void pushData( WRBytecode& bytecode, const unsigned char* data, const int len ) { bytecode.all.append( data, len ); }

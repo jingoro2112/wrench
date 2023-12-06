@@ -26,8 +26,9 @@ SOFTWARE.
 #define _WRENCH_H
 /*------------------------------------------------------------------------------*/
 
-#define WRENCH_VERSION_MAJOR 2
-#define WRENCH_VERSION_MINOR 2
+#define WRENCH_VERSION_MAJOR 3
+#define WRENCH_VERSION_MINOR 0
+#define WRENCH_VERSION_BUILD 0
 
 /************************************************************************
 The compiler was not designed to be particularly memory or space efficient, for
@@ -36,7 +37,7 @@ only bytecode be executed. This flag allows the source code to be
 explicitly unavailable. Esp32-class processors have no trouble compiling
 on-the-fly but ATMega/SAMD21 are a no-go here.
 */
-//#define WRENCH_WITHOUT_COMPILER
+#define WRENCH_WITHOUT_COMPILER
 /***********************************************************************/
 
 /***********************************************************************
@@ -49,8 +50,8 @@ WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
 interpreter in favor of a giant switch(). This saves ~6k at the cost
 of a chunk of speed so only use it if you need to.
 */
-//#define WRENCH_COMPACT           // saves a lot, costs some speed
-//#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
+#define WRENCH_COMPACT           // saves a lot, costs some speed
+#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 /***********************************************************************/
 
 /************************************************************************
@@ -121,9 +122,14 @@ int wr_compile( const char* source,
 // block:      location of bytecode
 // blockSize:  number of bytes in the block
 
-// RETURNS:    a WRContext pointer to be passed to wr_callFunction
-//             'global' values are NOT SHARED between contexts
+// RETURNS:    an allocated WRContext
+//             NOTE: This Context is automatically destyroyed when
+//             wr_destroyState() is called, but can be manually deleted
+//             with wr_destroyContext(...) (see below)
 WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize );
+
+// macro for automatically freeing the WRContext
+#define wr_runOnce( w, block, blockSize ) wr_destroyContext( wr_run((w),(block),(blockSize)) )
 
 // After wr_run(...) or wr_callFunction(...) has run, there is always a
 // return value (default 0) this function fetches it
@@ -297,6 +303,27 @@ void wr_addIntToContainer( WRValue* container, const char* name, const int32_t v
 void wr_addFloatToContainer( WRValue* container, const char* name, const float value );
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size );
 
+/***************************************************************/
+/* Wrench is endian-neutral, code generated on one platform is
+ * 100% compatible with all other platforms.
+ *
+ * BUT
+ *
+ * The internal representation of data has to be one or the other
+ * this defines which that is.
+ * It is advantageous to select an enian-ness that matches your target
+ * platform but then it must be the same for the machine that compiles
+ * it as well.
+ * 
+ * Obviously this is not a problem if you are compiling/running on the
+ * same machine.
+ *
+ * The more common architectures (including embedded) use little endian
+ * so that's the default.
+*/ 
+#define WRENCH_NATIVE_LITTLE_ENDIAN
+//#define WRENCH_NATIVE_BIG_ENDIAN
+
 
 /***************************************************************/
 /***************************************************************/
@@ -411,6 +438,62 @@ enum WRExType : uint8_t
 #define IS_RAW_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_RAW_ARRAY)
 #define IS_HASH_TABLE(X) (((X)&EX_TYPE_MASK)==WR_EX_HASH_TABLE)
 
+#if __arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__
+#include <memory.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <cstdlib>
+#endif
+
+#ifdef ARDUINO
+#include <Arduino.h>
+#ifdef BYTE_ORDER
+#if BYTE_ORDER == LITTLE_ENDIAN
+#define ARDUINO_LITTLE_ENDIAN
+#elif BYTE_ORDER == BIG_ENDIAN
+#define ARDUINO_BIG_ENDIAN
+#else
+#error
+#endif
+
+#else
+
+#define TEST_LITTLE_ENDIAN (((union { unsigned x; unsigned char c; }){1}).c)
+#ifdef TEST_LITTLE_ENDIAN
+#define ARDUINO_LITTLE_ENDIAN
+#else
+#define ARDUINO_BIG_ENDIAN
+#endif
+
+#endif
+#endif
+
+#if defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN || \
+						  defined(__BIG_ENDIAN__) || \
+						  defined(__ARMEB__) || \
+						  defined(__THUMBEB__) || \
+						  defined(__AARCH64EB__) || \
+						  defined(_MIBSEB) || defined(__MIBSEB) || defined(__MIBSEB__) || \
+						  defined(ARDUINO_BIG_ENDIAN)
+#define WRENCH_BIG_ENDIAN
+#elif defined(__BYTE_ORDER) && __BYTE_ORDER == __LITTLE_ENDIAN || \
+							defined(__LITTLE_ENDIAN__) || \
+							defined(__ARMEL__) || \
+							defined(_M_PPC) || \
+							defined(__THUMBEL__) || \
+							defined(__AARCH64EL__) || \
+							defined(_MSC_VER) || \
+							defined(_MIPSEL) || defined(__MIPSEL) || defined(__MIPSEL__) || \
+							defined(ARDUINO_LITTLE_ENDIAN)
+#define WRENCH_LITTLE_ENDIAN
+#else
+
+// if you are reading this, please define the appropriate endian-ness
+// here for your compiler(WRENCH_LITTLE_ENDIAN / WRENCH_BIG_ENDIAN) and:
+#error "Endian-ness not detected! Please contact curt.hartung@gmail.com so it can be added"
+
+#endif
+
 class WRGCObject;
 
 //------------------------------------------------------------------------------
@@ -481,6 +564,7 @@ struct WRValue
 
 	union
 	{
+#ifdef WRENCH_LITTLE_ENDIAN
 		struct
 		{
 #if (__cplusplus <= 199711L)
@@ -495,7 +579,23 @@ struct WRValue
 			WRExType xtype; // carries the extra type (if it exists)
 #endif
 		};
-
+#else // WRENCH_BIG_ENDIAN
+		struct
+		{
+#if (__cplusplus <= 199711L)
+			uint8_t xtype; // carries the extra type (if it exists)
+			uint8_t padH;
+			uint8_t padL; // pad carries an array pointer (up to 2megs using bottom 4 bits of xtype)
+			uint8_t type; // carries the type
+#else
+			WRExType xtype; // carries the extra type (if it exists)
+			uint8_t padH;
+			uint8_t padL; // pad carries an array pointer (up to 2megs using bottom 4 bits of xtype)
+			WRValueType type; // carries the type
+#endif
+		};
+#endif
+		
 		uint32_t p2;
 		union
 		{
@@ -553,17 +653,6 @@ private:
   #if _MSC_VER
 	#undef WRENCH_JUMPTABLE_INTERPRETER
   #endif
-#endif
-
-#if __arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__
-#include <memory.h>
-#include <stdio.h>
-#include <sys/stat.h>
-#include <cstdlib>
-#endif
-
-#ifdef ARDUINO
-#include <Arduino.h>
 #endif
 
 #ifndef WRENCH_COMBINED

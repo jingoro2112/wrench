@@ -210,13 +210,10 @@ void wr_destroyContext( WRContext* context )
 				context->w->contextList = (WRContext*)context->w->contextList->registry.m_vNext;
 			}
 
-			while ( context->svAllocated )
-			{
-				WRGCObject* next = context->svAllocated->m_next;
-				context->svAllocated->clear();
-				free( context->svAllocated );
-				context->svAllocated = next;
-			}
+			// free all memory allocations by forcing the gc to collect everything
+			context->gcPauseCount = 0; 
+			context->globals = 0;
+			context->gc( 0 );
 
 			context->registry.clear();
 
@@ -551,3 +548,44 @@ void wr_destroyContainer( WRValue* val )
 	val->init();
 }
 
+#ifndef WRENCH_WITHOUT_COMPILER
+
+//------------------------------------------------------------------------------
+const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte )
+{
+	const unsigned char* data = (char unsigned *)d;
+	str.clear();
+	for( unsigned int i=0; i<len; i++ )
+	{
+		str.appendFormat( "0x%08X: ", i );
+		char dump[24];
+		unsigned int j;
+		for( j=0; j<16 && i<len; j++, i++ )
+		{
+			dump[j] = isgraph((unsigned char)data[i]) ? data[i] : '.';
+			dump[j+1] = 0;
+			if ( i == (unsigned int)markByte )
+			{
+				str.shave(1);
+				str.appendFormat( "[%02X]", (unsigned char)data[i] );
+			}
+			else
+			{
+				str.appendFormat( "%02X ", (unsigned char)data[i] );
+			}
+		}
+
+		for( ; j<16; j++ )
+		{
+			str.appendFormat( "   " );
+		}
+		i--;
+		str += ": ";
+		str += dump;
+		str += "\n";
+	}
+
+	return str;
+}
+
+#endif

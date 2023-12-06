@@ -41,6 +41,7 @@ enum WROpcode
 	O_PushIndexFunctionReturnValue,
 
 	O_CallLibFunction,
+	O_CallLibFunctionAndPop,
 
 	O_NewObjectTable,
 	O_AssignToObjectTableByOffset,
@@ -54,6 +55,7 @@ enum WROpcode
 	O_Return,
 	O_Stop,
 
+	O_Dereference,
 	O_Index,
 	O_IndexSkipLoad,
 	O_CountOf,
@@ -320,8 +322,6 @@ enum WROpcode
 	O_ToInt,
 	O_ToFloat,
 
-	O_CallLibFunctionAndPop,
-
 	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,
 	O_FUNCTION_CALL_PLACEHOLDER,
@@ -329,12 +329,4 @@ enum WROpcode
 	O_LAST,
 };
 
-//#define DEBUG_OPCODE_NAMES
-#ifdef DEBUG_OPCODE_NAMES
-#define D_OPCODE
-extern const char* c_opcodeName[];
-#else
 #endif
-
-#endif
-

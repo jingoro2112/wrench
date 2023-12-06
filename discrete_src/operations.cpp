@@ -85,20 +85,21 @@ void WRValue::arrayValue( WRValue* val ) const
 
 	if ( IS_RAW_ARRAY(r->xtype) )
 	{
-		val->p2 = INIT_AS_INT;
 		val->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[s]) : 0;
+		val->p2 = INIT_AS_INT;
 	}
 	else if ( r->va->m_type == SV_VALUE )
 	{
 		if ( s < r->va->m_size )
 		{
-			*val = r->va->m_Vdata[s];
+			WRValue* R = r;
+			*val = R->va->m_Vdata[s];
 		}
 	}
 	else if ( r->va->m_type == SV_CHAR )
 	{
-		val->p2 = INIT_AS_INT;
 		val->ui = (s < r->va->m_size) ? (uint32_t)(unsigned char)r->va->m_Cdata[s] : 0;
+		val->p2 = INIT_AS_INT;
 	}
 	else
 	{

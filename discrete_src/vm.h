@@ -171,12 +171,24 @@ void wr_removeFromHashTable( WRContext* c, WRValue* index, WRValue* table );
 
 extern WRReturnFunc wr_CompareEQ[16];
 
-#ifdef WRENCH_COMPACT
-int32_t READ_32_FROM_PC( const unsigned char* P );
-int16_t READ_16_FROM_PC( const unsigned char* P );
+// if the current + native match then great it's a simple read, it's
+// only when they differ that we need bitshiftiness
+#if (defined(WRENCH_LITTLE_ENDIAN) && defined(WRENCH_NATIVE_LITTLE_ENDIAN))	|| (defined(WRENCH_BIG_ENDIAN) && defined(WRENCH_NATIVE_BIG_ENDIAN))
+ #define READ_32_FROM_PC(P) (int32_t)(*(int32_t *)(P))
+ #define READ_16_FROM_PC(P) (int16_t)(*(int16_t *)(P))
 #else
-#define READ_32_FROM_PC(P) ((((int32_t)*(P)) << 24) | (((int32_t)*((P)+1)) << 16) | (((int32_t)*((P)+2)) << 8) | ((int32_t)*((P)+3))) 
-#define READ_16_FROM_PC(P) ((int16_t)((((int16_t)*(P)) << 8) | ((int16_t)*(P+1))))
+ #ifdef WRENCH_COMPACT
+  int32_t READ_32_FROM_PC( const unsigned char* P );
+  int16_t READ_16_FROM_PC( const unsigned char* P );
+ #else
+  #if defined( WRENCH_NATIVE_BIG_ENDIAN )
+   #define READ_32_FROM_PC(P) (int32_t)((int32_t)*(P+3) | ((int32_t)*(P+2))<<8 | ((int32_t)*(P+1))<<16 | ((int32_t)*(P))<<24)
+   #define READ_16_FROM_PC(P) (int16_t)((int16_t)*(P+1) | ((int16_t)*(P))<<8)
+  #elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
+   #define READ_32_FROM_PC(P) (int32_t)((int32_t)*(P) | ((int32_t)*(P+1))<<8 | ((int32_t)*(P+2))<<16 | ((int32_t)*(P+3))<<24)
+   #define READ_16_FROM_PC(P) (int16_t)((int16_t)*(P) | ((int16_t)*(P+1))<<8)
+  #endif
+ #endif
 #endif
 
 #endif

@@ -1,5 +1,42 @@
-- fixed warning with int/int32_t pointer confusion in 64 bit land
+3.0.0 ----------------------------------------------------------------------------------
 
+!!NOTE: Code generated on 3.* is NOT compatible with 2.* and verse-visa !!
+
+- new version sub-type added "build" 
+
+- Actually ran wrench on a big-endian machine and it blew chow. short version:
+  I THOUGHT I had been testing on big-endian using Raspberry-Pi since it's ARM but
+  turns out (stop snickering!) That I was wrong about that
+
+  So using Qemu and a PPC debian image I actually tested it on an [emulated] big-endian box
+  and shook out all the bugs.
+
+  This led me the conclusion that storing data natively as big-endian, a habit
+  from my netork progamming, is stupid. It requires byte-swapping on every architechitecture
+  this is likely to be used on, including embedded. So the "native" format of data in
+  wrench is now Little-Endian, 
+
+  tl;dr:
+  
+  this:
+
+    ((int32_t)*(P+3) | ((int32_t)*(P+2))<<8 | ((int32_t)*(P+1))<<16 | ((int32_t)*(P))<<24)
+
+  becoms this:
+
+    (*(int32_t *)(P))
+  
+  with a pickup in speed and decrease of code size. so yay.
+  bad news is this means pushing the major version since it is no longer binary compatible
+
+- Taking advantage of non-binary-compatible to clean up the opcode order a bit and group
+  some likes together.
+- Added PPC (qemu/G4/debian) to test-platforms required to pass before release. It's
+  slow at 266mhz single-core (wow.. there was a time...) but is big-endian so actually
+  ensures cross-compatibility.
+- fixed opcode error in corner-case of keyhole optimizer in index
+- added opcode for indexed members into function call, they need to be dereferenced
+  in order to work as expected
 
 2.2 ----------------------------------------------------------------------------------
 - Major API change to wr_callfunction(...) !!!!!!!
@@ -19,6 +56,8 @@
 - WRValue* WrenchValue::asArrayMember( const int index )
 - int* WrenchValue::makeInt()
 - float* WrenchValue::makeFloat();
+- fixed warning with int/int32_t pointer confusion in 64 bit land
+- fixed command-line strip/symbols flag to work properly
 
 2.12 ----------------------------------------------------------------------------------
 - added global function symbols and method to access them via c:

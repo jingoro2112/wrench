@@ -40,6 +40,10 @@ clean:
 valgrind: $(OBJS) wrench_cli.cpp
 	g++ -o wrench_v $(FLAGS) -Wall -Werror -I. -Idiscrete_src -O3 -ggdb $(OBJS) wrench_cli.cpp 
 
+test: $(OBJS) wrench_cli.cpp
+	g++ $(OBJS) -Wall -Werror wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_cli
+	./wrench_cli t
+
 dev_wrench: $(OBJS) wrench_cli.cpp
 	g++ $(OBJS) -Wall -Werror wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_cli
 
