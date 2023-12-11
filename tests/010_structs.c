@@ -138,12 +138,12 @@ in.a = 2;
 
 if ( in.a + in.a + in.a + in.a != 8 ) println("err 23");
 
-
+// play with the parser:
 struct Bob
-{
-};
+{//{
+/*{*/};
 
-function a()
+function/**/a()//{
 {
 	p = 23;
 	h = 2;
@@ -179,8 +179,8 @@ instance4 = new a
 if ( instance4.p != 321) println("err 27");
 if ( instance4.h != 2 ) println("err 28");
 
-struct particle
-{
+struct/* */particle
+{//
 	x;
 	y;
 	z; // specifically does NOT get the 'global' z because this is a struct

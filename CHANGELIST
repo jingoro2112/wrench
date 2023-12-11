@@ -1,3 +1,16 @@
+3.1.0 ----------------------------------------------------------------------------------
+- Trying to figure out how to add this-> ish functionalit
+- Added new string functions:
+    str::concat
+    str::left
+    str::trunc
+    str::right
+    str::substr
+    str::trimright
+    str::trimleft
+    str::trim
+    str::insert
+
 3.0.0 ----------------------------------------------------------------------------------
 
 !!NOTE: Code generated on 3.* is NOT compatible with 2.* and verse-visa !!

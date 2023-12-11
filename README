@@ -26,17 +26,13 @@ Highlights:
 
 - Yes switch (and NO it's not if-else sugar)
 
-- Can operate directly on data and exposes all static values
-  to be manipulated externally and directly.
+- Can operate directly on data and exposes all static values to be manipulated externally and directly.
 
 - Can call back and forth to native code with minimal overhead
 
 - API is designed to be easily extended, that's the whole point!
 
-- Memory is garbage-collected but only for dynamic arrays. Unless
-  you are allocating/de-allocating arrays the gc _never_ runs.
-
-- MIT licence
+- Memory is garbage-collected but only for dynamic arrays. Unless you are allocating/de-allocating arrays the gc _never_ runs.
 
 - Includes a handy command-line tool
 

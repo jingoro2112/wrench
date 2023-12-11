@@ -27,7 +27,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 3
-#define WRENCH_VERSION_MINOR 0
+#define WRENCH_VERSION_MINOR 1
 #define WRENCH_VERSION_BUILD 0
 
 /************************************************************************
@@ -51,7 +51,7 @@ interpreter in favor of a giant switch(). This saves ~6k at the cost
 of a chunk of speed so only use it if you need to.
 */
 #define WRENCH_COMPACT           // saves a lot, costs some speed
-#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
+//#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 /***********************************************************************/
 
 /************************************************************************
@@ -351,7 +351,8 @@ enum WRError
 	WR_ERR_continue_keyword_not_in_looping_structure,
 	WR_ERR_expected_while,
 	WR_ERR_compiler_panic,
-	WR_ERR_constant_refined,
+	WR_ERR_constant_redefined,
+	WR_ERR_struct_in_struct,
 
 	WR_ERR_run_must_be_called_by_itself_first,
 	WR_ERR_hash_table_size_exceeded,

@@ -218,3 +218,64 @@ if ( str::chr("#()*+,-/:;<=>?@\\^", '\\') != 15 ) println("strchr 3");
 if ( str::chr("#()*+,-/:;<=>?@\\^", '^') != 16 ) println("strchr 4");
 if ( str::chr("#()*+,-/:;<=>?@\\^", 'A') != -1 ) println("strchr 5");
 
+a = "hello";
+b = "world";
+if ( str::concat( "hello", "world" ) != "helloworld" ) println( "concat0" );
+if ( str::concat( a, "world" ) != "helloworld" ) println( "concat1" );
+if ( str::concat( "hello", b ) != "helloworld" ) println( "concat2" );
+if ( str::concat( a, b ) != "helloworld" ) println( "concat3" );
+
+if ( str::left( "hello", 0 ) != "" ) println( "left0");
+if ( str::left( "hello", 1 ) != "h" ) println( "left1");
+if ( str::left( "hello", 2 ) != "he" ) println( "left2");
+if ( str::left( "hello", 5 ) != "hello" ) println( "left3");
+if ( str::left( "hello", 15 ) != "hello" ) println( "left4");
+if ( str::left( a, 0 ) != "" ) println( "left5");
+if ( str::left( a, 1 ) != "h" ) println( "left6");
+if ( str::left( a, 2 ) != "he" ) println( "left7");
+if ( str::left( a, 5 ) != "hello" ) println( "left8");
+if ( str::left( a, 15 ) != "hello" ) println( "left9");
+
+if ( str::trunc( "hello", 0 ) != "" ) println( "trunc0");
+if ( str::trunc( "hello", 1 ) != "h" ) println( "trunc1");
+if ( str::trunc( "hello", 2 ) != "he" ) println( "trunc2");
+if ( str::trunc( "hello", 5 ) != "hello" ) println( "trunc3");
+if ( str::trunc( "hello", 15 ) != "hello" ) println( "trunc4");
+if ( str::trunc( a, 0 ) != "" ) println( "trunc5");
+if ( str::trunc( a, 1 ) != "h" ) println( "trunc6");
+if ( str::trunc( a, 2 ) != "he" ) println( "trunc7");
+if ( str::trunc( a, 5 ) != "hello" ) println( "trunc8");
+if ( str::trunc( a, 15 ) != "hello" ) println( "trunc9");
+
+if ( str::trimright("") != "" ) println("tright0");
+if ( str::trimright(" ") != "" ) println("tright01");
+if ( str::trimright("123") != "123" ) println("tright1");
+if ( str::trimright("123 ") != "123" ) println("tright2");
+if ( str::trimright(" 123 ") != " 123" ) println("tright3");
+if ( str::trimright(" 123") != " 123" ) println("tright4");
+
+if ( str::trimleft("") != "" ) println("tleft0");
+if ( str::trimleft(" ") != "" ) println("tleft10");
+if ( str::trimleft("123") != "123" ) println("tleft1");
+if ( str::trimleft("123 ") != "123 " ) println("tleft2");
+if ( str::trimleft(" 123 ") != "123 " ) println("tleft3");
+if ( str::trimleft(" 123") != "123" ) println("tleft4");
+
+if ( str::trim("") != "" ) println("t0");
+if ( str::trim(" ") != "" ) println("t10");
+if ( str::trim("123") != "123" ) println("t1");
+if ( str::trim("123 ") != "123" ) println("t2");
+if ( str::trim(" 123 ") != "123" ) println("t3");
+if ( str::trim(" 123") != "123" ) println("t4");
+
+if ( str::insert( "", "", 0 ) != "" ) println("ins0");
+if ( str::insert( "", "", 10 ) != "" ) println("ins1");
+if ( str::insert( "11", "", 0 ) != "11" ) println("ins2");
+if ( str::insert( "11", "", 10 ) != "11" ) println("ins3");
+if ( str::insert( "", "11", 0 ) != "11" ) println("ins4");
+if ( str::insert( "", "11", 10 ) != "11" ) println("ins5");
+if ( str::insert( "11", "22", 0 ) != "2211" ) println("ins6");
+if ( str::insert( "11", "22", 1 ) != "1221" ) println("ins7");
+if ( str::insert( "11", "22", 2 ) != "1122" ) println("ins8");
+if ( str::insert( "11", "22", 12 ) != "1122" ) println("ins9");
+

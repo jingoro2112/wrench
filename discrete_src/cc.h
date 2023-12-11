@@ -352,10 +352,13 @@ struct WRUnitContext
 	// the code that runs when it loads
 	// the locals it has
 	WRBytecode bytecode;
+
+	int parentUnitIndex;
 	
 	WRUnitContext() { reset(); }
 	void reset()
 	{
+		parentUnitIndex = 0;
 		hash = 0;
 		arguments = 0;
 		offsetInBytecode = 0;
@@ -373,6 +376,7 @@ private:
 	
 	bool isReserved( const char* token );
 	bool isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix );
+
 	bool getToken( WRExpressionContext& ex, const char* expect =0 );
 
 	static bool CheckSkipLoad( WROpcode opcode, WRBytecode& bytecode, int a, int o );
@@ -410,7 +414,7 @@ private:
 	bool parseCallFunction( WRExpression& expression, WRstr functionName, int depth, bool parseArguments );
 	bool pushObjectTable( WRExpressionContext& context, WRarray<WRNamespaceLookup>& localSpace, uint32_t hash );
 	char parseExpression( WRExpression& expression);
-	bool parseUnit( bool isStruct );
+	bool parseUnit( bool isStruct, int parentUnitIndex );
 	bool parseWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseDoWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseForLoop( bool& returnCalled, WROpcode opcodeToReturn );
@@ -423,10 +427,19 @@ private:
 
 	void createLocalHashMap( WRUnitContext& unit, unsigned char** buf, int* size );
 	void link( unsigned char** out, int* outLen, bool includeSymbols );
-	
+
 	const char* m_source;
 	int m_sourceLen;
 	int m_pos;
+
+	bool getChar( char &c ) { c = m_source[m_pos++]; return m_pos < m_sourceLen; }
+	bool checkAsComment( char lead );
+	bool readCurlyBlock( WRstr& block );
+	struct TokenBlock
+	{
+		WRstr data;
+		TokenBlock* next;
+	};
 
 	WRstr m_loadedToken;
 	WRValue m_loadedValue;

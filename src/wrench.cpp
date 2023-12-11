@@ -2120,10 +2120,13 @@ struct WRUnitContext
 	// the code that runs when it loads
 	// the locals it has
 	WRBytecode bytecode;
+
+	int parentUnitIndex;
 	
 	WRUnitContext() { reset(); }
 	void reset()
 	{
+		parentUnitIndex = 0;
 		hash = 0;
 		arguments = 0;
 		offsetInBytecode = 0;
@@ -2141,6 +2144,7 @@ private:
 	
 	bool isReserved( const char* token );
 	bool isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix );
+
 	bool getToken( WRExpressionContext& ex, const char* expect =0 );
 
 	static bool CheckSkipLoad( WROpcode opcode, WRBytecode& bytecode, int a, int o );
@@ -2178,7 +2182,7 @@ private:
 	bool parseCallFunction( WRExpression& expression, WRstr functionName, int depth, bool parseArguments );
 	bool pushObjectTable( WRExpressionContext& context, WRarray<WRNamespaceLookup>& localSpace, uint32_t hash );
 	char parseExpression( WRExpression& expression);
-	bool parseUnit( bool isStruct );
+	bool parseUnit( bool isStruct, int parentUnitIndex );
 	bool parseWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseDoWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseForLoop( bool& returnCalled, WROpcode opcodeToReturn );
@@ -2191,10 +2195,19 @@ private:
 
 	void createLocalHashMap( WRUnitContext& unit, unsigned char** buf, int* size );
 	void link( unsigned char** out, int* outLen, bool includeSymbols );
-	
+
 	const char* m_source;
 	int m_sourceLen;
 	int m_pos;
+
+	bool getChar( char &c ) { c = m_source[m_pos++]; return m_pos < m_sourceLen; }
+	bool checkAsComment( char lead );
+	bool readCurlyBlock( WRstr& block );
+	struct TokenBlock
+	{
+		WRstr data;
+		TokenBlock* next;
+	};
 
 	WRstr m_loadedToken;
 	WRValue m_loadedValue;
@@ -2277,6 +2290,11 @@ SOFTWARE.
 
 #define WR_COMPILER_LITERAL_STRING 0x10 
 #define KEYHOLE_OPTIMIZER
+
+
+//#define TEST_STRUCT_PARSING
+
+
 
 //------------------------------------------------------------------------------
 const char* c_reserved[] =
@@ -2922,7 +2940,7 @@ foundMacroToken:
 	{
 		return false;
 	}
-	
+
 	return true;
 }
 
@@ -6268,11 +6286,17 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 }
 
 //------------------------------------------------------------------------------
-bool WRCompilationContext::parseUnit( bool isStruct )
+bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 {
 	int previousIndex = m_unitTop;
 	m_unitTop = m_units.count();
-	
+
+	if ( parentUnitIndex && isStruct )
+	{
+		m_err = WR_ERR_struct_in_struct;
+		return false;
+	}
+
 	bool isGlobal;
 
 	WRExpressionContext ex;
@@ -6290,6 +6314,8 @@ bool WRCompilationContext::parseUnit( bool isStruct )
 
 	m_units[m_unitTop].hash = wr_hash( token, token.size() );
 	m_units[m_unitTop].bytecode.isStructSpace = isStruct;
+
+	m_units[m_unitTop].parentUnitIndex = parentUnitIndex; // if non-zero, must be called from a new'ed structure!
 	
 	// get the function name
 	if ( getToken(ex, "(") )
@@ -6921,7 +6947,7 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 		
 		if ( lookupConstantValue(prefix) )
 		{
-			m_err = WR_ERR_constant_refined;
+			m_err = WR_ERR_constant_redefined;
 			return false;
 		}
 
@@ -7456,7 +7482,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 
-			if ( !parseUnit(true) )
+			if ( !parseUnit(true, unitIndex) )
 			{
 				return false;
 			}
@@ -7469,7 +7495,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 			
-			if ( !parseUnit(false) )
+			if ( !parseUnit(false, unitIndex) )
 			{
 				return false;
 			}
@@ -7852,6 +7878,107 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 }
 
 //------------------------------------------------------------------------------
+bool WRCompilationContext::checkAsComment( char lead )
+{
+	char c;
+	if ( lead == '/' )
+	{
+		if ( !getChar(c) )
+		{
+			m_err = WR_ERR_unexpected_EOF;
+			return false;
+		}
+
+		if ( c == '/' )
+		{
+			while( getChar(c) && c != '\n' );
+			return true;
+		}
+		else if ( c == '*' )
+		{
+			for(;;)
+			{
+				if ( !getChar(c) )
+				{
+					m_err = WR_ERR_unexpected_EOF;
+					return false;
+				}
+
+				if ( c == '*' )
+				{
+					if ( !getChar(c) )
+					{
+						m_err = WR_ERR_unexpected_EOF;
+						return false;
+					}
+
+					if ( c == '/' )
+					{
+						break;
+					}
+				}
+			}
+
+			return true;
+		}
+
+		// else not a comment
+	}
+
+	return false;
+}
+
+//------------------------------------------------------------------------------
+bool WRCompilationContext::readCurlyBlock( WRstr& block )
+{
+	char c;
+	int closesNeeded = 0;
+
+	for(;;)
+	{
+		if ( !getChar(c) )
+		{
+			m_err = WR_ERR_unexpected_EOF;
+			return false;
+		}
+
+		// read past comments
+		if ( checkAsComment(c) )
+		{
+			continue;
+		}
+
+		if ( m_err )
+		{
+			return false;
+		}
+
+		block += c;
+		
+		if ( c == '{' )
+		{
+			++closesNeeded;
+		}
+		
+		if ( c == '}' )
+		{
+			if ( closesNeeded == 0 )
+			{
+				m_err = WR_ERR_unexpected_token;
+				return false;
+			}
+			
+			if ( !--closesNeeded )
+			{
+				break;
+			}
+		}
+	}
+
+	return true;
+}
+
+//------------------------------------------------------------------------------
 WRError WRCompilationContext::compile( const char* source,
 									   const int size,
 									   unsigned char** out,
@@ -7878,9 +8005,10 @@ WRError WRCompilationContext::compile( const char* source,
 
 	m_loadedValue.p2 = INIT_AS_REF;
 
+	TokenBlock* unitBlocks = 0;
+	
 	do
 	{
-
 		WRExpressionContext ex;
 		WRstr& token = ex.token;
 		WRValue& value = ex.value;
@@ -7888,12 +8016,58 @@ WRError WRCompilationContext::compile( const char* source,
 		{
 			break;
 		}
-		m_loadedToken = token;
-		m_loadedValue = value;
-		parseStatement( 0, ';', returnCalled, O_GlobalStop );
+#ifdef TEST_STRUCT_PARSING
+		if ( token == "struct" || token == "function" )
+		{
+			TokenBlock* block = new TokenBlock;
+			block->next = unitBlocks;
+			unitBlocks = block;
+
+			block->data += token;
+			block->data += " ";
+			
+			if ( !readCurlyBlock(block->data) )
+			{
+				break;
+			}
+		}
+		else
+#endif
+		{
+			m_loadedToken = token;
+			m_loadedValue = value;
+
+			parseStatement( 0, ';', returnCalled, O_GlobalStop );
+		}
 
 	} while ( !m_EOF && (m_err == WR_ERR_None) );
 
+	while ( unitBlocks )
+	{
+		m_EOF = false;
+		m_sourceLen = unitBlocks->data.size();
+		m_source = unitBlocks->data.c_str();
+		m_pos = 0;
+		
+		while ( !m_EOF && (m_err == WR_ERR_None) )
+		{
+			WRExpressionContext ex;
+			WRstr& token = ex.token;
+			WRValue& value = ex.value;
+			if ( !getToken(ex) )
+			{
+				break;
+			}
+			m_loadedToken = token;
+			m_loadedValue = value;
+			parseStatement( 0, ';', returnCalled, O_GlobalStop );
+		} 
+		
+		TokenBlock* next = unitBlocks->next;
+		delete unitBlocks;
+		unitBlocks = next;
+	}
+	
 	WRstr msg;
 	
 	if ( m_err != WR_ERR_None )
@@ -13920,6 +14094,192 @@ void wr_tol( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
+void wr_concat( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	if ( argn < 2 )
+	{
+		return;
+	}
+
+	WRValue* args = stackTop - argn;
+	unsigned int len1 = 0;
+	unsigned int len2 = 0;
+	const char* data1 = args[0].c_str( &len1 );
+	const char* data2 = args[1].c_str( &len2 );
+
+	if( !data1 || !data2 )
+	{
+		return;
+	}
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->va = c->getSVA( len1 + len2, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data1, len1 );
+	memcpy( stackTop->va->m_Cdata + len1, data2, len2 );
+}
+
+//------------------------------------------------------------------------------
+void wr_left( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	if ( argn < 2 )
+	{
+		return;
+	}
+
+	WRValue* args = stackTop - argn;
+	unsigned int len = 0;
+	const char* data = args[0].c_str( &len );
+	unsigned int chars = args[1].asInt();
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	
+	if ( chars > len )
+	{
+		chars = len;
+	}
+	
+	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data, chars );
+}
+
+//------------------------------------------------------------------------------
+void wr_right( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+	
+	if ( argn < 2 )
+	{
+		return;
+	}
+
+	WRValue* args = stackTop - argn;
+	unsigned int len = 0;
+	const char* data = args[0].c_str( &len );
+	unsigned int chars = args[1].asInt();
+
+	if ( chars > len )
+	{
+		chars = len;
+	}
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data + (len - chars), chars );
+}
+
+//------------------------------------------------------------------------------
+void wr_trimright( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	WRValue* args = stackTop - argn;
+	const char* data;
+	int len = 0;
+	
+	if ( argn < 1 || ((data = args->c_str((unsigned int *)&len)) == 0) )
+	{
+		return;
+	}
+
+	while( --len >= 0 && isspace(data[len]) );
+
+	++len;
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->va = c->getSVA( len, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data, len );
+}
+
+//------------------------------------------------------------------------------
+void wr_trimleft( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	WRValue* args = stackTop - argn;
+	const char* data;
+	unsigned int len = 0;
+	
+	if ( argn < 1 || ((data = args->c_str(&len)) == 0) )
+	{
+		return;
+	}
+
+	unsigned int marker = 0;
+	while( marker < len && isspace(data[marker]) ) { ++marker; }
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->va = c->getSVA( len - marker, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data + marker, len - marker );
+}
+
+//------------------------------------------------------------------------------
+void wr_trim( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	WRValue* args = stackTop - argn;
+	const char* data;
+	int len = 0;
+
+	if ( argn < 1 || ((data = args->c_str((unsigned int*)&len)) == 0) )
+	{
+		return;
+	}
+
+	int marker = 0;
+	while( marker < len && isspace(data[marker]) ) { ++marker; }
+
+	while( --len >= marker && isspace(data[len]) );
+
+	++len;
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->va = c->getSVA( len - marker, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data + marker, len - marker );
+}
+
+//------------------------------------------------------------------------------
+void wr_insert( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	if ( argn < 3 )
+	{
+		return;
+	}
+
+	WRValue* args = stackTop - argn;
+	unsigned int len1 = 0;
+	unsigned int len2 = 0;
+	const char* data1 = args[0].c_str( &len1 );
+	const char* data2 = args[1].c_str( &len2 );
+
+	if( !data1 || !data2 )
+	{
+		return;
+	}
+	
+	unsigned int pos = args[2].asInt();
+	if ( pos >= len1 )
+	{
+		pos = len1;
+	}
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	unsigned int newlen = len1 + len2;
+	stackTop->va = c->getSVA( newlen, SV_CHAR, false );
+
+	memcpy( stackTop->va->m_Cdata, data1, pos );
+	memcpy( stackTop->va->m_Cdata + pos, data2, len2 );
+	memcpy( stackTop->va->m_Cdata + pos + len2, data1 + pos, len1  - pos );
+}
+
+
+//------------------------------------------------------------------------------
 void wr_loadStringLib( WRState* w )
 {
 	wr_registerLibraryFunction( w, "str::strlen", wr_strlen );
@@ -13934,6 +14294,15 @@ void wr_loadStringLib( WRState* w )
 	wr_registerLibraryFunction( w, "str::tolower", wr_tolower );
 	wr_registerLibraryFunction( w, "str::toupper", wr_toupper );
 	wr_registerLibraryFunction( w, "str::tol", wr_tol );
+	wr_registerLibraryFunction( w, "str::concat", wr_concat );
+	wr_registerLibraryFunction( w, "str::left", wr_left );
+	wr_registerLibraryFunction( w, "str::trunc", wr_left );
+	wr_registerLibraryFunction( w, "str::right", wr_right );
+	wr_registerLibraryFunction( w, "str::substr", wr_mid );
+	wr_registerLibraryFunction( w, "str::trimright", wr_trimright );
+	wr_registerLibraryFunction( w, "str::trimleft", wr_trimleft );
+	wr_registerLibraryFunction( w, "str::trim", wr_trim );
+	wr_registerLibraryFunction( w, "str::insert", wr_insert );
 }
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com

@@ -29,6 +29,11 @@ SOFTWARE.
 #define WR_COMPILER_LITERAL_STRING 0x10 
 #define KEYHOLE_OPTIMIZER
 
+
+//#define TEST_STRUCT_PARSING
+
+
+
 //------------------------------------------------------------------------------
 const char* c_reserved[] =
 {
@@ -673,7 +678,7 @@ foundMacroToken:
 	{
 		return false;
 	}
-	
+
 	return true;
 }
 
@@ -4019,11 +4024,17 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 }
 
 //------------------------------------------------------------------------------
-bool WRCompilationContext::parseUnit( bool isStruct )
+bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 {
 	int previousIndex = m_unitTop;
 	m_unitTop = m_units.count();
-	
+
+	if ( parentUnitIndex && isStruct )
+	{
+		m_err = WR_ERR_struct_in_struct;
+		return false;
+	}
+
 	bool isGlobal;
 
 	WRExpressionContext ex;
@@ -4041,6 +4052,8 @@ bool WRCompilationContext::parseUnit( bool isStruct )
 
 	m_units[m_unitTop].hash = wr_hash( token, token.size() );
 	m_units[m_unitTop].bytecode.isStructSpace = isStruct;
+
+	m_units[m_unitTop].parentUnitIndex = parentUnitIndex; // if non-zero, must be called from a new'ed structure!
 	
 	// get the function name
 	if ( getToken(ex, "(") )
@@ -4672,7 +4685,7 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 		
 		if ( lookupConstantValue(prefix) )
 		{
-			m_err = WR_ERR_constant_refined;
+			m_err = WR_ERR_constant_redefined;
 			return false;
 		}
 
@@ -5207,7 +5220,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 
-			if ( !parseUnit(true) )
+			if ( !parseUnit(true, unitIndex) )
 			{
 				return false;
 			}
@@ -5220,7 +5233,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 			
-			if ( !parseUnit(false) )
+			if ( !parseUnit(false, unitIndex) )
 			{
 				return false;
 			}
@@ -5603,6 +5616,107 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 }
 
 //------------------------------------------------------------------------------
+bool WRCompilationContext::checkAsComment( char lead )
+{
+	char c;
+	if ( lead == '/' )
+	{
+		if ( !getChar(c) )
+		{
+			m_err = WR_ERR_unexpected_EOF;
+			return false;
+		}
+
+		if ( c == '/' )
+		{
+			while( getChar(c) && c != '\n' );
+			return true;
+		}
+		else if ( c == '*' )
+		{
+			for(;;)
+			{
+				if ( !getChar(c) )
+				{
+					m_err = WR_ERR_unexpected_EOF;
+					return false;
+				}
+
+				if ( c == '*' )
+				{
+					if ( !getChar(c) )
+					{
+						m_err = WR_ERR_unexpected_EOF;
+						return false;
+					}
+
+					if ( c == '/' )
+					{
+						break;
+					}
+				}
+			}
+
+			return true;
+		}
+
+		// else not a comment
+	}
+
+	return false;
+}
+
+//------------------------------------------------------------------------------
+bool WRCompilationContext::readCurlyBlock( WRstr& block )
+{
+	char c;
+	int closesNeeded = 0;
+
+	for(;;)
+	{
+		if ( !getChar(c) )
+		{
+			m_err = WR_ERR_unexpected_EOF;
+			return false;
+		}
+
+		// read past comments
+		if ( checkAsComment(c) )
+		{
+			continue;
+		}
+
+		if ( m_err )
+		{
+			return false;
+		}
+
+		block += c;
+		
+		if ( c == '{' )
+		{
+			++closesNeeded;
+		}
+		
+		if ( c == '}' )
+		{
+			if ( closesNeeded == 0 )
+			{
+				m_err = WR_ERR_unexpected_token;
+				return false;
+			}
+			
+			if ( !--closesNeeded )
+			{
+				break;
+			}
+		}
+	}
+
+	return true;
+}
+
+//------------------------------------------------------------------------------
 WRError WRCompilationContext::compile( const char* source,
 									   const int size,
 									   unsigned char** out,
@@ -5629,9 +5743,10 @@ WRError WRCompilationContext::compile( const char* source,
 
 	m_loadedValue.p2 = INIT_AS_REF;
 
+	TokenBlock* unitBlocks = 0;
+	
 	do
 	{
-
 		WRExpressionContext ex;
 		WRstr& token = ex.token;
 		WRValue& value = ex.value;
@@ -5639,12 +5754,58 @@ WRError WRCompilationContext::compile( const char* source,
 		{
 			break;
 		}
-		m_loadedToken = token;
-		m_loadedValue = value;
-		parseStatement( 0, ';', returnCalled, O_GlobalStop );
+#ifdef TEST_STRUCT_PARSING
+		if ( token == "struct" || token == "function" )
+		{
+			TokenBlock* block = new TokenBlock;
+			block->next = unitBlocks;
+			unitBlocks = block;
+
+			block->data += token;
+			block->data += " ";
+			
+			if ( !readCurlyBlock(block->data) )
+			{
+				break;
+			}
+		}
+		else
+#endif
+		{
+			m_loadedToken = token;
+			m_loadedValue = value;
+
+			parseStatement( 0, ';', returnCalled, O_GlobalStop );
+		}
 
 	} while ( !m_EOF && (m_err == WR_ERR_None) );
 
+	while ( unitBlocks )
+	{
+		m_EOF = false;
+		m_sourceLen = unitBlocks->data.size();
+		m_source = unitBlocks->data.c_str();
+		m_pos = 0;
+		
+		while ( !m_EOF && (m_err == WR_ERR_None) )
+		{
+			WRExpressionContext ex;
+			WRstr& token = ex.token;
+			WRValue& value = ex.value;
+			if ( !getToken(ex) )
+			{
+				break;
+			}
+			m_loadedToken = token;
+			m_loadedValue = value;
+			parseStatement( 0, ';', returnCalled, O_GlobalStop );
+		} 
+		
+		TokenBlock* next = unitBlocks->next;
+		delete unitBlocks;
+		unitBlocks = next;
+	}
+	
 	WRstr msg;
 	
 	if ( m_err != WR_ERR_None )

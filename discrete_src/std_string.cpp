@@ -513,6 +513,192 @@ void wr_tol( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
+void wr_concat( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	if ( argn < 2 )
+	{
+		return;
+	}
+
+	WRValue* args = stackTop - argn;
+	unsigned int len1 = 0;
+	unsigned int len2 = 0;
+	const char* data1 = args[0].c_str( &len1 );
+	const char* data2 = args[1].c_str( &len2 );
+
+	if( !data1 || !data2 )
+	{
+		return;
+	}
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->va = c->getSVA( len1 + len2, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data1, len1 );
+	memcpy( stackTop->va->m_Cdata + len1, data2, len2 );
+}
+
+//------------------------------------------------------------------------------
+void wr_left( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	if ( argn < 2 )
+	{
+		return;
+	}
+
+	WRValue* args = stackTop - argn;
+	unsigned int len = 0;
+	const char* data = args[0].c_str( &len );
+	unsigned int chars = args[1].asInt();
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	
+	if ( chars > len )
+	{
+		chars = len;
+	}
+	
+	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data, chars );
+}
+
+//------------------------------------------------------------------------------
+void wr_right( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+	
+	if ( argn < 2 )
+	{
+		return;
+	}
+
+	WRValue* args = stackTop - argn;
+	unsigned int len = 0;
+	const char* data = args[0].c_str( &len );
+	unsigned int chars = args[1].asInt();
+
+	if ( chars > len )
+	{
+		chars = len;
+	}
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data + (len - chars), chars );
+}
+
+//------------------------------------------------------------------------------
+void wr_trimright( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	WRValue* args = stackTop - argn;
+	const char* data;
+	int len = 0;
+	
+	if ( argn < 1 || ((data = args->c_str((unsigned int *)&len)) == 0) )
+	{
+		return;
+	}
+
+	while( --len >= 0 && isspace(data[len]) );
+
+	++len;
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->va = c->getSVA( len, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data, len );
+}
+
+//------------------------------------------------------------------------------
+void wr_trimleft( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	WRValue* args = stackTop - argn;
+	const char* data;
+	unsigned int len = 0;
+	
+	if ( argn < 1 || ((data = args->c_str(&len)) == 0) )
+	{
+		return;
+	}
+
+	unsigned int marker = 0;
+	while( marker < len && isspace(data[marker]) ) { ++marker; }
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->va = c->getSVA( len - marker, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data + marker, len - marker );
+}
+
+//------------------------------------------------------------------------------
+void wr_trim( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	WRValue* args = stackTop - argn;
+	const char* data;
+	int len = 0;
+
+	if ( argn < 1 || ((data = args->c_str((unsigned int*)&len)) == 0) )
+	{
+		return;
+	}
+
+	int marker = 0;
+	while( marker < len && isspace(data[marker]) ) { ++marker; }
+
+	while( --len >= marker && isspace(data[len]) );
+
+	++len;
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->va = c->getSVA( len - marker, SV_CHAR, false );
+	memcpy( stackTop->va->m_Cdata, data + marker, len - marker );
+}
+
+//------------------------------------------------------------------------------
+void wr_insert( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	if ( argn < 3 )
+	{
+		return;
+	}
+
+	WRValue* args = stackTop - argn;
+	unsigned int len1 = 0;
+	unsigned int len2 = 0;
+	const char* data1 = args[0].c_str( &len1 );
+	const char* data2 = args[1].c_str( &len2 );
+
+	if( !data1 || !data2 )
+	{
+		return;
+	}
+	
+	unsigned int pos = args[2].asInt();
+	if ( pos >= len1 )
+	{
+		pos = len1;
+	}
+
+	stackTop->p2 = INIT_AS_ARRAY;
+	unsigned int newlen = len1 + len2;
+	stackTop->va = c->getSVA( newlen, SV_CHAR, false );
+
+	memcpy( stackTop->va->m_Cdata, data1, pos );
+	memcpy( stackTop->va->m_Cdata + pos, data2, len2 );
+	memcpy( stackTop->va->m_Cdata + pos + len2, data1 + pos, len1  - pos );
+}
+
+
+//------------------------------------------------------------------------------
 void wr_loadStringLib( WRState* w )
 {
 	wr_registerLibraryFunction( w, "str::strlen", wr_strlen );
@@ -527,4 +713,13 @@ void wr_loadStringLib( WRState* w )
 	wr_registerLibraryFunction( w, "str::tolower", wr_tolower );
 	wr_registerLibraryFunction( w, "str::toupper", wr_toupper );
 	wr_registerLibraryFunction( w, "str::tol", wr_tol );
+	wr_registerLibraryFunction( w, "str::concat", wr_concat );
+	wr_registerLibraryFunction( w, "str::left", wr_left );
+	wr_registerLibraryFunction( w, "str::trunc", wr_left );
+	wr_registerLibraryFunction( w, "str::right", wr_right );
+	wr_registerLibraryFunction( w, "str::substr", wr_mid );
+	wr_registerLibraryFunction( w, "str::trimright", wr_trimright );
+	wr_registerLibraryFunction( w, "str::trimleft", wr_trimleft );
+	wr_registerLibraryFunction( w, "str::trim", wr_trim );
+	wr_registerLibraryFunction( w, "str::insert", wr_insert );
 }

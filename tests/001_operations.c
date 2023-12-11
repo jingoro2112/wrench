@@ -306,4 +306,3 @@ function local()
 	c = ::ag | ::bg;if ( c != 11 ) println("F6");
 	
 }
-

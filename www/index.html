@@ -1057,6 +1057,16 @@ str::strchr( str, char ); // returns -1 if not found
 str::tolower( str );
 str::toupper( str );
 
+str::concat( str1, str2, ... ); // return str1+str2+...
+str::left( str, len ); // return string from left side 0 to len 
+str::right( str, len ); // return string from right side of len chars
+str::substr( str, start, len); // [alias for mid() see above]
+str::trimright( str ); // remove trailing whitespace
+str::trimleft( str ); // remove leading whitespace
+str::trim( str ); // remove leading and trailing whitespace
+str::trunc( str, len ); // [alist for left() see above]
+str::insert( str1, str2, pos ); // insert str2 into str1 at pos
+
 file::read( name ); // returns an array representing the data
 file::write( name, data[] );
 

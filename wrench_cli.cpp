@@ -648,7 +648,7 @@ void testGlobalValues( WRState* w )
 							"function test7() { return global_four[17] == 18; }"
 							"function test8() { return global_four[17] == 19.3; }"
 							"function test9() { return global_four[2] = 200; }"
-							"function test10() { return global_four[32] = 3200; }";
+							"function test10() { return global_four[32] = 3200; }\r\n";
 
 	unsigned char* out;
 	int outLen;
