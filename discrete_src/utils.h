@@ -409,4 +409,6 @@ enum WRGCObjectType
 #define EX_RAW_ARRAY_SIZE_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define IS_EX_SINGLE_CHAR_RAW_P2(P) ((P) == (((uint32_t)WR_EX) | (((uint32_t)WR_EX_RAW_ARRAY<<24)) | (1<<8)))
 
+int wr_addI( int a, int b );
+
 #endif

@@ -1,3 +1,8 @@
+3.1.1 ----------------------------------------------------------------------------------
+- added functionality so  string + string  and string += string work!!
+  its a teeny bit hack-ish but overall not that bad, and does not impact normal
+  performance at all, it's only engaged if you actually use the strings functionality
+
 3.1.0 ----------------------------------------------------------------------------------
 - Trying to figure out how to add this-> ish functionalit
 - Added new string functions:

@@ -410,6 +410,8 @@ enum WRGCObjectType
 #define EX_RAW_ARRAY_SIZE_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define IS_EX_SINGLE_CHAR_RAW_P2(P) ((P) == (((uint32_t)WR_EX) | (((uint32_t)WR_EX_RAW_ARRAY<<24)) | (1<<8)))
 
+int wr_addI( int a, int b );
+
 #endif
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
@@ -460,6 +462,7 @@ public:
 	{
 		uint32_t* m_hashTable;
 		const unsigned char* m_ROMHashTable;
+		WRContext* m_creatorContext;
 	};
 
 	union
@@ -8603,6 +8606,11 @@ WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 		memset( (char*)ret->m_Cdata, 0, sizeof(WRValue) * size);
 	}
 
+	if ( type == SV_CHAR )
+	{
+		ret->m_creatorContext = this;
+	}
+	
 	ret->m_next = svAllocated;
 	svAllocated = ret;
 
@@ -8685,7 +8693,7 @@ static float subtractionF( float a, float b ) { return a - b; }
 static float multiplicationF( float a, float b ) { return a * b; }
 
 static int divisionI( int a, int b ) { return a / b; }
-static int addI( int a, int b ) { return a + b; }
+int wr_addI( int a, int b ) { return a + b; }
 static int subtractionI( int a, int b ) { return a - b; }
 static int multiplicationI( int a, int b ) { return a * b; }
 
@@ -9964,7 +9972,7 @@ targetFuncOpSkipLoadAndReg2:
 			CASE(BinaryAddition):
 			{
 				floatCall = addF;
-				intCall = addI;
+				intCall = wr_addI;
 targetFuncOp:
 				register1 = --stackTop;
 				register0 = stackTop - 1;
@@ -9974,7 +9982,7 @@ targetFuncOp:
 			
 			
 			CASE(SubtractAssign): { floatCall = subtractionF; intCall = subtractionI; goto binaryTableOp; }
-			CASE(AddAssign): { floatCall = addF; intCall = addI; goto binaryTableOp; }
+			CASE(AddAssign): { floatCall = addF; intCall = wr_addI; goto binaryTableOp; }
 			CASE(MultiplyAssign): { floatCall = multiplicationF; intCall = multiplicationI; goto binaryTableOp; }
 			CASE(DivideAssign): { floatCall = divisionF; intCall = divisionI; goto binaryTableOp; }
 			CASE(ModAssign): { intCall = modI; goto binaryTableOpBlankF; }
@@ -10002,7 +10010,7 @@ binaryTableOp:
 			}
 			
 			CASE(SubtractAssignAndPop): { floatCall = subtractionF; intCall = subtractionI; goto binaryTableOpAndPop; }
-			CASE(AddAssignAndPop): { floatCall = addF; intCall = addI; goto binaryTableOpAndPop; }
+			CASE(AddAssignAndPop): { floatCall = addF; intCall = wr_addI; goto binaryTableOpAndPop; }
 			CASE(MultiplyAssignAndPop): { floatCall = multiplicationF; intCall = multiplicationI; goto binaryTableOpAndPop; }
 			CASE(DivideAssignAndPop): { floatCall = divisionF; intCall = divisionI; goto binaryTableOpAndPop; }
 			CASE(ModAssignAndPop): { intCall = modI; goto binaryTableOpAndPopBlankF; }
@@ -10034,7 +10042,7 @@ assignAndPopEx:
 				CONTINUE;
 			}
 			
-			CASE(BinaryAdditionAndStoreGlobal) : { floatCall = addF; intCall = addI; goto targetFuncStoreGlobalOp; }
+			CASE(BinaryAdditionAndStoreGlobal) : { floatCall = addF; intCall = wr_addI; goto targetFuncStoreGlobalOp; }
 			CASE(BinarySubtractionAndStoreGlobal): { floatCall = subtractionF; intCall = subtractionI; goto targetFuncStoreGlobalOp; }
 			CASE(BinaryMultiplicationAndStoreGlobal): { floatCall = multiplicationF; intCall = multiplicationI; goto targetFuncStoreGlobalOp; }
 			CASE(BinaryDivisionAndStoreGlobal):
@@ -10049,7 +10057,7 @@ targetFuncStoreGlobalOp:
 				CONTINUE;
 			}
 			
-			CASE(BinaryAdditionAndStoreLocal): { floatCall = addF; intCall = addI; goto targetFuncStoreLocalOp; }
+			CASE(BinaryAdditionAndStoreLocal): { floatCall = addF; intCall = wr_addI; goto targetFuncStoreLocalOp; }
 			CASE(BinarySubtractionAndStoreLocal): { floatCall = subtractionF; intCall = subtractionI; goto targetFuncStoreLocalOp; }
 			CASE(BinaryMultiplicationAndStoreLocal): { floatCall = multiplicationF; intCall = multiplicationI; goto targetFuncStoreLocalOp; }
 			CASE(BinaryDivisionAndStoreLocal):
@@ -10068,7 +10076,7 @@ targetFuncStoreLocalOp:
 			{
 				register0 = stackTop - 1;
 compactPreIncrement:
-				intCall = addI;
+				intCall = wr_addI;
 				floatCall = addF;
 
 compactIncrementWork:
@@ -10197,21 +10205,21 @@ CompactFFFunc:
 			CASE(GGBinaryAddition):
 			{
 				floatCall = addF;
-				intCall = addI;
+				intCall = wr_addI;
 				goto CompactGGFunc;
 			}
 
 			CASE(GLBinaryAddition):
 			{
 				floatCall = addF;
-				intCall = addI;
+				intCall = wr_addI;
 				goto CompactGLFunc;
 			}
 
 			CASE(LLBinaryAddition):
 			{
 				floatCall = addF;
-				intCall = addI;
+				intCall = wr_addI;
 				goto CompactFFFunc;
 			}
 
@@ -12505,6 +12513,20 @@ static void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, W
 		wr_FuncAssign[(WR_EX<<2)|element.type]( to, &element, intCall, floatCall );
 		wr_arrayToValue( to, from );
 	}
+	else if ( intCall == wr_addI
+			  && IS_ARRAY(to->xtype)
+			  && to->va->m_type == SV_CHAR
+			  && !to->va->m_skipGC
+			  && IS_ARRAY(from->xtype)
+			  && from->va->m_type == SV_CHAR )
+	{
+		char* t = to->va->m_SCdata;
+		to->va->m_SCdata = (char*)malloc( to->va->m_size + from->va->m_size );
+		memcpy( to->va->m_SCdata, t, to->va->m_size );
+		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
+		to->va->m_size = to->va->m_size + from->va->m_size;
+		free( t );
+	}
 }
 static void FuncAssign_X_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
@@ -12584,6 +12606,18 @@ static void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncI
 		WRValue element2;
 		wr_arrayToValue( from, &element2 );
 		wr_funcBinary[(element1.type<<2)|element2.type](&element1, &element2, target, intCall, floatCall );
+	}
+	else if ( intCall == wr_addI
+			  && IS_ARRAY(to->xtype)
+			  && to->va->m_type == SV_CHAR
+			  && !to->va->m_skipGC
+			  && IS_ARRAY(from->xtype)
+			  && from->va->m_type == SV_CHAR )
+	{
+		target->p2 = INIT_AS_ARRAY;
+		target->va = from->va->m_creatorContext->getSVA( from->va->m_size + to->va->m_size, SV_CHAR, false );
+		memcpy( target->va->m_SCdata, from->va->m_SCdata, from->va->m_size );
+		memcpy( target->va->m_SCdata + from->va->m_size, to->va->m_SCdata, to->va->m_size );
 	}
 }
 static void FuncBinary_X_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
@@ -12822,16 +12856,6 @@ X_INT_ASSIGN( wr_LeftShift, << );
 
 
 #define X_ASSIGN( NAME, OPERATION ) \
-static void NAME##Assign_R_E( WRValue* to, WRValue* from ) \
-{\
-	if ( IS_REFARRAY(from->xtype) )\
-	{\
-		WRValue element;\
-		wr_arrayToValue( from, &element );\
-		NAME##Assign[(to->r->type<<2)|element.type](to->r, &element);\
-		*from = *to->r;\
-	}\
-}\
 static void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 {\
 	if ( IS_REFARRAY(to->xtype) )\
@@ -12898,6 +12922,7 @@ static void NAME##Assign_E_R( WRValue* to, WRValue* from )\
 		wr_arrayToValue( to, from );\
 	}\
 }\
+static void NAME##Assign_R_E( WRValue* to, WRValue* from ) { NAME##Assign[(to->r->type<<2)|WR_EX](to->r, from); *from = *to->r; } \
 static void NAME##Assign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; NAME##Assign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }\
 static void NAME##Assign_R_I( WRValue* to, WRValue* from ) { NAME##Assign[(to->r->type<<2)|WR_INT](to->r, from); *from = *to->r; }\
 static void NAME##Assign_R_F( WRValue* to, WRValue* from ) { NAME##Assign[(to->r->type<<2)|WR_FLOAT](to->r, from); *from = *to->r; }\
@@ -12917,21 +12942,139 @@ WRVoidFunc NAME##Assign[16] = \
 
 
 X_ASSIGN( wr_Subtract, - );
-X_ASSIGN( wr_Add, + );
+//X_ASSIGN( wr_Add, + );
 X_ASSIGN( wr_Multiply, * );
 X_ASSIGN( wr_Divide, / );
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+static void wr_AddAssign_E_I( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(to->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( to, &element );
+
+		wr_AddAssign[(element.type<<2)|WR_INT]( &element, from );
+
+		wr_valueToArray( to, &element );
+		*from = element;
+	}
+}
+static void wr_AddAssign_E_F( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(to->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( to, &element );
+
+		wr_AddAssign[(element.type<<2)|WR_FLOAT]( &element, from );
+
+		wr_valueToArray( to, &element );
+		*from = element;
+	}
+}
+static void wr_AddAssign_E_E( WRValue* to, WRValue* from ) 
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+
+		wr_AddAssign[(WR_EX<<2)|element.type]( to, &element );
+		wr_arrayToValue( to, from );
+	}
+	else if ( IS_ARRAY(to->xtype)
+			  && to->va->m_type == SV_CHAR
+			  && !to->va->m_skipGC
+			  && IS_ARRAY(from->xtype)
+			  && from->va->m_type == SV_CHAR )
+	{
+		char* t = to->va->m_SCdata;
+		to->va->m_SCdata = (char*)malloc( to->va->m_size + from->va->m_size );
+		memcpy( to->va->m_SCdata, t, to->va->m_size );
+		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
+		to->va->m_size = to->va->m_size + from->va->m_size;
+		free( t );
+	}
+}
+static void wr_AddAssign_I_E( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_AddAssign[(WR_INT<<2)|element.type](to, &element);
+		*from = *to;
+	}
+}
+static void wr_AddAssign_F_E( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_AddAssign[(WR_FLOAT<<2)|element.type](to, &element);
+		*from = *to;
+	}
+}
+static void wr_AddAssign_E_R( WRValue* to, WRValue* from )
+{
+	if ( IS_REFARRAY(to->xtype) )
+	{
+		WRValue temp = *from->r;
+		wr_AddAssign[(WR_EX<<2)|temp.type]( to, &temp );
+		wr_arrayToValue( to, from );
+	}
+}
+static void wr_AddAssign_R_E( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_EX](to->r, from); *from = *to->r; }
+static void wr_AddAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }
+static void wr_AddAssign_R_I( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_INT](to->r, from); *from = *to->r; }
+static void wr_AddAssign_R_F( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_FLOAT](to->r, from); *from = *to->r; }
+static void wr_AddAssign_I_R( WRValue* to, WRValue* from ) { wr_AddAssign[(WR_INT<<2)+from->r->type](to, from->r); *from = *to; }
+static void wr_AddAssign_F_R( WRValue* to, WRValue* from ) { wr_AddAssign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }
+static void wr_AddAssign_F_F( WRValue* to, WRValue* from ) { to->f += from->f; }
+static void wr_AddAssign_I_I( WRValue* to, WRValue* from ) { to->i += from->i; }
+static void wr_AddAssign_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; to->f = (float)to->i + from->f; }
+static void wr_AddAssign_F_I( WRValue* to, WRValue* from ) { from->p2 = INIT_AS_FLOAT; to->f += (float)from->i; }
+WRVoidFunc wr_AddAssign[16] = 
+{
+	wr_AddAssign_I_I,  wr_AddAssign_I_F,  wr_AddAssign_I_R,  wr_AddAssign_I_E,
+	wr_AddAssign_F_I,  wr_AddAssign_F_F,  wr_AddAssign_F_R,  wr_AddAssign_F_E,
+	wr_AddAssign_R_I,  wr_AddAssign_R_F,  wr_AddAssign_R_R,  wr_AddAssign_R_E,
+	wr_AddAssign_E_I,  wr_AddAssign_E_F,  wr_AddAssign_E_R,  wr_AddAssign_E_E,
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 //------------------------------------------------------------------------------
 #define X_BINARY( NAME, OPERATION ) \
-static void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target )\
-{\
-	if ( IS_REFARRAY(to->xtype) )\
-	{\
-		WRValue element;\
-		wr_arrayToValue( to, &element );\
-		NAME##Binary[(element.type<<2)|from->r->type](&element, from->r, target);\
-	}\
-}\
 static void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target )\
 {\
 	if ( IS_REFARRAY(from->xtype) )\
@@ -12988,6 +13131,7 @@ static void NAME##Binary_F_E( WRValue* to, WRValue* from, WRValue* target )\
 		NAME##Binary[(WR_FLOAT<<2)|element.type](to, &element, target);\
 	}\
 }\
+static void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_EX<<2)+from->r->type](to, from->r, target); }\
 static void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_INT<<2)+from->r->type](to, from->r, target); }\
 static void NAME##Binary_R_F( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_FLOAT](to->r, from, target); }\
 static void NAME##Binary_R_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }\
@@ -13005,10 +13149,117 @@ WRTargetFunc NAME##Binary[16] = \
 	NAME##Binary_E_I,  NAME##Binary_E_F,  NAME##Binary_E_R,  NAME##Binary_E_E,\
 };\
 
-X_BINARY( wr_Addition, + );
+//X_BINARY( wr_Addition, + );
 X_BINARY( wr_Multiply, * );
 X_BINARY( wr_Subtract, - );
 X_BINARY( wr_Divide, / );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+static void wr_AdditionBinary_R_E( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_AdditionBinary[(to->r->type<<2)|element.type]( to->r, &element, target);
+	}
+}
+static void wr_AdditionBinary_E_I( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( IS_REFARRAY(to->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( to, &element );
+		wr_AdditionBinary[(element.type<<2)|WR_INT](&element, from, target);
+	}
+}
+static void wr_AdditionBinary_E_F( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( IS_REFARRAY(to->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( to, &element );
+		wr_AdditionBinary[(element.type<<2)|WR_FLOAT](&element, from, target);
+	}
+}
+static void wr_AdditionBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( IS_REFARRAY(to->xtype) && IS_REFARRAY(from->xtype) )
+	{
+		WRValue element1;
+		wr_arrayToValue( to, &element1 );
+		WRValue element2;
+		wr_arrayToValue( from, &element2 );
+		wr_AdditionBinary[(element1.type<<2)|element2.type](&element1, &element2, target);
+	}
+	else if ( IS_ARRAY(to->xtype)
+			  && to->va->m_type == SV_CHAR
+			  && !to->va->m_skipGC
+			  && IS_ARRAY(from->xtype)
+			  && from->va->m_type == SV_CHAR )
+	{
+		target->p2 = INIT_AS_ARRAY;
+		target->va = from->va->m_creatorContext->getSVA( from->va->m_size + to->va->m_size, SV_CHAR, false );
+		memcpy( target->va->m_SCdata, from->va->m_SCdata, from->va->m_size );
+		memcpy( target->va->m_SCdata + from->va->m_size, to->va->m_SCdata, to->va->m_size );
+	}
+}
+static void wr_AdditionBinary_I_E( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_AdditionBinary[(WR_INT<<2)|element.type](to, &element, target);
+	}
+}
+static void wr_AdditionBinary_F_E( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( IS_REFARRAY(from->xtype) )
+	{
+		WRValue element;
+		wr_arrayToValue( from, &element );
+		wr_AdditionBinary[(WR_FLOAT<<2)|element.type](to, &element, target);
+	}
+}
+static void wr_AdditionBinary_E_R( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(WR_EX<<2)+from->r->type](to, from->r, target); }
+static void wr_AdditionBinary_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(WR_INT<<2)+from->r->type](to, from->r, target); }
+static void wr_AdditionBinary_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(to->r->type<<2)|WR_FLOAT](to->r, from, target); }
+static void wr_AdditionBinary_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }
+static void wr_AdditionBinary_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(to->r->type<<2)|WR_INT](to->r, from, target); }
+static void wr_AdditionBinary_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(WR_FLOAT<<2)+from->r->type](to, from->r, target); }
+static void wr_AdditionBinary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = to->i + from->i; }
+static void wr_AdditionBinary_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = (float)to->i + from->f; }
+static void wr_AdditionBinary_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = to->f + (float)from->i; }
+static void wr_AdditionBinary_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = to->f + from->f; }
+WRTargetFunc wr_AdditionBinary[16] = 
+{
+	wr_AdditionBinary_I_I,  wr_AdditionBinary_I_F,  wr_AdditionBinary_I_R,  wr_AdditionBinary_I_E,
+	wr_AdditionBinary_F_I,  wr_AdditionBinary_F_F,  wr_AdditionBinary_F_R,  wr_AdditionBinary_F_E,
+	wr_AdditionBinary_R_I,  wr_AdditionBinary_R_F,  wr_AdditionBinary_R_R,  wr_AdditionBinary_R_E,
+	wr_AdditionBinary_E_I,  wr_AdditionBinary_E_F,  wr_AdditionBinary_E_R,  wr_AdditionBinary_E_E,
+};
+
+
+
+
+
+
+
+
 
 
 static void doTargetFuncBlank( WRValue* to, WRValue* from, WRValue* target ) {}

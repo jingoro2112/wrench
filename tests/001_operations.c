@@ -53,8 +53,17 @@ hello world
 
 
 
+y = "hello";
+y += "hi";
+if ( y != "hellohi" ) print("failconcat");
 
 
+y = "BB";
+z = "CC";
+y1 = y + z;
+y = y + z;
+if ( y1 != "BBCC" ) print("fail bin1");
+if ( y != "BBCC" ) print("fail bin1");
 
 
 

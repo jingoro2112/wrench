@@ -47,6 +47,7 @@ public:
 	{
 		uint32_t* m_hashTable;
 		const unsigned char* m_ROMHashTable;
+		WRContext* m_creatorContext;
 	};
 
 	union

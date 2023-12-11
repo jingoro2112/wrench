@@ -430,6 +430,11 @@ WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 		memset( (char*)ret->m_Cdata, 0, sizeof(WRValue) * size);
 	}
 
+	if ( type == SV_CHAR )
+	{
+		ret->m_creatorContext = this;
+	}
+	
 	ret->m_next = svAllocated;
 	svAllocated = ret;
 
@@ -512,7 +517,7 @@ static float subtractionF( float a, float b ) { return a - b; }
 static float multiplicationF( float a, float b ) { return a * b; }
 
 static int divisionI( int a, int b ) { return a / b; }
-static int addI( int a, int b ) { return a + b; }
+int wr_addI( int a, int b ) { return a + b; }
 static int subtractionI( int a, int b ) { return a - b; }
 static int multiplicationI( int a, int b ) { return a * b; }
 
@@ -1791,7 +1796,7 @@ targetFuncOpSkipLoadAndReg2:
 			CASE(BinaryAddition):
 			{
 				floatCall = addF;
-				intCall = addI;
+				intCall = wr_addI;
 targetFuncOp:
 				register1 = --stackTop;
 				register0 = stackTop - 1;
@@ -1801,7 +1806,7 @@ targetFuncOp:
 			
 			
 			CASE(SubtractAssign): { floatCall = subtractionF; intCall = subtractionI; goto binaryTableOp; }
-			CASE(AddAssign): { floatCall = addF; intCall = addI; goto binaryTableOp; }
+			CASE(AddAssign): { floatCall = addF; intCall = wr_addI; goto binaryTableOp; }
 			CASE(MultiplyAssign): { floatCall = multiplicationF; intCall = multiplicationI; goto binaryTableOp; }
 			CASE(DivideAssign): { floatCall = divisionF; intCall = divisionI; goto binaryTableOp; }
 			CASE(ModAssign): { intCall = modI; goto binaryTableOpBlankF; }
@@ -1829,7 +1834,7 @@ binaryTableOp:
 			}
 			
 			CASE(SubtractAssignAndPop): { floatCall = subtractionF; intCall = subtractionI; goto binaryTableOpAndPop; }
-			CASE(AddAssignAndPop): { floatCall = addF; intCall = addI; goto binaryTableOpAndPop; }
+			CASE(AddAssignAndPop): { floatCall = addF; intCall = wr_addI; goto binaryTableOpAndPop; }
 			CASE(MultiplyAssignAndPop): { floatCall = multiplicationF; intCall = multiplicationI; goto binaryTableOpAndPop; }
 			CASE(DivideAssignAndPop): { floatCall = divisionF; intCall = divisionI; goto binaryTableOpAndPop; }
 			CASE(ModAssignAndPop): { intCall = modI; goto binaryTableOpAndPopBlankF; }
@@ -1861,7 +1866,7 @@ assignAndPopEx:
 				CONTINUE;
 			}
 			
-			CASE(BinaryAdditionAndStoreGlobal) : { floatCall = addF; intCall = addI; goto targetFuncStoreGlobalOp; }
+			CASE(BinaryAdditionAndStoreGlobal) : { floatCall = addF; intCall = wr_addI; goto targetFuncStoreGlobalOp; }
 			CASE(BinarySubtractionAndStoreGlobal): { floatCall = subtractionF; intCall = subtractionI; goto targetFuncStoreGlobalOp; }
 			CASE(BinaryMultiplicationAndStoreGlobal): { floatCall = multiplicationF; intCall = multiplicationI; goto targetFuncStoreGlobalOp; }
 			CASE(BinaryDivisionAndStoreGlobal):
@@ -1876,7 +1881,7 @@ targetFuncStoreGlobalOp:
 				CONTINUE;
 			}
 			
-			CASE(BinaryAdditionAndStoreLocal): { floatCall = addF; intCall = addI; goto targetFuncStoreLocalOp; }
+			CASE(BinaryAdditionAndStoreLocal): { floatCall = addF; intCall = wr_addI; goto targetFuncStoreLocalOp; }
 			CASE(BinarySubtractionAndStoreLocal): { floatCall = subtractionF; intCall = subtractionI; goto targetFuncStoreLocalOp; }
 			CASE(BinaryMultiplicationAndStoreLocal): { floatCall = multiplicationF; intCall = multiplicationI; goto targetFuncStoreLocalOp; }
 			CASE(BinaryDivisionAndStoreLocal):
@@ -1895,7 +1900,7 @@ targetFuncStoreLocalOp:
 			{
 				register0 = stackTop - 1;
 compactPreIncrement:
-				intCall = addI;
+				intCall = wr_addI;
 				floatCall = addF;
 
 compactIncrementWork:
@@ -2024,21 +2029,21 @@ CompactFFFunc:
 			CASE(GGBinaryAddition):
 			{
 				floatCall = addF;
-				intCall = addI;
+				intCall = wr_addI;
 				goto CompactGGFunc;
 			}
 
 			CASE(GLBinaryAddition):
 			{
 				floatCall = addF;
-				intCall = addI;
+				intCall = wr_addI;
 				goto CompactGLFunc;
 			}
 
 			CASE(LLBinaryAddition):
 			{
 				floatCall = addF;
-				intCall = addI;
+				intCall = wr_addI;
 				goto CompactFFFunc;
 			}
 
