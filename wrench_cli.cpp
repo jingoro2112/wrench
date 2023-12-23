@@ -27,8 +27,10 @@ SOFTWARE.
 
 #include <stdio.h>
 #include <assert.h>
+#include <stdlib.h>
 
 #include "discrete_src/str.h"
+#include "discrete_src/simple_ll.h"
 
 #define DUMP_BIN
 
@@ -36,6 +38,7 @@ int runTests( int number =0 );
 void testGlobalValues( WRState* w );
 void setup();
 void ctest();
+int doDebug( const char* name );
 
 //------------------------------------------------------------------------------
 const char* g_errStrings[]=
@@ -152,21 +155,26 @@ void blobToAssemblyInc( WRstr const& blob, WRstr const& variableName, WRstr& hea
 const char* sourceOrder[]=
 {
 	"/utils.h",
+	"/simple_ll.h",
 	"/gc_object.h",
 	"/vm.h",
 	"/opcode.h",
 	"/str.h",
 	"/opcode_stream.h",
 	"/cc.h",
+	"/wrench_debug.h",
 	"/cc.cpp",
 	"/vm.cpp",
 	"/utils.cpp",
+	"/wrench_client_debug.cpp",
+	"/wrench_server_debug.cpp",
 	"/operations.cpp",
 	"/std.cpp",
 	"/std_io.cpp",
 	"/std_string.cpp",
 	"/std_math.cpp",
 	"/std_msg.cpp",
+	"/std_sys.cpp",
 	"/esp32_lib.cpp",
 	"/arduino_lib.cpp",
 	""
@@ -235,13 +243,18 @@ static void print( WRState* w, const WRValue* argv, const int argn, WRValue& ret
 	}
 }
 
+struct Test
+{
+	int i;
+};
+	
 //------------------------------------------------------------------------------
 int main( int argn, char* argv[] )
 {
 	assert( sizeof(WRValue) == 2*sizeof(void*) );
 	assert( sizeof(float) == 4 );
 	assert( sizeof(unsigned char) == 1 );
-
+	
 //	ctest();
 	
 	if ( argn <= 1 )
@@ -257,38 +270,54 @@ int main( int argn, char* argv[] )
 
 		runTests( (argn >= 3) ? atoi(argv[2]) : 0 );
 	}
+	else if ( (command == "d") && (argn == 3) )
+	{
+		return doDebug( argv[2] );
+	}
 	else if ( (command == "rb" || command == "r") && argn == 3 )
 	{
-		WRstr bytes;
-		if ( command == "rb" )
+		WRstr infile;
+		if ( !infile.fileToBuffer(argv[2]) )
 		{
-			if ( !bytes.fileToBuffer(argv[2]) )
-			{
-				printf( "Could not open bytecode [%s]\n", argv[2] );
-				return usage();
-			}
+			printf( "Could not open source file [%s]\n", argv[2] );
+			return usage();
 		}
-		else
+
+		unsigned char* out;
+		int outLen;
+		
+		int err = wr_compile( infile, infile.size(), &out, &outLen );
+		if ( err )
 		{
-			WRstr infile;
-			if ( !infile.fileToBuffer(argv[2]) )
-			{
-				printf( "Could not open source file [%s]\n", argv[2] );
-				return usage();
-			}
+			printf( "compile error [%s]\n", g_errStrings[err] );
+			return -1;
+		}
 
-			unsigned char* out;
-			int outLen;
 
-			int err = wr_compile( infile, infile.size(), &out, &outLen );
-			if ( err )
-			{
-				printf( "compile error [%s]\n", g_errStrings[err] );
-				return -1;
-			}
+		WRState* w = wr_newState( 128 );
+		wr_loadAllLibs(w);
+		wr_registerFunction( w, "println", println );
+		wr_registerFunction( w, "print", print );
 
-			bytes.set( (char *)out, outLen );
-			delete[] out;
+		wr_run( w, out, outLen );
+
+		delete[] out;
+
+		if ( wr_getLastError(w) )
+		{
+			printf( "err: %d\n", (int)wr_getLastError(w) );
+		}
+
+		wr_destroyState( w );
+	}
+	else if ( command == "rb" && argn == 3 )
+	{
+		WRstr bytes;
+
+		if ( !bytes.fileToBuffer(argv[2]) )
+		{
+			printf( "Could not open bytecode [%s]\n", argv[2] );
+			return usage();
 		}
 
 		WRState* w = wr_newState( 128 );
@@ -301,6 +330,8 @@ int main( int argn, char* argv[] )
 		{
 			printf( "err: %d\n", (int)wr_getLastError(w) );
 		}
+
+		wr_destroyState( w );
 	}
 	else if ( command == "c" || command == "ch" || command == "ca"
 			  || command == "cs" || command == "chs" || command == "cas" )
@@ -328,11 +359,9 @@ int main( int argn, char* argv[] )
 			return 0;
 		}
 
-#ifdef DUMP_BIN
 		WRstr str;
 		wr_asciiDump( out, outLen, str );
 		printf( "%d:\n%s\n", outLen, str.c_str() );
-#endif
 		
 		WRstr outname( argv[3] );
 		if ( (command == "c"|| command == "cs") && argn == 4)
@@ -446,7 +475,7 @@ void ctest()
 
 	WRContext* g_wr_context = wr_run( g_wrench, w_obj_p, w_obj_len );
 	
-
+	
 	WRValue* w_test_value = wr_getGlobalRef( g_wr_context, "test_value");
 	if (!w_test_value)
 		printf("test_value not defined in wrench context");
@@ -454,7 +483,7 @@ void ctest()
 		printf("w_test_value = %f", *(float*)w_test_value);
 
 	
-	wr_callFunction( g_wrench, g_wr_context, "setup", NULL, 0 );
+	wr_callFunction( g_wr_context, "setup", NULL, 0 );
 
 	delete[] w_obj_p;
 	wr_destroyState( g_wrench );
@@ -527,6 +556,7 @@ int runTests( int number )
 				printf( "test [%d][%s]: ", fileNumber, codeName.c_str() );
 
 				wr_compile( code, code.size(), &out, &outLen, errMsg );
+				
 				if ( err )
 				{
 					printf( "compile error [%s]\n", g_errStrings[err] );
@@ -600,7 +630,6 @@ int runTests( int number )
 							printf( "expected less [%c]\n", isspace(expect[i]) ? ' ' : expect[i] );
 						}
 					}
-					
 				}
 				else
 				{
@@ -719,6 +748,144 @@ void testGlobalValues( WRState* w )
 	g = g;
 	err = err;
 }
+
+
+//------------------------------------------------------------------------------
+int doDebug( const char* name )
+{
+	WRstr infile;
+	if ( !infile.fileToBuffer(name) )
+	{
+		printf( "Could not open source file [%s]\n", name );
+		return usage();
+	}
+
+	unsigned char* out;
+	int outLen;
+
+	int err = wr_compile( infile, infile.size(), &out, &outLen, 0, WR_EMBED_DEBUG_CODE|WR_INCLUDE_GLOBALS|WR_EMBED_SOURCE_CODE );
+	if ( err )
+	{
+		printf( "compile error [%s]\n", g_errStrings[err] );
+		return -1;
+	}
+
+	WRstr str;
+	wr_asciiDump( out, outLen, str );
+	printf( "%d:\n%s\n", outLen, str.c_str() );
+	
+	WRState* w = wr_newState();
+	wr_loadAllLibs(w);
+	wr_registerFunction( w, "println", println );
+	wr_registerFunction( w, "print", print );
+
+	// the object running the code
+	WRDebugServerInterface server( w, out, outLen );
+
+	// the object commanding the code to be run
+	WRDebugClientInterface client( &server );
+
+
+	WRstr cmd;
+	for(;;)
+	{
+		cmd.alloc( 200 );
+		printf( "> " );
+
+		if ( !fgets(cmd.p_str(), cmd.bufferSize(), stdin) )
+		{
+			printf( "quit\n" );
+			break;
+		}
+
+		cmd.c_size();
+		cmd.trim();
+
+		switch( tolower(cmd[0]) )
+		{
+			case 'r':
+			{
+				printf( "<r>un\n" );
+				client.run();
+				
+				break;
+			}
+
+			case 'l':
+			{
+				printf( "<l>istn" );
+//				client.load()
+				break;
+			}
+
+			case 's':
+			{
+				printf( "<s>tep\n" );
+				break;
+			}
+			
+			case 'i':
+			{
+				printf( "step <i>nto\n" );
+				break;
+			}
+			
+			case 'b':
+			{
+				printf( "<b>reak @ ##\n" );
+				break;
+			}
+			
+			case 'x':
+			{
+				printf( "<x>-out break @ ##\n" );
+				break;
+			}
+			
+			case 'd':
+			{
+				printf( "<d>umping:\n" );
+				
+				break;
+			}
+
+			case 'q': break;
+					  
+			default:
+			{
+				printf( "r     run/continue\n"
+						"s     step over\n"
+						"i     step into\n"
+						"l     list\n"
+						"b #   break on line #\n"
+						"x #   remove break on line #\n"
+						"d     dump current variables\n"
+					  "\nq     quit\n"
+					  );
+				break;
+			}
+		}
+
+
+		const WRDebugMessage& s = client.status();
+
+		printf( "status[%d] line[%d] func[%d]\n", s.type, s.line, s.function );
+		
+		if ( cmd[0] == 'q' )
+		{
+			printf( "<q>uit\n" );
+			break;
+		}
+	}
+
+	printf( "\n" );
+	
+	delete[] out;
+	return 0;
+}
+
+
+
 
 // COMPLETE EXAMPLE MUST WORK
 

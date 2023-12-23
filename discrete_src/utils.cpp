@@ -24,20 +24,37 @@ SOFTWARE.
 
 #include "wrench.h"
 
-// !!DEPRECATED!!! [[deprecated]]
-WRValue* wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv, const int argn )
+//------------------------------------------------------------------------------
+unsigned char* wr_pack16( int16_t i, unsigned char* buf )
 {
-	return wr_callFunction( context, functionName, argv, argn);
+#if defined( WRENCH_NATIVE_BIG_ENDIAN )
+	*buf = (i>>8) & 0xFF;
+	*(buf + 1) = i & 0xFF;
+#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
+	*buf = i & 0xFF;
+	*(buf + 1) = (i>>8) & 0xFF;
+#else
+#error
+#endif
+	return buf;
 }
-// !!DEPRECATED!!! [[deprecated]]
-WRValue* wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
+
+unsigned char* wr_pack32( int32_t l, unsigned char* buf )
 {
-	return wr_callFunction( context, hash, argv, argn);
-}
-// !!DEPRECATED!!! [[deprecated]]
-WRValue* wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const WRValue* argv, const int argn )
-{
-	return wr_callFunction( context, function, argv, argn);
+#if defined( WRENCH_NATIVE_BIG_ENDIAN )
+	*buf = (l>>24) & 0xFF;
+	*(buf + 1) = (l>>16) & 0xFF;
+	*(buf + 2) = (l>>8) & 0xFF;
+	*(buf + 3) = l & 0xFF;
+#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
+	*buf = l & 0xFF;
+	*(buf + 1) = (l>>8) & 0xFF;
+	*(buf + 2) = (l>>16) & 0xFF;
+	*(buf + 3) = (l>>24) & 0xFF;
+#else
+#error
+#endif
+	return buf;
 }
 
 //------------------------------------------------------------------------------
@@ -121,8 +138,18 @@ WRError wr_getLastError( WRState* w )
 	return (WRError)w->err;
 }
 
-//------------------------------------------------------------------------------
 WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize )
+{
+	return wr_newContext(w, block, blockSize);
+}
+
+bool wr_executeFunctionZero( WRContext* context )
+{
+	return wr_executeContext(context) ? true : false;
+}
+
+//------------------------------------------------------------------------------
+WRContext* wr_newContext( WRState* w, const unsigned char* block, const int blockSize )
 {
 	// CRC the code block, at least is it what the compiler intended?
 	const unsigned char* p = block + (blockSize - 4);
@@ -155,29 +182,24 @@ WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const i
 }
 
 //------------------------------------------------------------------------------
-bool wr_executeFunctionZero( WRContext* context )
+WRValue* wr_executeContext( WRContext* context )
 {
 	WRState* w = context->w;
 	if ( context->stopLocation )
 	{
 		w->err = WR_ERR_execute_function_zero_called_more_than_once;
-		return false;
+		return 0;
 	}
 	
-	if ( !wr_callFunction( context, (int32_t)0) ) 
-	{
-		return false;
-	}
-	
-	return true;
+	return wr_callFunction( context, (int32_t)0 );
 }
 
 //------------------------------------------------------------------------------
 WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 {
-	WRContext* C = wr_allocateNewScript( w, block, blockSize );
+	WRContext* C = wr_newContext( w, block, blockSize );
 
-	if ( C && !wr_executeFunctionZero(C) )
+	if ( C && !wr_executeContext(C) )
 	{
 		wr_destroyContext( C );
 		return 0;
@@ -193,6 +215,10 @@ void wr_destroyContext( WRContext* context )
 	{
 		return;
 	}
+
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+	free( context->debugInterface ); // in case it had been created
+#endif
 
 	WRContext* prev = 0;
 
@@ -587,5 +613,6 @@ const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markB
 
 	return str;
 }
+
 
 #endif

@@ -657,9 +657,9 @@ static void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, W
 			  && from->va->m_type == SV_CHAR )
 	{
 		char* t = to->va->m_SCdata;
-		to->va->m_SCdata = (char*)malloc( to->va->m_size + from->va->m_size );
+		to->va->m_SCdata = (char*)malloc( to->va->m_size + from->va->m_size + 1 );
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
-		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
+		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
 		to->va->m_size = to->va->m_size + from->va->m_size;
 		free( t );
 	}
@@ -1138,9 +1138,9 @@ static void wr_AddAssign_E_E( WRValue* to, WRValue* from )
 			  && from->va->m_type == SV_CHAR )
 	{
 		char* t = to->va->m_SCdata;
-		to->va->m_SCdata = (char*)malloc( to->va->m_size + from->va->m_size );
+		to->va->m_SCdata = (char*)malloc( to->va->m_size + from->va->m_size + 1 );
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
-		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
+		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
 		to->va->m_size = to->va->m_size + from->va->m_size;
 		free( t );
 	}

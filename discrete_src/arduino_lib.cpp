@@ -97,7 +97,7 @@ void wr_lcd_print( WRValue* stackTop, const int argn, WRContext* c)
 	// returns number of chars printed
 	if( argn == 1 )
 	{
-		char buf[61];
+//		char buf[61];
 //		stackTop->i = lcd.print( stackTop[-1].asString(buf, sizeof(buf)-1));
 	}
 }

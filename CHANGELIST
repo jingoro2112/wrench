@@ -1,3 +1,25 @@
+3.2.1 ----------------------------------------------------------------------------------
+- bugfix release for negative array reference
+- debug features are DORMANT and not meant for release yet
+
+3.2.0 ----------------------------------------------------------------------------------
+- removed DEPRECATED call-function signatures
+- added sys:: library and calls to set garbage-collector states and check for functions existence
+	sys::functionExists
+	sys::gcPause
+- fixed bug in function calling where it was possible for the return vector to set the
+  garbage-collect flag on the return frame.
+- these names had been bothering and I finnaly came up with better ones:
+
+	These are now !!DEPRECATED!!:
+	WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize );
+	bool wr_executeFunctionZero( WRContext* context );
+
+    And have been replaced with:
+    WRContext* wr_newContext( WRState* w, const unsigned char* block, const int blockSize );
+    WRValue* wr_executeContext( WRContext* context );
+
+
 3.1.1 ----------------------------------------------------------------------------------
 - added functionality so  string + string  and string += string work!!
   its a teeny bit hack-ish but overall not that bad, and does not impact normal

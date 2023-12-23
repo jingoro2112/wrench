@@ -92,6 +92,8 @@ public:
 	inline WRstr& alloc( const unsigned int characters, const bool preserveContents =true ); 
 
 	unsigned int size() const { return m_len; } // see length
+	unsigned int bufferSize() const { return m_buflen; } // see length
+	unsigned int c_size() { for( m_len=0; m_len<m_buflen && m_str[m_len]; ++m_len); return m_len; }
 
 	const char* c_str( const unsigned int offset =0 ) const { return m_str + offset; }
 	char* p_str( const unsigned int offset =0 ) const { return m_str + offset; }

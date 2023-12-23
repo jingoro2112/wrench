@@ -52,14 +52,27 @@ struct WRContext
 		uint32_t contextId;
 	};
 	
-	const unsigned char* bottom;
-	int bottomSize;
+	union
+	{
+		const unsigned char* bottom;
+		const unsigned char* bytes;
+	};
+	union
+	{
+		int bottomSize;
+		int bytesLen;
+	};
+	
 	const unsigned char* stopLocation;
 	
 	WRGCObject* svAllocated;
-	
+
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+	WRDebugServerInterface* debugInterface; 
+#endif
+
 	WRState* w;
-	
+
 	WRGCObject registry; // the 'next' pointer in this registry is used as the context LL next
 
 	void mark( WRValue* s );
@@ -80,12 +93,10 @@ struct WRState
 	WRGCObject globalRegistry;
 };
 
-
 void wr_arrayToValue( const WRValue* array, WRValue* value, int index =-1 );
 void wr_intValueToArray( const WRValue* array, int32_t I );
 void wr_floatValueToArray( const WRValue* array, float F );
 void wr_countOfArrayElement( WRValue* array, WRValue* target );
-
 
 typedef void (*WRVoidFunc)( WRValue* to, WRValue* from );
 extern WRVoidFunc wr_assign[16];

@@ -18,8 +18,11 @@
     <ClCompile Include="..\discrete_src\std_math.cpp" />
     <ClCompile Include="..\discrete_src\std_msg.cpp" />
     <ClCompile Include="..\discrete_src\std_string.cpp" />
+    <ClCompile Include="..\discrete_src\std_sys.cpp" />
     <ClCompile Include="..\discrete_src\utils.cpp" />
     <ClCompile Include="..\discrete_src\vm.cpp" />
+    <ClCompile Include="..\discrete_src\wrench_client_debug.cpp" />
+    <ClCompile Include="..\discrete_src\wrench_server_debug.cpp" />
     <ClCompile Include="..\wrench_cli.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -31,6 +34,7 @@
     <ClInclude Include="..\discrete_src\utils.h" />
     <ClInclude Include="..\discrete_src\vm.h" />
     <ClInclude Include="..\discrete_src\wrench.h" />
+    <ClInclude Include="..\discrete_src\wrench_debug.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>

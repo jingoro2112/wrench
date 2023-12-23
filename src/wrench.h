@@ -27,7 +27,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 #define WRENCH_VERSION_MAJOR 3
-#define WRENCH_VERSION_MINOR 1
+#define WRENCH_VERSION_MINOR 2
 #define WRENCH_VERSION_BUILD 1
 
 /************************************************************************
@@ -66,6 +66,19 @@ This will consume 8 bytes per stack entry
 #define WRENCH_DEFAULT_STACK_SIZE 64
 /***********************************************************************/
 
+/************************************************************************
+including debug functionality incurs NO performance penalty on the VM
+
+..BUT
+
+it does add a small size penalty. If you are trying to cram wrench
+into the smallest possible space, this compiles out the debug functions.
+You can still run debug-enabled code, the VM will just skip it.
+
+!!!PRE-RELEASE DO NOT ENABLE!!!
+
+*/
+//#define WRENCH_INCLUDE_DEBUG_CODE
 
 /************************************************************************
 if you WANT full sprintf support for floats (%f/%g) this adds it, at
@@ -102,21 +115,30 @@ void wr_destroyState( WRState* w );
 /**************************************************************/
 //                        Running Code
 
+
 // compile source code and return a new'ed block of bytecode ready
 // for wr_run(), this memory must be delete[]'ed
 // return value is a WRError
 // optionally an "errMsg" buffer can be passed which will output a
 //     human-readable string of what went wrong and where.
-// includeSymbols - associates the globals with their name hashes and
-//                  stores that with the bytecode so
-//                  wr_getGlobalRef(...) can work, the overhead is 4
-//                  bytes per global                
+// compilerOptionFlags : OR'ed mask of of WrenchCompilerOptionFlags:
+enum WrenchCompilerOptionFlags
+{
+	WR_INCLUDE_GLOBALS = 1<<0,	// include all globals NOTE: wr_getGlobalRef(...)
+								// will not function without this
+	
+	WR_EMBED_DEBUG_CODE = 1<<1,	// include per-instruction NOTE: WrenchDebugInterface
+								// will not function without this
+	
+	WR_EMBED_SOURCE_CODE = 1<<2,// include a copy of the source code
+};
+
 int wr_compile( const char* source,
 				const int size,
 				unsigned char** out,
 				int* outLen,
 				char* errMsg =0,
-				bool includeSymbols =true );
+				const unsigned int compilerOptionFlags = WR_INCLUDE_GLOBALS );
 
 // w:          state (see wr_newState)
 // block:      location of bytecode
@@ -137,8 +159,13 @@ WRValue* wr_returnValueFromLastCall( WRState* w );
 
 // wr_run actually calls these two functions back-to back. If you want
 // to separate the process you can call them on your own.
+WRContext* wr_newContext( WRState* w, const unsigned char* block, const int blockSize );
+WRValue* wr_executeContext( WRContext* context );
+
+// !!!!! DEPRECATED !!!!!!!
 WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize );
 bool wr_executeFunctionZero( WRContext* context );
+// !!!!! DEPRECATED !!!!!!!
 
 // after wr_run() this allows any function in the script to be
 // called with the given arguments, returning a single value
@@ -162,14 +189,6 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 // This method is exposed so functions can be called with an absolute
 // minimum of overhead
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
-
-
-// !!DEPRECATED!!! [[deprecated]]
-WRValue* wr_callFunction( WRState* w, WRContext* context, const char* functionName, const WRValue* argv =0, const int argn =0 );
-// !!DEPRECATED!!! [[deprecated]]
-WRValue* wr_callFunction( WRState* w, WRContext* context, const int32_t hash, const WRValue* argv =0, const int argn =0 );
-// !!DEPRECATED!!! [[deprecated]]
-WRValue* wr_callFunction( WRState* w, WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
 
 
 // once wr_run() is called the returned context object can be used to
@@ -257,6 +276,7 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 
 void wr_loadAllLibs( WRState* w ); // load all libraries in one call
 
+void wr_loadSysLib( WRState* w ); // system/internal functions
 void wr_loadMathLib( WRState* w ); // provides most of the calls in math.h
 void wr_loadStdLib( WRState* w ); // standard functions like sprintf/rand/
 void wr_loadFileLib( WRState* w ); // file funcs
@@ -424,7 +444,8 @@ enum WRExType : uint8_t
 	WR_EX_RAW_ARRAY  = 0x20,  // 0010
 
 	// EX types have one of the upper two bits set
-	WR_EX_RESERVED   = 0x40,  // 0100
+	WR_EX_DEBUG_BREAK= 0x40,  // 0100
+	
 	WR_EX_ITERATOR	 = 0x60,  // 0110
 	WR_EX_REFARRAY   = 0x80,  // 1000
 	WR_EX_ARRAY      = 0xA0,  // 1010
@@ -433,6 +454,7 @@ enum WRExType : uint8_t
 };
 
 #define EX_TYPE_MASK   0xE0
+#define IS_DEBUG_BREAK(X) (((X)&EX_TYPE_MASK)==WR_EX_DEBUG_BREAK)
 #define IS_REFARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_REFARRAY)
 #define IS_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_ARRAY)
 #define IS_ITERATOR(X) (((X)&EX_TYPE_MASK)==WR_EX_ITERATOR)
@@ -528,7 +550,10 @@ struct WRValue
 
 	// return a raw pointer to the raw data array if this is one, otherwise
 	// return null
-	void* array( unsigned int* len, char* arrayType =0 ) const; 
+	void* array( unsigned int* len, char* arrayType =0 ) const;
+
+	// if this is a character array, return a pointer to that array,
+	// which IS null-terminated
 	const char* c_str( unsigned int* len =0 ) const; 
 
 	inline void init() { p = 0; p2 = 0; } // call upon first create or when you're sure no memory is hanging from one
@@ -553,8 +578,10 @@ struct WRValue
 	{
 		int32_t i;
 		uint32_t ui;
+		WRValue* frame;
 		float f;
 		const void* p;
+		void* r1;
 		char* c;
 		WRValue* r;
 		WRGCObject* va;
@@ -600,13 +627,13 @@ struct WRValue
 		uint32_t p2;
 		union
 		{
-			WRValue* frame;
+			int returnOffset;
 			WRValue* r2;
 			void* usr;
 		};
 	};
 
-	inline WRValue& operator= (const WRValue& V) { p = V.p; frame = V.frame; return *this; }
+	inline WRValue& operator= (const WRValue& V) { r1 = V.r1; r2 = V.r2; return *this; }
 };
 
 //------------------------------------------------------------------------------
@@ -641,6 +668,179 @@ private:
 	WRValue* m_value;
 };
 
+//------------------------------------------------------------------------------
+enum WRDebugMessageTypes
+{
+	None, // nothing happening
+	
+	Halted, // last started script has reached a global stop
+	// str will contain returnvalue.ToString()
+	// f will contain returnValue.f
+	// p1 will contain returnValue.i
+
+	Paused,	// p1 will contain line number
+	// p2 will contain '1' for line break, '2' for function break
+
+	Err,
+};
+
+//------------------------------------------------------------------------------
+struct WRDebugMessage
+{
+	char type;
+	int line;
+	int function;
+
+	char str[64];
+
+	float f;
+	uint32_t u;
+	
+	int32_t p1;
+	int32_t p2;
+
+	unsigned char* data;
+	int dataLen;
+};
+
+struct PendingDebugMessage;
+struct WrenchPacket;
+struct WrenchSymbol;
+struct WrenchFunction;
+
+template<class> class SimpleLL;
+
+//------------------------------------------------------------------------------
+class WRDebugServerInterface
+{
+public:
+
+	WRDebugServerInterface( WRState* w,
+							const unsigned char* bytes =0,
+							const int len =0,
+							bool (*receiveFunction)( char* data, const size_t length, const int timeoutMilliseconds ) =0,
+							size_t (*writeFunction)( const char* data, const size_t length ) =0 );
+
+	~WRDebugServerInterface();
+
+	WRContext* loadBytes( const unsigned char* bytes, const int len );
+	char* localBytes;
+	int localBytesLen;
+
+	int onLine() { return m_msg.line; }
+	
+	void tick();
+
+//private: again.. TECHNICALLY.. but we are keeping things simple
+
+	int m_steppingOverReturnVector;
+	int m_lineSteps;
+	int m_opcodeSteps;
+
+	struct LineBreak
+	{
+		int line;
+		LineBreak* next;
+	};
+	SimpleLL<LineBreak>* m_lineBreaks;
+	SimpleLL<WrenchPacket>* m_packetQ;
+
+	void codewordEncountered( uint16_t codeword, WRValue* stackTop );
+
+	WRDebugMessage& processPacket( WrenchPacket* packet );
+
+	WRDebugMessage m_msg;
+
+	WRState* m_w;
+	bool (*m_receiveFunction)( char* data, const size_t length, const int timeoutMilliseconds );
+	size_t (*m_writeFunction)( const char* data, const size_t length );
+
+	bool m_firstCall;
+
+	const unsigned char* m_embeddedSource;
+	int m_embeddedSourceSize;
+	int m_embeddedSourceHash;
+
+	const unsigned char* m_symbolBlock;
+	int m_symbolBlockSize;
+	
+	WRContext* m_context;
+	const WRValue* m_argv;
+	int m_argn;
+	const unsigned char* m_pc;
+	WRValue* m_frameBase;
+	WRValue* m_stackTop;
+	
+	bool m_brk;
+};
+
+//------------------------------------------------------------------------------
+class WRDebugClientInterface
+{
+public:
+
+	WRDebugClientInterface( size_t (*receiveFunction)( char* data, const size_t length, const int timeoutMilliseconds ),
+							size_t (*writeFunction)( const char* data, const size_t length ) );
+
+	WRDebugClientInterface( WRDebugServerInterface* localServer );
+
+	~WRDebugClientInterface();
+	
+	const WRDebugMessage& status();
+
+	// load and prepare a program for running
+	// if byteCode/size is null then it re-loads it's existing program
+	void load( const char* byteCode =0, const int size =0 ); 
+	void run(); // run or continue
+
+	static bool getSourceCode( WRContext* context, const char** data, int* len );
+	static uint32_t getSourceCodeHash( WRContext* context );
+	static uint32_t setSourceCode( const char* path );
+
+	const WRValue* getGlobalValue( const char* name );
+	const char* getGlobalName( const int index );
+	void setGlobalValue( const char* name, WRValue const& value );
+
+	const WRValue* getLocalValue( const char* name );
+	const char* getLocalName( const int index );
+	void setLocalValue( const char* name, WRValue const& value );
+
+	void stepOverLine( const int steps =1 );
+	void stepOverOpcode( const int steps =1 );
+
+	void stepIntoLine( const int steps =1 );
+	void stepIntoOpcode( const int steps =1 );
+
+	void setBreakpoint( const int lineNumber );
+	void clearBreakpoint( const int lineNumber );
+
+//private:
+
+	bool transmit( WrenchPacket& packet );
+	
+	void loadSourceBlock();
+	void loadSymbols();
+	
+	void init();
+
+	char* m_sourceBlock;
+	int m_sourceBlockLen;
+	uint32_t m_sourceBlockHash;
+						
+	WRDebugMessage m_msg;
+	SimpleLL<WrenchPacket>* m_packetQ;
+
+	void populateSymbols( const char* block, const int size );
+	SimpleLL<WrenchSymbol>* m_globals;
+	SimpleLL<WrenchFunction>* m_functions;
+	bool m_symbolsLoaded;
+	
+	WRDebugServerInterface* m_localServer;
+	size_t (*m_receiveFunction)( char* data, const size_t length, const int timeoutMilliseconds );
+	size_t (*m_writeFunction)( const char* data, const size_t length );
+};
+
+
 #ifdef WRENCH_REALLY_COMPACT
 #ifndef WRENCH_COMPACT
 #define WRENCH_COMPACT
@@ -658,11 +858,13 @@ private:
 
 #ifndef WRENCH_COMBINED
 #include "utils.h"
+#include "simple_ll.h"
 #include "gc_object.h"
 #include "vm.h"
 #include "opcode.h"
 #include "str.h"
 #include "opcode_stream.h"
+#include "wrench_debug.h"
 #include "cc.h"
 #endif
 

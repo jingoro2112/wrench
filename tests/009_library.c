@@ -279,3 +279,13 @@ if ( str::insert( "11", "22", 1 ) != "1221" ) println("ins7");
 if ( str::insert( "11", "22", 2 ) != "1122" ) println("ins8");
 if ( str::insert( "11", "22", 12 ) != "1122" ) println("ins9");
 
+
+function f1() { }
+
+if ( sys::function("println") != 1 ) println("sys0");
+if ( sys::function("foo") != 0 ) println("sys1");
+if ( sys::function("f1") != 2 ) println("sys2");
+if ( sys::function("f2") != 2 ) println("sys3");
+if ( sys::function() != 0 ) println("sys4");
+
+function f2() { }

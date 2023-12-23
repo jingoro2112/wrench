@@ -29,10 +29,7 @@ SOFTWARE.
 #define WR_COMPILER_LITERAL_STRING 0x10 
 #define KEYHOLE_OPTIMIZER
 
-
 //#define TEST_STRUCT_PARSING
-
-
 
 //------------------------------------------------------------------------------
 const char* c_reserved[] =
@@ -909,38 +906,6 @@ bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpco
 }
 
 //------------------------------------------------------------------------------
-unsigned char* WRCompilationContext::pack16( int16_t i, unsigned char* buf )
-{
-#if defined( WRENCH_NATIVE_BIG_ENDIAN )
-	*buf = (i>>8) & 0xFF;
-	*(buf + 1) = i & 0xFF;
-#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
-	*buf = i & 0xFF;
-	*(buf + 1) = (i>>8) & 0xFF;
-#else
-#error
-#endif
-	return buf;
-}
-unsigned char* WRCompilationContext::pack32( int32_t l, unsigned char* buf )
-{
-#if defined( WRENCH_NATIVE_BIG_ENDIAN )
-	*buf = (l>>24) & 0xFF;
-	*(buf + 1) = (l>>16) & 0xFF;
-	*(buf + 2) = (l>>8) & 0xFF;
-	*(buf + 3) = l & 0xFF;
-#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
-	*buf = l & 0xFF;
-	*(buf + 1) = (l>>8) & 0xFF;
-	*(buf + 2) = (l>>16) & 0xFF;
-	*(buf + 3) = (l>>24) & 0xFF;
-#else
-#error
-#endif
-	return buf;
-}
-
-//------------------------------------------------------------------------------
 void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 {
 #ifdef KEYHOLE_OPTIMIZER
@@ -1103,52 +1068,54 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 		}
 		else if ( opcode == O_BinaryMultiplication && (a>2) )
 		{
+			if ( o>1 )
+			{
+				if ( bytecode.opcodes[o] == O_LoadFromGlobal
+					 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+				{
+					// LoadFromGlobal   a - 3
+					// [index]          a - 2
+					// LoadFromGlobal   a - 1
+					// [index]          a
+					
+					bytecode.all[ a - 3 ] = O_GGBinaryMultiplication;
+					bytecode.all[ a - 1 ] = bytecode.all[ a ];
+					bytecode.all.shave(1);
+					bytecode.opcodes.clear();
+					return;
+				}
+				else if ( bytecode.opcodes[o] == O_LoadFromLocal
+						  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+				{
+					bytecode.all[ a - 3 ] = O_GLBinaryMultiplication;
+					bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
+					bytecode.all[ a - 2 ] = bytecode.all[ a ];
+					bytecode.all.shave(1);
+					bytecode.opcodes.clear();
+					return;
+				}
+				else if ( bytecode.opcodes[o] == O_LoadFromGlobal
+						  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+				{
+					bytecode.all[ a - 3 ] = O_GLBinaryMultiplication;
+					bytecode.all[ a - 1 ] = bytecode.all[ a ];
+					bytecode.all.shave(1);
+					bytecode.opcodes.clear();
+					return;
+				}
+				else if ( bytecode.opcodes[o] == O_LoadFromLocal
+						  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+				{
+					bytecode.all[ a - 3 ] = O_LLBinaryMultiplication;
+					bytecode.all[ a - 1 ] = bytecode.all[ a ];
+					bytecode.all.shave(1);
+					bytecode.opcodes.clear();
+					return;
+				}
+			}
 			
-			if ( bytecode.opcodes[o] == O_LoadFromGlobal
-				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-			{
-				// LoadFromGlobal   a - 3
-				// [index]          a - 2
-				// LoadFromGlobal   a - 1
-				// [index]          a
-
-				bytecode.all[ a - 3 ] = O_GGBinaryMultiplication;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else if ( bytecode.opcodes[o] == O_LoadFromLocal
-					  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-			{
-				bytecode.all[ a - 3 ] = O_GLBinaryMultiplication;
-				bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
-				bytecode.all[ a - 2 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else if ( bytecode.opcodes[o] == O_LoadFromGlobal
-					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-			{
-				bytecode.all[ a - 3 ] = O_GLBinaryMultiplication;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else if ( bytecode.opcodes[o] == O_LoadFromLocal
-					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-			{
-				bytecode.all[ a - 3 ] = O_LLBinaryMultiplication;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else
-			{
-				bytecode.all += opcode;
-				bytecode.opcodes += opcode;
-			}
-			
+			bytecode.all += opcode;
+			bytecode.opcodes += opcode;
 			return;
 		}
 		else if ( opcode == O_BinaryAddition && (a>2) )
@@ -1941,6 +1908,70 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 }
 
 //------------------------------------------------------------------------------
+void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int param )
+{
+	if ( !m_addDebugLineNumbers )
+	{
+		return;
+	}
+
+	if ( param == -1 )
+	{
+		int onChar;
+		getSourcePosition( param, onChar );
+
+		if ( param == m_lastLineNumber && code == m_lastCode )
+		{
+			return;
+		}
+	
+		m_lastLineNumber = param;
+		m_lastCode = code;
+	}
+
+	pushOpcode( bytecode, O_DebugInfo );
+
+	uint16_t codeword = code | ((uint16_t)param & PayloadMask);
+	unsigned char data[2];
+
+	pushData( bytecode, wr_pack16(codeword, data), 2 );
+}
+
+//------------------------------------------------------------------------------
+void WRCompilationContext::getSourcePosition( int& onLine, int& onChar, WRstr* line )
+{
+	onChar = 0;
+	onLine = 1;
+
+	for( int p = 0; line && p<m_sourceLen && m_source[p] != '\n'; p++ )
+	{
+		(*line) += (char)m_source[p];
+	}
+
+	for( int i=0; i<m_pos; ++i )
+	{
+		if ( m_source[i] == '\n' )
+		{
+			onLine++;
+			onChar = 0;
+
+			if( line )
+			{
+				line->clear();
+				for( int p = i+1; p<m_sourceLen && m_source[p] != '\n'; p++ )
+				{
+					(*line) += (char)m_source[p];
+				}
+			}
+		}
+		else
+		{
+			onChar++;
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
 int WRCompilationContext::addRelativeJumpTarget( WRBytecode& bytecode )
 {
 	bytecode.jumpOffsetTargets.append().references.clear();
@@ -2323,7 +2354,7 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 					}
 				}
 				
-				pack16( diff, bytecode.all.p_str(offset) );
+				wr_pack16( diff, bytecode.all.p_str(offset) );
 			}
 		}
 	}
@@ -2624,20 +2655,20 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 		{
 			pushOpcode( bytecode, O_LiteralInt16 );
 			int16_t be = value.i;
-			pushData( bytecode, pack16(be, data), 2 );
+			pushData( bytecode, wr_pack16(be, data), 2 );
 		}
 		else
 		{
 			pushOpcode( bytecode, O_LiteralInt32 );
 			unsigned char data[4];
-			pushData( bytecode, pack32(value.i, data), 4 );
+			pushData( bytecode, wr_pack32(value.i, data), 4 );
 		}
 	}
 	else if ( value.type == WR_COMPILER_LITERAL_STRING )
 	{
 		pushOpcode( bytecode, O_LiteralString );
 		int16_t be = context.literalString.size();
-		pushData( bytecode, pack16(be, data), 2 );
+		pushData( bytecode, wr_pack16(be, data), 2 );
 		for( unsigned int i=0; i<context.literalString.size(); ++i )
 		{
 			pushData( bytecode, context.literalString.c_str(i), 1 );
@@ -2648,7 +2679,7 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 		pushOpcode( bytecode, O_LiteralFloat );
 		unsigned char data[4];
 		int32_t be = value.i;
-		pushData( bytecode, pack32(be, data), 4 );
+		pushData( bytecode, wr_pack32(be, data), 4 );
 	}
 }
 
@@ -2705,7 +2736,8 @@ int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token,
 	}
 
 	bytecode.localSpace[i].hash = hash;
-
+	bytecode.localSpace[i].label = token;
+	
 	if ( !addOnly )
 	{
 		pushOpcode( bytecode, O_LoadFromLocal );
@@ -2742,6 +2774,7 @@ int WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token
 	}
 	
 	m_units[0].bytecode.localSpace[i].hash = hash;
+	m_units[0].bytecode.localSpace[i].label = t2;
 
 	if ( !addOnly )
 	{
@@ -2762,7 +2795,7 @@ void WRCompilationContext::loadExpressionContext( WRExpression& expression, int 
 		 && depth > operation )
 	{
 		unsigned char buf[4];
-		pack32( wr_hash( expression.context[depth].token,
+		wr_pack32( wr_hash( expression.context[depth].token,
 						 expression.context[depth].token.size()),
 				buf );
 		pushOpcode( expression.bytecode, O_LiteralInt32 );
@@ -3179,7 +3212,7 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 	WRstr prefix = expression.context[depth].prefix;
 
 	expression.context[depth].type = EXTYPE_BYTECODE_RESULT;
-
+	
 	unsigned char argsPushed = 0;
 
 	if ( parseArguments )
@@ -3241,13 +3274,15 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		}
 	}
 
+	pushDebug( FunctionCall, expression.context[depth].bytecode, wr_hashStr(prefix) );
+
 	if ( prefix.size() )
 	{
 		prefix += "::";
 		prefix += functionName;
 
 		unsigned char buf[4];
-		pack32( wr_hashStr(prefix), buf );
+		wr_pack32( wr_hashStr(prefix), buf );
 
 		pushOpcode( expression.context[depth].bytecode, O_CallLibFunction );
 		pushData( expression.context[depth].bytecode, &argsPushed, 1 ); // arg #
@@ -3285,6 +3320,8 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		// the return value a call to copy-down must be
 		// inserted
 	}
+
+	pushDebug( Returned, expression.context[depth].bytecode );
 
 	return true;
 }
@@ -3366,6 +3403,8 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 		{
 			return 0;
 		}
+
+		pushDebug( LineNumber, expression.bytecode );
 
 		if ( value.type != WR_REF )
 		{
@@ -3516,7 +3555,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					char end = parseExpression( nex );
 
 					unsigned char data[2];
-					pack16( initializer, data );
+					wr_pack16( initializer, data );
 
 					if ( end == '}' )
 					{
@@ -3746,7 +3785,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 						pushOpcode( expression.context[depth].bytecode, O_AssignToArrayAndPop );
 
 						unsigned char data[2];
-						pack16( initializer, data );
+						wr_pack16( initializer, data );
 						++initializer;
 
 						pushData( expression.context[depth].bytecode, data, 2 );
@@ -3799,7 +3838,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					return 0;
 				}
 
-				pack16( initializer, expression.context[depth].bytecode.all.p_str(gcOffset) );
+				wr_pack16( initializer, expression.context[depth].bytecode.all.p_str(gcOffset) );
 
 				++depth;
 				continue;
@@ -4332,13 +4371,27 @@ A:
 
 		if ( foreachPossible )
 		{
-			if ( foreachLoadI < 3
-				 && nex.bytecode.opcodes.size() == 1
-				 && nex.bytecode.all.size() == 2
-				 && ((nex.bytecode.all[0] == O_LoadFromLocal) || (nex.bytecode.all[0] == O_LoadFromGlobal) ) )
+			if ( foreachLoadI < 3 )
 			{
-				foreachLoad[foreachLoadI++] = nex.bytecode.all[0];
-				foreachLoad[foreachLoadI++] = nex.bytecode.all[1];
+				if (nex.bytecode.opcodes.size() == 1
+					  && nex.bytecode.all.size() == 2
+					  && ((nex.bytecode.all[0] == O_LoadFromLocal) || (nex.bytecode.all[0] == O_LoadFromGlobal)) )
+				{
+					foreachLoad[foreachLoadI++] = nex.bytecode.all[0];
+					foreachLoad[foreachLoadI++] = nex.bytecode.all[1];
+				}
+				else if ( nex.bytecode.opcodes.size() == 2
+						  && nex.bytecode.all.size() == 5
+						  && nex.bytecode.all[0] == O_DebugInfo
+						  && ((nex.bytecode.all[3] == O_LoadFromLocal) || (nex.bytecode.all[3] == O_LoadFromGlobal)) )
+				{
+					foreachLoad[foreachLoadI++] = nex.bytecode.all[3];
+					foreachLoad[foreachLoadI++] = nex.bytecode.all[4];
+				}
+				else
+				{
+					foreachPossible = false;
+				}
 			}
 			else
 			{
@@ -4974,17 +5027,17 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 			}
 		}
 
-		pushData( m_units[m_unitTop].bytecode, pack16(defaultOffset, packbuf), 2 );
+		pushData( m_units[m_unitTop].bytecode, wr_pack16(defaultOffset, packbuf), 2 );
 
 		for( unsigned int i=0; i<size; ++i )
 		{
 			if ( table[i].occupied )
 			{
-				pushData( m_units[m_unitTop].bytecode, pack16(table[i].jumpOffset, packbuf), 2 );
+				pushData( m_units[m_unitTop].bytecode, wr_pack16(table[i].jumpOffset, packbuf), 2 );
 			}
 			else
 			{
-				pushData( m_units[m_unitTop].bytecode, pack16(defaultOffset, packbuf), 2 );
+				pushData( m_units[m_unitTop].bytecode, wr_pack16(defaultOffset, packbuf), 2 );
 			}
 		}
 	}
@@ -5046,20 +5099,20 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 			defaultOffset -= currentPos;
 		}
 
-		pushData( m_units[m_unitTop].bytecode, pack16(mod, packbuf), 2 ); // mod value
-		pushData( m_units[m_unitTop].bytecode, pack16(defaultOffset, packbuf), 2 ); // default offset
+		pushData( m_units[m_unitTop].bytecode, wr_pack16(mod, packbuf), 2 ); // mod value
+		pushData( m_units[m_unitTop].bytecode, wr_pack16(defaultOffset, packbuf), 2 ); // default offset
 
 		for( uint16_t m = 0; m<mod; ++m )
 		{
-			pushData( m_units[m_unitTop].bytecode, pack32(table[m].hash, packbuf), 4 );
+			pushData( m_units[m_unitTop].bytecode, wr_pack32(table[m].hash, packbuf), 4 );
 
 			if ( !table[m].occupied )
 			{
-				pushData( m_units[m_unitTop].bytecode, pack16(defaultOffset, packbuf), 2 );
+				pushData( m_units[m_unitTop].bytecode, wr_pack16(defaultOffset, packbuf), 2 );
 			}
 			else
 			{
-				pushData( m_units[m_unitTop].bytecode, pack16(table[m].jumpOffset, packbuf), 2 );
+				pushData( m_units[m_unitTop].bytecode, wr_pack16(table[m].jumpOffset, packbuf), 2 );
 			}
 		}
 	}
@@ -5318,7 +5371,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 
 			pushOpcode( m_units[unitIndex].bytecode, O_GC_Command );
 			unsigned char count[2];
-			pack16( cycle, count );
+			wr_pack16( cycle, count );
 			pushData( m_units[unitIndex].bytecode, count, 2 );
 
 			if ( !getToken(ex, ")") )
@@ -5405,19 +5458,19 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	*size = 2;
 	*buf = new unsigned char[ (offsets.m_mod * 5) + 4 ];
 
-	pack16( offsets.m_mod, *buf + *size );
+	wr_pack16( offsets.m_mod, *buf + *size );
 	*size += 2;
 
 	for( int i=0; i<offsets.m_mod; ++i )
 	{
-		pack32( offsets.m_list[i].hash, *buf + *size );
+		wr_pack32( offsets.m_list[i].hash, *buf + *size );
 		*size += 4;
 		(*buf)[(*size)++] = offsets.m_list[i].hash ? offsets.m_list[i].value : (unsigned char)-1;
 	}
 }
 
 //------------------------------------------------------------------------------
-void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeSymbols )
+void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigned int compilerOptionFlags )
 {
 	WROpcodeStream code;
 
@@ -5425,6 +5478,8 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 	code += (unsigned char)(m_units[0].bytecode.localSpace.count()); // globals count
 
 	unsigned char data[4];
+	unsigned int units = m_units.count();
+	unsigned int globals = m_units[0].bytecode.localSpace.count();
 
 	// register the function signatures
 	for( unsigned int u=1; u<m_units.count(); ++u )
@@ -5434,10 +5489,10 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 							  | ((m_units[u].arguments << 16));
 		
 		code += O_LiteralInt32;
-		code.append( pack32(signature, data), 4 );
+		code.append( wr_pack32(signature, data), 4 );
 
 		code += O_LiteralInt32; // hash
-		code.append( pack32(m_units[u].hash, data), 4 );
+		code.append( wr_pack32(m_units[u].hash, data), 4 );
 
 		// offset placeholder
 		code += O_LiteralInt16;
@@ -5453,7 +5508,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 		if ( u > 0 ) // for the non-zero unit fill location into the jump table
 		{
 			int16_t offset = code.size();
-			pack16( offset, code.p_str(m_units[u].offsetInBytecode) );
+			wr_pack16( offset, code.p_str(m_units[u].offsetInBytecode) );
 		}
 
 		// fill in relative jumps for the gotos
@@ -5474,7 +5529,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 					else
 					{
 						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset ) = (unsigned char)O_RelativeJump;
-						pack16( diff, m_units[u].bytecode.all.p_str(m_units[u].bytecode.gotoSource[g].offset + 1) );
+						wr_pack16( diff, m_units[u].bytecode.all.p_str(m_units[u].bytecode.gotoSource[g].offset + 1) );
 					}
 
 					break;
@@ -5528,7 +5583,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 					{
 						int index = base + N.references[r];
 
-						pack16( m_units[u2].offsetOfLocalHashMap, code.p_str(index) );
+						wr_pack16( m_units[u2].offsetOfLocalHashMap, code.p_str(index) );
 					}
 
 					break;
@@ -5549,7 +5604,13 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 				for( ; u2<m_units.count(); ++u2 )
 				{
 					if ( m_units[u2].hash == N.hash )
-					{
+					{	
+						if ( m_addDebugLineNumbers )
+						{
+							uint16_t codeword = (uint16_t)FunctionCall | ((uint16_t)(u2 - 1) & PayloadMask);
+							wr_pack16( codeword, (unsigned char *)code.p_str(index - 2) );
+						}
+						
 						code[index] = O_CallFunctionByIndex;
 
 						code[index+2] = (char)(u2 - 1);
@@ -5583,30 +5644,80 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, bool includeS
 						code[index] = O_CallFunctionByHash;
 					}
 
-					pack32( N.hash, code.p_str(index+2) );
+					wr_pack32( N.hash, code.p_str(index+2) );
 				}
 			}
 		}
 	}
 
-	unsigned int globals = m_units[0].bytecode.localSpace.count();
-	if ( includeSymbols && globals )
+
+//	[h][#globals][bytes] / [global data|global data crc] / [CRC]
+// 	[h][#globals][bytes] |[[debug options + crc]|/ [global data|global data crc] / [CRC]
+
+	
+	if ( m_addDebugLineNumbers || m_embedSourceCode )
 	{
-		uint32_t* symbolsBlock = new uint32_t[globals + 1];
-		for( unsigned int s = 0; s<globals; ++s )
+		WRstr symbolBlock;
+		if ( m_addDebugLineNumbers || m_embedSourceCode )
 		{
-			pack32( m_units[0].bytecode.localSpace[s].hash, (unsigned char *)(symbolsBlock + s) );
+			symbolBlock.append( (char *)wr_pack16(globals, data), 2 ); // globals
+			symbolBlock.append( (char *)wr_pack16(units - 1, data), 2 ); // functions
+
+			data[0] = 0;
+			for( unsigned int g=0; g<globals; ++g )
+			{
+				symbolBlock.append( m_units[0].bytecode.localSpace[g].label );
+				symbolBlock.append( (char *)data, 1 ); 
+			}
+
+			for( unsigned int u=1; u<units; ++u )
+			{
+				data[1] = m_units[u].bytecode.localSpace.count();
+				symbolBlock.append( (char *)(data + 1), 1 );
+				for( unsigned int s=0; s<m_units[u].bytecode.localSpace.count(); ++s )
+				{
+					symbolBlock.append( m_units[u].bytecode.localSpace[s].label );
+					symbolBlock.append( (char *)data, 1 ); 
+				}
+			}
 		}
+
+
+		uint32_t sourceOffset = m_embedSourceCode ? code.size() : 0;
+		if ( m_embedSourceCode )
+		{
+			code.append( (const unsigned char*)m_source, m_sourceLen );
+		}
+
+		uint32_t symbolBlockOffset = code.size();
+		code.append( (unsigned char *)symbolBlock.c_str(), symbolBlock.size() );
+
+		uint32_t debugBlockBase = code.size();
 		
-		pack32( wr_hash(symbolsBlock, globals * sizeof(uint32_t)), (unsigned char *)(symbolsBlock + globals) );
-		code.append( (unsigned char *)symbolsBlock, (globals + 1) * sizeof(uint32_t) );
-		delete[] symbolsBlock;
+		code.append( wr_pack32(compilerOptionFlags, data), 4 ); // 0: flags
+		code.append( wr_pack32(m_sourceLen, data), 4 ); // 4:source Length
+		code.append( wr_pack32(wr_hash(m_source, m_sourceLen), data), 4 ); // 8:source Hash
+		code.append( wr_pack32(sourceOffset, data), 4 ); // 12:source Offset
+		code.append( wr_pack32(symbolBlock.size(), data), 4 ); // 16:symbol Block Size
+		code.append( wr_pack32(symbolBlockOffset, data), 4 ); // 20:symbol Offset
+
+		code.append( wr_pack32(wr_hash(code.p_str(debugBlockBase), 24), data), 4 ); // 24
 	}
 	
-	uint32_t hash = wr_hash( code, code.size() );
+	if ( m_embedGlobalSymbols && globals )
+	{
+		uint32_t* globalsBlock = new uint32_t[globals + 1];
+		for( unsigned int s = 0; s<globals; ++s )
+		{
+			wr_pack32( m_units[0].bytecode.localSpace[s].hash, (unsigned char *)(globalsBlock + s) );
+		}
 
-	pack32( hash, data );
-	code.append( data, 4 );
+		wr_pack32( wr_hash(globalsBlock, globals * sizeof(uint32_t)), (unsigned char *)(globalsBlock + globals) );
+		code.append( (unsigned char *)globalsBlock, (globals + 1) * sizeof(uint32_t) );
+		delete[] globalsBlock;
+	}
+
+	code.append( wr_pack32(wr_hash(code, code.size()), data), 4 );
 
 	if ( !m_err )
 	{
@@ -5722,13 +5833,16 @@ WRError WRCompilationContext::compile( const char* source,
 									   unsigned char** out,
 									   int* outLen,
 									   char* errorMsg,
-									   bool includeSymbols )
+									   const unsigned int compilerOptionFlags )
 {
 	m_source = source;
 	m_sourceLen = size;
 
 	*outLen = 0;
 	*out = 0;
+
+	m_lastLineNumber = 0;
+	m_lastCode = 0xFFFF;
 	
 	m_pos = 0;
 	m_err = WR_ERR_None;
@@ -5744,6 +5858,10 @@ WRError WRCompilationContext::compile( const char* source,
 	m_loadedValue.p2 = INIT_AS_REF;
 
 	TokenBlock* unitBlocks = 0;
+
+	m_addDebugLineNumbers = compilerOptionFlags & WR_EMBED_DEBUG_CODE;
+	m_embedSourceCode = compilerOptionFlags & WR_EMBED_SOURCE_CODE;
+	m_embedGlobalSymbols = compilerOptionFlags != 0; // if any options are set, embed them
 	
 	do
 	{
@@ -5807,36 +5925,14 @@ WRError WRCompilationContext::compile( const char* source,
 	}
 	
 	WRstr msg;
-	
+
 	if ( m_err != WR_ERR_None )
-	{			
-		int onChar = 0;
-		int onLine = 1;
+	{
+		int onChar;
+		int onLine;
 		WRstr line;
-
-		for( int p = 0; p<size && source[p] != '\n'; p++ )
-		{
-			line += (char)source[p];
-		}
-
-		for( int i=0; i<m_pos; ++i )
-		{
-			if ( source[i] == '\n' )
-			{
-				onLine++;
-				onChar = 0;
-
-				line.clear();
-				for( int p = i+1; p<size && source[p] != '\n'; p++ )
-				{
-					line += (char)source[p];
-				}
-			}
-			else
-			{
-				onChar++;
-			}
-		}
+		
+		getSourcePosition( onLine, onChar, &line );
 		
 		msg.format( "line:%d\n", onLine );
 		msg.appendFormat( "err:%d\n", m_err );
@@ -5868,7 +5964,7 @@ WRError WRCompilationContext::compile( const char* source,
 
 	pushOpcode( m_units[0].bytecode, O_Stop );
 	
-	link( out, outLen, includeSymbols );
+	link( out, outLen, compilerOptionFlags );
 	if ( m_err )
 	{
 		printf( "link error [%d]\n", m_err );
@@ -5887,7 +5983,12 @@ WRError WRCompilationContext::compile( const char* source,
 }
 
 //------------------------------------------------------------------------------
-int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg, bool includeSymbols )
+int wr_compile( const char* source,
+				const int size,
+				unsigned char** out,
+				int* outLen,
+				char* errMsg,
+				const unsigned int compilerOptionFlags )
 {
 	assert( sizeof(float) == 4 );
 	assert( sizeof(int) == 4 );
@@ -5897,7 +5998,7 @@ int wr_compile( const char* source, const int size, unsigned char** out, int* ou
 	// create a compiler context that has all the necessary stuff so it's completely unloaded when complete
 	WRCompilationContext comp; 
 
-	return comp.compile( source, size, out, outLen, errMsg, includeSymbols );
+	return comp.compile( source, size, out, outLen, errMsg, compilerOptionFlags );
 }
 
 #else // WRENCH_WITHOUT_COMPILER

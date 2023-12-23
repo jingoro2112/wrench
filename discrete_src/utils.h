@@ -29,6 +29,10 @@ SOFTWARE.
 int wr_itoa( int i, char* string, size_t len );
 int wr_ftoa( float f, char* string, size_t len );
 
+unsigned char* wr_pack16( int16_t i, unsigned char* buf );
+unsigned char* wr_pack32( int32_t l, unsigned char* buf );
+
+
 #ifndef WRENCH_WITHOUT_COMPILER
 
 //-----------------------------------------------------------------------------
@@ -390,13 +394,14 @@ enum WRGCObjectType
 
 #define IS_SVA_VALUE_TYPE(V) ((V)->m_type & 0x1)
 
-#define INIT_AS_ARRAY      (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
-#define INIT_AS_USR        (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
-#define INIT_AS_RAW_ARRAY  (((uint32_t)WR_EX) | ((uint32_t)WR_EX_RAW_ARRAY<<24))
-#define INIT_AS_REFARRAY   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_REFARRAY<<24))
-#define INIT_AS_STRUCT     (((uint32_t)WR_EX) | ((uint32_t)WR_EX_STRUCT<<24))
-#define INIT_AS_HASH_TABLE (((uint32_t)WR_EX) | ((uint32_t)WR_EX_HASH_TABLE<<24))
-#define INIT_AS_ITERATOR   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ITERATOR<<24))
+#define INIT_AS_DEBUG_BREAK (((uint32_t)WR_EX) | ((uint32_t)WR_EX_DEBUG_BREAK<<24))
+#define INIT_AS_ARRAY       (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
+#define INIT_AS_USR         (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
+#define INIT_AS_RAW_ARRAY   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_RAW_ARRAY<<24))
+#define INIT_AS_REFARRAY    (((uint32_t)WR_EX) | ((uint32_t)WR_EX_REFARRAY<<24))
+#define INIT_AS_STRUCT      (((uint32_t)WR_EX) | ((uint32_t)WR_EX_STRUCT<<24))
+#define INIT_AS_HASH_TABLE  (((uint32_t)WR_EX) | ((uint32_t)WR_EX_HASH_TABLE<<24))
+#define INIT_AS_ITERATOR    (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ITERATOR<<24))
 
 #define INIT_AS_REF      WR_REF
 #define INIT_AS_INT      WR_INT

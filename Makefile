@@ -23,11 +23,14 @@ OBJS = \
 	$(OBJDIR)/operations.o \
 	$(OBJDIR)/vm.o \
 	$(OBJDIR)/utils.o \
+	$(OBJDIR)/wrench_server_debug.o \
+	$(OBJDIR)/wrench_client_debug.o \
 	$(OBJDIR)/std.o \
 	$(OBJDIR)/std_io.o \
 	$(OBJDIR)/std_string.o \
 	$(OBJDIR)/std_math.o \
 	$(OBJDIR)/std_msg.o \
+	$(OBJDIR)/std_sys.o \
 
 clean:
 	-@rm -rf $(OBJDIR)
@@ -43,6 +46,8 @@ valgrind: $(OBJS) wrench_cli.cpp
 test: $(OBJS) wrench_cli.cpp
 	g++ $(OBJS) -Wall -Werror wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_cli
 	./wrench_cli t
+
+wrench_dev: dev_wrench
 
 dev_wrench: $(OBJS) wrench_cli.cpp
 	g++ $(OBJS) -Wall -Werror wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_cli
@@ -65,6 +70,12 @@ $(OBJDIR)/vm.o: discrete_src/vm.cpp
 $(OBJDIR)/utils.o: discrete_src/utils.cpp
 	$(CC) $@ $<
 
+$(OBJDIR)/wrench_server_debug.o: discrete_src/wrench_server_debug.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/wrench_client_debug.o: discrete_src/wrench_client_debug.cpp
+	$(CC) $@ $<
+
 $(OBJDIR)/std.o: discrete_src/std.cpp
 	$(CC) $@ $<
 
@@ -78,4 +89,7 @@ $(OBJDIR)/std_math.o: discrete_src/std_math.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/std_msg.o: discrete_src/std_msg.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/std_sys.o: discrete_src/std_sys.cpp
 	$(CC) $@ $<

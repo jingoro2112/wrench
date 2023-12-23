@@ -45,6 +45,15 @@
     <ClCompile Include="..\discrete_src\std_msg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\discrete_src\std_sys.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\wrench_client_debug.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\wrench_server_debug.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\discrete_src\cc.h">
@@ -69,6 +78,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\discrete_src\gc_object.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\discrete_src\wrench_debug.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

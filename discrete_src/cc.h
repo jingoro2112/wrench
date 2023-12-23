@@ -135,6 +135,7 @@ struct WRNamespaceLookup
 {
 	uint32_t hash; // hash of symbol
 	WRarray<int> references; // where this symbol is referenced (loaded) in the bytecode
+	WRstr label;
 	
 	WRNamespaceLookup() { reset(0); }
 	void reset( uint32_t h )
@@ -370,8 +371,12 @@ struct WRUnitContext
 struct WRCompilationContext
 {
 public:
-	WRError compile( const char* data, const int size, unsigned char** out, int* outLen, char* erroMsg =0, bool includeSymbols =true );
-	
+	WRError compile( const char* data,
+					 const int size,
+					 unsigned char** out,
+					 int* outLen,
+					 char* erroMsg,
+					 const unsigned int compilerOptionFlags );
 private:
 	
 	bool isReserved( const char* token );
@@ -384,15 +389,21 @@ private:
 	static bool IsLiteralLoadOpcode( unsigned char opcode );
 	static bool CheckCompareReplace( WROpcode LS, WROpcode GS, WROpcode ILS, WROpcode IGS, WRBytecode& bytecode, unsigned int a, unsigned int o );
 
-	unsigned char* pack16( int16_t i, unsigned char* buf );
-	unsigned char* pack32( int32_t l, unsigned char* buf );
-	
 	friend class WRExpression;
 	static void pushOpcode( WRBytecode& bytecode, WROpcode opcode );
 	static void pushData( WRBytecode& bytecode, const unsigned char* data, const int len ) { bytecode.all.append( data, len ); }
 	static void pushData( WRBytecode& bytecode, const char* data, const int len ) { bytecode.all.append( (unsigned char*)data, len ); }
 
 	int getBytecodePosition( WRBytecode& bytecode ) { return bytecode.all.size(); }
+
+	bool m_addDebugLineNumbers;
+	bool m_embedGlobalSymbols;
+	bool m_embedSourceCode;
+	
+	int m_lastLineNumber;
+	uint16_t m_lastCode;
+	void pushDebug( uint16_t code, WRBytecode& bytecode,int param =-1 );
+	void getSourcePosition( int& onLine, int& onChar, WRstr* line =0 );
 	
 	int addRelativeJumpTarget( WRBytecode& bytecode );
 	void setRelativeJumpTarget( WRBytecode& bytecode, int relativeJumpTarget );
@@ -426,7 +437,7 @@ private:
 	bool parseStatement( int unitIndex, char end, bool& returnCalled, WROpcode opcodeToReturn );
 
 	void createLocalHashMap( WRUnitContext& unit, unsigned char** buf, int* size );
-	void link( unsigned char** out, int* outLen, bool includeSymbols );
+	void link( unsigned char** out, int* outLen, const unsigned int compilerOptionFlags );
 
 	const char* m_source;
 	int m_sourceLen;

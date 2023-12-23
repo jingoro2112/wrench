@@ -322,6 +322,8 @@ enum WROpcode
 	O_ToInt,
 	O_ToFloat,
 
+	O_DebugInfo,
+			
 	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,
 	O_FUNCTION_CALL_PLACEHOLDER,

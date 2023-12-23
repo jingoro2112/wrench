@@ -1,4 +1,7 @@
 /*~
+hellohiBBCC
+BBCC
+BBCCCC
 hello world
 0.1
 -0.1
@@ -65,6 +68,20 @@ y = y + z;
 if ( y1 != "BBCC" ) print("fail bin1");
 if ( y != "BBCC" ) print("fail bin1");
 
+
+a = "hello";
+a += "hi";
+
+print( a );
+
+a = "BB";
+b = "CC";
+d = a + b;
+a = a + b;
+b = a + b;
+println( d );
+println( a );
+println( b );
 
 
 
@@ -146,7 +163,10 @@ if ( flip != 0x0000FFFF ) println("flip2");
 a1 = b1 = c1 = 10;
 if ( a1 != 10 || b1 != 10 || c1 != 10 ) println("err 0");
 
-c = --a + a-- + ++a + a--;
+a = 1;
+b = -1;
+c = --a + ++b;
+if ( c != 0 ) { println("err00"); }
 
 a = 90;
 a++;

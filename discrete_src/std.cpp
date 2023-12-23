@@ -146,13 +146,31 @@ int wr_ftoa( float f, char* string, size_t len )
 //------------------------------------------------------------------------------
 void wr_std_rand( WRValue* stackTop, const int argn, WRContext* c )
 {
-	if ( argn == 1 )
-	{
-		stackTop->p2 = INIT_AS_INT;
+	stackTop->init();
 
-		int32_t	k = wr_Seed / 127773;
-		wr_Seed = 16807 * ( wr_Seed - k * 127773 ) - 2836 * k;
-		stackTop->i = (uint32_t)wr_Seed % (uint32_t)(stackTop - 1)->asInt();
+	if ( argn > 0 )
+	{
+		WRValue* args = stackTop - argn;
+		
+		int32_t a = args[0].asInt();
+		int32_t b; 
+		if ( argn > 1 )
+		{
+			a = args[0].asInt();
+			b = args[1].asInt() - a;
+		}
+		else
+		{
+			a = 0;
+			b = args[0].asInt();
+		}
+
+		if ( b > 0 )
+		{
+			int32_t k = wr_Seed / 127773;
+			wr_Seed = 16807 * (wr_Seed - k * 127773) - 2836 * k;
+			stackTop->i = a + ((uint32_t)wr_Seed % (uint32_t)b);
+		}
 	}
 }
 
@@ -161,15 +179,33 @@ void wr_std_srand( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
-		wr_Seed = (stackTop - 1)->asInt();
+		wr_Seed = (uint32_t)((stackTop - 1)->asInt());
 	}
 }
+
+#if __arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__
+#include <time.h>
+//------------------------------------------------------------------------------
+void wr_std_time( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->p2 = INIT_AS_INT;
+	stackTop->i = (int32_t)time(0);
+}
+#else
+//------------------------------------------------------------------------------
+void wr_std_time( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+}
+#endif
+
 
 //------------------------------------------------------------------------------
 void wr_loadStdLib( WRState* w )
 {
 	wr_registerLibraryFunction( w, "std::rand", wr_std_rand );
 	wr_registerLibraryFunction( w, "std::srand", wr_std_srand );
+	wr_registerLibraryFunction( w, "std::time", wr_std_time );
 }
 
 //------------------------------------------------------------------------------
@@ -180,4 +216,5 @@ void wr_loadAllLibs( WRState* w )
 	wr_loadFileLib( w );
 	wr_loadStringLib( w );
 	wr_loadMessageLib( w );
+	wr_loadSysLib( w );
 }

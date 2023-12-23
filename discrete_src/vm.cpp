@@ -322,6 +322,8 @@ const char* c_opcodeName[] =
 
 	"ToInt",
 	"ToFloat",
+
+	"DebugInfo",
 };
 #endif
 
@@ -873,6 +875,8 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&ToInt,
 		&&ToFloat,
 
+		&&DebugInfo,
+
 	};
 #endif
 
@@ -890,6 +894,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	
 	WRValue* frameBase = 0;
 	WRState* w = context->w;
+	const unsigned char* bottom = context->bottom;
 	WRValue* stackTop = w->stack;
 	WRValue* globalSpace = (WRValue *)(context + 1);
 
@@ -918,7 +923,21 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 #endif
 
 	w->err = WR_ERR_None;
-	
+
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+	if ( context->debugInterface && function )
+	{
+		if ( !function->offset ) // impossible offset, this is a re-entry!
+		{
+			// pop state
+			pc = context->debugInterface->m_pc;
+			frameBase = context->debugInterface->m_frameBase;
+			stackTop = context->debugInterface->m_stackTop;
+			goto debugContinue;
+		}
+	}
+#endif
+
 	if ( function )
 	{
 		stackTop->p = 0;
@@ -933,7 +952,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		goto callFunction;
 	}
 
-	pc = context->bottom + 2;
+	pc = bottom + 2;
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 
@@ -956,7 +975,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 				context->localFunctions[findex].hash = (stackTop + 1)->i;
 
-				context->localFunctions[findex].offset = context->bottom + (stackTop + 2)->i;
+				context->localFunctions[findex].offset = bottom + (stackTop + 2)->i;
 
 				context->localFunctions[findex].frameBaseAdjustment = 1
 																	  + context->localFunctions[ findex ].frameSpaceNeeded
@@ -1002,6 +1021,34 @@ literalZero:
 				
 				CONTINUE;
 			}
+
+			CASE(DebugInfo):
+			{
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+				if ( context->debugInterface )
+				{
+					context->debugInterface->codewordEncountered( READ_16_FROM_PC(pc), stackTop );
+					if ( context->debugInterface->m_brk )
+					{
+						// push state
+						context->debugInterface->m_argv = argv;
+						context->debugInterface->m_argn = argn;
+						context->debugInterface->m_pc = pc;
+						context->debugInterface->m_frameBase = frameBase;
+						context->debugInterface->m_stackTop = stackTop;
+						context->debugInterface->m_brk = false;
+						
+						stackTop->p2 = INIT_AS_DEBUG_BREAK;
+						return stackTop;
+					}
+				}
+
+debugContinue:
+#endif
+				pc += 2;
+				CONTINUE;
+			}
+
 
 			CASE(CallFunctionByHash):
 			{
@@ -1086,8 +1133,8 @@ callFunction:
 				// temp value contains return vector/frame base
 				register0 = stackTop++; // return vector
 				register0->frame = frameBase;
+				register0->returnOffset = pc - bottom; // can't use "pc" because it might set the "gc me" bit, this is guaranteed to be small enough to never do that
 
-				register0->p = pc;
 				pc = function->offset;
 
 				// set the new frame base to the base arguments the function is expecting
@@ -1162,10 +1209,10 @@ callFunction:
 
 			CASE(NewObjectTable):
 			{
-				const unsigned char* table = context->bottom + READ_16_FROM_PC(pc);
+				const unsigned char* table = bottom + READ_16_FROM_PC(pc);
 				pc += 2;
 
-				if ( table > context->bottom )
+				if ( table > bottom )
 				{
 					// if unit was called with no arguments from global
 					// level there are not "free" stack entries to
@@ -1173,7 +1220,7 @@ callFunction:
 					// first value
 
 					// NOTE: we are guaranteed to have at least one
-					// value if table > context->bottom
+					// value if table > bottom
 
 					unsigned char count = *table++;
 
@@ -1280,7 +1327,7 @@ callFunction:
 			{
 				register0 = stackTop - 2;
 
-				pc = (unsigned char*)register0->p; // grab return PC
+				pc = bottom + register0->returnOffset; // grab return PC
 
 				stackTop = frameBase;
 				frameBase = register0->frame;
