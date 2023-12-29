@@ -26,13 +26,6 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 //------------------------------------------------------------------------------
-struct PendingDebugMessage
-{
-	WRDebugMessage message;
-	PendingDebugMessage* next;
-};
-
-//------------------------------------------------------------------------------
 enum WrenchDebugComm
 {
 	Run,
@@ -41,25 +34,28 @@ enum WrenchDebugComm
 	RequestStatus,
 	RequestSymbolBlock,
 	RequestSourceBlock,
+	RequestSourceHash,
 
 	ReplyStatus,
 	ReplySymbolBlock,
-	ReplySourceBlock,
+	ReplySource,
+	ReplySourceHash,
+	
+	ReplyUnavailable,
+	Err,
+	Halted,
 
+};
 
-	// To VM
-	SetBreak =1,
-	ClearBreak,
+//------------------------------------------------------------------------------
+struct WrenchPacketGenericPayload
+{
+	int32_t hash;
 
-	// From VM
-	FunctionEntered,
-	Broken,
-	GlobalStop,
-
-	Ping,
-	Pong,
-
-
+	void xlate()
+	{
+		hash = wr_x32(hash);
+	}
 };
 
 //------------------------------------------------------------------------------
@@ -70,6 +66,47 @@ struct WrenchPacket
 	char* payload;
 
 	WrenchPacket() { memset(this, 0, sizeof(*this)); }
+	~WrenchPacket() { clear(); }
+
+	WrenchPacket( WrenchPacket& other )
+	{
+		*this = other;
+		other.payload = 0;
+	}
+
+	WrenchPacket& operator=( WrenchPacket& other )
+	{
+		if ( this != &other )
+		{
+			*this = other;
+			other.payload = 0;
+		}
+
+		return *this;
+	}
+	
+
+	void clear() { free(payload); payload = 0; }
+	
+	void xlate() { payloadSize = wr_x32(payloadSize); }
+
+	char* allocate( int size )
+	{
+		if ( payload )
+		{
+			free( payload );
+		}
+		return (payload = (char*)malloc(size));
+	}
+	
+	WrenchPacketGenericPayload* genericPayload()
+	{
+		return (WrenchPacketGenericPayload *)allocate( sizeof(WrenchPacketGenericPayload) );
+	}
+
+private:
+	WrenchPacket( const WrenchPacket& other );
+	WrenchPacket& operator=( const WrenchPacket& other );
 };
 
 //------------------------------------------------------------------------------

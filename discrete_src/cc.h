@@ -454,11 +454,13 @@ private:
 
 	WRstr m_loadedToken;
 	WRValue m_loadedValue;
-
+	bool m_loadedQuoted;
+	
 	WRError m_err;
 	bool m_EOF;
 	bool m_LastParsedLabel;
 	bool m_parsingFor;
+	bool m_quoted;
 
 	int m_unitTop;
 	WRarray<WRUnitContext> m_units;

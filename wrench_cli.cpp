@@ -254,7 +254,7 @@ int main( int argn, char* argv[] )
 	assert( sizeof(WRValue) == 2*sizeof(void*) );
 	assert( sizeof(float) == 4 );
 	assert( sizeof(unsigned char) == 1 );
-	
+
 //	ctest();
 	
 	if ( argn <= 1 )
@@ -573,7 +573,7 @@ int runTests( int number )
 				wr_destroyContext( context );
 				context = wr_run( w, out, outLen );
 
-				if ( !wr_getLastError(w) )
+				if ( !(err = wr_getLastError(w)) )
 				{
 					integer.i = 2456;
 					someArray[1] = 'e';
@@ -813,8 +813,14 @@ int doDebug( const char* name )
 
 			case 'l':
 			{
-				printf( "<l>istn" );
-//				client.load()
+				printf( "<l>ist\n" );
+
+				const char* buf;
+				int len;
+				if ( client.getSourceCode( &buf, &len ) )
+				{
+					
+				}
 				break;
 			}
 
@@ -866,11 +872,10 @@ int doDebug( const char* name )
 			}
 		}
 
-
+		/*
 		const WRDebugMessage& s = client.status();
-
 		printf( "status[%d] line[%d] func[%d]\n", s.type, s.line, s.function );
-		
+		*/
 		if ( cmd[0] == 'q' )
 		{
 			printf( "<q>uit\n" );

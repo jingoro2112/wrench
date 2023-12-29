@@ -1,3 +1,8 @@
+3.2.2 ----------------------------------------------------------------------------------
+- fixed parse error where control chars are quoted f(")"); for example would fail
+- calling a function that does not exist is now an execution error
+- fixed spurious dereference from new struct code
+
 3.2.1 ----------------------------------------------------------------------------------
 - bugfix release for negative array reference
 - debug features are DORMANT and not meant for release yet

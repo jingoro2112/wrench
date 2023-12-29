@@ -1069,21 +1069,22 @@ extern WRReturnFunc wr_CompareEQ[16];
 
 // if the current + native match then great it's a simple read, it's
 // only when they differ that we need bitshiftiness
-#if (defined(WRENCH_LITTLE_ENDIAN) && defined(WRENCH_NATIVE_LITTLE_ENDIAN))	|| (defined(WRENCH_BIG_ENDIAN) && defined(WRENCH_NATIVE_BIG_ENDIAN))
+#ifdef WRENCH_LITTLE_ENDIAN
+ #define wr_x32(P) P
+ #define wr_x16(P) P
  #define READ_32_FROM_PC(P) (int32_t)(*(int32_t *)(P))
  #define READ_16_FROM_PC(P) (int16_t)(*(int16_t *)(P))
 #else
+
+ int32_t wr_x32( const int32_t val );
+ int16_t wr_x16( const int16_t val );
+
  #ifdef WRENCH_COMPACT
   int32_t READ_32_FROM_PC( const unsigned char* P );
   int16_t READ_16_FROM_PC( const unsigned char* P );
  #else
-  #if defined( WRENCH_NATIVE_BIG_ENDIAN )
-   #define READ_32_FROM_PC(P) (int32_t)((int32_t)*(P+3) | ((int32_t)*(P+2))<<8 | ((int32_t)*(P+1))<<16 | ((int32_t)*(P))<<24)
-   #define READ_16_FROM_PC(P) (int16_t)((int16_t)*(P+1) | ((int16_t)*(P))<<8)
-  #elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
-   #define READ_32_FROM_PC(P) (int32_t)((int32_t)*(P) | ((int32_t)*(P+1))<<8 | ((int32_t)*(P+2))<<16 | ((int32_t)*(P+3))<<24)
-   #define READ_16_FROM_PC(P) (int16_t)((int16_t)*(P) | ((int16_t)*(P+1))<<8)
-  #endif
+  #define READ_32_FROM_PC(P) (int32_t)((int32_t)*(P) | ((int32_t)*(P+1))<<8 | ((int32_t)*(P+2))<<16 | ((int32_t)*(P+3))<<24)
+  #define READ_16_FROM_PC(P) (int16_t)((int16_t)*(P) | ((int16_t)*(P+1))<<8)
  #endif
 #endif
 
@@ -2373,11 +2374,13 @@ private:
 
 	WRstr m_loadedToken;
 	WRValue m_loadedValue;
-
+	bool m_loadedQuoted;
+	
 	WRError m_err;
 	bool m_EOF;
 	bool m_LastParsedLabel;
 	bool m_parsingFor;
+	bool m_quoted;
 
 	int m_unitTop;
 	WRarray<WRUnitContext> m_units;
@@ -2450,13 +2453,6 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 //------------------------------------------------------------------------------
-struct PendingDebugMessage
-{
-	WRDebugMessage message;
-	PendingDebugMessage* next;
-};
-
-//------------------------------------------------------------------------------
 enum WrenchDebugComm
 {
 	Run,
@@ -2465,25 +2461,28 @@ enum WrenchDebugComm
 	RequestStatus,
 	RequestSymbolBlock,
 	RequestSourceBlock,
+	RequestSourceHash,
 
 	ReplyStatus,
 	ReplySymbolBlock,
-	ReplySourceBlock,
+	ReplySource,
+	ReplySourceHash,
+	
+	ReplyUnavailable,
+	Err,
+	Halted,
 
+};
 
-	// To VM
-	SetBreak =1,
-	ClearBreak,
+//------------------------------------------------------------------------------
+struct WrenchPacketGenericPayload
+{
+	int32_t hash;
 
-	// From VM
-	FunctionEntered,
-	Broken,
-	GlobalStop,
-
-	Ping,
-	Pong,
-
-
+	void xlate()
+	{
+		hash = wr_x32(hash);
+	}
 };
 
 //------------------------------------------------------------------------------
@@ -2494,6 +2493,47 @@ struct WrenchPacket
 	char* payload;
 
 	WrenchPacket() { memset(this, 0, sizeof(*this)); }
+	~WrenchPacket() { clear(); }
+
+	WrenchPacket( WrenchPacket& other )
+	{
+		*this = other;
+		other.payload = 0;
+	}
+
+	WrenchPacket& operator=( WrenchPacket& other )
+	{
+		if ( this != &other )
+		{
+			*this = other;
+			other.payload = 0;
+		}
+
+		return *this;
+	}
+	
+
+	void clear() { free(payload); payload = 0; }
+	
+	void xlate() { payloadSize = wr_x32(payloadSize); }
+
+	char* allocate( int size )
+	{
+		if ( payload )
+		{
+			free( payload );
+		}
+		return (payload = (char*)malloc(size));
+	}
+	
+	WrenchPacketGenericPayload* genericPayload()
+	{
+		return (WrenchPacketGenericPayload *)allocate( sizeof(WrenchPacketGenericPayload) );
+	}
+
+private:
+	WrenchPacket( const WrenchPacket& other );
+	WrenchPacket& operator=( const WrenchPacket& other );
 };
 
 //------------------------------------------------------------------------------
@@ -2673,9 +2713,11 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 	{
 		token = m_loadedToken;
 		value = m_loadedValue;
+		m_quoted = m_loadedQuoted;
 	}
 	else
 	{
+		m_quoted = false;
 		value.p2 = INIT_AS_REF;
 
 		ex.spaceBefore = (m_pos < m_sourceLen) && isspace(m_source[m_pos]);
@@ -2898,7 +2940,8 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 			{
 				bool single = token[0] == '\'';
 				token.clear();
-
+				m_quoted = true;
+				
 				do
 				{
 					if (m_pos >= m_sourceLen)
@@ -3194,6 +3237,7 @@ foundMacroToken:
 	}
 
 	m_loadedToken.clear();
+	m_loadedQuoted = m_quoted;
 	m_loadedValue.p2 = INIT_AS_REF;
 
 	if ( expect && (token != expect) )
@@ -5753,7 +5797,7 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 				return 0;
 			}
 
-			if ( token2 == ")" )
+			if ( !m_quoted && token2 == ")" )
 			{
 				break;
 			}
@@ -5765,9 +5809,11 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 			nex.context[0].value = value2;
 			m_loadedToken = token2;
 			m_loadedValue = value2;
-
+			m_loadedQuoted = m_quoted;
+			
 			char end = parseExpression( nex );
 
+/*
 			if ( nex.bytecode.opcodes.size() > 0 )
 			{
 				char op = nex.bytecode.opcodes[nex.bytecode.opcodes.size() - 1];
@@ -5784,7 +5830,7 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 					nex.bytecode.all += O_Dereference;
 				}
 			}
-
+*/
 			appendBytecode( expression.context[depth].bytecode, nex.bytecode );
 
 			if ( end == ')' )
@@ -5877,7 +5923,7 @@ bool WRCompilationContext::pushObjectTable( WRExpressionContext& context,
 
 	context.type = EXTYPE_BYTECODE_RESULT;
 
-	if ( token2 == "{" )
+	if ( !m_quoted && token2 == "{" )
 	{
 		unsigned char offset = 0;
 		for(;;)
@@ -6066,7 +6112,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 						return 0;
 					}
 
-					if ( token2 == "}" )
+					if ( !m_quoted && token2 == "}" )
 					{
 						break;
 					}
@@ -6076,7 +6122,8 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					nex.context[0].value = value2;
 					m_loadedToken = token2;
 					m_loadedValue = value2;
-
+					m_loadedQuoted = m_quoted;
+					
 					char end = parseExpression( nex );
 
 					unsigned char data[2];
@@ -6149,7 +6196,8 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 				m_loadedToken = token2;
 				m_loadedValue = value2;
-
+				m_loadedQuoted = m_quoted;
+				
 				++depth;
 
 				continue;
@@ -6162,7 +6210,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			continue;
 		}
 		
-		if ( token == "new" )
+		if ( !m_quoted && token == "new" )
 		{
 			if ( (depth < 2) || 
 				 (expression.context[depth - 1].operation
@@ -6207,7 +6255,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				return 0;
 			}
 
-			if ( token2 == ";" )
+			if ( !m_quoted && token2 == ";" )
 			{
 				if ( !parseCallFunction(expression, functionName, depth, false) )
 				{
@@ -6216,8 +6264,9 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 				m_loadedToken = ";";
 				m_loadedValue.p2 = INIT_AS_REF;
+				m_loadedQuoted = m_quoted;
 			}
-			else if ( token2 == "(" )
+			else if ( !m_quoted && token2 == "(" )
 			{
 				if ( !parseCallFunction(expression, functionName, depth, true) )
 				{
@@ -6234,9 +6283,10 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				{
 					m_loadedToken = token2;
 					m_loadedValue = value2;
+					m_loadedQuoted = m_quoted;
 				}
 			}
-			else if (token2 == "{")
+			else if (!m_quoted && token2 == "{")
 			{
 				if ( !parseCallFunction(expression, functionName, depth, false) )
 				{
@@ -6244,7 +6294,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				}
 				token2 = "{";
 			}
-			else if ( token2 == "[" )
+			else if ( !m_quoted && token2 == "[" )
 			{
 				// must be "array" directive
 				if ( !getToken(expression.context[depth], "]") )
@@ -6276,7 +6326,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 				uint16_t initializer = 0;
 
-				if ( token3 == "{" )
+				if ( !m_quoted && token3 == "{" )
 				{
 					for(;;)
 					{
@@ -6291,11 +6341,11 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 							return 0;
 						}
 
-						if ( token3 == "}" )
+						if ( !m_quoted && token3 == "}" )
 						{
 							break;
 						}
-						else if (token3 != "{")
+						else if (!m_quoted && token3 != "{")
 						{
 							m_err = WR_ERR_unexpected_token;
 							return 0;
@@ -6321,7 +6371,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 							return 0;
 						}
 
-						if ( token3 == "," )
+						if ( !m_quoted && token3 == "," )
 						{
 							continue;
 						}
@@ -6355,7 +6405,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 					m_loadedToken = token3;
 					m_loadedValue = value3;
-
+					m_loadedQuoted = m_quoted;
 				}
 				else if ( token2 != ";" )
 				{
@@ -6384,7 +6434,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			continue;
 		}
 
-		if ( token == "(" )
+		if ( !m_quoted && token == "(" )
 		{
 			// might be cast, call or sub-expression
 			
@@ -6437,6 +6487,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				nex.context[0].value = value;
 				m_loadedToken = token;
 				m_loadedValue = value;
+				m_loadedQuoted = m_quoted;
 				if ( parseExpression(nex) != ')' )
 				{
 					m_err = WR_ERR_unexpected_token;
@@ -6471,7 +6522,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			continue;
 		}
 
-		if ( token == "[" )
+		if ( !m_quoted && token == "[" )
 		{
 			if ( depth == 0
 				 || (expression.context[depth - 1].type != EXTYPE_LABEL
@@ -6537,7 +6588,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					return 0;
 				}
 				
-				if ( token == ":" )
+				if ( !m_quoted && token == ":" )
 				{
 					uint32_t hash = wr_hashStr( label );
 					for( unsigned int i=0; i<expression.bytecode.jumpOffsetTargets.count(); ++i )
@@ -6563,6 +6614,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				{
 					m_loadedToken = token;
 					m_loadedValue = value;
+					m_loadedQuoted = m_quoted;
 				}
 			}
 			
@@ -6630,7 +6682,7 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 				return false;
 			}
 			
-			if ( token == ")" )
+			if ( !m_quoted && token == ")" )
 			{
 				break;
 			}
@@ -6652,7 +6704,7 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 				return false;
 			}
 
-			if ( token == ")" )
+			if ( !m_quoted && token == ")" )
 			{
 				break;
 			}
@@ -6714,6 +6766,7 @@ bool WRCompilationContext::parseWhile( bool& returnCalled, WROpcode opcodeToRetu
 	nex.context[0].value = value;
 	m_loadedToken = token;
 	m_loadedValue = value;
+	m_loadedQuoted = m_quoted;
 
 	if ( parseExpression(nex) != ')' )
 	{
@@ -6881,7 +6934,7 @@ A:
 			return false;
 		}
 
-		if ( token == ";" )
+		if ( !m_quoted && token == ";" )
 		{
 			break;
 		}
@@ -6891,6 +6944,7 @@ A:
 		nex.context[0].value = value;
 		m_loadedToken = token;
 		m_loadedValue = value;
+		m_loadedQuoted = m_quoted;
 
 		char end = parseExpression( nex );
 
@@ -7069,6 +7123,7 @@ A:
 			nex.context[0].value = value;
 			m_loadedToken = token;
 			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
 
 			if ( parseExpression( nex ) != ';' )
 			{
@@ -7094,7 +7149,7 @@ A:
 				return false;
 			}
 
-			if ( token == ")" )
+			if ( !m_quoted && token == ")" )
 			{
 				break;
 			}
@@ -7104,6 +7159,7 @@ A:
 			nex.context[0].value = value;
 			m_loadedToken = token;
 			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
 
 			char end = parseExpression( nex );
 			pushOpcode( nex.bytecode, O_PopOne );
@@ -7200,11 +7256,11 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 			return false;
 		}
 
-		if ( token == "}" )
+		if ( !m_quoted && token == "}" )
 		{
 			break;
 		}
-		else if ( token == "," )
+		else if ( !m_quoted && token == "," )
 		{
 			continue;
 		}
@@ -7229,7 +7285,7 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 			return false;
 		}
 
-		if ( token == "=" )
+		if ( !m_quoted && token == "=" )
 		{
 			if ( !getToken(ex) )
 			{
@@ -7247,6 +7303,7 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 		{
 			m_loadedToken = token;
 			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
 
 			value = defaultValue;
 		}
@@ -7276,6 +7333,7 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 	{
 		m_loadedToken = token;
 		m_loadedValue = value;
+		m_loadedQuoted = m_quoted;
 	}
 
 	return true;
@@ -7289,7 +7347,7 @@ uint32_t WRCompilationContext::getSingleValueHash( const char* end )
 	WRValue& value = ex.value;
 	getToken( ex );
 	
-	if ( token == "(" )
+	if ( !m_quoted && token == "(" )
 	{
 		return getSingleValueHash( ")" );
 	}
@@ -7401,12 +7459,12 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 			return false;
 		}
 
-		if( token == "}" )
+		if( !m_quoted && token == "}" )
 		{
 			break;
 		}
 
-		if ( token == "case" )
+		if ( !m_quoted && token == "case" )
 		{
 			swCase = &cases.append();
 			swCase->jumpOffset = m_units[m_unitTop].bytecode.all.size();
@@ -7431,7 +7489,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 				}
 			}
 		}
-		else if ( token == "default" )
+		else if ( !m_quoted && token == "default" )
 		{
 			if ( defaultOffset != -1 )
 			{
@@ -7458,6 +7516,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 
 			m_loadedToken = token;
 			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
 
 			if ( !parseStatement(m_unitTop, ';', returnCalled, opcodeToReturn) )
 			{
@@ -7677,6 +7736,7 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	nex.context[0].value = value;
 	m_loadedToken = token;
 	m_loadedValue = value;
+	m_loadedQuoted = m_quoted;
 
 	if ( parseExpression(nex) != ')' )
 	{
@@ -7699,7 +7759,7 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	{
 		setRelativeJumpTarget(m_units[m_unitTop].bytecode, conditionFalseMarker);
 	}
-	else if ( token == "else" )
+	else if ( !m_quoted && token == "else" )
 	{
 		int conditionTrueMarker = addRelativeJumpTarget( m_units[m_unitTop].bytecode ); // when it hits here it will jump OVER this section
 
@@ -7718,6 +7778,7 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	{
 		m_loadedToken = token;
 		m_loadedValue = value;
+		m_loadedQuoted = m_quoted;
 		setRelativeJumpTarget( m_units[m_unitTop].bytecode, conditionFalseMarker );
 	}
 
@@ -7753,12 +7814,12 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 			break;
 		}
 
-		if ( token == "{" )
+		if ( !m_quoted && token == "{" )
 		{
 			return parseStatement( unitIndex, '}', returnCalled, opcodeToReturn );
 		}
 
-		if ( token == "return" )
+		if ( !m_quoted && token == "return" )
 		{
 			returnCalled = true;
 			if ( !getToken(ex) )
@@ -7767,7 +7828,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 
-			if ( token == ";" ) // special case of a null return, add the null
+			if ( !m_quoted && token == ";" ) // special case of a null return, add the null
 			{
 				pushOpcode( m_units[unitIndex].bytecode, O_LiteralZero );
 			}
@@ -7778,6 +7839,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				nex.context[0].value = ex.value;
 				m_loadedToken = token;
 				m_loadedValue = ex.value;
+				m_loadedQuoted = m_quoted;
 
 				if ( parseExpression( nex ) != ';')
 				{
@@ -7790,7 +7852,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 
 			pushOpcode( m_units[unitIndex].bytecode, opcodeToReturn );
 		}
-		else if ( token == "struct" )
+		else if ( !m_quoted && token == "struct" )
 		{
 			if ( unitIndex != 0 )
 			{
@@ -7803,7 +7865,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 		}
-		else if ( token == "function" )
+		else if ( !m_quoted && token == "function" )
 		{
 			if ( unitIndex != 0 )
 			{
@@ -7816,49 +7878,49 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 		}
-		else if ( token == "if" )
+		else if ( !m_quoted && token == "if" )
 		{
 			if ( !parseIf(returnCalled, opcodeToReturn) )
 			{
 				return false;
 			}
 		}
-		else if ( token == "while" )
+		else if ( !m_quoted && token == "while" )
 		{
 			if ( !parseWhile(returnCalled, opcodeToReturn) )
 			{
 				return false;
 			}
 		}
-		else if ( token == "for" )
+		else if ( !m_quoted && token == "for" )
 		{
 			if ( !parseForLoop(returnCalled, opcodeToReturn) )
 			{
 				return false;
 			}
 		}
-		else if ( token == "enum" )
+		else if ( !m_quoted && token == "enum" )
 		{
 			if ( !parseEnum(unitIndex) )
 			{
 				return false;
 			}
 		}
-		else if ( token == "switch" )
+		else if ( !m_quoted && token == "switch" )
 		{
 			if ( !parseSwitch(returnCalled, opcodeToReturn) )
 			{
 				return false;
 			}
 		}
-		else if ( token == "do" )
+		else if ( !m_quoted && token == "do" )
 		{
 			if ( !parseDoWhile(returnCalled, opcodeToReturn) )
 			{
 				return false;
 			}
 		}
-		else if ( token == "break" )
+		else if ( !m_quoted && token == "break" )
 		{
 			if ( !m_breakTargets.count() )
 			{
@@ -7868,7 +7930,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 
 			addRelativeJumpSource( m_units[unitIndex].bytecode, O_RelativeJump, *m_breakTargets.tail() );
 		}
-		else if ( token == "continue" )
+		else if ( !m_quoted && token == "continue" )
 		{
 			if ( !m_continueTargets.count() )
 			{
@@ -7878,7 +7940,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 
 			addRelativeJumpSource( m_units[unitIndex].bytecode, O_RelativeJump, *m_continueTargets.tail() );
 		}
-		else if ( token == "gc_pause" )
+		else if ( !m_quoted && token == "gc_pause" )
 		{
 			if ( !getToken(ex, "(") )
 			{
@@ -7911,7 +7973,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 		}
-		else if ( token == "goto" )
+		else if ( !m_quoted && token == "goto" )
 		{
 			if ( !getToken(ex) ) // if we run out of tokens that's fine as long as we were not waiting for a }
 			{
@@ -7938,13 +8000,33 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 		}
+		else if ( !m_quoted && token == "var" )
+		{
+			if ( !getToken(ex) ) // if we run out of tokens that's fine as long as we were not waiting for a }
+			{
+				m_err = WR_ERR_unexpected_EOF;
+				return false;
+			}
+
+			bool isGlobal;
+			WRstr prefix;
+			if ( !isValidLabel(token, isGlobal, prefix) )
+			{
+				m_err = WR_ERR_bad_goto_label;
+				return false;
+			}
+
+			goto parseAsVar;
+		}
 		else
 		{
+parseAsVar:
 			WRExpression nex( m_units[unitIndex].bytecode.localSpace, m_units[unitIndex].bytecode.isStructSpace );
 			nex.context[0].token = token;
 			nex.context[0].value = ex.value;
 			m_loadedToken = token;
 			m_loadedValue = ex.value;
+			m_loadedQuoted = m_quoted;
 			if ( parseExpression(nex) != ';' )
 			{
 				m_err = WR_ERR_unexpected_token;
@@ -8417,6 +8499,7 @@ WRError WRCompilationContext::compile( const char* source,
 		{
 			m_loadedToken = token;
 			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
 
 			parseStatement( 0, ';', returnCalled, O_GlobalStop );
 		}
@@ -8441,6 +8524,7 @@ WRError WRCompilationContext::compile( const char* source,
 			}
 			m_loadedToken = token;
 			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
 			parseStatement( 0, ';', returnCalled, O_GlobalStop );
 		} 
 		
@@ -9084,29 +9168,16 @@ static float blankF( float a, float b ) { return 0; }
 #ifndef READ_32_FROM_PC
 int32_t READ_32_FROM_PC( const unsigned char* P )
 {
-#if defined( WRENCH_NATIVE_BIG_ENDIAN )
-	return ( (((int32_t)*(P)) << 24)
-			 | (((int32_t)*((P)+1)) << 16)
-			 | (((int32_t)*((P)+2)) << 8)
-			 | (((int32_t)*((P)+3)) ) );
-	
-#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
 	return ( (((int32_t)*(P)) )
 			 | (((int32_t)*((P)+1)) << 8)
 			 | (((int32_t)*((P)+2)) << 16)
 			 | (((int32_t)*((P)+3)) << 24) );
-#endif
 }
 
 int16_t READ_16_FROM_PC( const unsigned char* P )
 {
-#if defined( WRENCH_NATIVE_BIG_ENDIAN )
-	return ( ((int16_t)*(P)) << 8)
-			| ((int16_t)*(P+1) );
-#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
 	return ( ((int16_t)*(P)) )
 			| ((int16_t)*(P+1) << 8 );
-#endif
 }
 #endif
 
@@ -9596,10 +9667,19 @@ debugContinue:
 				register0->p = 0;
 				register0->p2 = INIT_AS_INT;
 
-				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb )
+				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb) )
 				{
-					register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+					if ( context->debugInterface )
+					{
+						
+					}					
+#endif
+					w->err = WR_ERR_function_hash_signature_not_found;
+					return 0;
 				}
+
+				register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
 
 				// DO care about return value, which will be at the top
 				// of the stack
@@ -9621,10 +9701,19 @@ debugContinue:
 			{
 				args = *pc++;
 
-				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb )
+				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb) )
 				{
-					register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+					if ( context->debugInterface )
+					{
+
+					}					
+#endif
+					w->err = WR_ERR_function_hash_signature_not_found;
+					return 0;
 				}
+
+				register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
 
 				stackTop -= args;
 				pc += 4;
@@ -9634,6 +9723,9 @@ debugContinue:
 			CASE(CallFunctionByIndex):
 			{
 				args = *pc++;
+
+				// function MUST exist or we wouldn't be here, we would
+				// be in the "call by hash" above
 				function = context->localFunctions + *pc++;
 				pc += *pc;
 callFunction:				
@@ -9703,10 +9795,19 @@ callFunction:
 
 				args = *pc++; // which have already been pushed
 
-				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb )
+				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb) )
 				{
-					register1->lcb( stackTop, args, context );
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+					if ( context->debugInterface )
+					{
+
+					}					
+#endif
+					w->err = WR_ERR_function_hash_signature_not_found;
+					return 0;
 				}
+
+				register1->lcb( stackTop, args, context );
 				pc += 4;
 
 #ifdef WRENCH_COMPACT
@@ -9733,10 +9834,19 @@ callFunction:
 			{
 				args = *pc++; // which have already been pushed
 
-				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb )
+				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb) )
 				{
-					register1->lcb( stackTop, args, context );
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+					if ( context->debugInterface )
+					{
+
+					}					
+#endif
+					w->err = WR_ERR_function_hash_signature_not_found;
+					return 0;
 				}
+
+				register1->lcb( stackTop, args, context );
 				pc += 4;
 
 				stackTop -= args;
@@ -11708,35 +11818,36 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 unsigned char* wr_pack16( int16_t i, unsigned char* buf )
 {
-#if defined( WRENCH_NATIVE_BIG_ENDIAN )
-	*buf = (i>>8) & 0xFF;
-	*(buf + 1) = i & 0xFF;
-#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
 	*buf = i & 0xFF;
 	*(buf + 1) = (i>>8) & 0xFF;
-#else
-#error
-#endif
 	return buf;
 }
 
+//------------------------------------------------------------------------------
 unsigned char* wr_pack32( int32_t l, unsigned char* buf )
 {
-#if defined( WRENCH_NATIVE_BIG_ENDIAN )
-	*buf = (l>>24) & 0xFF;
-	*(buf + 1) = (l>>16) & 0xFF;
-	*(buf + 2) = (l>>8) & 0xFF;
-	*(buf + 3) = l & 0xFF;
-#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
 	*buf = l & 0xFF;
 	*(buf + 1) = (l>>8) & 0xFF;
 	*(buf + 2) = (l>>16) & 0xFF;
 	*(buf + 3) = (l>>24) & 0xFF;
-#else
-#error
-#endif
 	return buf;
 }
+
+#ifdef WRENCH_BIG_ENDIAN
+//------------------------------------------------------------------------------
+int32_t wr_x32( const int32_t val )
+{
+	int32_t v = READ_32_FROM_PC( (const unsigned char *)&val );
+	return v;
+}
+
+//------------------------------------------------------------------------------
+int16_t wr_x16( const int16_t val )
+{
+	int16_t v = READ_16_FROM_PC( (const unsigned char *)&val );
+	return v;
+}
+#endif
 
 //------------------------------------------------------------------------------
 int32_t* WrenchValue::makeInt()
@@ -12350,6 +12461,7 @@ void WRDebugClientInterface::init()
 	m_packetQ = new SimpleLL<WrenchPacket>();
 	m_globals = new SimpleLL<WrenchSymbol>();
 	m_functions = new SimpleLL<WrenchFunction>();
+	m_packet = new WrenchPacket;
 }
 
 //------------------------------------------------------------------------------
@@ -12358,10 +12470,12 @@ WRDebugClientInterface::~WRDebugClientInterface()
 	delete m_packetQ;
 	delete m_globals;
 	delete m_functions;
+	delete m_packet;
 	
 	delete[] m_sourceBlock;
 }
 
+/*
 //------------------------------------------------------------------------------
 const WRDebugMessage& WRDebugClientInterface::status()
 {
@@ -12381,8 +12495,8 @@ const WRDebugMessage& WRDebugClientInterface::status()
 			 && m_receiveFunction(data, 4*2, -1) )
 		{
 			m_msg.type = data[0];
-			m_msg.line = READ_32_FROM_PC( data + 1 );
-			m_msg.function = READ_32_FROM_PC( data + 5 );
+			m_msg.line = READ_32_FROM_PC( (const unsigned char *)(data + 1) );
+			m_msg.function = READ_32_FROM_PC( (const unsigned char *)(data + 5) );
 		}
 	}
 	else
@@ -12392,7 +12506,7 @@ const WRDebugMessage& WRDebugClientInterface::status()
 			
 	return m_msg;
 }
-
+*/
 //------------------------------------------------------------------------------
 void WRDebugClientInterface::load( const char* byteCode, const int size )
 {
@@ -12418,8 +12532,86 @@ void WRDebugClientInterface::run()
 }
 
 //------------------------------------------------------------------------------
+bool WRDebugClientInterface::getSourceCode( const char** data, int* len )
+{
+	WrenchPacket packet;
+	packet.type = RequestSourceBlock;
+	
+	if ( !transmit(packet) )
+	{
+		return false;
+	}
+
+	WrenchPacket* P = receive();
+	if ( !P || (P->type != ReplySource) )
+	{
+		return false;
+	}
+
+	m_sourceBlock = new char[ P->payloadSize ];
+	memcpy( m_sourceBlock, P->payload, P->payloadSize );
+	*len = P->payloadSize;
+	*data = m_sourceBlock;
+	return true;
+}
+
+//------------------------------------------------------------------------------
+uint32_t WRDebugClientInterface::getSourceCodeHash()
+{
+	WrenchPacket packet;
+	packet.type = RequestSourceBlock;
+
+	if ( !transmit(packet) )
+	{
+		return 0;
+	}
+
+	return 1;
+}
+
+//------------------------------------------------------------------------------
+WrenchPacket* WRDebugClientInterface::receive( const int timeoutMilliseconds )
+{
+	if ( m_localServer )
+	{
+		WrenchPacket* p = m_localServer->m_packetQ->head();
+		if ( p )
+		{
+			*m_packet = *p;
+			m_localServer->m_packetQ->popHead();
+			return m_packet;
+		}
+	}
+	else
+	{
+		m_packet->clear();
+		
+		size_t read = m_receiveFunction( (char *)m_packet, sizeof(WrenchPacket), timeoutMilliseconds );
+		if ( read == sizeof(WrenchPacket) )
+		{
+			m_packet->xlate();
+			if ( m_packet->payloadSize )
+			{
+				m_packet->payload = (char *)malloc( m_packet->payloadSize );
+				if ( !m_receiveFunction(m_packet->allocate(m_packet->payloadSize), m_packet->payloadSize, timeoutMilliseconds) )
+				{
+					m_packet->clear();
+					return 0;
+				}
+			}
+	
+			return m_packet;
+		}
+	}
+
+	return 0;
+}
+
+//------------------------------------------------------------------------------
 bool WRDebugClientInterface::transmit( WrenchPacket& packet )
 {
+	packet.xlate();
+
 	if ( m_localServer )
 	{
 		m_localServer->processPacket( &packet );
@@ -12457,7 +12649,6 @@ void WRDebugClientInterface::loadSymbols()
 	{
 		return;
 	}
-
 }
 
 //------------------------------------------------------------------------------
@@ -12467,9 +12658,9 @@ void WRDebugClientInterface::populateSymbols( const char* block, const int size 
 	m_functions->clear();
 
 	int pos = 0;
-	int globals = READ_16_FROM_PC( block );
+	int globals = READ_16_FROM_PC( (const unsigned char *)block );
 	pos += 2;
-	int functions = READ_16_FROM_PC( block + pos );
+	int functions = READ_16_FROM_PC( (const unsigned char *)(block + pos) );
 	pos += 2;
 
 	for( int g=0; g<globals; ++g )
@@ -12546,7 +12737,7 @@ WRDebugServerInterface::~WRDebugServerInterface()
 	delete m_packetQ;
 	delete m_lineBreaks;
 
-	free( localBytes );
+	free( m_localBytes );
 }
 
 //------------------------------------------------------------------------------
@@ -12592,7 +12783,7 @@ WRContext* WRDebugServerInterface::loadBytes( const unsigned char* bytes, const 
 		uint32_t offset = READ_32_FROM_PC( data );
 		data += 4;
 		m_embeddedSource = offset ? m_context->bottom + offset : 0;
-
+		
 		m_symbolBlockSize = READ_32_FROM_PC( data );
 		data += 4;
 
@@ -12690,11 +12881,11 @@ void WRDebugServerInterface::codewordEncountered( uint16_t codeword, WRValue* st
 	
 	if ( type == LineNumber )
 	{
-		m_msg.line = codeword & PayloadMask;
+		m_onLine = codeword & PayloadMask;
 
 		for( LineBreak* L = m_lineBreaks->first(); L ; L = m_lineBreaks->next() )
 		{
-			if ( L->line == m_msg.line )
+			if ( L->line == m_onLine )
 			{
 				m_brk = true;
 				break;
@@ -12711,9 +12902,9 @@ void WRDebugServerInterface::codewordEncountered( uint16_t codeword, WRValue* st
 	}
 	else if ( type == FunctionCall )
 	{
-		m_msg.function = codeword & PayloadMask;
+		m_onFunction = codeword & PayloadMask;
 
-		printf( "Calling[%d] @ line[%d] stack[%d]\n", m_msg.function, m_msg.line, (int)(stackTop - m_context->w->stack) );
+		printf( "Calling[%d] @ line[%d] stack[%d]\n", m_onFunction, m_onLine, (int)(stackTop - m_context->w->stack) );
 	}
 	else if ( type == Returned )
 	{
@@ -12722,15 +12913,19 @@ void WRDebugServerInterface::codewordEncountered( uint16_t codeword, WRValue* st
 }
 
 //------------------------------------------------------------------------------
-WRDebugMessage& WRDebugServerInterface::processPacket( WrenchPacket* packet )
+void WRDebugServerInterface::processPacket( WrenchPacket* packet )
 {
+	packet->xlate();
+
+	WrenchPacket* reply = m_packetQ->addTail();
+	
 	switch( packet->type )
 	{
 		case Run:
 		{
 			if ( !m_context )
 			{
-				m_msg.type = Err;
+				reply->type = Err;
 			}
 			else if ( m_firstCall )
 			{ 
@@ -12744,20 +12939,19 @@ WRDebugMessage& WRDebugServerInterface::processPacket( WrenchPacket* packet )
 				wr_callFunction( m_context, &f, 0, 0 ); // signal "continue"
 			}
 
-			m_msg.type = Halted;
-
+			reply->type = Halted;
 			break;
 		}
 
 		case Load:
 		{
-			int32_t size = READ_32_FROM_PC( (unsigned char *)&packet->payloadSize );
+			int32_t size = packet->payloadSize;
 			if ( size )
 			{
-				free( localBytes );
-				localBytes = packet->payload; // memory was "malloced" before being sent to us
-				localBytesLen = size;
-				loadBytes( (unsigned char*)localBytes, localBytesLen );
+				free( m_localBytes );
+				m_localBytes = packet->payload; // memory was "malloced" before being sent to us
+				m_localBytesLen = size;
+				loadBytes( (unsigned char*)m_localBytes, m_localBytesLen );
 			}
 			else if ( m_context )
 			{
@@ -12766,30 +12960,49 @@ WRDebugMessage& WRDebugServerInterface::processPacket( WrenchPacket* packet )
 			
 			break;
 		}
-		
-		case RequestSymbolBlock:
+
+		case RequestSourceBlock:
 		{
-			m_msg.type = ReplySymbolBlock;
 			if ( !m_context )
 			{
-				m_msg.dataLen = 0;
+				reply->type = Err;
+			}
+			else if ( !m_embeddedSourceSize )
+			{
+				reply->type = ReplyUnavailable;
 			}
 			else
 			{
-				
+				reply->type = ReplySource;
+				reply->payload = (char *)malloc( m_embeddedSourceSize );
+				memcpy( reply->payload, m_embeddedSource, m_embeddedSourceSize );
+			}
+			
+			break;
+		}
+		
+		case RequestSourceHash:
+		{
+			if ( !m_context )
+			{
+				reply->type = Err;
+			}
+			else
+			{
+				reply->type = ReplySourceHash;
+				WrenchPacketGenericPayload *p = reply->genericPayload();
+				p->hash = m_embeddedSourceHash;
+				p->xlate();
 			}
 			break;
 		}
 
 		default:
 		{
-			m_msg.type = Err;
 			break;
 		}
 	}
-	return m_msg;
 }
-
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
@@ -12870,6 +13083,44 @@ WRGCObject* wr_growValueArray( WRGCObject* va, int newSize )
 	return newArray;
 }
 
+/*
+//------------------------------------------------------------------------------
+void WRValue::arrayValue( WRValue* val ) const
+{
+	val->p2 = INIT_AS_INT;
+
+	if (type == WR_REF)
+	{
+		unsigned int s = ARRAY_ELEMENT_FROM_P2(p2);
+
+		if ( IS_EXARRAY_TYPE(r->xtype) )
+		{
+			if ( IS_RAW_ARRAY(r->xtype) )
+			{
+				val->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[s]) : 0;
+				return;
+			}
+			else if ( r->va->m_type == SV_VALUE )
+			{
+				if ( s < r->va->m_size )
+				{
+					WRValue* R = r;
+					*val = R->va->m_Vdata[s];
+					return;
+				}
+			}
+			else if ( r->va->m_type == SV_CHAR )
+			{
+				val->ui = (s < r->va->m_size) ? (uint32_t)(unsigned char)r->va->m_Cdata[s] : 0;
+				return;
+			}
+		}
+	}
+
+	val->i = 0;
+}
+*/
+
 //------------------------------------------------------------------------------
 void WRValue::arrayValue( WRValue* val ) const
 {
@@ -12898,6 +13149,7 @@ void WRValue::arrayValue( WRValue* val ) const
 		val->init();
 	}
 }
+
 
 //------------------------------------------------------------------------------
 void wr_arrayToValue( const WRValue* array, WRValue* value, int index )

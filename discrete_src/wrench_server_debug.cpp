@@ -49,7 +49,7 @@ WRDebugServerInterface::~WRDebugServerInterface()
 	delete m_packetQ;
 	delete m_lineBreaks;
 
-	free( localBytes );
+	free( m_localBytes );
 }
 
 //------------------------------------------------------------------------------
@@ -95,7 +95,7 @@ WRContext* WRDebugServerInterface::loadBytes( const unsigned char* bytes, const 
 		uint32_t offset = READ_32_FROM_PC( data );
 		data += 4;
 		m_embeddedSource = offset ? m_context->bottom + offset : 0;
-
+		
 		m_symbolBlockSize = READ_32_FROM_PC( data );
 		data += 4;
 
@@ -193,11 +193,11 @@ void WRDebugServerInterface::codewordEncountered( uint16_t codeword, WRValue* st
 	
 	if ( type == LineNumber )
 	{
-		m_msg.line = codeword & PayloadMask;
+		m_onLine = codeword & PayloadMask;
 
 		for( LineBreak* L = m_lineBreaks->first(); L ; L = m_lineBreaks->next() )
 		{
-			if ( L->line == m_msg.line )
+			if ( L->line == m_onLine )
 			{
 				m_brk = true;
 				break;
@@ -214,9 +214,9 @@ void WRDebugServerInterface::codewordEncountered( uint16_t codeword, WRValue* st
 	}
 	else if ( type == FunctionCall )
 	{
-		m_msg.function = codeword & PayloadMask;
+		m_onFunction = codeword & PayloadMask;
 
-		printf( "Calling[%d] @ line[%d] stack[%d]\n", m_msg.function, m_msg.line, (int)(stackTop - m_context->w->stack) );
+		printf( "Calling[%d] @ line[%d] stack[%d]\n", m_onFunction, m_onLine, (int)(stackTop - m_context->w->stack) );
 	}
 	else if ( type == Returned )
 	{
@@ -225,15 +225,19 @@ void WRDebugServerInterface::codewordEncountered( uint16_t codeword, WRValue* st
 }
 
 //------------------------------------------------------------------------------
-WRDebugMessage& WRDebugServerInterface::processPacket( WrenchPacket* packet )
+void WRDebugServerInterface::processPacket( WrenchPacket* packet )
 {
+	packet->xlate();
+
+	WrenchPacket* reply = m_packetQ->addTail();
+	
 	switch( packet->type )
 	{
 		case Run:
 		{
 			if ( !m_context )
 			{
-				m_msg.type = Err;
+				reply->type = Err;
 			}
 			else if ( m_firstCall )
 			{ 
@@ -247,20 +251,19 @@ WRDebugMessage& WRDebugServerInterface::processPacket( WrenchPacket* packet )
 				wr_callFunction( m_context, &f, 0, 0 ); // signal "continue"
 			}
 
-			m_msg.type = Halted;
-
+			reply->type = Halted;
 			break;
 		}
 
 		case Load:
 		{
-			int32_t size = READ_32_FROM_PC( (unsigned char *)&packet->payloadSize );
+			int32_t size = packet->payloadSize;
 			if ( size )
 			{
-				free( localBytes );
-				localBytes = packet->payload; // memory was "malloced" before being sent to us
-				localBytesLen = size;
-				loadBytes( (unsigned char*)localBytes, localBytesLen );
+				free( m_localBytes );
+				m_localBytes = packet->payload; // memory was "malloced" before being sent to us
+				m_localBytesLen = size;
+				loadBytes( (unsigned char*)m_localBytes, m_localBytesLen );
 			}
 			else if ( m_context )
 			{
@@ -269,27 +272,46 @@ WRDebugMessage& WRDebugServerInterface::processPacket( WrenchPacket* packet )
 			
 			break;
 		}
-		
-		case RequestSymbolBlock:
+
+		case RequestSourceBlock:
 		{
-			m_msg.type = ReplySymbolBlock;
 			if ( !m_context )
 			{
-				m_msg.dataLen = 0;
+				reply->type = Err;
+			}
+			else if ( !m_embeddedSourceSize )
+			{
+				reply->type = ReplyUnavailable;
 			}
 			else
 			{
-				
+				reply->type = ReplySource;
+				reply->payload = (char *)malloc( m_embeddedSourceSize );
+				memcpy( reply->payload, m_embeddedSource, m_embeddedSourceSize );
+			}
+			
+			break;
+		}
+		
+		case RequestSourceHash:
+		{
+			if ( !m_context )
+			{
+				reply->type = Err;
+			}
+			else
+			{
+				reply->type = ReplySourceHash;
+				WrenchPacketGenericPayload *p = reply->genericPayload();
+				p->hash = m_embeddedSourceHash;
+				p->xlate();
 			}
 			break;
 		}
 
 		default:
 		{
-			m_msg.type = Err;
 			break;
 		}
 	}
-	return m_msg;
 }
-

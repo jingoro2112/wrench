@@ -51,6 +51,7 @@ void WRDebugClientInterface::init()
 	m_packetQ = new SimpleLL<WrenchPacket>();
 	m_globals = new SimpleLL<WrenchSymbol>();
 	m_functions = new SimpleLL<WrenchFunction>();
+	m_packet = new WrenchPacket;
 }
 
 //------------------------------------------------------------------------------
@@ -59,10 +60,12 @@ WRDebugClientInterface::~WRDebugClientInterface()
 	delete m_packetQ;
 	delete m_globals;
 	delete m_functions;
+	delete m_packet;
 	
 	delete[] m_sourceBlock;
 }
 
+/*
 //------------------------------------------------------------------------------
 const WRDebugMessage& WRDebugClientInterface::status()
 {
@@ -82,8 +85,8 @@ const WRDebugMessage& WRDebugClientInterface::status()
 			 && m_receiveFunction(data, 4*2, -1) )
 		{
 			m_msg.type = data[0];
-			m_msg.line = READ_32_FROM_PC( data + 1 );
-			m_msg.function = READ_32_FROM_PC( data + 5 );
+			m_msg.line = READ_32_FROM_PC( (const unsigned char *)(data + 1) );
+			m_msg.function = READ_32_FROM_PC( (const unsigned char *)(data + 5) );
 		}
 	}
 	else
@@ -93,7 +96,7 @@ const WRDebugMessage& WRDebugClientInterface::status()
 			
 	return m_msg;
 }
-
+*/
 //------------------------------------------------------------------------------
 void WRDebugClientInterface::load( const char* byteCode, const int size )
 {
@@ -119,8 +122,86 @@ void WRDebugClientInterface::run()
 }
 
 //------------------------------------------------------------------------------
+bool WRDebugClientInterface::getSourceCode( const char** data, int* len )
+{
+	WrenchPacket packet;
+	packet.type = RequestSourceBlock;
+	
+	if ( !transmit(packet) )
+	{
+		return false;
+	}
+
+	WrenchPacket* P = receive();
+	if ( !P || (P->type != ReplySource) )
+	{
+		return false;
+	}
+
+	m_sourceBlock = new char[ P->payloadSize ];
+	memcpy( m_sourceBlock, P->payload, P->payloadSize );
+	*len = P->payloadSize;
+	*data = m_sourceBlock;
+	return true;
+}
+
+//------------------------------------------------------------------------------
+uint32_t WRDebugClientInterface::getSourceCodeHash()
+{
+	WrenchPacket packet;
+	packet.type = RequestSourceBlock;
+
+	if ( !transmit(packet) )
+	{
+		return 0;
+	}
+
+	return 1;
+}
+
+//------------------------------------------------------------------------------
+WrenchPacket* WRDebugClientInterface::receive( const int timeoutMilliseconds )
+{
+	if ( m_localServer )
+	{
+		WrenchPacket* p = m_localServer->m_packetQ->head();
+		if ( p )
+		{
+			*m_packet = *p;
+			m_localServer->m_packetQ->popHead();
+			return m_packet;
+		}
+	}
+	else
+	{
+		m_packet->clear();
+		
+		size_t read = m_receiveFunction( (char *)m_packet, sizeof(WrenchPacket), timeoutMilliseconds );
+		if ( read == sizeof(WrenchPacket) )
+		{
+			m_packet->xlate();
+			if ( m_packet->payloadSize )
+			{
+				m_packet->payload = (char *)malloc( m_packet->payloadSize );
+				if ( !m_receiveFunction(m_packet->allocate(m_packet->payloadSize), m_packet->payloadSize, timeoutMilliseconds) )
+				{
+					m_packet->clear();
+					return 0;
+				}
+			}
+	
+			return m_packet;
+		}
+	}
+
+	return 0;
+}
+
+//------------------------------------------------------------------------------
 bool WRDebugClientInterface::transmit( WrenchPacket& packet )
 {
+	packet.xlate();
+
 	if ( m_localServer )
 	{
 		m_localServer->processPacket( &packet );
@@ -158,7 +239,6 @@ void WRDebugClientInterface::loadSymbols()
 	{
 		return;
 	}
-
 }
 
 //------------------------------------------------------------------------------
@@ -168,9 +248,9 @@ void WRDebugClientInterface::populateSymbols( const char* block, const int size 
 	m_functions->clear();
 
 	int pos = 0;
-	int globals = READ_16_FROM_PC( block );
+	int globals = READ_16_FROM_PC( (const unsigned char *)block );
 	pos += 2;
-	int functions = READ_16_FROM_PC( block + pos );
+	int functions = READ_16_FROM_PC( (const unsigned char *)(block + pos) );
 	pos += 2;
 
 	for( int g=0; g<globals; ++g )

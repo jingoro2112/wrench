@@ -547,29 +547,16 @@ static float blankF( float a, float b ) { return 0; }
 #ifndef READ_32_FROM_PC
 int32_t READ_32_FROM_PC( const unsigned char* P )
 {
-#if defined( WRENCH_NATIVE_BIG_ENDIAN )
-	return ( (((int32_t)*(P)) << 24)
-			 | (((int32_t)*((P)+1)) << 16)
-			 | (((int32_t)*((P)+2)) << 8)
-			 | (((int32_t)*((P)+3)) ) );
-	
-#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
 	return ( (((int32_t)*(P)) )
 			 | (((int32_t)*((P)+1)) << 8)
 			 | (((int32_t)*((P)+2)) << 16)
 			 | (((int32_t)*((P)+3)) << 24) );
-#endif
 }
 
 int16_t READ_16_FROM_PC( const unsigned char* P )
 {
-#if defined( WRENCH_NATIVE_BIG_ENDIAN )
-	return ( ((int16_t)*(P)) << 8)
-			| ((int16_t)*(P+1) );
-#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
 	return ( ((int16_t)*(P)) )
 			| ((int16_t)*(P+1) << 8 );
-#endif
 }
 #endif
 
@@ -1059,10 +1046,19 @@ debugContinue:
 				register0->p = 0;
 				register0->p2 = INIT_AS_INT;
 
-				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb )
+				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb) )
 				{
-					register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+					if ( context->debugInterface )
+					{
+						
+					}					
+#endif
+					w->err = WR_ERR_function_hash_signature_not_found;
+					return 0;
 				}
+
+				register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
 
 				// DO care about return value, which will be at the top
 				// of the stack
@@ -1084,10 +1080,19 @@ debugContinue:
 			{
 				args = *pc++;
 
-				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb )
+				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb) )
 				{
-					register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+					if ( context->debugInterface )
+					{
+
+					}					
+#endif
+					w->err = WR_ERR_function_hash_signature_not_found;
+					return 0;
 				}
+
+				register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
 
 				stackTop -= args;
 				pc += 4;
@@ -1097,6 +1102,9 @@ debugContinue:
 			CASE(CallFunctionByIndex):
 			{
 				args = *pc++;
+
+				// function MUST exist or we wouldn't be here, we would
+				// be in the "call by hash" above
 				function = context->localFunctions + *pc++;
 				pc += *pc;
 callFunction:				
@@ -1166,10 +1174,19 @@ callFunction:
 
 				args = *pc++; // which have already been pushed
 
-				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb )
+				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb) )
 				{
-					register1->lcb( stackTop, args, context );
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+					if ( context->debugInterface )
+					{
+
+					}					
+#endif
+					w->err = WR_ERR_function_hash_signature_not_found;
+					return 0;
 				}
+
+				register1->lcb( stackTop, args, context );
 				pc += 4;
 
 #ifdef WRENCH_COMPACT
@@ -1196,10 +1213,19 @@ callFunction:
 			{
 				args = *pc++; // which have already been pushed
 
-				if ( (register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb )
+				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb) )
 				{
-					register1->lcb( stackTop, args, context );
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+					if ( context->debugInterface )
+					{
+
+					}					
+#endif
+					w->err = WR_ERR_function_hash_signature_not_found;
+					return 0;
 				}
+
+				register1->lcb( stackTop, args, context );
 				pc += 4;
 
 				stackTop -= args;

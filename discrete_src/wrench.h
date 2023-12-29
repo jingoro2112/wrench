@@ -27,7 +27,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 3
 #define WRENCH_VERSION_MINOR 2
-#define WRENCH_VERSION_BUILD 1
+#define WRENCH_VERSION_BUILD 2
 
 /************************************************************************
 The compiler was not designed to be particularly memory or space efficient, for
@@ -73,11 +73,8 @@ including debug functionality incurs NO performance penalty on the VM
 it does add a small size penalty. If you are trying to cram wrench
 into the smallest possible space, this compiles out the debug functions.
 You can still run debug-enabled code, the VM will just skip it.
-
-!!!PRE-RELEASE DO NOT ENABLE!!!
-
 */
-//#define WRENCH_INCLUDE_DEBUG_CODE
+#define WRENCH_INCLUDE_DEBUG_CODE
 
 /************************************************************************
 if you WANT full sprintf support for floats (%f/%g) this adds it, at
@@ -321,27 +318,6 @@ void wr_addValueToContainer( WRValue* container, const char* name, WRValue* valu
 void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value );
 void wr_addFloatToContainer( WRValue* container, const char* name, const float value );
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size );
-
-/***************************************************************/
-/* Wrench is endian-neutral, code generated on one platform is
- * 100% compatible with all other platforms.
- *
- * BUT
- *
- * The internal representation of data has to be one or the other
- * this defines which that is.
- * It is advantageous to select an enian-ness that matches your target
- * platform but then it must be the same for the machine that compiles
- * it as well.
- * 
- * Obviously this is not a problem if you are compiling/running on the
- * same machine.
- *
- * The more common architectures (including embedded) use little endian
- * so that's the default.
-*/ 
-#define WRENCH_NATIVE_LITTLE_ENDIAN
-//#define WRENCH_NATIVE_BIG_ENDIAN
 
 
 /***************************************************************/
@@ -637,7 +613,7 @@ struct WRValue
 
 //------------------------------------------------------------------------------
 // Helper class to represent a wrench value, in all cases it does NOT
-// manager the memory, but relies on a WRContext to do that
+// managerthe memory, but relies on a WRContext to do that
 class WrenchValue
 {
 public:
@@ -667,42 +643,6 @@ private:
 	WRValue* m_value;
 };
 
-//------------------------------------------------------------------------------
-enum WRDebugMessageTypes
-{
-	None, // nothing happening
-	
-	Halted, // last started script has reached a global stop
-	// str will contain returnvalue.ToString()
-	// f will contain returnValue.f
-	// p1 will contain returnValue.i
-
-	Paused,	// p1 will contain line number
-	// p2 will contain '1' for line break, '2' for function break
-
-	Err,
-};
-
-//------------------------------------------------------------------------------
-struct WRDebugMessage
-{
-	char type;
-	int line;
-	int function;
-
-	char str[64];
-
-	float f;
-	uint32_t u;
-	
-	int32_t p1;
-	int32_t p2;
-
-	unsigned char* data;
-	int dataLen;
-};
-
-struct PendingDebugMessage;
 struct WrenchPacket;
 struct WrenchSymbol;
 struct WrenchFunction;
@@ -723,12 +663,8 @@ public:
 	~WRDebugServerInterface();
 
 	WRContext* loadBytes( const unsigned char* bytes, const int len );
-	char* localBytes;
-	int localBytesLen;
-
-	int onLine() { return m_msg.line; }
-	
-	void tick();
+	char* m_localBytes;
+	int m_localBytesLen;
 
 //private: again.. TECHNICALLY.. but we are keeping things simple
 
@@ -746,14 +682,14 @@ public:
 
 	void codewordEncountered( uint16_t codeword, WRValue* stackTop );
 
-	WRDebugMessage& processPacket( WrenchPacket* packet );
-
-	WRDebugMessage m_msg;
+	void processPacket( WrenchPacket* packet );
 
 	WRState* m_w;
 	bool (*m_receiveFunction)( char* data, const size_t length, const int timeoutMilliseconds );
 	size_t (*m_writeFunction)( const char* data, const size_t length );
 
+	int m_onLine;
+	int m_onFunction;
 	bool m_firstCall;
 
 	const unsigned char* m_embeddedSource;
@@ -785,16 +721,15 @@ public:
 
 	~WRDebugClientInterface();
 	
-	const WRDebugMessage& status();
+//	const WRDebugMessage& status();
 
 	// load and prepare a program for running
 	// if byteCode/size is null then it re-loads it's existing program
 	void load( const char* byteCode =0, const int size =0 ); 
 	void run(); // run or continue
 
-	static bool getSourceCode( WRContext* context, const char** data, int* len );
-	static uint32_t getSourceCodeHash( WRContext* context );
-	static uint32_t setSourceCode( const char* path );
+	bool getSourceCode( const char** data, int* len );
+	uint32_t getSourceCodeHash();
 
 	const WRValue* getGlobalValue( const char* name );
 	const char* getGlobalName( const int index );
@@ -815,7 +750,8 @@ public:
 
 //private:
 
-	bool transmit( WrenchPacket& packet );
+	bool transmit( WrenchPacket& packet );\
+	WrenchPacket* receive( const int timeoutMilliseconds =0 );
 	
 	void loadSourceBlock();
 	void loadSymbols();
@@ -825,8 +761,8 @@ public:
 	char* m_sourceBlock;
 	int m_sourceBlockLen;
 	uint32_t m_sourceBlockHash;
-						
-	WRDebugMessage m_msg;
+	WrenchPacket* m_packet;
+	
 	SimpleLL<WrenchPacket>* m_packetQ;
 
 	void populateSymbols( const char* block, const int size );

@@ -148,9 +148,11 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 	{
 		token = m_loadedToken;
 		value = m_loadedValue;
+		m_quoted = m_loadedQuoted;
 	}
 	else
 	{
+		m_quoted = false;
 		value.p2 = INIT_AS_REF;
 
 		ex.spaceBefore = (m_pos < m_sourceLen) && isspace(m_source[m_pos]);
@@ -373,7 +375,8 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 			{
 				bool single = token[0] == '\'';
 				token.clear();
-
+				m_quoted = true;
+				
 				do
 				{
 					if (m_pos >= m_sourceLen)
@@ -669,6 +672,7 @@ foundMacroToken:
 	}
 
 	m_loadedToken.clear();
+	m_loadedQuoted = m_quoted;
 	m_loadedValue.p2 = INIT_AS_REF;
 
 	if ( expect && (token != expect) )
@@ -3228,7 +3232,7 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 				return 0;
 			}
 
-			if ( token2 == ")" )
+			if ( !m_quoted && token2 == ")" )
 			{
 				break;
 			}
@@ -3240,9 +3244,11 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 			nex.context[0].value = value2;
 			m_loadedToken = token2;
 			m_loadedValue = value2;
-
+			m_loadedQuoted = m_quoted;
+			
 			char end = parseExpression( nex );
 
+/*
 			if ( nex.bytecode.opcodes.size() > 0 )
 			{
 				char op = nex.bytecode.opcodes[nex.bytecode.opcodes.size() - 1];
@@ -3259,7 +3265,7 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 					nex.bytecode.all += O_Dereference;
 				}
 			}
-
+*/
 			appendBytecode( expression.context[depth].bytecode, nex.bytecode );
 
 			if ( end == ')' )
@@ -3352,7 +3358,7 @@ bool WRCompilationContext::pushObjectTable( WRExpressionContext& context,
 
 	context.type = EXTYPE_BYTECODE_RESULT;
 
-	if ( token2 == "{" )
+	if ( !m_quoted && token2 == "{" )
 	{
 		unsigned char offset = 0;
 		for(;;)
@@ -3541,7 +3547,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 						return 0;
 					}
 
-					if ( token2 == "}" )
+					if ( !m_quoted && token2 == "}" )
 					{
 						break;
 					}
@@ -3551,7 +3557,8 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					nex.context[0].value = value2;
 					m_loadedToken = token2;
 					m_loadedValue = value2;
-
+					m_loadedQuoted = m_quoted;
+					
 					char end = parseExpression( nex );
 
 					unsigned char data[2];
@@ -3624,7 +3631,8 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 				m_loadedToken = token2;
 				m_loadedValue = value2;
-
+				m_loadedQuoted = m_quoted;
+				
 				++depth;
 
 				continue;
@@ -3637,7 +3645,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			continue;
 		}
 		
-		if ( token == "new" )
+		if ( !m_quoted && token == "new" )
 		{
 			if ( (depth < 2) || 
 				 (expression.context[depth - 1].operation
@@ -3682,7 +3690,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				return 0;
 			}
 
-			if ( token2 == ";" )
+			if ( !m_quoted && token2 == ";" )
 			{
 				if ( !parseCallFunction(expression, functionName, depth, false) )
 				{
@@ -3691,8 +3699,9 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 				m_loadedToken = ";";
 				m_loadedValue.p2 = INIT_AS_REF;
+				m_loadedQuoted = m_quoted;
 			}
-			else if ( token2 == "(" )
+			else if ( !m_quoted && token2 == "(" )
 			{
 				if ( !parseCallFunction(expression, functionName, depth, true) )
 				{
@@ -3709,9 +3718,10 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				{
 					m_loadedToken = token2;
 					m_loadedValue = value2;
+					m_loadedQuoted = m_quoted;
 				}
 			}
-			else if (token2 == "{")
+			else if (!m_quoted && token2 == "{")
 			{
 				if ( !parseCallFunction(expression, functionName, depth, false) )
 				{
@@ -3719,7 +3729,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				}
 				token2 = "{";
 			}
-			else if ( token2 == "[" )
+			else if ( !m_quoted && token2 == "[" )
 			{
 				// must be "array" directive
 				if ( !getToken(expression.context[depth], "]") )
@@ -3751,7 +3761,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 				uint16_t initializer = 0;
 
-				if ( token3 == "{" )
+				if ( !m_quoted && token3 == "{" )
 				{
 					for(;;)
 					{
@@ -3766,11 +3776,11 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 							return 0;
 						}
 
-						if ( token3 == "}" )
+						if ( !m_quoted && token3 == "}" )
 						{
 							break;
 						}
-						else if (token3 != "{")
+						else if (!m_quoted && token3 != "{")
 						{
 							m_err = WR_ERR_unexpected_token;
 							return 0;
@@ -3796,7 +3806,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 							return 0;
 						}
 
-						if ( token3 == "," )
+						if ( !m_quoted && token3 == "," )
 						{
 							continue;
 						}
@@ -3830,7 +3840,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 					m_loadedToken = token3;
 					m_loadedValue = value3;
-
+					m_loadedQuoted = m_quoted;
 				}
 				else if ( token2 != ";" )
 				{
@@ -3859,7 +3869,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			continue;
 		}
 
-		if ( token == "(" )
+		if ( !m_quoted && token == "(" )
 		{
 			// might be cast, call or sub-expression
 			
@@ -3912,6 +3922,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				nex.context[0].value = value;
 				m_loadedToken = token;
 				m_loadedValue = value;
+				m_loadedQuoted = m_quoted;
 				if ( parseExpression(nex) != ')' )
 				{
 					m_err = WR_ERR_unexpected_token;
@@ -3946,7 +3957,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			continue;
 		}
 
-		if ( token == "[" )
+		if ( !m_quoted && token == "[" )
 		{
 			if ( depth == 0
 				 || (expression.context[depth - 1].type != EXTYPE_LABEL
@@ -4012,7 +4023,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					return 0;
 				}
 				
-				if ( token == ":" )
+				if ( !m_quoted && token == ":" )
 				{
 					uint32_t hash = wr_hashStr( label );
 					for( unsigned int i=0; i<expression.bytecode.jumpOffsetTargets.count(); ++i )
@@ -4038,6 +4049,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				{
 					m_loadedToken = token;
 					m_loadedValue = value;
+					m_loadedQuoted = m_quoted;
 				}
 			}
 			
@@ -4105,7 +4117,7 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 				return false;
 			}
 			
-			if ( token == ")" )
+			if ( !m_quoted && token == ")" )
 			{
 				break;
 			}
@@ -4127,7 +4139,7 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 				return false;
 			}
 
-			if ( token == ")" )
+			if ( !m_quoted && token == ")" )
 			{
 				break;
 			}
@@ -4189,6 +4201,7 @@ bool WRCompilationContext::parseWhile( bool& returnCalled, WROpcode opcodeToRetu
 	nex.context[0].value = value;
 	m_loadedToken = token;
 	m_loadedValue = value;
+	m_loadedQuoted = m_quoted;
 
 	if ( parseExpression(nex) != ')' )
 	{
@@ -4356,7 +4369,7 @@ A:
 			return false;
 		}
 
-		if ( token == ";" )
+		if ( !m_quoted && token == ";" )
 		{
 			break;
 		}
@@ -4366,6 +4379,7 @@ A:
 		nex.context[0].value = value;
 		m_loadedToken = token;
 		m_loadedValue = value;
+		m_loadedQuoted = m_quoted;
 
 		char end = parseExpression( nex );
 
@@ -4544,6 +4558,7 @@ A:
 			nex.context[0].value = value;
 			m_loadedToken = token;
 			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
 
 			if ( parseExpression( nex ) != ';' )
 			{
@@ -4569,7 +4584,7 @@ A:
 				return false;
 			}
 
-			if ( token == ")" )
+			if ( !m_quoted && token == ")" )
 			{
 				break;
 			}
@@ -4579,6 +4594,7 @@ A:
 			nex.context[0].value = value;
 			m_loadedToken = token;
 			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
 
 			char end = parseExpression( nex );
 			pushOpcode( nex.bytecode, O_PopOne );
@@ -4675,11 +4691,11 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 			return false;
 		}
 
-		if ( token == "}" )
+		if ( !m_quoted && token == "}" )
 		{
 			break;
 		}
-		else if ( token == "," )
+		else if ( !m_quoted && token == "," )
 		{
 			continue;
 		}
@@ -4704,7 +4720,7 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 			return false;
 		}
 
-		if ( token == "=" )
+		if ( !m_quoted && token == "=" )
 		{
 			if ( !getToken(ex) )
 			{
@@ -4722,6 +4738,7 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 		{
 			m_loadedToken = token;
 			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
 
 			value = defaultValue;
 		}
@@ -4751,6 +4768,7 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 	{
 		m_loadedToken = token;
 		m_loadedValue = value;
+		m_loadedQuoted = m_quoted;
 	}
 
 	return true;
@@ -4764,7 +4782,7 @@ uint32_t WRCompilationContext::getSingleValueHash( const char* end )
 	WRValue& value = ex.value;
 	getToken( ex );
 	
-	if ( token == "(" )
+	if ( !m_quoted && token == "(" )
 	{
 		return getSingleValueHash( ")" );
 	}
@@ -4876,12 +4894,12 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 			return false;
 		}
 
-		if( token == "}" )
+		if( !m_quoted && token == "}" )
 		{
 			break;
 		}
 
-		if ( token == "case" )
+		if ( !m_quoted && token == "case" )
 		{
 			swCase = &cases.append();
 			swCase->jumpOffset = m_units[m_unitTop].bytecode.all.size();
@@ -4906,7 +4924,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 				}
 			}
 		}
-		else if ( token == "default" )
+		else if ( !m_quoted && token == "default" )
 		{
 			if ( defaultOffset != -1 )
 			{
@@ -4933,6 +4951,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 
 			m_loadedToken = token;
 			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
 
 			if ( !parseStatement(m_unitTop, ';', returnCalled, opcodeToReturn) )
 			{
@@ -5152,6 +5171,7 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	nex.context[0].value = value;
 	m_loadedToken = token;
 	m_loadedValue = value;
+	m_loadedQuoted = m_quoted;
 
 	if ( parseExpression(nex) != ')' )
 	{
@@ -5174,7 +5194,7 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	{
 		setRelativeJumpTarget(m_units[m_unitTop].bytecode, conditionFalseMarker);
 	}
-	else if ( token == "else" )
+	else if ( !m_quoted && token == "else" )
 	{
 		int conditionTrueMarker = addRelativeJumpTarget( m_units[m_unitTop].bytecode ); // when it hits here it will jump OVER this section
 
@@ -5193,6 +5213,7 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	{
 		m_loadedToken = token;
 		m_loadedValue = value;
+		m_loadedQuoted = m_quoted;
 		setRelativeJumpTarget( m_units[m_unitTop].bytecode, conditionFalseMarker );
 	}
 
@@ -5228,12 +5249,12 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 			break;
 		}
 
-		if ( token == "{" )
+		if ( !m_quoted && token == "{" )
 		{
 			return parseStatement( unitIndex, '}', returnCalled, opcodeToReturn );
 		}
 
-		if ( token == "return" )
+		if ( !m_quoted && token == "return" )
 		{
 			returnCalled = true;
 			if ( !getToken(ex) )
@@ -5242,7 +5263,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 
-			if ( token == ";" ) // special case of a null return, add the null
+			if ( !m_quoted && token == ";" ) // special case of a null return, add the null
 			{
 				pushOpcode( m_units[unitIndex].bytecode, O_LiteralZero );
 			}
@@ -5253,6 +5274,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				nex.context[0].value = ex.value;
 				m_loadedToken = token;
 				m_loadedValue = ex.value;
+				m_loadedQuoted = m_quoted;
 
 				if ( parseExpression( nex ) != ';')
 				{
@@ -5265,7 +5287,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 
 			pushOpcode( m_units[unitIndex].bytecode, opcodeToReturn );
 		}
-		else if ( token == "struct" )
+		else if ( !m_quoted && token == "struct" )
 		{
 			if ( unitIndex != 0 )
 			{
@@ -5278,7 +5300,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 		}
-		else if ( token == "function" )
+		else if ( !m_quoted && token == "function" )
 		{
 			if ( unitIndex != 0 )
 			{
@@ -5291,49 +5313,49 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 		}
-		else if ( token == "if" )
+		else if ( !m_quoted && token == "if" )
 		{
 			if ( !parseIf(returnCalled, opcodeToReturn) )
 			{
 				return false;
 			}
 		}
-		else if ( token == "while" )
+		else if ( !m_quoted && token == "while" )
 		{
 			if ( !parseWhile(returnCalled, opcodeToReturn) )
 			{
 				return false;
 			}
 		}
-		else if ( token == "for" )
+		else if ( !m_quoted && token == "for" )
 		{
 			if ( !parseForLoop(returnCalled, opcodeToReturn) )
 			{
 				return false;
 			}
 		}
-		else if ( token == "enum" )
+		else if ( !m_quoted && token == "enum" )
 		{
 			if ( !parseEnum(unitIndex) )
 			{
 				return false;
 			}
 		}
-		else if ( token == "switch" )
+		else if ( !m_quoted && token == "switch" )
 		{
 			if ( !parseSwitch(returnCalled, opcodeToReturn) )
 			{
 				return false;
 			}
 		}
-		else if ( token == "do" )
+		else if ( !m_quoted && token == "do" )
 		{
 			if ( !parseDoWhile(returnCalled, opcodeToReturn) )
 			{
 				return false;
 			}
 		}
-		else if ( token == "break" )
+		else if ( !m_quoted && token == "break" )
 		{
 			if ( !m_breakTargets.count() )
 			{
@@ -5343,7 +5365,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 
 			addRelativeJumpSource( m_units[unitIndex].bytecode, O_RelativeJump, *m_breakTargets.tail() );
 		}
-		else if ( token == "continue" )
+		else if ( !m_quoted && token == "continue" )
 		{
 			if ( !m_continueTargets.count() )
 			{
@@ -5353,7 +5375,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 
 			addRelativeJumpSource( m_units[unitIndex].bytecode, O_RelativeJump, *m_continueTargets.tail() );
 		}
-		else if ( token == "gc_pause" )
+		else if ( !m_quoted && token == "gc_pause" )
 		{
 			if ( !getToken(ex, "(") )
 			{
@@ -5386,7 +5408,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 		}
-		else if ( token == "goto" )
+		else if ( !m_quoted && token == "goto" )
 		{
 			if ( !getToken(ex) ) // if we run out of tokens that's fine as long as we were not waiting for a }
 			{
@@ -5413,13 +5435,33 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 		}
+		else if ( !m_quoted && token == "var" )
+		{
+			if ( !getToken(ex) ) // if we run out of tokens that's fine as long as we were not waiting for a }
+			{
+				m_err = WR_ERR_unexpected_EOF;
+				return false;
+			}
+
+			bool isGlobal;
+			WRstr prefix;
+			if ( !isValidLabel(token, isGlobal, prefix) )
+			{
+				m_err = WR_ERR_bad_goto_label;
+				return false;
+			}
+
+			goto parseAsVar;
+		}
 		else
 		{
+parseAsVar:
 			WRExpression nex( m_units[unitIndex].bytecode.localSpace, m_units[unitIndex].bytecode.isStructSpace );
 			nex.context[0].token = token;
 			nex.context[0].value = ex.value;
 			m_loadedToken = token;
 			m_loadedValue = ex.value;
+			m_loadedQuoted = m_quoted;
 			if ( parseExpression(nex) != ';' )
 			{
 				m_err = WR_ERR_unexpected_token;
@@ -5892,6 +5934,7 @@ WRError WRCompilationContext::compile( const char* source,
 		{
 			m_loadedToken = token;
 			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
 
 			parseStatement( 0, ';', returnCalled, O_GlobalStop );
 		}
@@ -5916,6 +5959,7 @@ WRError WRCompilationContext::compile( const char* source,
 			}
 			m_loadedToken = token;
 			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
 			parseStatement( 0, ';', returnCalled, O_GlobalStop );
 		} 
 		

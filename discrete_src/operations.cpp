@@ -78,6 +78,44 @@ WRGCObject* wr_growValueArray( WRGCObject* va, int newSize )
 	return newArray;
 }
 
+/*
+//------------------------------------------------------------------------------
+void WRValue::arrayValue( WRValue* val ) const
+{
+	val->p2 = INIT_AS_INT;
+
+	if (type == WR_REF)
+	{
+		unsigned int s = ARRAY_ELEMENT_FROM_P2(p2);
+
+		if ( IS_EXARRAY_TYPE(r->xtype) )
+		{
+			if ( IS_RAW_ARRAY(r->xtype) )
+			{
+				val->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[s]) : 0;
+				return;
+			}
+			else if ( r->va->m_type == SV_VALUE )
+			{
+				if ( s < r->va->m_size )
+				{
+					WRValue* R = r;
+					*val = R->va->m_Vdata[s];
+					return;
+				}
+			}
+			else if ( r->va->m_type == SV_CHAR )
+			{
+				val->ui = (s < r->va->m_size) ? (uint32_t)(unsigned char)r->va->m_Cdata[s] : 0;
+				return;
+			}
+		}
+	}
+
+	val->i = 0;
+}
+*/
+
 //------------------------------------------------------------------------------
 void WRValue::arrayValue( WRValue* val ) const
 {
@@ -106,6 +144,7 @@ void WRValue::arrayValue( WRValue* val ) const
 		val->init();
 	}
 }
+
 
 //------------------------------------------------------------------------------
 void wr_arrayToValue( const WRValue* array, WRValue* value, int index )

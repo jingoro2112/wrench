@@ -1,5 +1,5 @@
 /*~
-0
+);}0
 1
 10
 100
@@ -9,6 +9,10 @@
 hello
 hello
 ~*/
+
+print(")");
+print(";");
+print("}");
 
 a = 0xFFFFFFFF;
 b = 4294967295;

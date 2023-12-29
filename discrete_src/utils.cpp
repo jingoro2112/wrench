@@ -27,35 +27,36 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 unsigned char* wr_pack16( int16_t i, unsigned char* buf )
 {
-#if defined( WRENCH_NATIVE_BIG_ENDIAN )
-	*buf = (i>>8) & 0xFF;
-	*(buf + 1) = i & 0xFF;
-#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
 	*buf = i & 0xFF;
 	*(buf + 1) = (i>>8) & 0xFF;
-#else
-#error
-#endif
 	return buf;
 }
 
+//------------------------------------------------------------------------------
 unsigned char* wr_pack32( int32_t l, unsigned char* buf )
 {
-#if defined( WRENCH_NATIVE_BIG_ENDIAN )
-	*buf = (l>>24) & 0xFF;
-	*(buf + 1) = (l>>16) & 0xFF;
-	*(buf + 2) = (l>>8) & 0xFF;
-	*(buf + 3) = l & 0xFF;
-#elif defined( WRENCH_NATIVE_LITTLE_ENDIAN )
 	*buf = l & 0xFF;
 	*(buf + 1) = (l>>8) & 0xFF;
 	*(buf + 2) = (l>>16) & 0xFF;
 	*(buf + 3) = (l>>24) & 0xFF;
-#else
-#error
-#endif
 	return buf;
 }
+
+#ifdef WRENCH_BIG_ENDIAN
+//------------------------------------------------------------------------------
+int32_t wr_x32( const int32_t val )
+{
+	int32_t v = READ_32_FROM_PC( (const unsigned char *)&val );
+	return v;
+}
+
+//------------------------------------------------------------------------------
+int16_t wr_x16( const int16_t val )
+{
+	int16_t v = READ_16_FROM_PC( (const unsigned char *)&val );
+	return v;
+}
+#endif
 
 //------------------------------------------------------------------------------
 int32_t* WrenchValue::makeInt()
