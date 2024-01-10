@@ -275,12 +275,38 @@ performance hit so only use it if absolutely necessary
 </pre></code>
 <p>wrench allocates a static stack and does not bounds-check it, this
 is done for speed an simplicity. The stack is used only for function
-calls and local data so it need not be large, the default 90 should be
+calls and local data so it need not be large, the default should be
 more than enough.
 <p>Each stack entry consumes 8 bytes, so embedded devices that have
 very limited ram (like the Uno Mini) might want to reduce this.
 The arduino example provided has a stack of 32, which
 should be plenty to run even a pretty intricate script.
+
+
+<pre><code>#define WRENCH_COMPACT
+#define WRENCH_FLOAT_SPRINTF
+</pre></code>
+<p>wrench is kept tight and small, if you want full floating point
+sprintf-style formatting from std::sprintf then define this. Not
+a huge amount of code but unecessary for most embedded aplications
+
+
+
+<pre><code>//#define WRENCH_WIN32_FILE_IO
+//#define WRENCH_LINUX_FILE_IO
+//#define WRENCH_SPIFFS_FILE_IO
+//#define WRENCH_LITTLEFS_FILE_IO
+//#define WRENCH_CUSTOM_FILE_IO
+</pre></code>
+<p>For architectural-specific file/system operations wrench provides
+the io:: lib (see <code>std_io_defs.h</code> and
+<code>std_io.cpp</code> for an overview of the provided functionality.
+This is not fully operational, but the calls will work if you need
+them.
+
+
+
+
 
 
 <p>To add functions to extend wrench, as well as calling into it are
@@ -1067,8 +1093,17 @@ str::trim( str ); // remove leading and trailing whitespace
 str::trunc( str, len ); // [alist for left() see above]
 str::insert( str1, str2, pos ); // insert str2 into str1 at pos
 
-file::read( name ); // returns an array representing the data
-file::write( name, data[] );
+io::fileRead( name ); // returns an array representing the data
+io::fileWrite( name, data[] ); // expects an array of data to write to "name"
+io::open( name, flags, mode ); // returns a file descriptor
+                               // flags can be any OR of:
+                               //  O_RDONLY | O_WRONLY | O_CREAT | O_TRUNC | O_APPEND
+                               // mode is octal unix file mode: 
+io::close( fd );
+io::read( fd, data[], max_cnt );
+io::write( fd, data[], cnt ); // don't know whether it's possible to give an array (by reference) as arg so that it's writable - or not?
+io::seek( fd, offset, whence ); 
+
 
 io::getline(); // return a line of text input with fgetc(stdin)
 
