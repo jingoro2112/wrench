@@ -19,10 +19,13 @@ kwds = new KWT[]
 	{"bye", really},
 };
 
+
 if ( kwds[0].s != "abs" || kwds[0].tok != 0 ) println("kwd 0");
+
 if ( kwds[1].s != "and" || kwds[1].tok != 1 ) println("kwd 1");
 if ( kwds[2].s != "asc" || kwds[2].tok != 2 ) println("kwd 2");
 if ( kwds[3].s != "bye" || kwds[3].tok[1] != 20 ) println("kwd 3");
+
 
 struct KWT
 {

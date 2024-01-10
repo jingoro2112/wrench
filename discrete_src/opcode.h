@@ -322,6 +322,8 @@ enum WROpcode
 	O_ToInt,
 	O_ToFloat,
 
+	O_LoadLibConstant,
+
 	O_DebugInfo,
 			
 	// non-interpreted opcodes

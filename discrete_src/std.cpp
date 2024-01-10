@@ -29,6 +29,22 @@ SOFTWARE.
 int32_t wr_Seed;
 
 //------------------------------------------------------------------------------
+uint32_t wr_hash_read8( const void *dat, const int len )
+{
+	// fnv-1
+	uint32_t hash = 0x811C9DC5;
+	const unsigned char* data = (const unsigned char *)dat;
+
+	for( int i=0; i<len; ++i )
+	{
+		hash ^= (uint32_t)READ_8_FROM_PC(data++);
+		hash *= 0x1000193;
+	}
+
+	return hash;
+}
+
+//------------------------------------------------------------------------------
 uint32_t wr_hash( const void *dat, const int len )
 {
 	// fnv-1
@@ -38,6 +54,20 @@ uint32_t wr_hash( const void *dat, const int len )
 	for( int i=0; i<len; ++i )
 	{
 		hash ^= (uint32_t)data[i];
+		hash *= 0x1000193;
+	}
+
+	return hash;
+}
+
+//------------------------------------------------------------------------------
+uint32_t wr_hashStr_read8( const char* dat )
+{
+	uint32_t hash = 0x811C9DC5;
+	const char* data = dat;
+	while ( *data )
+	{
+		hash ^= (uint32_t)READ_8_FROM_PC(data++);
 		hash *= 0x1000193;
 	}
 
@@ -213,7 +243,7 @@ void wr_loadAllLibs( WRState* w )
 {
 	wr_loadMathLib( w );
 	wr_loadStdLib( w );
-	wr_loadFileLib( w );
+	wr_loadIOLib( w );
 	wr_loadStringLib( w );
 	wr_loadMessageLib( w );
 	wr_loadSysLib( w );

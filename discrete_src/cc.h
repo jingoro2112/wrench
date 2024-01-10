@@ -124,6 +124,7 @@ enum WRExpressionType
 {
 	EXTYPE_NONE =0,
 	EXTYPE_LITERAL,
+	EXTYPE_LIB_CONSTANT,
 	EXTYPE_LABEL,
 	EXTYPE_OPERATION,
 	EXTYPE_RESOLVED,
@@ -377,10 +378,13 @@ public:
 					 int* outLen,
 					 char* erroMsg,
 					 const unsigned int compilerOptionFlags );
+
+	void createListing( const char* bytecode, WRstr& listing );
+	
 private:
 	
 	bool isReserved( const char* token );
-	bool isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix );
+	bool isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix, bool& isLibConstant );
 
 	bool getToken( WRExpressionContext& ex, const char* expect =0 );
 
@@ -414,6 +418,7 @@ private:
 	void appendBytecode( WRBytecode& bytecode, WRBytecode& addMe );
 	
 	void pushLiteral( WRBytecode& bytecode, WRExpressionContext& context );
+	void pushLibConstant( WRBytecode& bytecode, WRExpressionContext& context );
 	int addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly =false );
 	int addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly =false );
 	void addFunctionToHashSpace( WRBytecode& result, WRstr& token );

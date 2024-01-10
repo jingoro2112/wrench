@@ -93,7 +93,6 @@ struct WRState
 	WRGCObject globalRegistry;
 };
 
-void wr_arrayToValue( const WRValue* array, WRValue* value, int index =-1 );
 void wr_intValueToArray( const WRValue* array, int32_t I );
 void wr_floatValueToArray( const WRValue* array, float F );
 void wr_countOfArrayElement( WRValue* array, WRValue* target );
@@ -165,42 +164,64 @@ extern WRUnaryFunc wr_predec[4];
 extern WRUnaryFunc wr_toInt[4];
 extern WRUnaryFunc wr_toFloat[4];
 
-typedef void (*WRGetValueFunc)( WRValue** value );
-extern WRGetValueFunc wr_getValue[4];
-
 typedef uint32_t (*WRUint32Call)( WRValue* value );
 extern WRUint32Call wr_bitwiseNot[4];
 
 typedef bool (*WRReturnSingleFunc)( WRValue* value );
 extern WRReturnSingleFunc wr_LogicalNot[4];
 
-typedef void (*WRIndexHashFunc)( WRValue* value, WRValue* target, uint32_t hash );
-extern WRIndexHashFunc wr_IndexHash[4];
-
 void wr_assignToHashTable( WRContext* c, WRValue* index, WRValue* value, WRValue* table );
 void wr_removeFromHashTable( WRContext* c, WRValue* index, WRValue* table );
 
 extern WRReturnFunc wr_CompareEQ[16];
 
+uint32_t wr_hash_read8( const void* dat, const int len );
+uint32_t wr_hashStr_read8( const char* dat );
+
 // if the current + native match then great it's a simple read, it's
 // only when they differ that we need bitshiftiness
 #ifdef WRENCH_LITTLE_ENDIAN
+
  #define wr_x32(P) P
  #define wr_x16(P) P
- #define READ_32_FROM_PC(P) (int32_t)(*(int32_t *)(P))
- #define READ_16_FROM_PC(P) (int16_t)(*(int16_t *)(P))
+
+ #ifndef READ_32_FROM_PC
+  #define READ_32_FROM_PC(P) ((int32_t)(*(int32_t *)(P)))
+ #endif
+ #ifndef READ_16_FROM_PC
+  #define READ_16_FROM_PC(P) ((int16_t)(*(int16_t *)(P)))
+ #endif
+
 #else
 
  int32_t wr_x32( const int32_t val );
  int16_t wr_x16( const int16_t val );
 
  #ifdef WRENCH_COMPACT
-  int32_t READ_32_FROM_PC( const unsigned char* P );
-  int16_t READ_16_FROM_PC( const unsigned char* P );
+
+  #ifndef READ_32_FROM_PC
+   int32_t READ_32_FROM_PC_func( const unsigned char* P );
+   #define READ_32_FROM_PC(P) READ_32_FROM_PC_func(P)
+  #endif
+  #ifndef READ_16_FROM_PC
+   int16_t READ_16_FROM_PC_func( const unsigned char* P );
+   #define READ_16_FROM_PC(P) READ_16_FROM_PC_func(P)
+  #endif
+   
  #else
-  #define READ_32_FROM_PC(P) (int32_t)((int32_t)*(P) | ((int32_t)*(P+1))<<8 | ((int32_t)*(P+2))<<16 | ((int32_t)*(P+3))<<24)
-  #define READ_16_FROM_PC(P) (int16_t)((int16_t)*(P) | ((int16_t)*(P+1))<<8)
+
+  #ifndef READ_32_FROM_PC
+   #define READ_32_FROM_PC(P) ((int32_t)((int32_t)*(P) | ((int32_t)*(P+1))<<8 | ((int32_t)*(P+2))<<16 | ((int32_t)*(P+3))<<24))
+  #endif
+  #ifndef READ_16_FROM_PC
+   #define READ_16_FROM_PC(P) ((int16_t)((int16_t)*(P) | ((int16_t)*(P+1))<<8))
+  #endif
+   
  #endif
 #endif
+
+ #ifndef READ_8_FROM_PC
+  #define READ_8_FROM_PC(P) (*(P))
+ #endif
 
 #endif

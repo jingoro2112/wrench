@@ -394,14 +394,15 @@ enum WRGCObjectType
 
 #define IS_SVA_VALUE_TYPE(V) ((V)->m_type & 0x1)
 
-#define INIT_AS_DEBUG_BREAK (((uint32_t)WR_EX) | ((uint32_t)WR_EX_DEBUG_BREAK<<24))
-#define INIT_AS_ARRAY       (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
-#define INIT_AS_USR         (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
-#define INIT_AS_RAW_ARRAY   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_RAW_ARRAY<<24))
-#define INIT_AS_REFARRAY    (((uint32_t)WR_EX) | ((uint32_t)WR_EX_REFARRAY<<24))
-#define INIT_AS_STRUCT      (((uint32_t)WR_EX) | ((uint32_t)WR_EX_STRUCT<<24))
-#define INIT_AS_HASH_TABLE  (((uint32_t)WR_EX) | ((uint32_t)WR_EX_HASH_TABLE<<24))
-#define INIT_AS_ITERATOR    (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ITERATOR<<24))
+#define INIT_AS_LIB_CONST    0xFFFFFFFC
+#define INIT_AS_DEBUG_BREAK  (((uint32_t)WR_EX) | ((uint32_t)WR_EX_DEBUG_BREAK<<24))
+#define INIT_AS_ARRAY        (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
+#define INIT_AS_USR          (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
+#define INIT_AS_RAW_ARRAY    (((uint32_t)WR_EX) | ((uint32_t)WR_EX_RAW_ARRAY<<24))
+#define INIT_AS_ARRAY_MEMBER (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY_MEMBER<<24))
+#define INIT_AS_STRUCT       (((uint32_t)WR_EX) | ((uint32_t)WR_EX_STRUCT<<24))
+#define INIT_AS_HASH_TABLE   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_HASH_TABLE<<24))
+#define INIT_AS_ITERATOR     (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ITERATOR<<24))
 
 #define INIT_AS_REF      WR_REF
 #define INIT_AS_INT      WR_INT

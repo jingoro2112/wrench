@@ -69,8 +69,10 @@ void streamDump( WROpcodeStream const& stream )
 }
 
 //------------------------------------------------------------------------------
-bool WRCompilationContext::isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix )
+bool WRCompilationContext::isValidLabel( WRstr& token, bool& isGlobal, WRstr& prefix, bool& isLibConstant )
 {
+	isLibConstant = false;
+	
 	prefix.clear();
 
 	if ( !token.size() || (!isalpha(token[0]) && token[0] != '_' && token[0] != ':') ) // non-zero size and start with alpha or '_' ?
@@ -100,6 +102,7 @@ bool WRCompilationContext::isValidLabel( WRstr& token, bool& isGlobal, WRstr& pr
 		}
 	}
 
+	bool foundColon = false;
 	for( unsigned int i=0; i<token.size(); i++ ) // entire token alphanumeric or '_'?
 	{
 		if ( token[i] == ':' )
@@ -109,6 +112,8 @@ bool WRCompilationContext::isValidLabel( WRstr& token, bool& isGlobal, WRstr& pr
 				m_err = WR_ERR_unexpected_token;
 				return false;
 			}
+
+			foundColon = true;
 
 			if ( i != 1 )
 			{
@@ -133,6 +138,16 @@ bool WRCompilationContext::isValidLabel( WRstr& token, bool& isGlobal, WRstr& pr
 		{
 			return false;
 		}
+	}
+
+	if ( foundColon && token[token.size() - 1] == ':' )
+	{
+		return false;
+	}
+	
+	if ( foundColon && token[0] != ':' )
+	{
+		isLibConstant = true;
 	}
 
 	return true;
@@ -569,6 +584,29 @@ parseAsNumber:
 
 					value.p2 = INIT_AS_INT;
 					value.i = strtol( token, 0, 2 );
+				}
+				else if (token[0] == '0' && isdigit(m_source[m_pos]) ) // octal
+				{
+					token.clear();
+
+					for(;;)
+					{
+						if ( m_pos >= m_sourceLen )
+						{
+							m_err = WR_ERR_unexpected_EOF;
+							return false;
+						}
+
+						if ( !isdigit(m_source[m_pos]) )
+						{
+							break;
+						}
+
+						token += m_source[m_pos++];
+					}
+
+					value.p2 = INIT_AS_INT;
+					value.i = strtol( token, 0, 8 );
 				}
 				else
 				{
@@ -2641,7 +2679,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContext& context )
 {
 	WRValue& value = context.value;
-	unsigned char data[2];
+	unsigned char data[4];
 	
 	if ( value.type == WR_INT && value.i == 0 )
 	{
@@ -2681,10 +2719,18 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 	else
 	{
 		pushOpcode( bytecode, O_LiteralFloat );
-		unsigned char data[4];
 		int32_t be = value.i;
 		pushData( bytecode, wr_pack32(be, data), 4 );
 	}
+}
+
+//------------------------------------------------------------------------------
+void WRCompilationContext::pushLibConstant( WRBytecode& bytecode, WRExpressionContext& context )
+{
+	pushOpcode( bytecode, O_LoadLibConstant );
+	unsigned char data[4];
+	uint32_t hash = wr_hashStr(context.prefix + "::" + context.token);
+	pushData( bytecode, wr_pack32(hash, data), 4 );
 }
 
 //------------------------------------------------------------------------------
@@ -2800,8 +2846,8 @@ void WRCompilationContext::loadExpressionContext( WRExpression& expression, int 
 	{
 		unsigned char buf[4];
 		wr_pack32( wr_hash( expression.context[depth].token,
-						 expression.context[depth].token.size()),
-				buf );
+							expression.context[depth].token.size()),
+				   buf );
 		pushOpcode( expression.bytecode, O_LiteralInt32 );
 		pushData( expression.bytecode, buf, 4 );
 	}
@@ -2809,6 +2855,12 @@ void WRCompilationContext::loadExpressionContext( WRExpression& expression, int 
 	{
 		switch( expression.context[depth].type )
 		{
+			case EXTYPE_LIB_CONSTANT:
+			{
+				pushLibConstant( expression.bytecode, expression.context[depth] );
+				break;
+			}
+			
 			case EXTYPE_LITERAL:
 			{
 				pushLiteral( expression.bytecode, expression.context[depth] );
@@ -2827,6 +2879,7 @@ void WRCompilationContext::loadExpressionContext( WRExpression& expression, int 
 					addLocalSpaceLoad( expression.bytecode,
 									   expression.context[depth].token );
 				}
+
 				break;
 			}
 
@@ -3248,7 +3301,6 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 			
 			char end = parseExpression( nex );
 
-/*
 			if ( nex.bytecode.opcodes.size() > 0 )
 			{
 				char op = nex.bytecode.opcodes[nex.bytecode.opcodes.size() - 1];
@@ -3265,7 +3317,7 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 					nex.bytecode.all += O_Dereference;
 				}
 			}
-*/
+			
 			appendBytecode( expression.context[depth].bytecode, nex.bytecode );
 
 			if ( end == ')' )
@@ -3475,6 +3527,22 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					return 0;
 				}
 
+				if ( depth == 3 )
+				{
+					// pop the element off and reload the actual table that was created
+					pushOpcode( expression.context[depth - 2].bytecode, O_PopOne );
+					if ( expression.context[depth-3].global )
+					{
+						addGlobalSpaceLoad( expression.context[depth - 2].bytecode,
+											expression.context[depth - 3].token );
+					}
+					else
+					{
+						addLocalSpaceLoad( expression.context[depth - 2].bytecode,
+										expression.context[depth - 3].token );
+					}
+				}
+
 				expression.context.remove( depth - 1, 1 ); // knock off the equate
 				depth--;
 
@@ -3494,50 +3562,6 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				WRValue& value2 = expression.context[depth].value;
 
 				uint16_t initializer = 0;
-
-
-				// TODO - more effiecient way to do this, it allocates
-				// twice for the case of
-				// a[500] = { 1 };
-
-				// um... I don't remember what this was for.. :P
-				
-/*
-				// make sure the array we are about to initialize is
-				// actually empty (set it to a nonsense int value)
-				unsigned char offset[3];
-				offset[2] = 0xEE;
-
-				int target = depth - 1;
-				if ( (depth > 1)
-					 && expression.context[target].operation
-					 && !strncmp( expression.context[target].operation->token, "@[]", 3) )
-				{
-					--target;
-				}
-								
-				if ( expression.context[target].global || (m_unitTop == 0) )
-				{
-					offset[0] = O_LiteralInt8ToGlobal;
-					offset[1] = addGlobalSpaceLoad( expression.bytecode,
-													expression.context[target].token,
-													true );
-				}
-				else
-				{
-					offset[0] = O_LiteralInt8ToLocal;
-					offset[1] = addLocalSpaceLoad( expression.bytecode,
-												   expression.context[target].token,
-												   true );
-				}
-
-				pushData( expression.context[depth].bytecode, offset, 3 );
-*/
-
-
-
-
-
 
 				for(;;)
 				{
@@ -3668,6 +3692,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 			bool isGlobal;
 			WRstr prefix;
+			bool isLibConstant;
 
 			if ( !getToken(expression.context[depth]) )
 			{
@@ -3675,7 +3700,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				return 0;
 			}
 
-			if ( !isValidLabel(token2, isGlobal, prefix) )
+			if ( !isValidLabel(token2, isGlobal, prefix, isLibConstant) || isLibConstant )
 			{
 				m_err = WR_ERR_bad_expression;
 				return 0;
@@ -3765,11 +3790,6 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				{
 					for(;;)
 					{
-						if ( !parseCallFunction(expression, functionName, depth, false) )
-						{
-							return 0;
-						}
-
 						if ( !getToken(expression.context[depth]) )
 						{
 							m_err = WR_ERR_unexpected_EOF;
@@ -3780,7 +3800,13 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 						{
 							break;
 						}
-						else if (!m_quoted && token3 != "{")
+
+						if ( !parseCallFunction(expression, functionName, depth, false) )
+						{
+							return 0;
+						}
+
+						if (!m_quoted && token3 != "{")
 						{
 							m_err = WR_ERR_unexpected_token;
 							return 0;
@@ -3873,10 +3899,13 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 		{
 			// might be cast, call or sub-expression
 			
-			if ( (depth > 0) && expression.context[depth - 1].type == EXTYPE_LABEL )
+			if ( (depth > 0) &&
+				 (expression.context[depth - 1].type == EXTYPE_LABEL
+				 || expression.context[depth - 1].type == EXTYPE_LIB_CONSTANT) )
 			{
 				// always only a call
-
+				expression.context[depth - 1].type = EXTYPE_LABEL;
+				
 				--depth;
 				if ( !parseCallFunction(expression, expression.context[depth].token, depth, true) )
 				{
@@ -3959,15 +3988,6 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 		if ( !m_quoted && token == "[" )
 		{
-			if ( depth == 0
-				 || (expression.context[depth - 1].type != EXTYPE_LABEL
-					 && expression.context[depth - 1].type != EXTYPE_BYTECODE_RESULT) )
-			{
-				m_err = WR_ERR_unexpected_EOF;
-				return 0;
-			}
-
-
 			WRExpression nex( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
 			nex.context[0].token = token;
 			nex.context[0].value = value;
@@ -3977,24 +3997,23 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				m_err = WR_ERR_unexpected_EOF;
 				return 0;
 			}
-			
+
+			WRstr t( "@[]" );
+
 			if ( nex.bytecode.all.size() == 0 )
 			{
-				WRstr t( "@[]" );
 				operatorFound( t, expression.context, depth );
 				expression.context[depth].bytecode.all.shave(1);
 				expression.context[depth].bytecode.opcodes.shave(1);
 				pushOpcode( expression.context[depth].bytecode, O_IndexLiteral8 );
-				unsigned char c = 0;
+				unsigned char c = 16;
 				pushData( expression.context[depth].bytecode, &c, 1 );
 			}
 			else 
 			{
-				WRstr t( "@[]" );
 				expression.context[depth].bytecode = nex.bytecode;
 				operatorFound( t, expression.context, depth );
 			}
-
 
 			++depth;
 			continue;
@@ -4002,17 +4021,19 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 		bool isGlobal;
 		WRstr prefix;
-		if ( isValidLabel(token, isGlobal, prefix) )
+		bool isLibConstant;
+
+		if ( isValidLabel(token, isGlobal, prefix, isLibConstant) )
 		{
 			if ( (depth > 0) 
 				&& ((expression.context[depth - 1].type == EXTYPE_LABEL) 
-					|| (expression.context[depth - 1].type == EXTYPE_LITERAL)) )
+					|| (expression.context[depth - 1].type == EXTYPE_LITERAL)
+					|| (expression.context[depth - 1].type == EXTYPE_LIB_CONSTANT)) )
 			{
 				// two labels/literals cannot follow each other
 				m_err = WR_ERR_bad_expression;
 				return 0;
 			}
-
 
 			WRstr label = token;
 			if ( depth == 0 && !m_parsingFor )
@@ -4053,8 +4074,8 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				}
 			}
 			
-			
-			expression.context[depth].type = EXTYPE_LABEL;
+
+			expression.context[depth].type = isLibConstant ? EXTYPE_LIB_CONSTANT : EXTYPE_LABEL;
 			expression.context[depth].token = label;
 			expression.context[depth].global = isGlobal;
 			expression.context[depth].prefix = prefix;
@@ -4091,11 +4112,13 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 	WRExpressionContext ex;
 	WRstr& token = ex.token;
 	WRstr prefix;
-	
+	bool isLibConstant;
+
 	// get the function name
 	if ( !getToken(ex)
-		 || !isValidLabel(token, isGlobal, prefix)
-		 || isGlobal )
+		 || !isValidLabel(token, isGlobal, prefix, isLibConstant)
+		 || isGlobal
+		 || isLibConstant )
 	{
 		m_err = WR_ERR_bad_label;
 		return false;
@@ -4122,7 +4145,7 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 				break;
 			}
 			
-			if ( !isValidLabel(token, isGlobal, prefix) || isGlobal )
+			if ( !isValidLabel(token, isGlobal, prefix, isLibConstant) || isGlobal || isLibConstant )
 			{
 				m_err = WR_ERR_bad_label;
 				return false;
@@ -4702,7 +4725,8 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 
 		bool isGlobal;
 		WRstr prefix;
-		if ( !isValidLabel(token, isGlobal, prefix) || isGlobal )
+		bool isLibConstant;
+		if ( !isValidLabel(token, isGlobal, prefix, isLibConstant) || isGlobal || isLibConstant )
 		{
 			m_err = WR_ERR_bad_label;
 			return false;
@@ -5418,7 +5442,8 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 
 			bool isGlobal;
 			WRstr prefix;
-			if ( !isValidLabel(token, isGlobal, prefix) || isGlobal )
+			bool isLibConstant;
+			if ( !isValidLabel(token, isGlobal, prefix, isLibConstant) || isGlobal || isLibConstant )
 			{
 				m_err = WR_ERR_bad_goto_label;
 				return false;
@@ -5445,7 +5470,8 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 
 			bool isGlobal;
 			WRstr prefix;
-			if ( !isValidLabel(token, isGlobal, prefix) )
+			bool isLibConstant;
+			if ( !isValidLabel(token, isGlobal, prefix, isLibConstant) || isLibConstant )
 			{
 				m_err = WR_ERR_bad_goto_label;
 				return false;
@@ -6027,12 +6053,12 @@ WRError WRCompilationContext::compile( const char* source,
 }
 
 //------------------------------------------------------------------------------
-int wr_compile( const char* source,
-				const int size,
-				unsigned char** out,
-				int* outLen,
-				char* errMsg,
-				const unsigned int compilerOptionFlags )
+WRError wr_compile( const char* source,
+					const int size,
+					unsigned char** out,
+					int* outLen,
+					char* errMsg,
+					const unsigned int compilerOptionFlags )
 {
 	assert( sizeof(float) == 4 );
 	assert( sizeof(int) == 4 );
@@ -6047,7 +6073,7 @@ int wr_compile( const char* source,
 
 #else // WRENCH_WITHOUT_COMPILER
 
-int wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg, bool includeSymbols )
+WRError wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg, bool includeSymbols )
 {
 	return WR_ERR_compiler_not_loaded;
 }

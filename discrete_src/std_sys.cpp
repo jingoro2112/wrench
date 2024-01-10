@@ -67,4 +67,8 @@ void wr_loadSysLib( WRState* w )
 {
 	wr_registerLibraryFunction( w, "sys::function", wr_function ); // read (true to clear, false to leave)
 	wr_registerLibraryFunction( w, "sys::gcPause", wr_gcPause ); // read (true to clear, false to leave)
+
+//	wr_registerLibraryFunction( w, "sys::serializeValue", wr_serializeValue ); // read (true to clear, false to leave)
+//	wr_registerLibraryFunction( w, "sys::deserializeValue", wr_deserializeValue ); // read (true to clear, false to leave)
+
 }

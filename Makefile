@@ -1,10 +1,10 @@
-OPT ?= -O3
-#OPT ?= -O0 -ggdb
+#OPT ?= -O3
+OPT ?= -O0 -ggdb
 
 PERF ?=
 
 #FLAGS ?= $(OPT) $(PERF) -std=c++11
-FLAGS ?= $(OPT) $(PERF) -I. $(COMPACT) -std=c++98
+FLAGS ?= $(OPT) $(PERF) -I. $(COMPACT) -std=c++98 -MD -DWRENCH_LINUX_FILE_IO
 
 #FLAGS = $(OPT) -pg
 #FLAGS = $(OPT) $(PERF)
@@ -15,18 +15,20 @@ OBJDIR = objs_linux
 
 -include $(OBJDIR)/*.d
 
-CC = g++  -MD -Wall -Werror $(FLAGS) -c -o
+CC = g++ -MD -Wall -Werror $(FLAGS) -c -o
 #CC = g++ -MD $(FLAGS) -c -o
 
 OBJS = \
 	$(OBJDIR)/cc.o \
 	$(OBJDIR)/operations.o \
+	$(OBJDIR)/index.o \
 	$(OBJDIR)/vm.o \
 	$(OBJDIR)/utils.o \
 	$(OBJDIR)/wrench_server_debug.o \
 	$(OBJDIR)/wrench_client_debug.o \
 	$(OBJDIR)/std.o \
 	$(OBJDIR)/std_io.o \
+	$(OBJDIR)/std_io_linux.o \
 	$(OBJDIR)/std_string.o \
 	$(OBJDIR)/std_math.o \
 	$(OBJDIR)/std_msg.o \
@@ -64,6 +66,9 @@ $(OBJDIR)/cc.o: discrete_src/cc.cpp
 $(OBJDIR)/operations.o: discrete_src/operations.cpp
 	$(CC) $@ $<
 
+$(OBJDIR)/index.o: discrete_src/index.cpp
+	$(CC) $@ $<
+
 $(OBJDIR)/vm.o: discrete_src/vm.cpp
 	$(CC) $@ $<
 
@@ -80,6 +85,9 @@ $(OBJDIR)/std.o: discrete_src/std.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/std_io.o: discrete_src/std_io.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/std_io_linux.o: discrete_src/std_io_linux.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/std_string.o: discrete_src/std_string.cpp

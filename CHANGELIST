@@ -1,3 +1,59 @@
+3.2.3 ----------------------------------------------------------------------------------
+- wr_compile(...) now returns a WRError type
+- streamlined and fixed EX_REFARRAY resolution so it will properly recurse/descend
+- Deprecated file::read and file::write, now io::readFile and io::writeFile
+- added: 
+
+    io::open( name, [flags, mode] );
+    io::close( fd );
+    io::read( fd, [max_count] );
+    io::write( fd, data, [count] );
+    io::seek( fd, offset, [whence] ); 
+
+- also added support for SPIFFS, LittleFS, Win32 and linux-ish io with:
+
+    #define WRENCH_WIN32_FILE_IO
+    #define WRENCH_LINUX_FILE_IO
+    #define WRENCH_SPIFFS_FILE_IO
+    #define WRENCH_LITTLEFS_FILE_IO
+    #define WRENCH_CUSTOM_FILE_IO
+
+    just defined the one you need in wrench.h
+
+- wrench now understands octal as C: 023 == 19
+- added macros for reading data from the code stream, including 8-bit for the case of 
+  it being specially addressed ROM:
+    
+    READ_32_FROM_PC( P )
+    READ_16_FROM_PC( P )
+    READ_8_FROM_PC( P )
+
+- changed function signatures to make a bit friendlier to use:
+    WRValue& wr_makeInt( WRValue* val, int i );
+    WRValue& wr_makeFloat( WRValue* val, float f );
+    WRValue& wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len );
+
+- added Library constants! So the concept of constant values that can be loaded at
+  runtime when they weren't compiled in to begin with, this is accomplished with the new opcode:
+
+    O_LoadLibConstant
+
+  Which is appended to the instruction set, so it remains backward-compatible. Along with this the
+  function:
+
+    void wr_registerLibraryConstant( WRState* w, const char* signature, const WRValue& value );
+
+  Has been added, which is called to load consts into the VM for access via code. The constants
+  MUST be of the form: "A::B" and it is a run-time error if one is not found when called for:
+
+    WR_ERR_library_constant_not_loaded
+
+- refactored index/hashing functions to be more robust and take far less space, by combining
+  the index operations into a single call. runs a touch faster and saved more than 10% code
+  size
+- fixed struct extra function call when parsing a trailing comma
+- fixed crashing bug when you accessed a non-hash as if it were one
+
 3.2.2 ----------------------------------------------------------------------------------
 - fixed parse error where control chars are quoted f(")"); for example would fail
 - calling a function that does not exist is now an execution error
@@ -23,7 +79,6 @@
     And have been replaced with:
     WRContext* wr_newContext( WRState* w, const unsigned char* block, const int blockSize );
     WRValue* wr_executeContext( WRContext* context );
-
 
 3.1.1 ----------------------------------------------------------------------------------
 - added functionality so  string + string  and string += string work!!

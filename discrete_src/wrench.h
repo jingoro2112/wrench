@@ -27,7 +27,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 3
 #define WRENCH_VERSION_MINOR 2
-#define WRENCH_VERSION_BUILD 2
+#define WRENCH_VERSION_BUILD 3
 
 /************************************************************************
 The compiler was not designed to be particularly memory or space efficient, for
@@ -53,6 +53,18 @@ of a chunk of speed so only use it if you need to.
 //#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 /***********************************************************************/
 
+/***********************************************************************
+wrench automatically detect endian-ness and defines these three
+macros for reading data from the code stream, if you have special
+memory requirements, as some embedded systems to, you may re-defines
+them here, but they MUST match the endian-ness of the target
+architecture, see vm.h for the current definitions
+*/
+//#define READ_32_FROM_PC( P )
+//#define READ_16_FROM_PC( P )
+//#define READ_8_FROM_PC( P )
+/***********************************************************************/
+
 /************************************************************************
 how many stack locations the wrench state will pre-allocate. The stack
 cannot be grown so this needs to be enough for the life of the process.
@@ -74,7 +86,7 @@ it does add a small size penalty. If you are trying to cram wrench
 into the smallest possible space, this compiles out the debug functions.
 You can still run debug-enabled code, the VM will just skip it.
 */
-#define WRENCH_INCLUDE_DEBUG_CODE
+//#define WRENCH_INCLUDE_DEBUG_CODE
 
 /************************************************************************
 if you WANT full sprintf support for floats (%f/%g) this adds it, at
@@ -83,6 +95,27 @@ systems but larger ones? who cares.
 */
 //#define WRENCH_FLOAT_SPRINTF
 
+/***********************************************************************/
+
+/************************************************************************
+File operations: define ONE of these. If you use "Custom" then you
+need to link in a source file with the functions defined in:
+
+  /discrete_src/std_io_defs.h
+
+examples are in
+
+  /discrete_src/std_io_linux.cpp
+  /discrete_src/std_io_win32.cpp
+  /discrete_src/std_io_spiffs.cpp
+  /discrete_src/std_io_littlefs.cpp
+
+*/
+//#define WRENCH_WIN32_FILE_IO
+//#define WRENCH_LINUX_FILE_IO
+//#define WRENCH_SPIFFS_FILE_IO
+//#define WRENCH_LITTLEFS_FILE_IO
+//#define WRENCH_CUSTOM_FILE_IO
 /***********************************************************************/
 
 #include <stdint.h>
@@ -98,6 +131,63 @@ struct WRFunction;
 uint32_t wr_hash( const void* dat, const int len );
 uint32_t wr_hashStr( const char* dat );
 
+// in order to minimize text segment size, only a minimum of strings
+// are embedded in the code. error messages are very verbose enums
+enum WRError
+{
+	WR_ERR_None = 0,
+
+	WR_ERR_compiler_not_loaded,
+	WR_ERR_function_hash_signature_not_found,
+	WR_ERR_library_constant_not_loaded,
+	WR_ERR_unknown_opcode,
+	WR_ERR_unexpected_EOF,
+	WR_ERR_unexpected_token,
+	WR_ERR_bad_expression,
+	WR_ERR_bad_label,
+	WR_ERR_statement_expected,
+	WR_ERR_unterminated_string_literal,
+	WR_ERR_newline_in_string_literal,
+	WR_ERR_bad_string_escape_sequence,
+	WR_ERR_tried_to_load_non_resolvable,
+	WR_ERR_break_keyword_not_in_looping_structure,
+	WR_ERR_continue_keyword_not_in_looping_structure,
+	WR_ERR_expected_while,
+	WR_ERR_compiler_panic,
+	WR_ERR_constant_redefined,
+	WR_ERR_struct_in_struct,
+
+	WR_ERR_run_must_be_called_by_itself_first,
+	WR_ERR_hash_table_size_exceeded,
+	WR_ERR_wrench_function_not_found,
+	WR_ERR_array_must_be_indexed,
+	WR_ERR_context_not_found,
+
+	WR_ERR_usr_data_template_already_exists,
+	WR_ERR_usr_data_already_exists,
+	WR_ERR_usr_data_template_not_found,
+	WR_ERR_usr_data_refernce_not_found,
+
+	WR_ERR_bad_goto_label,
+	WR_ERR_bad_goto_location,
+	WR_ERR_goto_target_not_found,
+
+	WR_ERR_switch_with_no_cases,
+	WR_ERR_switch_case_or_default_expected,
+	WR_ERR_switch_construction_error,
+	WR_ERR_switch_bad_case_hash,
+	WR_ERR_switch_duplicate_case,
+
+	WR_ERR_bad_bytecode_CRC,
+
+	WR_ERR_execute_function_zero_called_more_than_once,
+
+	WR_warning_enums_follow,
+
+	WR_WARN_c_function_not_found,
+	WR_WARN_lib_function_not_found,
+};
+
 /***************************************************************/
 /**************************************************************/
 //                       State Management
@@ -110,7 +200,6 @@ void wr_destroyState( WRState* w );
 /***************************************************************/
 /**************************************************************/
 //                        Running Code
-
 
 // compile source code and return a new'ed block of bytecode ready
 // for wr_run(), this memory must be delete[]'ed
@@ -129,12 +218,12 @@ enum WrenchCompilerOptionFlags
 	WR_EMBED_SOURCE_CODE = 1<<2,// include a copy of the source code
 };
 
-int wr_compile( const char* source,
-				const int size,
-				unsigned char** out,
-				int* outLen,
-				char* errMsg =0,
-				const unsigned int compilerOptionFlags = WR_INCLUDE_GLOBALS );
+WRError wr_compile( const char* source,
+					const int size,
+					unsigned char** out,
+					int* outLen,
+					char* errMsg =0,
+					const unsigned int compilerOptionFlags = WR_INCLUDE_GLOBALS );
 
 // w:          state (see wr_newState)
 // block:      location of bytecode
@@ -157,11 +246,6 @@ WRValue* wr_returnValueFromLastCall( WRState* w );
 // to separate the process you can call them on your own.
 WRContext* wr_newContext( WRState* w, const unsigned char* block, const int blockSize );
 WRValue* wr_executeContext( WRContext* context );
-
-// !!!!! DEPRECATED !!!!!!!
-WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize );
-bool wr_executeFunctionZero( WRContext* context );
-// !!!!! DEPRECATED !!!!!!!
 
 // after wr_run() this allows any function in the script to be
 // called with the given arguments, returning a single value
@@ -186,6 +270,10 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 // minimum of overhead
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
 
+// after wrench executes it may have set an error code, this is how to
+// retreive it. This sytems is coarse at the moment. Re-entering the
+// interpreter clears the last error
+WRError wr_getLastError( WRState* w );
 
 // once wr_run() is called the returned context object can be used to
 // pre-fetch a function pointer. This reduces the overhead of calling
@@ -266,6 +354,7 @@ typedef void (*WR_LIB_CALLBACK)( WRValue* stackTop, const int argn, WRContext* c
 //            ex: "math::cos"
 // function:  callback (see typdef above)
 void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLBACK function );
+void wr_registerLibraryConstant( WRState* w, const char* signature, const WRValue& value );
 
 // you can write your own libraries (look at std.cpp for all the
 // standard ones) but several have been provided:
@@ -275,7 +364,7 @@ void wr_loadAllLibs( WRState* w ); // load all libraries in one call
 void wr_loadSysLib( WRState* w ); // system/internal functions
 void wr_loadMathLib( WRState* w ); // provides most of the calls in math.h
 void wr_loadStdLib( WRState* w ); // standard functions like sprintf/rand/
-void wr_loadFileLib( WRState* w ); // file funcs
+void wr_loadIOLib( WRState* w ); // IO funcs (time/file/io)
 void wr_loadStringLib( WRState* w ); // string functions
 void wr_loadMessageLib( WRState* w ); // messaging between contexts
 
@@ -297,12 +386,12 @@ void wr_loadAllArduinoLibs( WRState* w );
 // heap will be harmed
 
 // load a value up and make it ready for calling a function
-void wr_makeInt( WRValue* val, int i );
-void wr_makeFloat( WRValue* val, float f );
+WRValue& wr_makeInt( WRValue* val, int i );
+WRValue& wr_makeFloat( WRValue* val, float f );
 
 // a string has to exist in a context so it can be worked with, but the
 // memory is managed by the caller, so wr_freeString() must be called
-void wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len );
+WRValue& wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len );
 
 // WARNING: If the memory is used/saved inside the context then
 // deleting it here will cause a segfault. Be sure the script is done
@@ -320,71 +409,6 @@ void wr_addFloatToContainer( WRValue* container, const char* name, const float v
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size );
 
 
-/***************************************************************/
-/***************************************************************/
-//                          Errors
-
-// in order to minimize text segment size, only a minimum of strings
-// are embedded in the code. error messages are very verbose enums
-enum WRError
-{
-	WR_ERR_None = 0,
-
-	WR_ERR_compiler_not_loaded,
-	WR_ERR_function_hash_signature_not_found,
-	WR_ERR_unknown_opcode,
-	WR_ERR_unexpected_EOF,
-	WR_ERR_unexpected_token,
-	WR_ERR_bad_expression,
-	WR_ERR_bad_label,
-	WR_ERR_statement_expected,
-	WR_ERR_unterminated_string_literal,
-	WR_ERR_newline_in_string_literal,
-	WR_ERR_bad_string_escape_sequence,
-	WR_ERR_tried_to_load_non_resolvable,
-	WR_ERR_break_keyword_not_in_looping_structure,
-	WR_ERR_continue_keyword_not_in_looping_structure,
-	WR_ERR_expected_while,
-	WR_ERR_compiler_panic,
-	WR_ERR_constant_redefined,
-	WR_ERR_struct_in_struct,
-
-	WR_ERR_run_must_be_called_by_itself_first,
-	WR_ERR_hash_table_size_exceeded,
-	WR_ERR_wrench_function_not_found,
-	WR_ERR_array_must_be_indexed,
-	WR_ERR_context_not_found,
-
-	WR_ERR_usr_data_template_already_exists,
-	WR_ERR_usr_data_already_exists,
-	WR_ERR_usr_data_template_not_found,
-	WR_ERR_usr_data_refernce_not_found,
-
-	WR_ERR_bad_goto_label,
-	WR_ERR_bad_goto_location,
-	WR_ERR_goto_target_not_found,
-
-	WR_ERR_switch_with_no_cases,
-	WR_ERR_switch_case_or_default_expected,
-	WR_ERR_switch_construction_error,
-	WR_ERR_switch_bad_case_hash,
-	WR_ERR_switch_duplicate_case,
-
-	WR_ERR_bad_bytecode_CRC,
-
-	WR_ERR_execute_function_zero_called_more_than_once,
-
-	WR_warning_enums_follow,
-
-	WR_WARN_c_function_not_found,
-	WR_WARN_lib_function_not_found,
-};
-
-// after wrench executes it may have set an error code, this is how to
-// retreive it. This sytems is coarse at the moment. Re-entering the
-// interpreter clears the last error
-WRError wr_getLastError( WRState* w );
-
 
 /******************************************************************/
 //                    "standard" functions
@@ -392,8 +416,111 @@ WRError wr_getLastError( WRState* w );
 extern int32_t wr_Seed;
 
 // inside-baseball time. This has to be here so stuff that includes
-// "wrench.h" can create a WRValue. nothing to see here.. smile and
-// wave...
+// "wrench.h" can create a WRValue.
+
+/*
+
+ wrench values have a 32-bit type vector
+ 
+type bits: XXXX  XXXX  ____  ____  ____  ____  __TT
+                                        [8-bit type]
+           [             32-bit xtype              ]
+
+the bottom two bits 'T' represent the main type:
+int       00 -- integer, ui / i are the value
+float     01 -- float, f is the value
+reference 10 -- reference, *r is a pointer to the real value
+extended  11 -- extended type, see upper bits.
+
+This is so operation tables can be constructed 4x4 for very quick
+resolution of how to add/subtract/AND/etc... two values without a
+time-consuming if-else-tree. single bit shift + OR and we're there:
+
+            (typeA << 2) | typeB
+
+Always results in a value from 0-15 which can index into a function
+table:
+
+    FunctionTypedef wr_func[16] = 
+    {
+      do_I_I,  do_I_F,  do_I_R,  do_I_E,
+      do_F_I,  do_F_F,  do_F_R,  do_F_E,
+      do_R_I,  do_R_F,  do_R_R,  do_R_E,
+      do_E_I,  do_E_F,  do_E_R,  do_E_E,
+    };
+
+such that
+wr_func[ (typeA << 2) | typeB ]( look ma, no ifs! );
+
+In the case of "extended" types these are the ones that take extra
+logic: arrays and hashes.
+
+The "extended" types are:
+
+(x is "don't care")
+
+0x20xxxxxx  raw array: r->c points to a flat array, and
+                       r->p2 holds the size of the array in the
+                              middle 21 bits:
+
+                              0x1FFFFF00
+                              
+                              such that shifting them >>8 yields
+                              the actual array size
+                       This is done so the value is never garbage
+                       collected, or matched to the wrong type, but
+                       does limit the size of an array to 2megabytes
+
+0x40xxxxxx  debug break: stop execution and do debugging work
+
+0x60xxxxxx  iterator: p2 holds the element we are on
+                        va holds the array to be iterated
+
+0x80xxxxxx  reference array: refers to a particular element of an
+                             array.
+
+                             r-> points to the array we are holding an
+                             element of
+
+                             p2 holds the element in the middle 21
+                             bits:
+
+							 0x1FFFFF00
+                             
+							 such that shifting them >>8 yields
+                             the actual element
+                             
+						     This is done so the value is never garbage
+							 collected, or matched to the wrong type, but
+							 does limit the size of an array to 2megabytes
+                              
+0xA0xxxxxx  array/utility hash:
+                        va-> holds a pointer to the actual array object (gc_object)
+                        which has been allocated and is subject to
+                        garbage collection
+
+                        there are 4 kinds of "array" objects:
+
+						SV_VALUE            0x01 array of WRValues
+						SV_CHAR             0x02 array of chars (this
+                         						 is how strings are represented)
+						SV_VOID_HASH_TABLE  0x04 hash table of void*
+						                         used for internal structures
+						                         (do not gc)
+						SV_HASH_TABLE       0x03 hash table of WRValues
+						                         (DO descend for gc)
+
+0xC0xxxxxx  struct: This value is a constructed "struct" object with a
+                   hash table of values
+                   
+                   va-> refers to the container of initialized objects
+                  
+
+0xE0xxxxxx  hash table: hash table of WRValues
+
+                   va-> refers to the hash table object
+
+*/
 
 //------------------------------------------------------------------------------
 #if __cplusplus <= 199711L
@@ -416,30 +543,37 @@ enum WRExType : uint8_t
 #endif
 {
 	WR_EX_NONE       = 0x00,  // 0000
+
 	WR_EX_RAW_ARRAY  = 0x20,  // 0010
 
 	// EX types have one of the upper two bits set
 	WR_EX_DEBUG_BREAK= 0x40,  // 0100
 	
-	WR_EX_ITERATOR	 = 0x60,  // 0110
-	WR_EX_REFARRAY   = 0x80,  // 1000
-	WR_EX_ARRAY      = 0xA0,  // 1010
+	WR_EX_ITERATOR	   = 0x60,  // 0110
+	WR_EX_ARRAY_MEMBER = 0x80,  // 1000
+	WR_EX_ARRAY        = 0xA0,  // 1010
+
+	// see EXPECTS_HASH_INDEX!!
 	WR_EX_STRUCT     = 0xC0,  // 1100
 	WR_EX_HASH_TABLE = 0xE0,  // 1110
 };
 
 #define EX_TYPE_MASK   0xE0
-#define IS_DEBUG_BREAK(X) (((X)&EX_TYPE_MASK)==WR_EX_DEBUG_BREAK)
-#define IS_REFARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_REFARRAY)
-#define IS_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_ARRAY)
-#define IS_ITERATOR(X) (((X)&EX_TYPE_MASK)==WR_EX_ITERATOR)
+#define IS_DEBUG_BREAK(X) ((X)==WR_EX_DEBUG_BREAK)
+#define IS_ARRAY_MEMBER(X) (((X)&EX_TYPE_MASK)==WR_EX_ARRAY_MEMBER)
+#define IS_ARRAY(X) ((X)==WR_EX_ARRAY)
+#define IS_ITERATOR(X) ((X)==WR_EX_ITERATOR)
 #define IS_RAW_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_RAW_ARRAY)
-#define IS_HASH_TABLE(X) (((X)&EX_TYPE_MASK)==WR_EX_HASH_TABLE)
+#define IS_HASH_TABLE(X) ((X)==WR_EX_HASH_TABLE)
+
+#define EXPECTS_HASH_INDEX(X) ( ((X) == WR_EX_STRUCT) || ((X)==WR_EX_HASH_TABLE) )
 
 #if __arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__
 #include <memory.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
 #include <cstdlib>
 #endif
 
@@ -508,7 +642,7 @@ struct WRValue
 
 	bool isFloat() const { return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
 	bool isInt() const { return type == WR_INT || (type == WR_REF && r->type == WR_INT); }
-	bool isWrenchArray() const { return (type == WR_EX) && IS_REFARRAY(xtype); }
+	bool isWrenchArray() const { return (type == WR_EX) && IS_ARRAY_MEMBER(xtype); }
 	bool isRawArray() const { return (type == WR_EX) && IS_RAW_ARRAY(xtype); }
 	bool isHashTable() const { return (type == WR_EX) && IS_HASH_TABLE(xtype); }
 
@@ -535,8 +669,9 @@ struct WRValue
 
 //private: // is what this SHOULD be.. but that's impractical since the
 		   // VM is not an object that can be friended.
-		   
-	void arrayValue( WRValue* val ) const;
+
+	WRValue& singleValue() const; // return a single value for comparison
+	WRValue& deref() const; // if this value is a ARRAY_MEMBER, copy the referred value in
 
 	uint32_t getHashEx() const; // harder
 	uint32_t getHash() const // for easy cases
@@ -546,7 +681,7 @@ struct WRValue
 			return ui;
 		}
 
-		return type == WR_REF ? r->getHashEx() : getHashEx();
+		return getHashEx();
 	}
 
 	union // first 4 bytes (or 8 on a 64-bit system but.. what are you doing here?)
@@ -631,8 +766,10 @@ public:
 	operator float* () { return asFloat(); }
 	float* asFloat() { return (m_value->type == WR_FLOAT) ? &(m_value->f) : makeFloat(); }
 
+	// this will convert it to an array if it isn't one
 	WRValue& operator[] ( const int index ) { return *asArrayMember( index ); }
 	WRValue* asArrayMember( const int index );
+	int arraySize(); // returns -1 if this is not an array
 
 	// convert the value in-place and return a pointer to it
 	int32_t* makeInt();
@@ -801,6 +938,7 @@ public:
 #include "opcode_stream.h"
 #include "wrench_debug.h"
 #include "cc.h"
+#include "std_io_defs.h"
 #endif
 
 #endif

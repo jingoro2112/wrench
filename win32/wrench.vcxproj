@@ -12,9 +12,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\discrete_src\cc.cpp" />
+    <ClCompile Include="..\discrete_src\index.cpp" />
     <ClCompile Include="..\discrete_src\operations.cpp" />
     <ClCompile Include="..\discrete_src\std.cpp" />
     <ClCompile Include="..\discrete_src\std_io.cpp" />
+    <ClCompile Include="..\discrete_src\std_io_win32.cpp" />
     <ClCompile Include="..\discrete_src\std_math.cpp" />
     <ClCompile Include="..\discrete_src\std_msg.cpp" />
     <ClCompile Include="..\discrete_src\std_string.cpp" />
@@ -79,7 +81,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WRENCH_WIN32_FILE_IO;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>..\discrete_src</AdditionalIncludeDirectories>
       <BufferSecurityCheck>false</BufferSecurityCheck>
@@ -96,7 +98,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS,WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WRENCH_WIN32_FILE_IO;_CRT_SECURE_NO_WARNINGS,WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>..\discrete_src</AdditionalIncludeDirectories>
       <BufferSecurityCheck>false</BufferSecurityCheck>

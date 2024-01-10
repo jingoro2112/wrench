@@ -10,6 +10,7 @@ hello
 hello
 ~*/
 
+
 print(")");
 print(";");
 print("}");
@@ -48,7 +49,8 @@ if ( '\r' != 0x0d ) println("err a3");
 if ( '\n' != 0x0a ) println("err a4");
 if ( '' != 0 ) println("err a5");
 if ( 1 != 1 ) println("err one");
-
+if ( 0x13 != 19 ) println("err hex");
+if ( 023 != 19 ) println("err octal");
 
 // test crazy comment combinations
 

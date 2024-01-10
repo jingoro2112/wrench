@@ -61,31 +61,16 @@ int16_t wr_x16( const int16_t val )
 //------------------------------------------------------------------------------
 int32_t* WrenchValue::makeInt()
 {
-	wr_getValue[m_value->type]( &m_value ); // in case it is a reference or array value or something
-
-	if ( m_value->type == WR_FLOAT )
-	{
-		int i =(int)m_value->f;
-		m_value->i = i;
-	}
-	
+	m_value->i = m_value->asInt();
 	m_value->p2 = INIT_AS_INT;
-	
 	return &(m_value->i);
 }
 
 //------------------------------------------------------------------------------
 float* WrenchValue::makeFloat()
 {
-	wr_getValue[m_value->type]( &m_value );
-	if ( m_value->type == WR_INT )
-	{
-		float f = (float)m_value->i;
-		m_value->f = f;
-	}
-
+	m_value->f = m_value->asFloat();
 	m_value->p2 = INIT_AS_FLOAT;
-
 	return &(m_value->f);
 }
 
@@ -155,24 +140,24 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 	// CRC the code block, at least is it what the compiler intended?
 	const unsigned char* p = block + (blockSize - 4);
 	uint32_t hash = READ_32_FROM_PC( p );
-	if ( hash != wr_hash(block, (blockSize - 4)) )
+	if ( hash != wr_hash_read8(block, (blockSize - 4)) )
 	{
 		w->err = WR_ERR_bad_bytecode_CRC;
 		return 0;
 	}
 
 	int needed = sizeof(WRContext) // class
-				 + block[0] * sizeof(WRFunction) // local functions
-				 + block[1] * sizeof(WRValue);  // globals
+				 + READ_8_FROM_PC(block) * sizeof(WRFunction) // local functions
+				 + READ_8_FROM_PC(block+1) * sizeof(WRValue);  // globals
 				 
 	WRContext* C = (WRContext *)malloc( needed );
 
 	memset((char*)C, 0, needed);
 
-	C->globals = block[1];
+	C->globals = READ_8_FROM_PC(block+1);
 	C->w = w;
 
-	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + block[1] * sizeof(WRValue));
+	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + C->globals * sizeof(WRValue));
 
 	C->registry.init( 0, SV_VOID_HASH_TABLE );
 	C->registry.m_vNext = w->contextList;
@@ -267,28 +252,29 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 }
 
 //------------------------------------------------------------------------------
+void wr_registerLibraryConstant( WRState* w, const char* signature, const WRValue& value )
+{
+	if ( value.p2 == WR_INT || value.p2 == WR_FLOAT )
+	{
+		WRValue* C = w->globalRegistry.getAsRawValueHashTable( wr_hashStr(signature) );
+		C->p2 = value.p2 | INIT_AS_LIB_CONST;
+		C->p = value.p;
+	}
+}
+
+//------------------------------------------------------------------------------
 int WRValue::asInt() const
 {
 	if ( type == WR_INT )
 	{
 		return i;
 	}
-	else if ( type == WR_REF )
-	{
-		return r->asInt();
-	}
 	else if ( type == WR_FLOAT )
 	{
 		return (int)f;
 	}
-	else if ( IS_REFARRAY(xtype) )
-	{
-		WRValue temp;
-		arrayValue( &temp );
-		return temp.asInt();
-	}
 
-	return 0;
+	return singleValue().asInt();
 }
 
 //------------------------------------------------------------------------------
@@ -298,22 +284,12 @@ float WRValue::asFloat() const
 	{
 		return f;
 	}
-	else if ( type == WR_REF )
-	{
-		return r->asFloat();
-	}
 	else if ( type == WR_INT )
 	{
 		return (float)i;
 	}
-	else if ( IS_REFARRAY(xtype) )
-	{
-		WRValue temp;
-		arrayValue( &temp );
-		return temp.asFloat();
-	}
 
-	return 0;
+	return singleValue().asFloat();
 }
 
 //------------------------------------------------------------------------------
@@ -345,68 +321,71 @@ void WRValue::setFloat( const float val )
 }
 
 //------------------------------------------------------------------------------
+void* WRValue::array( unsigned int* len, char* arrayType ) const
+{
+	if ( type == WR_REF )
+	{
+		return r->array( len, arrayType );
+	}
+
+	if ( (xtype != WR_EX_ARRAY) || (va->m_type != SV_CHAR) )
+	{
+		return 0;
+	}
+
+	if ( arrayType )
+	{
+		*arrayType = va->m_type;
+	}
+
+	if ( len )
+	{
+		*len = va->m_size;
+	}
+
+	return va->m_data;
+}
+
+//------------------------------------------------------------------------------
+const char* WRValue::c_str( unsigned int* len ) const
+{
+	char arrayType = 0;
+	void* ret = array( len, &arrayType );
+	return (arrayType == SV_CHAR) ? (char*)ret : 0;
+}
+
+//------------------------------------------------------------------------------
 char* WRValue::asString( char* string, size_t len ) const
 {
-	switch( type )
+	if ( type == WR_REF )
 	{
-		case WR_FLOAT: { wr_ftoa( f, string, len ); break; }
-		case WR_INT: { wr_itoa( i, string, len ); break; }
-		case WR_REF: { return r->asString( string, len ); }
-		case WR_EX:
+		return r->asString( string, len );
+	}
+	else if ( type == WR_FLOAT )
+	{
+		wr_ftoa( f, string, len );
+	}
+	else if ( type == WR_INT )
+	{
+		wr_itoa( i, string, len );
+	}
+	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
+	{
+		unsigned int s = 0;
+		while( (string[s] = va->m_Cdata[s]) )
 		{
-			switch( xtype & EX_TYPE_MASK )
+			if ( s >= len )
 			{
-				case WR_EX_ARRAY:
-				{
-					if ( va->m_type == SV_CHAR )
-					{
-						unsigned int s = 0;
-						while( (string[s] = va->m_Cdata[s]) )
-						{
-							if ( s >= len )
-							{
-								string[s] = '\0';
-								break;
-							}
-							
-							++s;
-						}
-					}
-					break;
-				}
-
-				case WR_EX_REFARRAY:
-				{
-					if ( IS_EXARRAY_TYPE(r->xtype) )
-					{
-						WRValue temp;
-						wr_arrayToValue(this, &temp);
-						return temp.asString(string, len);
-					}
-					else if ( IS_RAW_ARRAY(r->xtype) )
-					{
-						uint32_t i = ARRAY_ELEMENT_FROM_P2(p2);
-						wr_itoa( (i < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[i]) : 0,
-								 string, 
-								 len);
-					}
-					else
-					{
-						return r->asString(string, len);
-					}
-
-					break;
-				}
-
-				case WR_EX_RAW_ARRAY:
-				case WR_EX_STRUCT:
-				case WR_EX_NONE:
-				{
-					string[0] = 0;
-					break;
-				}
+				string[s] = '\0';
+				break;
 			}
+
+			++s;
 		}
+	}
+	else
+	{
+		singleValue().asString( string, len ); // never give up, never surrender	
 	}
 
 	return string;
@@ -487,7 +466,7 @@ WRValue* wr_getGlobalRef( WRContext* context, const char* label )
 											  + context->globals * sizeof(uint32_t)))); // globals
 	
 	uint32_t hash = READ_32_FROM_PC( symbolsBlock + context->globals*sizeof(uint32_t) );
-	if ( hash != wr_hash( symbolsBlock, context->globals * sizeof(uint32_t) ) )
+	if ( hash != wr_hash_read8( symbolsBlock, context->globals * sizeof(uint32_t) ) )
 	{
 		return 0; // bad CRC
 	}
@@ -505,27 +484,30 @@ WRValue* wr_getGlobalRef( WRContext* context, const char* label )
 }
 
 //------------------------------------------------------------------------------
-void wr_makeInt( WRValue* val, int i )
+WRValue& wr_makeInt( WRValue* val, int i )
 {
 	val->p2 = INIT_AS_INT;
 	val->i = i;
+	return *val;
 }
 
 //------------------------------------------------------------------------------
-void wr_makeFloat( WRValue* val, float f )
+WRValue& wr_makeFloat( WRValue* val, float f )
 {
 	val->p2 = INIT_AS_FLOAT;
 	val->f = f;
+	return *val;
 }
 
 //------------------------------------------------------------------------------
-void wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len )
+WRValue& wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len )
 {
 	val->p2 = INIT_AS_ARRAY;
 	val->va = (WRGCObject*)malloc( sizeof(WRGCObject) );
 	val->va->init( len, SV_CHAR );
 	val->va->m_skipGC = 1;
 	memcpy( (unsigned char *)val->va->m_data, data, len );
+	return *val;
 }
 
 //------------------------------------------------------------------------------

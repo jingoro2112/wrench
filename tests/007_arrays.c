@@ -1,4 +1,32 @@
-/*~ ~*/
+/*~
+one
+two
+3
+6
+6
+7
+seven
+~*/
+
+ 
+hashTable = { 1:"one", 2:"two", 3:3, "str":6 };
+
+if ( hashTable[1] != "one" ) println("h0");
+println( hashTable[1] ); // "one"
+if ( hashTable[2] != "two" ) println("h1");
+println( hashTable[2] ); // "two"
+if ( hashTable[3] != 3 ) println("h2");
+println( hashTable[3] ); // 3
+
+println( hashTable["str"] ); // 6
+
+println( hashTable.str ); // 6
+
+hashTable.str = 7;
+println( hashTable.str ); // 6
+hashTable.str = "seven";
+println( hashTable.str ); // 6
+
 
 array = { 20 };
 if ( array[0] != 20 ) println("lk1");
@@ -9,7 +37,6 @@ for( a : array )
 	s = "allocate memory";
 	if ( a != 20 ) println("lk2");
 }
-
 
 ff[] = { 1.2, 1.3, 1.4, 1.5 };
 if ( ff[0] != 1.2 ) { println("ff1"); }
@@ -31,6 +58,7 @@ if ( a[0]._count != 11 ) println("bad size2");
 if ( a._count!= 501 ) println("bad size");
 
 
+
 for( gi=0; gi<500; ++gi )
 {
 	allocArray();
@@ -39,6 +67,9 @@ for( gi=0; gi<500; ++gi )
 {
 	allocArray();
 }
+
+
+
 
 b[40000];
 b[1] = 10;
@@ -88,7 +119,6 @@ if ( a[400] != 4 )
 
 ggi = 0;
 
-
 grow[1] = 10;
 grow[2] = 11;
 grow[3] = 12;
@@ -130,6 +160,7 @@ function allocArray()
 		println("F bad d1");
 	}
 
+
 	ab[500];
 	i = 2;
 	ab = { 0, 2, 3 };
@@ -137,11 +168,16 @@ function allocArray()
 	{
 		println("bad ab2");
 	}
+
+
+
+	
 	ab[401] = 41;
 	if ( ab[401] != 41 )
 	{
 		println("bad ab41");
 	}
+
 
 	ac[50];
 
@@ -149,6 +185,7 @@ function allocArray()
 	{
 		ac[i] = i+1;
 	}
+
 
 	for( i=0; i<50; ++i )
 	{
@@ -158,10 +195,12 @@ function allocArray()
 		}
 	}
 
+
 	for( i=0; i<50; ++i )
 	{
 		ac[i] = i+1;
 	}
+
 
 	for( i=0; i<50; ++i )
 	{
@@ -176,6 +215,7 @@ function allocArray()
 		}
 	}
 
+
 	for( i=0; i<50; ++i )
 	{
 		if ( ::a[i] != i+1 )
@@ -183,6 +223,7 @@ function allocArray()
 			println( "oops_GL" );
 		}
 	}
+
 
 	for( ::ggi=0; ::ggi<50; ++::ggi )
 	{

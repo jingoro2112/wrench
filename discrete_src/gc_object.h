@@ -38,8 +38,13 @@ public:
 
 	// the order here matters for data alignment
 	
-	char m_type;
-	char m_skipGC;
+#if (__cplusplus <= 199711L)
+	int8_t m_type; // carries the type
+#else
+	WRGCObjectType m_type;
+#endif
+
+	int8_t m_skipGC;
 	uint16_t m_mod;
 	uint32_t m_size;
 
@@ -180,10 +185,10 @@ tryAgain:
 	{
 		memset( (unsigned char*)this, 0, sizeof(WRGCObject) );
 
-		if ( (m_type = (char)type) == SV_VALUE )
+		if ( (m_type = type) == SV_VALUE )
 		{
 			m_size = size;
-			m_Cdata = (unsigned char*)malloc( m_size * sizeof(WRValue) );
+			m_Vdata = (WRValue*)malloc( m_size * sizeof(WRValue) );
 		}
 		else if ( m_type == SV_CHAR )
 		{

@@ -163,14 +163,20 @@ const char* sourceOrder[]=
 	"/opcode_stream.h",
 	"/cc.h",
 	"/wrench_debug.h",
+	"/std_io_defs.h",
 	"/cc.cpp",
 	"/vm.cpp",
 	"/utils.cpp",
 	"/wrench_client_debug.cpp",
 	"/wrench_server_debug.cpp",
 	"/operations.cpp",
+	"/index.cpp",
 	"/std.cpp",
 	"/std_io.cpp",
+	"/std_io_linux.cpp",
+	"/std_io_win32.cpp",
+	"/std_io_spiffs.cpp",
+	"/std_io_littlefs.cpp",
 	"/std_string.cpp",
 	"/std_math.cpp",
 	"/std_msg.cpp",
@@ -247,7 +253,9 @@ struct Test
 {
 	int i;
 };
-	
+
+WRState* gw = 0;
+
 //------------------------------------------------------------------------------
 int main( int argn, char* argv[] )
 {
@@ -294,21 +302,21 @@ int main( int argn, char* argv[] )
 		}
 
 
-		WRState* w = wr_newState( 128 );
-		wr_loadAllLibs(w);
-		wr_registerFunction( w, "println", println );
-		wr_registerFunction( w, "print", print );
+		gw = wr_newState( 128 );
+		wr_loadAllLibs(gw);
+		wr_registerFunction( gw, "println", println );
+		wr_registerFunction( gw, "print", print );
 
-		wr_run( w, out, outLen );
+		wr_run( gw, out, outLen );
 
 		delete[] out;
 
-		if ( wr_getLastError(w) )
+		if ( wr_getLastError(gw) )
 		{
-			printf( "err: %d\n", (int)wr_getLastError(w) );
+			printf( "err: %d\n", (int)wr_getLastError(gw) );
 		}
 
-		wr_destroyState( w );
+		wr_destroyState( gw );
 	}
 	else if ( command == "rb" && argn == 3 )
 	{
@@ -320,18 +328,18 @@ int main( int argn, char* argv[] )
 			return usage();
 		}
 
-		WRState* w = wr_newState( 128 );
-		wr_loadAllLibs(w);
-		wr_registerFunction( w, "println", println );
-		wr_registerFunction( w, "print", print );
+		gw = wr_newState( 128 );
+		wr_loadAllLibs(gw);
+		wr_registerFunction( gw, "println", println );
+		wr_registerFunction( gw, "print", print );
 
-		wr_run( w, (const unsigned char *)bytes.c_str(), bytes.size() );
-		if ( wr_getLastError( w ) )
+		wr_run( gw, (const unsigned char *)bytes.c_str(), bytes.size() );
+		if ( wr_getLastError( gw ) )
 		{
-			printf( "err: %d\n", (int)wr_getLastError(w) );
+			printf( "err: %d\n", (int)wr_getLastError(gw) );
 		}
 
-		wr_destroyState( w );
+		wr_destroyState( gw );
 	}
 	else if ( command == "c" || command == "ch" || command == "ca"
 			  || command == "cs" || command == "chs" || command == "cas" )
@@ -394,6 +402,10 @@ int main( int argn, char* argv[] )
 	}
 	else if ( argn == 4 && WRstr(argv[1]) == "release" )
 	{
+		WRstr version;
+		version.format( "%d.%d.%d", WRENCH_VERSION_MAJOR, WRENCH_VERSION_MINOR, WRENCH_VERSION_BUILD );
+		version.bufferToFile( "version.txt" );
+
 		WRstr out = "#include \"wrench.h\"\n";
 		WRstr name;		
 		WRstr read;
@@ -608,6 +620,7 @@ int runTests( int number )
 							expect.c_str(),
 							logger.c_str() );
 
+					/*
 					for( unsigned i=0; !(i>=expect.size() && i>=logger.size()); ++i )
 					{
 						if ( (i < expect.size()) && (i < logger.size()) )
@@ -630,6 +643,7 @@ int runTests( int number )
 							printf( "expected less [%c]\n", isspace(expect[i]) ? ' ' : expect[i] );
 						}
 					}
+					*/
 				}
 				else
 				{
@@ -774,13 +788,13 @@ int doDebug( const char* name )
 	wr_asciiDump( out, outLen, str );
 	printf( "%d:\n%s\n", outLen, str.c_str() );
 	
-	WRState* w = wr_newState();
-	wr_loadAllLibs(w);
-	wr_registerFunction( w, "println", println );
-	wr_registerFunction( w, "print", print );
+	gw = wr_newState();
+	wr_loadAllLibs(gw);
+	wr_registerFunction( gw, "println", println );
+	wr_registerFunction( gw, "print", print );
 
 	// the object running the code
-	WRDebugServerInterface server( w, out, outLen );
+	WRDebugServerInterface server( gw, out, outLen );
 
 	// the object commanding the code to be run
 	WRDebugClientInterface client( &server );

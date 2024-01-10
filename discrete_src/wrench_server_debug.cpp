@@ -81,7 +81,7 @@ WRContext* WRDebugServerInterface::loadBytes( const unsigned char* bytes, const 
 	if ( debugBlockOffset < m_context->bottomSize )
 	{
 		const unsigned char* data = m_context->bottom + (m_context->bottomSize - debugBlockOffset);
-		uint32_t hash = wr_hash( data, 24 );
+		uint32_t hash = wr_hash_read8( data, 24 );
 		
 		//flags = READ_32_FROM_PC( data );
 		data += 4; // flags
@@ -287,7 +287,10 @@ void WRDebugServerInterface::processPacket( WrenchPacket* packet )
 			{
 				reply->type = ReplySource;
 				reply->payload = (char *)malloc( m_embeddedSourceSize );
-				memcpy( reply->payload, m_embeddedSource, m_embeddedSourceSize );
+				for( int i=0; i<m_embeddedSourceSize; ++i )
+				{
+					reply->payload[i] = (unsigned char)READ_8_FROM_PC( m_embeddedSource + i );
+				}
 			}
 			
 			break;

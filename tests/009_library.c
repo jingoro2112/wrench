@@ -9,6 +9,7 @@
 ~*/
 
 
+if ( io::O_RDWR != io::O_RDWR ) println( "c_err" );
 
 msg::write( "key1", 10 );
 if ( msg::peek("test") ) println("m1");
