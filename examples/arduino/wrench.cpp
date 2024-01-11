@@ -9610,7 +9610,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		uint32_t hashLocInt;
 	};
 	
-	WRValue* register1;
+	WRValue* register1 = 0;
 	
 	WRValue* frameBase = 0;
 	WRState* w = context->w;
@@ -14342,11 +14342,6 @@ void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 		}
 		doIndexHash( V, target, I->getHash() );
 	}
-	
-	// the problem here is hash values are gigantic, if used as array indices will cause bad behavior.
-	// so need to check if our "single value" is the result of a hash
-//	WRValue& I = index->singleValue();
-//	wr_index[I.type<<2|WR_EX]( c, &I, value, target );
 }
 
 //------------------------------------------------------------------------------

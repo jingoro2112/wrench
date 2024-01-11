@@ -9610,8 +9610,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		uint32_t hashLocInt;
 	};
 	
-	WRValue* register1;
-	
+	WRValue* register1 = 0;
 	WRValue* frameBase = 0;
 	WRState* w = context->w;
 	const unsigned char* bottom = context->bottom;
