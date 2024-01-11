@@ -1,5 +1,5 @@
-#OPT ?= -O3
-OPT ?= -O0 -ggdb
+OPT ?= -O3
+#OPT ?= -O0 -ggdb
 
 PERF ?=
 
