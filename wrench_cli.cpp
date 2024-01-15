@@ -293,8 +293,21 @@ int main( int argn, char* argv[] )
 
 		unsigned char* out;
 		int outLen;
+
+
+
 		
+		//int err = wr_compile( infile, infile.size(), &out, &outLen, 0, WR_EMBED_DEBUG_CODE|WR_INCLUDE_GLOBALS|WR_EMBED_SOURCE_CODE );
+		//int err = wr_compile( infile, infile.size(), &out, &outLen, 0, WR_EMBED_DEBUG_CODE );
 		int err = wr_compile( infile, infile.size(), &out, &outLen );
+
+
+		WRstr str;
+		wr_asciiDump( out, outLen, str );
+		printf( "%d:\n%s\n", outLen, str.c_str() );
+
+
+		
 		if ( err )
 		{
 			printf( "compile error [%s]\n", g_errStrings[err] );
@@ -567,7 +580,15 @@ int runTests( int number )
 
 				printf( "test [%d][%s]: ", fileNumber, codeName.c_str() );
 
+
+
+				
+//				wr_compile( code, code.size(), &out, &outLen, errMsg, WR_EMBED_DEBUG_CODE|WR_INCLUDE_GLOBALS|WR_EMBED_SOURCE_CODE );
 				wr_compile( code, code.size(), &out, &outLen, errMsg );
+
+
+
+
 				
 				if ( err )
 				{

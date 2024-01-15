@@ -28,7 +28,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 3
 #define WRENCH_VERSION_MINOR 2
-#define WRENCH_VERSION_BUILD 3
+#define WRENCH_VERSION_BUILD 4
 
 /************************************************************************
 The compiler was not designed to be particularly memory or space efficient, for
@@ -37,7 +37,7 @@ only bytecode be executed. This flag allows the source code to be
 explicitly unavailable. Esp32-class processors have no trouble compiling
 on-the-fly but ATMega/SAMD21 are a no-go here.
 */
-//#define WRENCH_WITHOUT_COMPILER
+#define WRENCH_WITHOUT_COMPILER
 /***********************************************************************/
 
 /***********************************************************************
@@ -50,8 +50,8 @@ WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
 interpreter in favor of a giant switch(). This saves ~6k at the cost
 of a chunk of speed so only use it if you need to.
 */
-//#define WRENCH_COMPACT           // saves a lot, costs some speed
-//#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
+#define WRENCH_COMPACT           // saves a lot, costs some speed
+#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 /***********************************************************************/
 
 /***********************************************************************
@@ -87,6 +87,7 @@ it does add a small size penalty. If you are trying to cram wrench
 into the smallest possible space, this compiles out the debug functions.
 You can still run debug-enabled code, the VM will just skip it.
 */
+//!!!!!!!!!!!!! EXPERIMENTAL DO NOT USE
 //#define WRENCH_INCLUDE_DEBUG_CODE
 
 /************************************************************************
@@ -114,9 +115,9 @@ examples are in
 */
 //#define WRENCH_WIN32_FILE_IO
 //#define WRENCH_LINUX_FILE_IO
-//#define WRENCH_SPIFFS_FILE_IO
-//#define WRENCH_LITTLEFS_FILE_IO
-//#define WRENCH_CUSTOM_FILE_IO
+//#define WRENCH_SPIFFS_FILE_IO    // !!!!!!!!!!!! PRE-RELEASE DO NOT USE
+//#define WRENCH_LITTLEFS_FILE_IO  // !!!!!!!!!!!! PRE-RELEASE DO NOT USE
+//#define WRENCH_CUSTOM_FILE_IO    
 /***********************************************************************/
 
 #include <stdint.h>
@@ -569,12 +570,13 @@ enum WRExType : uint8_t
 
 #define EXPECTS_HASH_INDEX(X) ( ((X) == WR_EX_STRUCT) || ((X)==WR_EX_HASH_TABLE) )
 
-#if __arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__
+#if !defined(ARDUINO) && (__arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__ || __GNUC__)
 #include <memory.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <cstring>
 #include <cstdlib>
 #endif
 
@@ -619,6 +621,11 @@ enum WRExType : uint8_t
 							defined(_MIPSEL) || defined(__MIPSEL) || defined(__MIPSEL__) || \
 							defined(ARDUINO_LITTLE_ENDIAN)
 #define WRENCH_LITTLE_ENDIAN
+#elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+ #define WRENCH_LITTLE_ENDIAN
+#elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ #define WRENCH_BIG_ENDIAN
+
 #else
 
 // if you are reading this, please define the appropriate endian-ness
@@ -943,4 +950,3 @@ public:
 #endif
 
 #endif
-

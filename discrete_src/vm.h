@@ -171,7 +171,6 @@ typedef bool (*WRReturnSingleFunc)( WRValue* value );
 extern WRReturnSingleFunc wr_LogicalNot[4];
 
 void wr_assignToHashTable( WRContext* c, WRValue* index, WRValue* value, WRValue* table );
-void wr_removeFromHashTable( WRContext* c, WRValue* index, WRValue* table );
 
 extern WRReturnFunc wr_CompareEQ[16];
 

@@ -48,7 +48,7 @@ const char* c_opcodeName[] =
 	"AssignToObjectTableByOffset",
 
 	"AssignToHashTableAndPop",
-	"RemoveFromHashTable",
+	"Remove",
 	"HashEntryExists",
 
 	"PopOne",
@@ -348,21 +348,29 @@ void WRContext::mark( WRValue* s )
 
 	WRGCObject* sva = s->va;
 
-	if ( IS_SVA_VALUE_TYPE(sva) && !(sva->m_size & 0x40000000) )
+	if ( sva->m_type == SV_VALUE )
 	{
-		// this is a container
-
 		WRValue* top = sva->m_Vdata + sva->m_size;
-		sva->m_size |= 0x40000000;
+
 		for( WRValue* V = sva->m_Vdata; V<top; ++V )
 		{
 			mark( V );
 		}
 	}
-	else
+	else if ( sva->m_type == SV_HASH_TABLE )
 	{
-		sva->m_size |= 0x40000000;
+		for( uint32_t i=0; i<sva->m_mod; ++i )
+		{
+			if ( sva->m_hashTable[i] )
+			{
+				uint32_t item = i<<1;
+				mark( sva->m_Vdata + item++ );
+				mark( sva->m_Vdata + item );
+			}
+		}
 	}
+
+	sva->m_size |= 0x40000000;
 }
 
 //------------------------------------------------------------------------------
@@ -590,7 +598,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&AssignToObjectTableByOffset,
 
 		&&AssignToHashTableAndPop,
-		&&RemoveFromHashTable,
+		&&Remove,
 		&&HashEntryExists,
 
 		&&PopOne,
@@ -892,6 +900,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	{
 		// never used at the same time..save RAM!
 		WRValue* register2;
+		uint32_t sizeCheck;
 		int args;
 		uint32_t hash;
 		WRVoidFunc* voidFunc;
@@ -1286,7 +1295,7 @@ callFunction:
 					stackTop->va->m_ROMHashTable = table + 3;
 					stackTop->va->m_mod = READ_16_FROM_PC(table+1);
 
-					register0 = (WRValue*)(stackTop->va->m_data);
+					register0 = stackTop->va->m_Vdata;
 					register0->r = register1;
 					(register0++)->r2 = register2;
 
@@ -1309,19 +1318,15 @@ callFunction:
 			{
 				register1 = --stackTop;
 				register0 = (stackTop - 1);
-
-				if (!IS_EXARRAY_TYPE(register0->xtype) || READ_8_FROM_PC(pc) < register0->va->m_size)
+				sizeCheck = READ_8_FROM_PC(pc++);
+				if ( IS_EXARRAY_TYPE(register0->xtype) && (sizeCheck < register0->va->m_size) )
 				{
-					register0 = register0->va->m_Vdata + READ_8_FROM_PC(pc++);
+					register0 = register0->va->m_Vdata + sizeCheck;
 #ifdef WRENCH_COMPACT
 					goto doAssignToLocalAndPop;
 #else
 					wr_assign[(register0->type << 2) | register1->type](register0, register1);
 #endif
-				}
-				else
-				{
-					++pc;
 				}
 
 				CONTINUE;
@@ -1331,27 +1336,18 @@ callFunction:
 			{
 				register0 = --stackTop; // value
 				register1 = --stackTop; // index
-				
 				wr_assignToHashTable( context, register1, register0, stackTop - 1 );
 				CONTINUE;
 			}
 			
-			CASE(RemoveFromHashTable):
+			CASE(Remove):
 			{
 				hash = (--stackTop)->getHash();
-				if ( (register0 = stackTop - 1)->type == WR_REF )
-				{
-					register0 = register0->r;
-				}
-
+				register0 = &((stackTop - 1)->deref());
 				if ( register0->xtype == WR_EX_HASH_TABLE )
 				{
-					hash %= register0->va->m_mod;
-					register0->va->m_hashTable[ hash ] = 0;
-					hash <<= 1;
-					memset( (char*)(register0->va->m_Vdata + hash), 0, sizeof(WRValue)*2 );
+					register0->va->exists( hash, false, true );
 				}
-				
 				CONTINUE;	
 			}
 
@@ -1359,10 +1355,10 @@ callFunction:
 			{
 				register0 = --stackTop;
 				register1 = (stackTop - 1);
-				register2 = (register1->type == WR_REF) ? register1->r : register1;
-				register1->i = ((register2->xtype == WR_EX_HASH_TABLE
-								 && register2->va->m_hashTable[register0->getHash() % register2->va->m_mod])) ? 1 : 0;
+				register2 = &(register1->deref());
 				register1->p2 = INIT_AS_INT;
+				register1->i = ((register2->xtype == WR_EX_HASH_TABLE) && register2->va->exists(register0->getHash(), false, false)) ? 1 : 0;
+				
 				CONTINUE;	
 			}
 

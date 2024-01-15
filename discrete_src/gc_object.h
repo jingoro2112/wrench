@@ -72,113 +72,6 @@ public:
 		void* m_vNext;
 	};
 
-	//------------------------------------------------------------------------------
-	uint32_t growHash( const uint32_t hash, const uint16_t sizeHint =0 )
-	{
-		// there was a collision with the passed hash, grow until the
-		// collision disappears
-
-		uint16_t start = (sizeHint > m_mod) ? sizeHint : m_mod;
-		int t = 0;
-		for( ; c_primeTable[t] <= start ; ++t );
-
-		for(;;)
-		{
-tryAgain:
-			int newMod = c_primeTable[t];
-
-			int newSize;
-			if ( m_type == SV_VOID_HASH_TABLE )
-			{
-				newSize = newMod;
-			}
-			else
-			{
-				newSize = newMod << 1;
-			}
-
-			int total = newMod*sizeof(uint32_t) + newSize*sizeof(WRValue);
-			uint32_t* proposed = (uint32_t*)malloc( total );
-
-			memset( (unsigned char *)proposed, 0, total );
-
-			proposed[ hash % newMod ] = hash;
-
-			for( int h=0; h<m_mod; ++h )
-			{
-				int tries = 3;
-				int newEntry = m_hashTable[h] % newMod;
-				for(;;)
-				{
-					if ( proposed[newEntry] == 0 )
-					{
-						proposed[newEntry] = m_hashTable[h];
-						break;
-					}
-					else if ( tries-- )
-					{
-						newEntry = (newEntry + 1) % newMod;
-					}
-					else
-					{
-						free( proposed );
-						++t;
-						
-						assert( newMod != 49157 );
-						
-						goto tryAgain;
-					}
-				}
-			}
-
-			WRValue* newValues = (WRValue*)(proposed + newMod);
-			
-			uint32_t* oldHashTable = m_hashTable;
-			m_hashTable = proposed;
-			int oldMod = m_mod;
-			m_mod = newMod;
-			m_size = newSize;
-			
-			for( int v=0; v<oldMod; ++v )
-			{
-				if ( !oldHashTable[v] )
-				{
-					continue;
-				}
-
-				unsigned int newPos = getIndexOfHit( oldHashTable[v], true );
-
-				if ( m_type == SV_VOID_HASH_TABLE )
-				{
-					newValues[newPos] = m_Vdata[v];
-				}
-				else
-				{
-					// copy all the new hashes to their new locations
-					WRValue* to = newValues + (newPos<<1);
-					WRValue* from = m_Vdata + (v<<1);
-
-					// value
-					to->p2 = from->p2;
-					to->p = from->p;
-					from->p2 = INIT_AS_INT;
-
-					// key
-					++to;
-					++from;
-					to->p2 = from->p2;
-					to->p = from->p;
-					from->p2 = INIT_AS_INT;
-				}
-			}
-
-			free( oldHashTable );
-
-			m_Vdata = newValues;
-
-			return getIndexOfHit( hash, true );
-		}
-	}
 	
 	//------------------------------------------------------------------------------
 	void init( const unsigned int size, const WRGCObjectType type )
@@ -245,62 +138,35 @@ tryAgain:
 	}
 
 	//------------------------------------------------------------------------------
-	WRValue* exists( const uint32_t hash, const bool clear )
+	WRValue* exists( const uint32_t hash, bool rawValueHash, bool removeIfPresent )
 	{
-		uint32_t index = hash % m_mod;
-		if ( m_hashTable[index] == hash )
+		const uint32_t h = rawValueHash ? hash : hash ^ HASH_SCRAMBLER;
+		uint32_t index = h % m_mod;
+
+		if ( m_hashTable[index] != h )
 		{
-checkReturn:
-			if ( clear )
+			int tries = 3;
+			do
 			{
-				m_hashTable[index] = 0;
-			}
-			return m_Vdata + index;
+				index = (index + 1) % m_mod;
+				if ( m_hashTable[index] == h )
+				{
+					goto foundExists;
+				}
+				
+			} while( tries-- );
+
+			return 0;
 		}
 
-		int tries = 3;
-		do
+foundExists:
+
+		if ( removeIfPresent )
 		{
-			index = (index + 1) % m_mod;
-
-			if ( m_hashTable[index] == hash )
-			{
-				goto checkReturn;
-			}
-
-		} while( tries-- );
-
-		return 0;
-	}
-
-	//------------------------------------------------------------------------------
-	uint32_t getIndexOfHit( const uint32_t hash, const bool insert )
-	{
-		uint32_t index = hash % m_mod;
-		if ( m_hashTable[index] == hash )
-		{
-			return index; // immediate hits should be cheap
+			m_hashTable[index] = 0;
 		}
-
-		int tries = 3;
-		do
-		{
-			if ( insert && m_hashTable[index] == 0 )
-			{
-				m_hashTable[index] = hash;
-				return index;
-			}
-
-			index = (index + 1) % m_mod;
-
-			if ( m_hashTable[index] == hash )
-			{
-				return index;
-			}
-
-		} while( tries-- );
-
-		return insert ? growHash(hash) : getIndexOfHit( hash, true );
+		
+		return m_Vdata + index;
 	}
 
 	//------------------------------------------------------------------------------
@@ -335,6 +201,145 @@ checkReturn:
 	}
 
 private:
+
+	//------------------------------------------------------------------------------
+	uint32_t getIndexOfHit( const uint32_t hash, const bool insert )
+	{
+		uint32_t index = hash % m_mod;
+		if ( m_hashTable[index] == hash )
+		{
+			return index; // immediate hits should be cheap
+		}
+
+		int tries = 3;
+		do
+		{
+			if ( insert && m_hashTable[index] == 0 )
+			{
+				m_hashTable[index] = hash;
+				return index;
+			}
+
+			index = (index + 1) % m_mod;
+
+			if ( m_hashTable[index] == hash )
+			{
+				return index;
+			}
+
+		} while( tries-- );
+
+		return insert ? growHash(hash) : getIndexOfHit( hash, true );
+	}
+
+	//------------------------------------------------------------------------------
+	uint32_t growHash( const uint32_t hash, const uint16_t sizeHint =0 )
+	{
+		// there was a collision with the passed hash, grow until the
+		// collision disappears
+
+		uint16_t start = (sizeHint > m_mod) ? sizeHint : m_mod;
+		int t = 0;
+		for( ; c_primeTable[t] <= start ; ++t );
+
+		for(;;)
+		{
+tryAgain:
+			int newMod = c_primeTable[t];
+
+			int newSize;
+			if ( m_type == SV_VOID_HASH_TABLE )
+			{
+				newSize = newMod;
+			}
+			else
+			{
+				newSize = newMod << 1;
+			}
+
+			int total = newMod*sizeof(uint32_t) + newSize*sizeof(WRValue);
+			uint32_t* proposed = (uint32_t*)malloc( total );
+
+			memset( (unsigned char *)proposed, 0, total );
+
+			proposed[ hash % newMod ] = hash;
+
+			for( int h=0; h<m_mod; ++h )
+			{
+				int tries = 3;
+				int newEntry = m_hashTable[h] % newMod;
+				for(;;)
+				{
+					if ( proposed[newEntry] == 0 )
+					{
+						proposed[newEntry] = m_hashTable[h];
+						break;
+					}
+					else if ( tries-- )
+					{
+						newEntry = (newEntry + 1) % newMod;
+					}
+					else
+					{
+						free( proposed );
+						++t;
+
+						assert( newMod != 49157 );
+
+						goto tryAgain;
+					}
+				}
+			}
+
+			WRValue* newValues = (WRValue*)(proposed + newMod);
+
+			uint32_t* oldHashTable = m_hashTable;
+			m_hashTable = proposed;
+			int oldMod = m_mod;
+			m_mod = newMod;
+			m_size = newSize;
+
+			for( int v=0; v<oldMod; ++v )
+			{
+				if ( !oldHashTable[v] )
+				{
+					continue;
+				}
+
+				unsigned int newPos = getIndexOfHit( oldHashTable[v], true );
+
+				if ( m_type == SV_VOID_HASH_TABLE )
+				{
+					newValues[newPos] = m_Vdata[v];
+				}
+				else
+				{
+					// copy all the new hashes to their new locations
+					WRValue* to = newValues + (newPos<<1);
+					WRValue* from = m_Vdata + (v<<1);
+
+					// value
+					to->p2 = from->p2;
+					to->p = from->p;
+					from->p2 = INIT_AS_INT;
+
+					// key
+					++to;
+					++from;
+					to->p2 = from->p2;
+					to->p = from->p;
+					from->p2 = INIT_AS_INT;
+				}
+			}
+
+			free( oldHashTable );
+
+			m_Vdata = newValues;
+
+			return getIndexOfHit( hash, true );
+		}
+	}
+
 	WRGCObject& operator= ( WRGCObject& A );
 	WRGCObject(WRGCObject& A);
 };

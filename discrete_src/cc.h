@@ -112,7 +112,7 @@ const WROperation c_operations[] =
 
 	{ "._count", 2, O_CountOf,          true,  WR_OPER_POST, O_LAST },
 	{ "._hash",  2, O_HashOf,           true,  WR_OPER_POST, O_LAST },
-	{ "._remove", 2, O_RemoveFromHashTable, true,  WR_OPER_POST, O_LAST },
+	{ "._remove", 2, O_Remove,			true,  WR_OPER_POST, O_LAST },
 	{ "._exists", 2, O_HashEntryExists, true,  WR_OPER_POST, O_LAST },
 	
 	{ 0, 0, O_LAST, false, WR_OPER_PRE, O_LAST },

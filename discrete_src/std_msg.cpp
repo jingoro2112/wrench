@@ -35,13 +35,15 @@ void wr_mboxRead( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		WRValue* args = stackTop - argn;
 		int clear = (argn > 1) ? args[1].asInt() : 0;
-		WRValue* msg = c->w->globalRegistry.exists( args[0].getHash() ^ HASH_SCRAMBLER, clear );
+
+		WRValue* msg = c->w->globalRegistry.exists( args[0].getHash(), true, clear );
 
 		if ( msg )
 		{
 			*stackTop = *msg;
 			return;
 		}
+
 	}
 
 	stackTop->init();
@@ -56,7 +58,7 @@ void wr_mboxWrite( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		WRValue* args = stackTop - argn;
 
-		WRValue* msg = c->w->globalRegistry.getAsRawValueHashTable( args[0].getHash() ^ HASH_SCRAMBLER );
+		WRValue* msg = c->w->globalRegistry.getAsRawValueHashTable( args[0].getHash() );
 		msg->ui = args[1].getHash();
 		msg->p2 = INIT_AS_INT;
 	}
@@ -68,7 +70,7 @@ void wr_mboxClear( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn > 0 )
 	{
-		c->w->globalRegistry.exists((stackTop - argn)->getHash() ^ HASH_SCRAMBLER, true);
+		c->w->globalRegistry.exists((stackTop - argn)->getHash(), true, true );
 	}
 }
 
@@ -81,7 +83,7 @@ void wr_mboxPeek( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->init();
 
 	if ( argn > 0
-		 && c->w->globalRegistry.exists((stackTop - argn)->getHash() ^ HASH_SCRAMBLER, false) )
+		 && c->w->globalRegistry.exists((stackTop - argn)->getHash(), true, false) )
 	{
 		stackTop->i = 1;
 	}

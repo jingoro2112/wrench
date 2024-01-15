@@ -124,11 +124,7 @@ WRError wr_getLastError( WRState* w )
 	return (WRError)w->err;
 }
 
-WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize )
-{
-	return wr_newContext(w, block, blockSize);
-}
-
+//------------------------------------------------------------------------------
 bool wr_executeFunctionZero( WRContext* context )
 {
 	return wr_executeContext(context) ? true : false;

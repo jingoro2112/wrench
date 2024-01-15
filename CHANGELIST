@@ -1,3 +1,6 @@
+3.2.4 ----------------------------------------------------------------------------------
+- added directives to compile for the esp8266 toolchain
+
 3.2.3 ----------------------------------------------------------------------------------
 - wr_compile(...) now returns a WRError type
 - streamlined and fixed EX_REFARRAY resolution so it will properly recurse/descend

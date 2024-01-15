@@ -621,113 +621,6 @@ public:
 		void* m_vNext;
 	};
 
-	//------------------------------------------------------------------------------
-	uint32_t growHash( const uint32_t hash, const uint16_t sizeHint =0 )
-	{
-		// there was a collision with the passed hash, grow until the
-		// collision disappears
-
-		uint16_t start = (sizeHint > m_mod) ? sizeHint : m_mod;
-		int t = 0;
-		for( ; c_primeTable[t] <= start ; ++t );
-
-		for(;;)
-		{
-tryAgain:
-			int newMod = c_primeTable[t];
-
-			int newSize;
-			if ( m_type == SV_VOID_HASH_TABLE )
-			{
-				newSize = newMod;
-			}
-			else
-			{
-				newSize = newMod << 1;
-			}
-
-			int total = newMod*sizeof(uint32_t) + newSize*sizeof(WRValue);
-			uint32_t* proposed = (uint32_t*)malloc( total );
-
-			memset( (unsigned char *)proposed, 0, total );
-
-			proposed[ hash % newMod ] = hash;
-
-			for( int h=0; h<m_mod; ++h )
-			{
-				int tries = 3;
-				int newEntry = m_hashTable[h] % newMod;
-				for(;;)
-				{
-					if ( proposed[newEntry] == 0 )
-					{
-						proposed[newEntry] = m_hashTable[h];
-						break;
-					}
-					else if ( tries-- )
-					{
-						newEntry = (newEntry + 1) % newMod;
-					}
-					else
-					{
-						free( proposed );
-						++t;
-						
-						assert( newMod != 49157 );
-						
-						goto tryAgain;
-					}
-				}
-			}
-
-			WRValue* newValues = (WRValue*)(proposed + newMod);
-			
-			uint32_t* oldHashTable = m_hashTable;
-			m_hashTable = proposed;
-			int oldMod = m_mod;
-			m_mod = newMod;
-			m_size = newSize;
-			
-			for( int v=0; v<oldMod; ++v )
-			{
-				if ( !oldHashTable[v] )
-				{
-					continue;
-				}
-
-				unsigned int newPos = getIndexOfHit( oldHashTable[v], true );
-
-				if ( m_type == SV_VOID_HASH_TABLE )
-				{
-					newValues[newPos] = m_Vdata[v];
-				}
-				else
-				{
-					// copy all the new hashes to their new locations
-					WRValue* to = newValues + (newPos<<1);
-					WRValue* from = m_Vdata + (v<<1);
-
-					// value
-					to->p2 = from->p2;
-					to->p = from->p;
-					from->p2 = INIT_AS_INT;
-
-					// key
-					++to;
-					++from;
-					to->p2 = from->p2;
-					to->p = from->p;
-					from->p2 = INIT_AS_INT;
-				}
-			}
-
-			free( oldHashTable );
-
-			m_Vdata = newValues;
-
-			return getIndexOfHit( hash, true );
-		}
-	}
 	
 	//------------------------------------------------------------------------------
 	void init( const unsigned int size, const WRGCObjectType type )
@@ -794,62 +687,35 @@ tryAgain:
 	}
 
 	//------------------------------------------------------------------------------
-	WRValue* exists( const uint32_t hash, const bool clear )
+	WRValue* exists( const uint32_t hash, bool rawValueHash, bool removeIfPresent )
 	{
-		uint32_t index = hash % m_mod;
-		if ( m_hashTable[index] == hash )
+		const uint32_t h = rawValueHash ? hash : hash ^ HASH_SCRAMBLER;
+		uint32_t index = h % m_mod;
+
+		if ( m_hashTable[index] != h )
 		{
-checkReturn:
-			if ( clear )
+			int tries = 3;
+			do
 			{
-				m_hashTable[index] = 0;
-			}
-			return m_Vdata + index;
+				index = (index + 1) % m_mod;
+				if ( m_hashTable[index] == h )
+				{
+					goto foundExists;
+				}
+				
+			} while( tries-- );
+
+			return 0;
 		}
 
-		int tries = 3;
-		do
+foundExists:
+
+		if ( removeIfPresent )
 		{
-			index = (index + 1) % m_mod;
-
-			if ( m_hashTable[index] == hash )
-			{
-				goto checkReturn;
-			}
-
-		} while( tries-- );
-
-		return 0;
-	}
-
-	//------------------------------------------------------------------------------
-	uint32_t getIndexOfHit( const uint32_t hash, const bool insert )
-	{
-		uint32_t index = hash % m_mod;
-		if ( m_hashTable[index] == hash )
-		{
-			return index; // immediate hits should be cheap
+			m_hashTable[index] = 0;
 		}
-
-		int tries = 3;
-		do
-		{
-			if ( insert && m_hashTable[index] == 0 )
-			{
-				m_hashTable[index] = hash;
-				return index;
-			}
-
-			index = (index + 1) % m_mod;
-
-			if ( m_hashTable[index] == hash )
-			{
-				return index;
-			}
-
-		} while( tries-- );
-
-		return insert ? growHash(hash) : getIndexOfHit( hash, true );
+		
+		return m_Vdata + index;
 	}
 
 	//------------------------------------------------------------------------------
@@ -884,6 +750,145 @@ checkReturn:
 	}
 
 private:
+
+	//------------------------------------------------------------------------------
+	uint32_t getIndexOfHit( const uint32_t hash, const bool insert )
+	{
+		uint32_t index = hash % m_mod;
+		if ( m_hashTable[index] == hash )
+		{
+			return index; // immediate hits should be cheap
+		}
+
+		int tries = 3;
+		do
+		{
+			if ( insert && m_hashTable[index] == 0 )
+			{
+				m_hashTable[index] = hash;
+				return index;
+			}
+
+			index = (index + 1) % m_mod;
+
+			if ( m_hashTable[index] == hash )
+			{
+				return index;
+			}
+
+		} while( tries-- );
+
+		return insert ? growHash(hash) : getIndexOfHit( hash, true );
+	}
+
+	//------------------------------------------------------------------------------
+	uint32_t growHash( const uint32_t hash, const uint16_t sizeHint =0 )
+	{
+		// there was a collision with the passed hash, grow until the
+		// collision disappears
+
+		uint16_t start = (sizeHint > m_mod) ? sizeHint : m_mod;
+		int t = 0;
+		for( ; c_primeTable[t] <= start ; ++t );
+
+		for(;;)
+		{
+tryAgain:
+			int newMod = c_primeTable[t];
+
+			int newSize;
+			if ( m_type == SV_VOID_HASH_TABLE )
+			{
+				newSize = newMod;
+			}
+			else
+			{
+				newSize = newMod << 1;
+			}
+
+			int total = newMod*sizeof(uint32_t) + newSize*sizeof(WRValue);
+			uint32_t* proposed = (uint32_t*)malloc( total );
+
+			memset( (unsigned char *)proposed, 0, total );
+
+			proposed[ hash % newMod ] = hash;
+
+			for( int h=0; h<m_mod; ++h )
+			{
+				int tries = 3;
+				int newEntry = m_hashTable[h] % newMod;
+				for(;;)
+				{
+					if ( proposed[newEntry] == 0 )
+					{
+						proposed[newEntry] = m_hashTable[h];
+						break;
+					}
+					else if ( tries-- )
+					{
+						newEntry = (newEntry + 1) % newMod;
+					}
+					else
+					{
+						free( proposed );
+						++t;
+
+						assert( newMod != 49157 );
+
+						goto tryAgain;
+					}
+				}
+			}
+
+			WRValue* newValues = (WRValue*)(proposed + newMod);
+
+			uint32_t* oldHashTable = m_hashTable;
+			m_hashTable = proposed;
+			int oldMod = m_mod;
+			m_mod = newMod;
+			m_size = newSize;
+
+			for( int v=0; v<oldMod; ++v )
+			{
+				if ( !oldHashTable[v] )
+				{
+					continue;
+				}
+
+				unsigned int newPos = getIndexOfHit( oldHashTable[v], true );
+
+				if ( m_type == SV_VOID_HASH_TABLE )
+				{
+					newValues[newPos] = m_Vdata[v];
+				}
+				else
+				{
+					// copy all the new hashes to their new locations
+					WRValue* to = newValues + (newPos<<1);
+					WRValue* from = m_Vdata + (v<<1);
+
+					// value
+					to->p2 = from->p2;
+					to->p = from->p;
+					from->p2 = INIT_AS_INT;
+
+					// key
+					++to;
+					++from;
+					to->p2 = from->p2;
+					to->p = from->p;
+					from->p2 = INIT_AS_INT;
+				}
+			}
+
+			free( oldHashTable );
+
+			m_Vdata = newValues;
+
+			return getIndexOfHit( hash, true );
+		}
+	}
+
 	WRGCObject& operator= ( WRGCObject& A );
 	WRGCObject(WRGCObject& A);
 };
@@ -1062,7 +1067,6 @@ typedef bool (*WRReturnSingleFunc)( WRValue* value );
 extern WRReturnSingleFunc wr_LogicalNot[4];
 
 void wr_assignToHashTable( WRContext* c, WRValue* index, WRValue* value, WRValue* table );
-void wr_removeFromHashTable( WRContext* c, WRValue* index, WRValue* table );
 
 extern WRReturnFunc wr_CompareEQ[16];
 
@@ -1165,7 +1169,7 @@ enum WROpcode
 	O_AssignToObjectTableByOffset,
 
 	O_AssignToHashTableAndPop,
-	O_RemoveFromHashTable,
+	O_Remove,
 	O_HashEntryExists,
 
 	O_PopOne,
@@ -2061,7 +2065,7 @@ const WROperation c_operations[] =
 
 	{ "._count", 2, O_CountOf,          true,  WR_OPER_POST, O_LAST },
 	{ "._hash",  2, O_HashOf,           true,  WR_OPER_POST, O_LAST },
-	{ "._remove", 2, O_RemoveFromHashTable, true,  WR_OPER_POST, O_LAST },
+	{ "._remove", 2, O_Remove,			true,  WR_OPER_POST, O_LAST },
 	{ "._exists", 2, O_HashEntryExists, true,  WR_OPER_POST, O_LAST },
 	
 	{ 0, 0, O_LAST, false, WR_OPER_PRE, O_LAST },
@@ -2646,7 +2650,7 @@ void wr_ioPushConstants( WRState* w );
 
 #endif
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -2706,6 +2710,182 @@ const char* c_reserved[] =
 	""
 };
 
+
+//------------------------------------------------------------------------------
+WRError WRCompilationContext::compile( const char* source,
+									   const int size,
+									   unsigned char** out,
+									   int* outLen,
+									   char* errorMsg,
+									   const unsigned int compilerOptionFlags )
+{
+	m_source = source;
+	m_sourceLen = size;
+
+	*outLen = 0;
+	*out = 0;
+
+	m_lastLineNumber = 0;
+	m_lastCode = 0xFFFF;
+
+	m_pos = 0;
+	m_err = WR_ERR_None;
+	m_EOF = false;
+	m_parsingFor = false;
+	m_unitTop = 0;
+	m_foreachHash = 0;
+
+	m_units.setCount(1);
+
+	bool returnCalled = false;
+
+	m_loadedValue.p2 = INIT_AS_REF;
+
+	TokenBlock* unitBlocks = 0;
+
+	m_addDebugLineNumbers = compilerOptionFlags & WR_EMBED_DEBUG_CODE;
+	m_embedSourceCode = compilerOptionFlags & WR_EMBED_SOURCE_CODE;
+	m_embedGlobalSymbols = compilerOptionFlags != 0; // if any options are set, embed them
+
+	do
+	{
+		WRExpressionContext ex;
+		WRstr& token = ex.token;
+		WRValue& value = ex.value;
+		if ( !getToken(ex) )
+		{
+			break;
+		}
+#ifdef TEST_STRUCT_PARSING
+		if ( token == "struct" || token == "function" )
+		{
+			TokenBlock* block = new TokenBlock;
+			block->next = unitBlocks;
+			unitBlocks = block;
+
+			block->data += token;
+			block->data += " ";
+
+			if ( !readCurlyBlock(block->data) )
+			{
+				break;
+			}
+		}
+		else
+#endif
+		{
+			m_loadedToken = token;
+			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
+
+			parseStatement( 0, ';', returnCalled, O_GlobalStop );
+		}
+
+	} while ( !m_EOF && (m_err == WR_ERR_None) );
+
+	while ( unitBlocks )
+	{
+		m_EOF = false;
+		m_sourceLen = unitBlocks->data.size();
+		m_source = unitBlocks->data.c_str();
+		m_pos = 0;
+
+		while ( !m_EOF && (m_err == WR_ERR_None) )
+		{
+			WRExpressionContext ex;
+			WRstr& token = ex.token;
+			WRValue& value = ex.value;
+			if ( !getToken(ex) )
+			{
+				break;
+			}
+			m_loadedToken = token;
+			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
+			parseStatement( 0, ';', returnCalled, O_GlobalStop );
+		} 
+
+		TokenBlock* next = unitBlocks->next;
+		delete unitBlocks;
+		unitBlocks = next;
+	}
+
+	WRstr msg;
+
+	if ( m_err != WR_ERR_None )
+	{
+		int onChar;
+		int onLine;
+		WRstr line;
+
+		getSourcePosition( onLine, onChar, &line );
+
+		msg.format( "line:%d\n", onLine );
+		msg.appendFormat( "err:%d\n", m_err );
+		msg.appendFormat( "%-5d %s\n", onLine, line.c_str() );
+
+		for( int i=0; i<onChar; i++ )
+		{
+			msg.appendFormat(" ");
+		}
+
+		msg.appendFormat( "     ^\n" );
+
+		if ( errorMsg )
+		{
+			strncpy( errorMsg, msg, msg.size() + 1 );
+		}
+
+		printf( "%s", msg.c_str() );
+
+		return m_err;
+	}
+
+	if ( !returnCalled )
+	{
+		// pop final return value
+		pushOpcode( m_units[0].bytecode, O_LiteralZero );
+		pushOpcode( m_units[0].bytecode, O_GlobalStop );
+	}
+
+	pushOpcode( m_units[0].bytecode, O_Stop );
+
+	link( out, outLen, compilerOptionFlags );
+	if ( m_err )
+	{
+		printf( "link error [%d]\n", m_err );
+		if ( errorMsg )
+		{
+			snprintf( errorMsg, 32, "link error [%d]\n", m_err );
+		}
+
+	}
+
+	//	WRstr str;
+	//	wr_asciiDump( *out, *outLen, str );
+	//	printf( "%d:\n%s\n", *outLen, str.c_str() );
+
+	return m_err;
+}
+
+//------------------------------------------------------------------------------
+WRError wr_compile( const char* source,
+					const int size,
+					unsigned char** out,
+					int* outLen,
+					char* errMsg,
+					const unsigned int compilerOptionFlags )
+{
+	assert( sizeof(float) == 4 );
+	assert( sizeof(int) == 4 );
+	assert( sizeof(char) == 1 );
+	assert( O_LAST < 255 );
+
+	// create a compiler context that has all the necessary stuff so it's completely unloaded when complete
+	WRCompilationContext comp; 
+
+	return comp.compile( source, size, out, outLen, errMsg, compilerOptionFlags );
+}
 
 //------------------------------------------------------------------------------
 void streamDump( WROpcodeStream const& stream )
@@ -6607,7 +6787,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 
 				if ( depth > 0 && expression.context[depth - 1].operation
-					 && expression.context[depth - 1].operation->opcode == O_RemoveFromHashTable )
+					 && expression.context[depth - 1].operation->opcode == O_Remove )
 				{
 					--depth;
 					WRstr t( "._remove" );
@@ -8185,263 +8365,6 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 }
 
 //------------------------------------------------------------------------------
-void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigned int compilerOptionFlags )
-{
-	WROpcodeStream code;
-
-	code += (unsigned char)(m_units.count() - 1); // function count
-	code += (unsigned char)(m_units[0].bytecode.localSpace.count()); // globals count
-
-	unsigned char data[4];
-	unsigned int units = m_units.count();
-	unsigned int globals = m_units[0].bytecode.localSpace.count();
-
-	// register the function signatures
-	for( unsigned int u=1; u<m_units.count(); ++u )
-	{
-		uint32_t signature =  (u - 1) // index
-							  | ((m_units[u].bytecode.localSpace.count()) << 8) // local frame size
-							  | ((m_units[u].arguments << 16));
-		
-		code += O_LiteralInt32;
-		code.append( wr_pack32(signature, data), 4 );
-
-		code += O_LiteralInt32; // hash
-		code.append( wr_pack32(m_units[u].hash, data), 4 );
-
-		// offset placeholder
-		code += O_LiteralInt16;
-		m_units[u].offsetInBytecode = code.size();
-		code.append( data, 2 ); // placeholder, it doesn't matter
-
-		code += O_RegisterFunction;
-	}
-
-	// append all the unit code
-	for( unsigned int u=0; u<m_units.count(); ++u )
-	{
-		if ( u > 0 ) // for the non-zero unit fill location into the jump table
-		{
-			int16_t offset = code.size();
-			wr_pack16( offset, code.p_str(m_units[u].offsetInBytecode) );
-		}
-
-		// fill in relative jumps for the gotos
-		for( unsigned int g=0; g<m_units[u].bytecode.gotoSource.count(); ++g )
-		{
-			unsigned int j=0;
-			for( ; j<m_units[u].bytecode.jumpOffsetTargets.count(); j++ )
-			{
-				if ( m_units[u].bytecode.jumpOffsetTargets[j].gotoHash == m_units[u].bytecode.gotoSource[g].hash )
-				{
-					int diff = m_units[u].bytecode.jumpOffsetTargets[j].offset - m_units[u].bytecode.gotoSource[g].offset;
-					diff -= 2;
-					if ( (diff < 128) && (diff > -129) )
-					{
-						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset ) = (unsigned char)O_RelativeJump8;
-						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset + 1 ) = diff;
-					}
-					else
-					{
-						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset ) = (unsigned char)O_RelativeJump;
-						wr_pack16( diff, m_units[u].bytecode.all.p_str(m_units[u].bytecode.gotoSource[g].offset + 1) );
-					}
-
-					break;
-				}
-			}
-
-			if ( j >= m_units[u].bytecode.jumpOffsetTargets.count() )
-			{
-				m_err = WR_ERR_goto_target_not_found;
-				return;
-			}
-		}
-
-		int base = code.size();
-
-		code.append( m_units[u].bytecode.all, m_units[u].bytecode.all.size() );
-
-		// load new's
-		for( unsigned int f=0; f<m_units[u].bytecode.unitObjectSpace.count(); ++f )
-		{
-			WRNamespaceLookup& N = m_units[u].bytecode.unitObjectSpace[f];
-
-			for( unsigned int r=0; r<N.references.count(); ++r )
-			{
-				for( unsigned int u2 = 1; u2<m_units.count(); ++u2 )
-				{
-					if ( m_units[u2].hash != N.hash )
-					{
-						continue;
-					}
-
-					if ( m_units[u2].offsetOfLocalHashMap == 0 )
-					{
-						int size;
-						unsigned char* buf = 0;
-
-						createLocalHashMap( m_units[u2], &buf, &size );
-						
-						if ( size )
-						{
-							buf[0] = (unsigned char)(m_units[u2].bytecode.localSpace.count() - m_units[u2].arguments); // number of entries
-							buf[1] = m_units[u2].arguments;
-							m_units[u2].offsetOfLocalHashMap = code.size();
-							code.append( buf, size );
-						}
-
-						delete[] buf;
-					}
-
-					if ( m_units[u2].offsetOfLocalHashMap != 0 )
-					{
-						int index = base + N.references[r];
-
-						wr_pack16( m_units[u2].offsetOfLocalHashMap, code.p_str(index) );
-					}
-
-					break;
-				}
-			}
-		}
-		
-		// load function table
-		for( unsigned int x=0; x<m_units[u].bytecode.functionSpace.count(); ++x )
-		{
-			WRNamespaceLookup& N = m_units[u].bytecode.functionSpace[x];
-
-			for( unsigned int r=0; r<N.references.count(); ++r )
-			{
-				unsigned int u2 = 1;
-				int index = base + N.references[r];
-
-				for( ; u2<m_units.count(); ++u2 )
-				{
-					if ( m_units[u2].hash == N.hash )
-					{	
-						if ( m_addDebugLineNumbers )
-						{
-							uint16_t codeword = (uint16_t)FunctionCall | ((uint16_t)(u2 - 1) & PayloadMask);
-							wr_pack16( codeword, (unsigned char *)code.p_str(index - 2) );
-						}
-						
-						code[index] = O_CallFunctionByIndex;
-
-						code[index+2] = (char)(u2 - 1);
-
-						// r+1 = args
-						// r+2345 = hash
-						// r+6
-
-						if ( code[index+5] == O_PopOne || code[index + 6] == O_NewObjectTable)
-						{
-							code[index+3] = 3; // skip past the pop, or TO the NewObjectTable
-						}
-						else 
-						{
-							code[index+3] = 2; // skip by this push is seen
-							code[index+5] = O_PushIndexFunctionReturnValue;
-						}
-						
-						break;
-					}
-				}
-
-				if ( u2 >= m_units.count() )
-				{
-					if ( code[index+5] == O_PopOne )
-					{
-						code[index] = O_CallFunctionByHashAndPop;
-					}
-					else
-					{
-						code[index] = O_CallFunctionByHash;
-					}
-
-					wr_pack32( N.hash, code.p_str(index+2) );
-				}
-			}
-		}
-	}
-
-
-//	[h][#globals][bytes] / [global data|global data crc] / [CRC]
-// 	[h][#globals][bytes] |[[debug options + crc]|/ [global data|global data crc] / [CRC]
-
-	
-	if ( m_addDebugLineNumbers || m_embedSourceCode )
-	{
-		WRstr symbolBlock;
-		if ( m_addDebugLineNumbers || m_embedSourceCode )
-		{
-			symbolBlock.append( (char *)wr_pack16(globals, data), 2 ); // globals
-			symbolBlock.append( (char *)wr_pack16(units - 1, data), 2 ); // functions
-
-			data[0] = 0;
-			for( unsigned int g=0; g<globals; ++g )
-			{
-				symbolBlock.append( m_units[0].bytecode.localSpace[g].label );
-				symbolBlock.append( (char *)data, 1 ); 
-			}
-
-			for( unsigned int u=1; u<units; ++u )
-			{
-				data[1] = m_units[u].bytecode.localSpace.count();
-				symbolBlock.append( (char *)(data + 1), 1 );
-				for( unsigned int s=0; s<m_units[u].bytecode.localSpace.count(); ++s )
-				{
-					symbolBlock.append( m_units[u].bytecode.localSpace[s].label );
-					symbolBlock.append( (char *)data, 1 ); 
-				}
-			}
-		}
-
-
-		uint32_t sourceOffset = m_embedSourceCode ? code.size() : 0;
-		if ( m_embedSourceCode )
-		{
-			code.append( (const unsigned char*)m_source, m_sourceLen );
-		}
-
-		uint32_t symbolBlockOffset = code.size();
-		code.append( (unsigned char *)symbolBlock.c_str(), symbolBlock.size() );
-
-		uint32_t debugBlockBase = code.size();
-		
-		code.append( wr_pack32(compilerOptionFlags, data), 4 ); // 0: flags
-		code.append( wr_pack32(m_sourceLen, data), 4 ); // 4:source Length
-		code.append( wr_pack32(wr_hash(m_source, m_sourceLen), data), 4 ); // 8:source Hash
-		code.append( wr_pack32(sourceOffset, data), 4 ); // 12:source Offset
-		code.append( wr_pack32(symbolBlock.size(), data), 4 ); // 16:symbol Block Size
-		code.append( wr_pack32(symbolBlockOffset, data), 4 ); // 20:symbol Offset
-
-		code.append( wr_pack32(wr_hash(code.p_str(debugBlockBase), 24), data), 4 ); // 24
-	}
-	
-	if ( m_embedGlobalSymbols && globals )
-	{
-		uint32_t* globalsBlock = new uint32_t[globals + 1];
-		for( unsigned int s = 0; s<globals; ++s )
-		{
-			wr_pack32( m_units[0].bytecode.localSpace[s].hash, (unsigned char *)(globalsBlock + s) );
-		}
-
-		wr_pack32( wr_hash(globalsBlock, globals * sizeof(uint32_t)), (unsigned char *)(globalsBlock + globals) );
-		code.append( (unsigned char *)globalsBlock, (globals + 1) * sizeof(uint32_t) );
-		delete[] globalsBlock;
-	}
-
-	code.append( wr_pack32(wr_hash(code, code.size()), data), 4 );
-
-	if ( !m_err )
-	{
-		*outLen = code.size();
-		code.release( out );
-	}
-}
-
-//------------------------------------------------------------------------------
 bool WRCompilationContext::checkAsComment( char lead )
 {
 	char c;
@@ -8543,179 +8466,260 @@ bool WRCompilationContext::readCurlyBlock( WRstr& block )
 }
 
 //------------------------------------------------------------------------------
-WRError WRCompilationContext::compile( const char* source,
-									   const int size,
-									   unsigned char** out,
-									   int* outLen,
-									   char* errorMsg,
-									   const unsigned int compilerOptionFlags )
+void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigned int compilerOptionFlags )
 {
-	m_source = source;
-	m_sourceLen = size;
+	WROpcodeStream code;
 
-	*outLen = 0;
-	*out = 0;
+	code += (unsigned char)(m_units.count() - 1); // function count
+	code += (unsigned char)(m_units[0].bytecode.localSpace.count()); // globals count
 
-	m_lastLineNumber = 0;
-	m_lastCode = 0xFFFF;
-	
-	m_pos = 0;
-	m_err = WR_ERR_None;
-	m_EOF = false;
-	m_parsingFor = false;
-	m_unitTop = 0;
-	m_foreachHash = 0;
+	unsigned char data[4];
+	unsigned int units = m_units.count();
+	unsigned int globals = m_units[0].bytecode.localSpace.count();
 
-	m_units.setCount(1);
-	
-	bool returnCalled = false;
-
-	m_loadedValue.p2 = INIT_AS_REF;
-
-	TokenBlock* unitBlocks = 0;
-
-	m_addDebugLineNumbers = compilerOptionFlags & WR_EMBED_DEBUG_CODE;
-	m_embedSourceCode = compilerOptionFlags & WR_EMBED_SOURCE_CODE;
-	m_embedGlobalSymbols = compilerOptionFlags != 0; // if any options are set, embed them
-	
-	do
+	// register the function signatures
+	for( unsigned int u=1; u<m_units.count(); ++u )
 	{
-		WRExpressionContext ex;
-		WRstr& token = ex.token;
-		WRValue& value = ex.value;
-		if ( !getToken(ex) )
-		{
-			break;
-		}
-#ifdef TEST_STRUCT_PARSING
-		if ( token == "struct" || token == "function" )
-		{
-			TokenBlock* block = new TokenBlock;
-			block->next = unitBlocks;
-			unitBlocks = block;
+		uint32_t signature =  (u - 1) // index
+							  | ((m_units[u].bytecode.localSpace.count()) << 8) // local frame size
+							  | ((m_units[u].arguments << 16));
 
-			block->data += token;
-			block->data += " ";
-			
-			if ( !readCurlyBlock(block->data) )
+		code += O_LiteralInt32;
+		code.append( wr_pack32(signature, data), 4 );
+
+		code += O_LiteralInt32; // hash
+		code.append( wr_pack32(m_units[u].hash, data), 4 );
+
+		// offset placeholder
+		code += O_LiteralInt16;
+		m_units[u].offsetInBytecode = code.size();
+		code.append( data, 2 ); // placeholder, it doesn't matter
+
+		code += O_RegisterFunction;
+	}
+
+	// append all the unit code
+	for( unsigned int u=0; u<m_units.count(); ++u )
+	{
+		if ( u > 0 ) // for the non-zero unit fill location into the jump table
+		{
+			int16_t offset = code.size();
+			wr_pack16( offset, code.p_str(m_units[u].offsetInBytecode) );
+		}
+
+		// fill in relative jumps for the gotos
+		for( unsigned int g=0; g<m_units[u].bytecode.gotoSource.count(); ++g )
+		{
+			unsigned int j=0;
+			for( ; j<m_units[u].bytecode.jumpOffsetTargets.count(); j++ )
 			{
-				break;
+				if ( m_units[u].bytecode.jumpOffsetTargets[j].gotoHash == m_units[u].bytecode.gotoSource[g].hash )
+				{
+					int diff = m_units[u].bytecode.jumpOffsetTargets[j].offset - m_units[u].bytecode.gotoSource[g].offset;
+					diff -= 2;
+					if ( (diff < 128) && (diff > -129) )
+					{
+						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset ) = (unsigned char)O_RelativeJump8;
+						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset + 1 ) = diff;
+					}
+					else
+					{
+						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset ) = (unsigned char)O_RelativeJump;
+						wr_pack16( diff, m_units[u].bytecode.all.p_str(m_units[u].bytecode.gotoSource[g].offset + 1) );
+					}
+
+					break;
+				}
+			}
+
+			if ( j >= m_units[u].bytecode.jumpOffsetTargets.count() )
+			{
+				m_err = WR_ERR_goto_target_not_found;
+				return;
 			}
 		}
-		else
-#endif
+
+		int base = code.size();
+
+		code.append( m_units[u].bytecode.all, m_units[u].bytecode.all.size() );
+
+		// load new's
+		for( unsigned int f=0; f<m_units[u].bytecode.unitObjectSpace.count(); ++f )
 		{
-			m_loadedToken = token;
-			m_loadedValue = value;
-			m_loadedQuoted = m_quoted;
+			WRNamespaceLookup& N = m_units[u].bytecode.unitObjectSpace[f];
 
-			parseStatement( 0, ';', returnCalled, O_GlobalStop );
-		}
-
-	} while ( !m_EOF && (m_err == WR_ERR_None) );
-
-	while ( unitBlocks )
-	{
-		m_EOF = false;
-		m_sourceLen = unitBlocks->data.size();
-		m_source = unitBlocks->data.c_str();
-		m_pos = 0;
-		
-		while ( !m_EOF && (m_err == WR_ERR_None) )
-		{
-			WRExpressionContext ex;
-			WRstr& token = ex.token;
-			WRValue& value = ex.value;
-			if ( !getToken(ex) )
+			for( unsigned int r=0; r<N.references.count(); ++r )
 			{
-				break;
+				for( unsigned int u2 = 1; u2<m_units.count(); ++u2 )
+				{
+					if ( m_units[u2].hash != N.hash )
+					{
+						continue;
+					}
+
+					if ( m_units[u2].offsetOfLocalHashMap == 0 )
+					{
+						int size;
+						unsigned char* buf = 0;
+
+						createLocalHashMap( m_units[u2], &buf, &size );
+
+						if ( size )
+						{
+							buf[0] = (unsigned char)(m_units[u2].bytecode.localSpace.count() - m_units[u2].arguments); // number of entries
+							buf[1] = m_units[u2].arguments;
+							m_units[u2].offsetOfLocalHashMap = code.size();
+							code.append( buf, size );
+						}
+
+						delete[] buf;
+					}
+
+					if ( m_units[u2].offsetOfLocalHashMap != 0 )
+					{
+						int index = base + N.references[r];
+
+						wr_pack16( m_units[u2].offsetOfLocalHashMap, code.p_str(index) );
+					}
+
+					break;
+				}
 			}
-			m_loadedToken = token;
-			m_loadedValue = value;
-			m_loadedQuoted = m_quoted;
-			parseStatement( 0, ';', returnCalled, O_GlobalStop );
-		} 
-		
-		TokenBlock* next = unitBlocks->next;
-		delete unitBlocks;
-		unitBlocks = next;
-	}
-	
-	WRstr msg;
-
-	if ( m_err != WR_ERR_None )
-	{
-		int onChar;
-		int onLine;
-		WRstr line;
-		
-		getSourcePosition( onLine, onChar, &line );
-		
-		msg.format( "line:%d\n", onLine );
-		msg.appendFormat( "err:%d\n", m_err );
-		msg.appendFormat( "%-5d %s\n", onLine, line.c_str() );
-
-		for( int i=0; i<onChar; i++ )
-		{
-			msg.appendFormat(" ");
 		}
 
-		msg.appendFormat( "     ^\n" );
-
-		if ( errorMsg )
+		// load function table
+		for( unsigned int x=0; x<m_units[u].bytecode.functionSpace.count(); ++x )
 		{
-			strncpy( errorMsg, msg, msg.size() + 1 );
+			WRNamespaceLookup& N = m_units[u].bytecode.functionSpace[x];
+
+			for( unsigned int r=0; r<N.references.count(); ++r )
+			{
+				unsigned int u2 = 1;
+				int index = base + N.references[r];
+
+				for( ; u2<m_units.count(); ++u2 )
+				{
+					if ( m_units[u2].hash == N.hash )
+					{	
+						if ( m_addDebugLineNumbers )
+						{
+							uint16_t codeword = (uint16_t)FunctionCall | ((uint16_t)(u2 - 1) & PayloadMask);
+							wr_pack16( codeword, (unsigned char *)code.p_str(index - 2) );
+						}
+
+						code[index] = O_CallFunctionByIndex;
+
+						code[index+2] = (char)(u2 - 1);
+
+						// r+1 = args
+						// r+2345 = hash
+						// r+6
+
+						if ( code[index+5] == O_PopOne || code[index + 6] == O_NewObjectTable)
+						{
+							code[index+3] = 3; // skip past the pop, or TO the NewObjectTable
+						}
+						else 
+						{
+							code[index+3] = 2; // skip by this push is seen
+							code[index+5] = O_PushIndexFunctionReturnValue;
+						}
+
+						break;
+					}
+				}
+
+				if ( u2 >= m_units.count() )
+				{
+					if ( code[index+5] == O_PopOne )
+					{
+						code[index] = O_CallFunctionByHashAndPop;
+					}
+					else
+					{
+						code[index] = O_CallFunctionByHash;
+					}
+
+					wr_pack32( N.hash, code.p_str(index+2) );
+				}
+			}
+		}
+	}
+
+
+//	[h][#globals][bytes] / [global data|global data crc] / [CRC]
+// 	[h][#globals][bytes] |[[debug options + crc]|/ [global data|global data crc] / [CRC]
+
+
+	if ( m_addDebugLineNumbers || m_embedSourceCode )
+	{
+		WRstr symbolBlock;
+		if ( m_addDebugLineNumbers || m_embedSourceCode )
+		{
+			symbolBlock.append( (char *)wr_pack16(globals, data), 2 ); // globals
+			symbolBlock.append( (char *)wr_pack16(units - 1, data), 2 ); // functions
+
+			data[0] = 0;
+			for( unsigned int g=0; g<globals; ++g )
+			{
+				symbolBlock.append( m_units[0].bytecode.localSpace[g].label );
+				symbolBlock.append( (char *)data, 1 ); 
+			}
+
+			for( unsigned int u=1; u<units; ++u )
+			{
+				data[1] = m_units[u].bytecode.localSpace.count();
+				symbolBlock.append( (char *)(data + 1), 1 );
+				for( unsigned int s=0; s<m_units[u].bytecode.localSpace.count(); ++s )
+				{
+					symbolBlock.append( m_units[u].bytecode.localSpace[s].label );
+					symbolBlock.append( (char *)data, 1 ); 
+				}
+			}
 		}
 
-		printf( "%s", msg.c_str() );
-		
-		return m_err;
-	}
-	
-	if ( !returnCalled )
-	{
-		// pop final return value
-		pushOpcode( m_units[0].bytecode, O_LiteralZero );
-		pushOpcode( m_units[0].bytecode, O_GlobalStop );
-	}
 
-	pushOpcode( m_units[0].bytecode, O_Stop );
-	
-	link( out, outLen, compilerOptionFlags );
-	if ( m_err )
-	{
-		printf( "link error [%d]\n", m_err );
-		if ( errorMsg )
+		uint32_t sourceOffset = m_embedSourceCode ? code.size() : 0;
+		if ( m_embedSourceCode )
 		{
-			snprintf( errorMsg, 32, "link error [%d]\n", m_err );
+			code.append( (const unsigned char*)m_source, m_sourceLen );
 		}
 
+		uint32_t symbolBlockOffset = code.size();
+		code.append( (unsigned char *)symbolBlock.c_str(), symbolBlock.size() );
+
+		uint32_t debugBlockBase = code.size();
+
+		code.append( wr_pack32(compilerOptionFlags, data), 4 ); // 0: flags
+		code.append( wr_pack32(m_sourceLen, data), 4 ); // 4:source Length
+		code.append( wr_pack32(wr_hash(m_source, m_sourceLen), data), 4 ); // 8:source Hash
+		code.append( wr_pack32(sourceOffset, data), 4 ); // 12:source Offset
+		code.append( wr_pack32(symbolBlock.size(), data), 4 ); // 16:symbol Block Size
+		code.append( wr_pack32(symbolBlockOffset, data), 4 ); // 20:symbol Offset
+
+		code.append( wr_pack32(wr_hash(code.p_str(debugBlockBase), 24), data), 4 ); // 24
 	}
 
-//	WRstr str;
-//	wr_asciiDump( *out, *outLen, str );
-//	printf( "%d:\n%s\n", *outLen, str.c_str() );
+	if ( m_embedGlobalSymbols && globals )
+	{
+		uint32_t* globalsBlock = new uint32_t[globals + 1];
+		for( unsigned int s = 0; s<globals; ++s )
+		{
+			wr_pack32( m_units[0].bytecode.localSpace[s].hash, (unsigned char *)(globalsBlock + s) );
+		}
 
-	return m_err;
-}
+		wr_pack32( wr_hash(globalsBlock, globals * sizeof(uint32_t)), (unsigned char *)(globalsBlock + globals) );
+		code.append( (unsigned char *)globalsBlock, (globals + 1) * sizeof(uint32_t) );
+		delete[] globalsBlock;
+	}
 
-//------------------------------------------------------------------------------
-WRError wr_compile( const char* source,
-					const int size,
-					unsigned char** out,
-					int* outLen,
-					char* errMsg,
-					const unsigned int compilerOptionFlags )
-{
-	assert( sizeof(float) == 4 );
-	assert( sizeof(int) == 4 );
-	assert( sizeof(char) == 1 );
-	assert( O_LAST < 255 );
+	code.append( wr_pack32(wr_hash(code, code.size()), data), 4 );
 
-	// create a compiler context that has all the necessary stuff so it's completely unloaded when complete
-	WRCompilationContext comp; 
-
-	return comp.compile( source, size, out, outLen, errMsg, compilerOptionFlags );
+	if ( !m_err )
+	{
+		*outLen = code.size();
+		code.release( out );
+	}
 }
 
 #else // WRENCH_WITHOUT_COMPILER
@@ -8777,7 +8781,7 @@ const char* c_opcodeName[] =
 	"AssignToObjectTableByOffset",
 
 	"AssignToHashTableAndPop",
-	"RemoveFromHashTable",
+	"Remove",
 	"HashEntryExists",
 
 	"PopOne",
@@ -9077,21 +9081,29 @@ void WRContext::mark( WRValue* s )
 
 	WRGCObject* sva = s->va;
 
-	if ( IS_SVA_VALUE_TYPE(sva) && !(sva->m_size & 0x40000000) )
+	if ( sva->m_type == SV_VALUE )
 	{
-		// this is a container
-
 		WRValue* top = sva->m_Vdata + sva->m_size;
-		sva->m_size |= 0x40000000;
+
 		for( WRValue* V = sva->m_Vdata; V<top; ++V )
 		{
 			mark( V );
 		}
 	}
-	else
+	else if ( sva->m_type == SV_HASH_TABLE )
 	{
-		sva->m_size |= 0x40000000;
+		for( uint32_t i=0; i<sva->m_mod; ++i )
+		{
+			if ( sva->m_hashTable[i] )
+			{
+				uint32_t item = i<<1;
+				mark( sva->m_Vdata + item++ );
+				mark( sva->m_Vdata + item );
+			}
+		}
 	}
+
+	sva->m_size |= 0x40000000;
 }
 
 //------------------------------------------------------------------------------
@@ -9319,7 +9331,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&AssignToObjectTableByOffset,
 
 		&&AssignToHashTableAndPop,
-		&&RemoveFromHashTable,
+		&&Remove,
 		&&HashEntryExists,
 
 		&&PopOne,
@@ -9611,7 +9623,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	};
 	
 	WRValue* register1 = 0;
-	
 	WRValue* frameBase = 0;
 	WRState* w = context->w;
 	const unsigned char* bottom = context->bottom;
@@ -9622,6 +9633,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	{
 		// never used at the same time..save RAM!
 		WRValue* register2;
+		uint32_t sizeCheck;
 		int args;
 		uint32_t hash;
 		WRVoidFunc* voidFunc;
@@ -10016,7 +10028,7 @@ callFunction:
 					stackTop->va->m_ROMHashTable = table + 3;
 					stackTop->va->m_mod = READ_16_FROM_PC(table+1);
 
-					register0 = (WRValue*)(stackTop->va->m_data);
+					register0 = stackTop->va->m_Vdata;
 					register0->r = register1;
 					(register0++)->r2 = register2;
 
@@ -10039,19 +10051,15 @@ callFunction:
 			{
 				register1 = --stackTop;
 				register0 = (stackTop - 1);
-
-				if (!IS_EXARRAY_TYPE(register0->xtype) || READ_8_FROM_PC(pc) < register0->va->m_size)
+				sizeCheck = READ_8_FROM_PC(pc++);
+				if ( IS_EXARRAY_TYPE(register0->xtype) && (sizeCheck < register0->va->m_size) )
 				{
-					register0 = register0->va->m_Vdata + READ_8_FROM_PC(pc++);
+					register0 = register0->va->m_Vdata + sizeCheck;
 #ifdef WRENCH_COMPACT
 					goto doAssignToLocalAndPop;
 #else
 					wr_assign[(register0->type << 2) | register1->type](register0, register1);
 #endif
-				}
-				else
-				{
-					++pc;
 				}
 
 				CONTINUE;
@@ -10061,27 +10069,18 @@ callFunction:
 			{
 				register0 = --stackTop; // value
 				register1 = --stackTop; // index
-				
 				wr_assignToHashTable( context, register1, register0, stackTop - 1 );
 				CONTINUE;
 			}
 			
-			CASE(RemoveFromHashTable):
+			CASE(Remove):
 			{
 				hash = (--stackTop)->getHash();
-				if ( (register0 = stackTop - 1)->type == WR_REF )
-				{
-					register0 = register0->r;
-				}
-
+				register0 = &((stackTop - 1)->deref());
 				if ( register0->xtype == WR_EX_HASH_TABLE )
 				{
-					hash %= register0->va->m_mod;
-					register0->va->m_hashTable[ hash ] = 0;
-					hash <<= 1;
-					memset( (char*)(register0->va->m_Vdata + hash), 0, sizeof(WRValue)*2 );
+					register0->va->exists( hash, false, true );
 				}
-				
 				CONTINUE;	
 			}
 
@@ -10089,10 +10088,10 @@ callFunction:
 			{
 				register0 = --stackTop;
 				register1 = (stackTop - 1);
-				register2 = (register1->type == WR_REF) ? register1->r : register1;
-				register1->i = ((register2->xtype == WR_EX_HASH_TABLE
-								 && register2->va->m_hashTable[register0->getHash() % register2->va->m_mod])) ? 1 : 0;
+				register2 = &(register1->deref());
 				register1->p2 = INIT_AS_INT;
+				register1->i = ((register2->xtype == WR_EX_HASH_TABLE) && register2->va->exists(register0->getHash(), false, false)) ? 1 : 0;
+				
 				CONTINUE;	
 			}
 
@@ -12070,11 +12069,7 @@ WRError wr_getLastError( WRState* w )
 	return (WRError)w->err;
 }
 
-WRContext* wr_allocateNewScript( WRState* w, const unsigned char* block, const int blockSize )
-{
-	return wr_newContext(w, block, blockSize);
-}
-
+//------------------------------------------------------------------------------
 bool wr_executeFunctionZero( WRContext* context )
 {
 	return wr_executeContext(context) ? true : false;
@@ -16459,13 +16454,15 @@ void wr_mboxRead( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		WRValue* args = stackTop - argn;
 		int clear = (argn > 1) ? args[1].asInt() : 0;
-		WRValue* msg = c->w->globalRegistry.exists( args[0].getHash() ^ HASH_SCRAMBLER, clear );
+
+		WRValue* msg = c->w->globalRegistry.exists( args[0].getHash(), true, clear );
 
 		if ( msg )
 		{
 			*stackTop = *msg;
 			return;
 		}
+
 	}
 
 	stackTop->init();
@@ -16480,7 +16477,7 @@ void wr_mboxWrite( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		WRValue* args = stackTop - argn;
 
-		WRValue* msg = c->w->globalRegistry.getAsRawValueHashTable( args[0].getHash() ^ HASH_SCRAMBLER );
+		WRValue* msg = c->w->globalRegistry.getAsRawValueHashTable( args[0].getHash() );
 		msg->ui = args[1].getHash();
 		msg->p2 = INIT_AS_INT;
 	}
@@ -16492,7 +16489,7 @@ void wr_mboxClear( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn > 0 )
 	{
-		c->w->globalRegistry.exists((stackTop - argn)->getHash() ^ HASH_SCRAMBLER, true);
+		c->w->globalRegistry.exists((stackTop - argn)->getHash(), true, true );
 	}
 }
 
@@ -16505,7 +16502,7 @@ void wr_mboxPeek( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->init();
 
 	if ( argn > 0
-		 && c->w->globalRegistry.exists((stackTop - argn)->getHash() ^ HASH_SCRAMBLER, false) )
+		 && c->w->globalRegistry.exists((stackTop - argn)->getHash(), true, false) )
 	{
 		stackTop->i = 1;
 	}
@@ -16560,11 +16557,11 @@ void wr_function( WRValue* stackTop, const int argn, WRContext* c )
 		if ( name )
 		{
 			uint32_t hash = wr_hashStr( name );
-			if ( c->w->globalRegistry.exists(hash, false) )
+			if ( c->w->globalRegistry.exists(hash, true, false) )
 			{
 				stackTop->i = 1;
 			}
-			else if ( c->registry.exists(hash, false) )
+			else if ( c->registry.exists(hash, true, false) )
 			{
 				stackTop->i = 2;
 			}
@@ -16586,11 +16583,11 @@ void wr_gcPause( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_loadSysLib( WRState* w )
 {
-	wr_registerLibraryFunction( w, "sys::function", wr_function ); // read (true to clear, false to leave)
-	wr_registerLibraryFunction( w, "sys::gcPause", wr_gcPause ); // read (true to clear, false to leave)
+	wr_registerLibraryFunction( w, "sys::function", wr_function );
+	wr_registerLibraryFunction( w, "sys::gcPause", wr_gcPause );
 
-//	wr_registerLibraryFunction( w, "sys::serializeValue", wr_serializeValue ); // read (true to clear, false to leave)
-//	wr_registerLibraryFunction( w, "sys::deserializeValue", wr_deserializeValue ); // read (true to clear, false to leave)
+//	wr_registerLibraryFunction( w, "sys::serializeValue", wr_serializeValue );
+//	wr_registerLibraryFunction( w, "sys::deserializeValue", wr_deserializeValue );
 
 }/*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com

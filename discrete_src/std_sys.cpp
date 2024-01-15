@@ -39,11 +39,11 @@ void wr_function( WRValue* stackTop, const int argn, WRContext* c )
 		if ( name )
 		{
 			uint32_t hash = wr_hashStr( name );
-			if ( c->w->globalRegistry.exists(hash, false) )
+			if ( c->w->globalRegistry.exists(hash, true, false) )
 			{
 				stackTop->i = 1;
 			}
-			else if ( c->registry.exists(hash, false) )
+			else if ( c->registry.exists(hash, true, false) )
 			{
 				stackTop->i = 2;
 			}
@@ -65,10 +65,10 @@ void wr_gcPause( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_loadSysLib( WRState* w )
 {
-	wr_registerLibraryFunction( w, "sys::function", wr_function ); // read (true to clear, false to leave)
-	wr_registerLibraryFunction( w, "sys::gcPause", wr_gcPause ); // read (true to clear, false to leave)
+	wr_registerLibraryFunction( w, "sys::function", wr_function );
+	wr_registerLibraryFunction( w, "sys::gcPause", wr_gcPause );
 
-//	wr_registerLibraryFunction( w, "sys::serializeValue", wr_serializeValue ); // read (true to clear, false to leave)
-//	wr_registerLibraryFunction( w, "sys::deserializeValue", wr_deserializeValue ); // read (true to clear, false to leave)
+//	wr_registerLibraryFunction( w, "sys::serializeValue", wr_serializeValue );
+//	wr_registerLibraryFunction( w, "sys::deserializeValue", wr_deserializeValue );
 
 }

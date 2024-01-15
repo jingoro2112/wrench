@@ -1,5 +1,14 @@
 /*~ ~*/
 
+hashTest = { 1:10, 2:20, "three":30 };
+if ( hashTest._exists(1) != 1 ) println("x1");
+if ( hashTest._exists(3) != 0 ) println("x2");
+if ( hashTest._exists("three") != 1 ) println("x3");
+somethingH._remove( 1 );
+if ( somethingH._exists(1) != 0 ) println("x4");
+somethingH._remove( "three" );
+if ( somethingH._exists("three") != 0 ) println("x4");
+
 blue   = { 10:"one", 20:"two", "three":30 };
 green[]  = { 1, 2, blue };
 red[]    = { green, 3 };
