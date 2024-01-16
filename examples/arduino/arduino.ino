@@ -43,6 +43,8 @@ void setup()
 
 	delay( 2000 ); // wait for link to come up for sample
 
+	Serial.print( "\r\n" );
+
 	WRState* w = wr_newState(20); // create the state with 20 stack entries
 
 	wr_registerFunction( w, "print", print ); // bind a function

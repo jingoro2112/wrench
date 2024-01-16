@@ -1069,12 +1069,20 @@ uint32_t wr_hashStr_read8( const char* dat );
  #define wr_x32(P) P
  #define wr_x16(P) P
 
- #ifndef READ_32_FROM_PC
-  #define READ_32_FROM_PC(P) ((int32_t)(*(int32_t *)(P)))
- #endif
- #ifndef READ_16_FROM_PC
-  #define READ_16_FROM_PC(P) ((int16_t)(*(int16_t *)(P)))
- #endif
+#ifndef READ_32_FROM_PC
+  #ifdef WRENCH_UNALIGNED_READS
+    #define READ_32_FROM_PC(P) ((int32_t)(*(int32_t *)(P)))
+  #else
+    #define READ_32_FROM_PC(P) ((int32_t)((int32_t)*(P) | ((int32_t)*(P+1))<<8 | ((int32_t)*(P+2))<<16 | ((int32_t)*(P+3))<<24))
+  #endif
+#endif
+#ifndef READ_16_FROM_PC
+  #ifdef WRENCH_UNALIGNED_READS
+    #define READ_16_FROM_PC(P) ((int16_t)(*(int16_t *)(P)))
+  #else
+    #define READ_16_FROM_PC(P) ((int16_t)((int16_t)*(P) | ((int16_t)*(P+1))<<8))
+  #endif
+#endif
 
 #else
 

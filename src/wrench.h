@@ -28,7 +28,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 3
 #define WRENCH_VERSION_MINOR 2
-#define WRENCH_VERSION_BUILD 4
+#define WRENCH_VERSION_BUILD 5
 
 /************************************************************************
 The compiler was not designed to be particularly memory or space efficient, for
@@ -52,6 +52,15 @@ of a chunk of speed so only use it if you need to.
 */
 //#define WRENCH_COMPACT           // saves a lot, costs some speed
 //#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
+/***********************************************************************/
+
+/***********************************************************************
+Cause the interpreter to compile into the smallest program size
+Some architectures (most embedded) really don't like reading more than
+8 bits on an unaligned memory location. If your architecture
+allows it (all PC, Mac, linux, uniz etc..) this is a good optimization
+*/
+//#define WRENCH_UNALIGNED_READS
 /***********************************************************************/
 
 /***********************************************************************

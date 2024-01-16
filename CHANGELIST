@@ -1,3 +1,6 @@
+3.2.5 ----------------------------------------------------------------------------------
+- fixed esp/embedded issue with unaligned 16/32 bit reads
+
 3.2.4 ----------------------------------------------------------------------------------
 - added directives to compile for the esp8266 toolchain
 - integrated code optimization from Manfred, thank you!
