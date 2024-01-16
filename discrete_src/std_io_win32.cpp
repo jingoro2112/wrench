@@ -35,11 +35,12 @@ SOFTWARE.
 void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
+	char buf[256];
 
 	if ( argn == 1 )
 	{
 		WRValue* arg = stackTop - 1;
-		const char* fileName = arg->c_str();
+		const char* fileName = arg->asString(buf, 256);
 
 		struct _stat sbuf;
 		int ret = _stat( fileName, &sbuf );
@@ -67,19 +68,18 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
-
+	char buf[256];
 	if ( argn == 2 )
 	{
 		WRValue* arg1 = stackTop - 2;
 		unsigned int len;
-		char type;
-		const char* data = (char*)((stackTop - 1)->array(&len, &type));
-		if ( !data || type != SV_CHAR )
+		const char* data = (char*)((stackTop - 1)->array(&len));
+		if ( !data  )
 		{
 			return;
 		}
 
-		const char* fileName = arg1->c_str();
+		const char* fileName = arg1->asString(buf, 256);
 		if ( !fileName )
 		{
 			return;
@@ -106,7 +106,7 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		int in = fgetc( stdin );
 
-		if ( in == EOF || in == '\n' || in == '\r' || pos >= 256 )   //@review: this isn't right - need to check for cr and lf
+		if ( in == EOF || in == '\n' || in == '\r' || pos >= 256 )
 		{ 
 			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( pos, SV_CHAR, false );
@@ -135,17 +135,18 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
 	stackTop->i = -1;
+	char buf[256];
 
 	if ( argn )
 	{
 		WRValue* args = stackTop - argn;
 
-		const char* fileName = args->c_str();
+		const char* fileName = args->asString(buf, 256);
 		if ( fileName )
 		{
 			int mode = (argn > 1) ? args[1].asInt() : O_RDWR | O_CREAT;
 
-			stackTop->i = _open( fileName, mode );
+			stackTop->i = _open( fileName, mode | O_BINARY );
 		}
 	}
 }
@@ -249,14 +250,14 @@ void wr_ioPushConstants( WRState* w )
 {
 	WRValue C;
 	
-	wr_registerLibraryConstant( w, "io::O_RDONLY", wr_makeInt(&C, O_RDONLY) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::O_RDWR", wr_makeInt(&C, O_RDWR) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::O_APPEND", wr_makeInt(&C, O_APPEND) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::O_CREAT", wr_makeInt(&C, O_CREAT) ); //( fd, offset, whence );
+	wr_registerLibraryConstant( w, "io::O_RDONLY", wr_makeInt(&C, O_RDONLY) );
+	wr_registerLibraryConstant( w, "io::O_RDWR", wr_makeInt(&C, O_RDWR) );
+	wr_registerLibraryConstant( w, "io::O_APPEND", wr_makeInt(&C, O_APPEND) );
+	wr_registerLibraryConstant( w, "io::O_CREAT", wr_makeInt(&C, O_CREAT) );
 
-	wr_registerLibraryConstant( w, "io::SEEK_SET", wr_makeInt(&C, SEEK_SET) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::SEEK_CUR", wr_makeInt(&C, SEEK_CUR) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::SEEK_END", wr_makeInt(&C, SEEK_END) ); //( fd, offset, whence );
+	wr_registerLibraryConstant( w, "io::SEEK_SET", wr_makeInt(&C, SEEK_SET) );
+	wr_registerLibraryConstant( w, "io::SEEK_CUR", wr_makeInt(&C, SEEK_CUR) );
+	wr_registerLibraryConstant( w, "io::SEEK_END", wr_makeInt(&C, SEEK_END) );
 }
 
 #endif

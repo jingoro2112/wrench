@@ -105,8 +105,8 @@ const WROperation c_operations[] =
 	{ "@i",  3, O_ToInt,               false,  WR_OPER_PRE, O_LAST },
 	{ "@f",  3, O_ToFloat,             false,  WR_OPER_PRE, O_LAST },
 
-	{ "@[]",  2, O_Index,               true,  WR_OPER_POST, O_LAST },
-	{ "@init", 2, O_Index,              true,  WR_OPER_POST, O_LAST },
+	{ "@[]",  2, O_Index,		        true,  WR_OPER_POST, O_LAST },
+	{ "@init", 2, O_InitArray,          true,  WR_OPER_POST, O_LAST },
 
 	{ "@macroBegin", 0, O_LAST,         true,  WR_OPER_POST, O_LAST },
 
@@ -252,6 +252,7 @@ public:
 	WRarray<WRExpressionContext> context;
 
 	WRBytecode bytecode;
+	bool lValue;
 
 	//------------------------------------------------------------------------------
 	void pushToStack( int index )
@@ -329,6 +330,7 @@ public:
 	{
 		context.clear();
 		bytecode.clear();
+		lValue = false;
 	}
 };
 

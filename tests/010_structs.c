@@ -4,6 +4,12 @@
 
 z = 1;
 
+struct KWT
+{
+	s;
+	tok;
+};
+
 kwds2 = new KWT[]{};
 kwds3 = new KWT[]{{}};
 
@@ -27,11 +33,6 @@ if ( kwds[2].s != "asc" || kwds[2].tok != 2 ) println("kwd 2");
 if ( kwds[3].s != "bye" || kwds[3].tok[1] != 20 ) println("kwd 3");
 
 
-struct KWT
-{
-	s;
-	tok;
-};
 
 
 instance2 = new a

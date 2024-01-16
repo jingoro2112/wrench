@@ -290,4 +290,3 @@ void wr_loadMathLib( WRState* w )
 	wr_registerLibraryFunction( w, "math::deg2rad", wr_math_deg2rad );
 	wr_registerLibraryFunction( w, "math::rad2deg", wr_math_rad2deg );
 }
-

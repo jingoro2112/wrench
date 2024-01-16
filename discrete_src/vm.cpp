@@ -324,6 +324,7 @@ const char* c_opcodeName[] =
 	"ToFloat",
 
 	"LoadLibConstant",
+	"InitArray",
 
 	"DebugInfo",
 };
@@ -464,28 +465,31 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 		return false;
 	}
 
-	uint32_t element = ARRAY_ELEMENT_FROM_P2( iterator->p2 );
+	uint32_t element = DECODE_ARRAY_ELEMENT_FROM_P2( iterator->p2 );
 
 	if ( iterator->va->m_type == SV_HASH_TABLE )
 	{
-		for( ; element<iterator->va->m_mod && !iterator->va->m_hashTable[element]; ++element );
-
-		if ( element >= iterator->va->m_mod )
+		for( ; element<iterator->va->m_mod; ++element )
 		{
-			return false;
+			if ( iterator->va->m_hashTable[element] )
+			{
+				iterator->p2 = INIT_AS_ITERATOR | ENCODE_ARRAY_ELEMENT_TO_P2(element+1);
+				
+				element <<= 1;
+
+				value->p2 = INIT_AS_REF;
+				value->r = iterator->va->m_Vdata + element;
+				if ( key )
+				{
+					key->p2 = INIT_AS_REF;
+					key->r = iterator->va->m_Vdata + element + 1;
+				}
+				
+				return true;
+			}
 		}
-
-		ARRAY_ELEMENT_TO_P2( iterator->p2, (element + 1) );
-
-		element <<= 1;
-
-		value->p2 = INIT_AS_REF;
-		value->r = iterator->va->m_Vdata + element;
-		if ( key )
-		{
-			key->p2 = INIT_AS_REF;
-			key->r = iterator->va->m_Vdata + element + 1;
-		}
+		
+		return false;
 	}
 	else
 	{
@@ -503,7 +507,7 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 		value->p2 = INIT_AS_REF;
 		value->r = iterator->va->m_Vdata + element;
 
-		ARRAY_ELEMENT_TO_P2( iterator->p2, ++element );
+		iterator->p2 = INIT_AS_ITERATOR | ENCODE_ARRAY_ELEMENT_TO_P2(++element);
 	}
 
 	return true;
@@ -874,6 +878,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&ToFloat,
 
 		&&LoadLibConstant,
+		&&InitArray,
 
 		&&DebugInfo,
 	};
@@ -1039,6 +1044,15 @@ literalZero:
 				CONTINUE;
 			}
 
+			CASE(InitArray):
+			{
+				register0 = &(--stackTop)->singleValue();
+				register1 = &(stackTop - 1)->deref();
+				register1->p2 = INIT_AS_ARRAY;
+				register1->va = context->getSVA( register0->ui, SV_VALUE, true );
+				CONTINUE;
+			}
+
 			CASE(DebugInfo):
 			{
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
@@ -1185,15 +1199,7 @@ callFunction:
 
 			CASE(PushIndexFunctionReturnValue):
 			{
-				if ( (++register0)->type == WR_REF )
-				{
-					*(stackTop++) = *register0->r;
-				}
-				else
-				{ 
-					*(stackTop++) = *register0;
-				}
-
+				*(stackTop++) = (++register0)->deref();
 				CONTINUE;
 			}
 
@@ -1408,7 +1414,7 @@ callFunction:
 			{
 				*w->stack = *(register0 + 1);
 				context->stopLocation = pc - 1;
-				return w->stack;
+				return &(w->stack)->deref();
 			}
 
 			CASE(Dereference):

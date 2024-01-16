@@ -298,8 +298,8 @@ int main( int argn, char* argv[] )
 
 		
 		//int err = wr_compile( infile, infile.size(), &out, &outLen, 0, WR_EMBED_DEBUG_CODE|WR_INCLUDE_GLOBALS|WR_EMBED_SOURCE_CODE );
-		//int err = wr_compile( infile, infile.size(), &out, &outLen, 0, WR_EMBED_DEBUG_CODE );
-		int err = wr_compile( infile, infile.size(), &out, &outLen );
+		int err = wr_compile( infile, infile.size(), &out, &outLen, 0, WR_EMBED_DEBUG_CODE );
+		//int err = wr_compile( infile, infile.size(), &out, &outLen );
 
 
 		WRstr str;
@@ -623,6 +623,21 @@ int runTests( int number )
 					wr_makeString( context, &val, testString, 11 );
 					wr_callFunction( context, "stringCheck", &val, 1 );
 					wr_freeString( &val );
+
+					V = wr_callFunction( context, "arrayCheck" );
+					if ( V )
+					{
+						assert( V->isWrenchArray() );
+						char someString[256];
+						someString[0] = someString[0]; // kill warning
+						assert( WRstr(V->indexArray(context, 0, false)->asString(someString)) == "some string" );
+						assert( V->indexArray(context, 1, false)->asFloat() == 0.0f );
+						assert( V->indexArray(context, 2, false)->asInt() == 0);
+						assert( !V->indexArray(context, 3, false)  );
+						assert( V->indexArray(context, 3, true)->asInt() == 0  );
+					}
+
+					
 				}
 
 				if ( err )

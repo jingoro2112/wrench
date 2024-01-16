@@ -29,8 +29,6 @@ SOFTWARE.
 #define WR_COMPILER_LITERAL_STRING 0x10 
 #define KEYHOLE_OPTIMIZER
 
-//#define TEST_STRUCT_PARSING
-
 //------------------------------------------------------------------------------
 const char* c_reserved[] =
 {
@@ -58,7 +56,6 @@ const char* c_reserved[] =
 	"gc_pause",
 	""
 };
-
 
 //------------------------------------------------------------------------------
 WRError WRCompilationContext::compile( const char* source,
@@ -90,8 +87,6 @@ WRError WRCompilationContext::compile( const char* source,
 
 	m_loadedValue.p2 = INIT_AS_REF;
 
-	TokenBlock* unitBlocks = 0;
-
 	m_addDebugLineNumbers = compilerOptionFlags & WR_EMBED_DEBUG_CODE;
 	m_embedSourceCode = compilerOptionFlags & WR_EMBED_SOURCE_CODE;
 	m_embedGlobalSymbols = compilerOptionFlags != 0; // if any options are set, embed them
@@ -105,59 +100,14 @@ WRError WRCompilationContext::compile( const char* source,
 		{
 			break;
 		}
-#ifdef TEST_STRUCT_PARSING
-		if ( token == "struct" || token == "function" )
-		{
-			TokenBlock* block = new TokenBlock;
-			block->next = unitBlocks;
-			unitBlocks = block;
 
-			block->data += token;
-			block->data += " ";
-
-			if ( !readCurlyBlock(block->data) )
-			{
-				break;
-			}
-		}
-		else
-#endif
-		{
-			m_loadedToken = token;
-			m_loadedValue = value;
-			m_loadedQuoted = m_quoted;
-
-			parseStatement( 0, ';', returnCalled, O_GlobalStop );
-		}
+		m_loadedToken = token;
+		m_loadedValue = value;
+		m_loadedQuoted = m_quoted;
+		
+		parseStatement( 0, ';', returnCalled, O_GlobalStop );
 
 	} while ( !m_EOF && (m_err == WR_ERR_None) );
-
-	while ( unitBlocks )
-	{
-		m_EOF = false;
-		m_sourceLen = unitBlocks->data.size();
-		m_source = unitBlocks->data.c_str();
-		m_pos = 0;
-
-		while ( !m_EOF && (m_err == WR_ERR_None) )
-		{
-			WRExpressionContext ex;
-			WRstr& token = ex.token;
-			WRValue& value = ex.value;
-			if ( !getToken(ex) )
-			{
-				break;
-			}
-			m_loadedToken = token;
-			m_loadedValue = value;
-			m_loadedQuoted = m_quoted;
-			parseStatement( 0, ';', returnCalled, O_GlobalStop );
-		} 
-
-		TokenBlock* next = unitBlocks->next;
-		delete unitBlocks;
-		unitBlocks = next;
-	}
 
 	WRstr msg;
 
@@ -210,9 +160,9 @@ WRError WRCompilationContext::compile( const char* source,
 
 	}
 
-	//	WRstr str;
-	//	wr_asciiDump( *out, *outLen, str );
-	//	printf( "%d:\n%s\n", *outLen, str.c_str() );
+//	WRstr str;
+//	wr_asciiDump( *out, *outLen, str );
+//	printf( "%d:\n%s\n", *outLen, str.c_str() );
 
 	return m_err;
 }
@@ -2128,6 +2078,9 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 //------------------------------------------------------------------------------
 void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int param )
 {
+#ifndef WRENCH_INCLUDE_DEBUG_CODE
+	return;
+#endif  
 	if ( !m_addDebugLineNumbers )
 	{
 		return;
@@ -2149,10 +2102,9 @@ void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int p
 
 	pushOpcode( bytecode, O_DebugInfo );
 
-	uint16_t codeword = code | ((uint16_t)param & PayloadMask);
-	unsigned char data[2];
-
-	pushData( bytecode, wr_pack16(codeword, data), 2 );
+//	uint16_t codeword = code | ((uint16_t)param & PayloadMask);
+//	unsigned char data[2];
+//	pushData( bytecode, wr_pack16(codeword, data), 2 );
 }
 
 //------------------------------------------------------------------------------
@@ -3696,29 +3648,60 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					return 0;
 				}
 
-				if ( (expression.context[depth - 2].operation
-					  && expression.context[ depth - 2 ].operation->opcode != O_Index) )
+				if ( expression.context[depth - 2].operation
+					 && !((expression.context[ depth - 2 ].operation->opcode == O_InitArray)
+						  || (expression.context[ depth - 2 ].operation->opcode == O_Index))
+				   )
 				{
 					m_err = WR_ERR_unexpected_token;
 					return 0;
 				}
 
-				if ( depth == 3 )
+
+				if ( depth == 3
+					 && expression.context[0].type == EXTYPE_LABEL
+					 && expression.context[1].type == EXTYPE_OPERATION
+					 && expression.context[1].operation->opcode
+					 && expression.context[1].operation->opcode == O_Index
+					 && expression.context[1].bytecode.opcodes.size() > 0 )
 				{
-					// pop the element off and reload the actual table that was created
-					pushOpcode( expression.context[depth - 2].bytecode, O_PopOne );
-					if ( expression.context[depth-3].global )
+					unsigned int i = expression.context[1].bytecode.opcodes.size() - 1;
+					unsigned int a = expression.context[1].bytecode.all.size() - 1;
+					WROpcode o = (WROpcode)(expression.context[1].bytecode.opcodes[ i ]);
+
+					switch( o )
 					{
-						addGlobalSpaceLoad( expression.context[depth - 2].bytecode,
-											expression.context[depth - 3].token );
-					}
-					else
-					{
-						addLocalSpaceLoad( expression.context[depth - 2].bytecode,
-										expression.context[depth - 3].token );
+						case O_Index:
+						{
+							expression.context[1].bytecode.all[a] = O_InitArray;
+							break;
+						}
+
+						case O_IndexLiteral16:
+						{
+							if (a > 1)
+							{
+								expression.context[1].bytecode.all[a - 2] = O_LiteralInt16;
+								pushOpcode(expression.context[1].bytecode, O_InitArray);
+							}
+							break;
+						}
+
+						case O_IndexLiteral8:
+						{
+							if (a > 0)
+							{
+								expression.context[1].bytecode.all[a - 1] = O_LiteralInt8;
+								pushOpcode(expression.context[1].bytecode, O_InitArray);
+							}
+							break;
+						}
+
+						default: break;
 					}
 				}
 
+			
 				expression.context.remove( depth - 1, 1 ); // knock off the equate
 				depth--;
 
@@ -3737,8 +3720,8 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				WRstr& token2 = expression.context[depth].token;
 				WRValue& value2 = expression.context[depth].value;
 
-				uint16_t initializer = 0;
-
+				uint16_t initializer = -1;
+				
 				for(;;)
 				{
 					if ( !getToken(expression.context[depth]) )
@@ -3751,6 +3734,8 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					{
 						break;
 					}
+
+					++initializer;
 
 					WRExpression nex( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
 					nex.context[0].token = token2;
@@ -3819,15 +3804,52 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 						m_err = WR_ERR_unexpected_token;
 						return 0;
 					}
-
-					++initializer;
 				}
+
+				++initializer;
 
 				if ( !getToken(expression.context[depth]) || token2 != ";" )
 				{
 					m_err = WR_ERR_unexpected_EOF;
 					return 0;
 				}
+
+				if ( depth == 2 )
+				{
+					if ( expression.context[1].bytecode.all.size() == 3
+						 && expression.context[1].bytecode.all[0] == O_LiteralInt8
+						 && expression.context[1].bytecode.all[1] == 0
+						 && expression.context[1].bytecode.all[2] == O_InitArray )
+					{
+						if (initializer < 255)
+						{
+							*expression.context[1].bytecode.all.p_str(1) = (unsigned char)initializer;
+						}
+						else
+						{
+							expression.context[1].bytecode.all.clear();
+							expression.context[1].bytecode.opcodes.clear();
+							pushOpcode( expression.context[1].bytecode, O_LiteralInt16 );
+							unsigned char data[2];
+							expression.context[1].bytecode.all.append(wr_pack16((uint16_t)initializer, data), 2);
+							pushOpcode( expression.context[1].bytecode, O_InitArray );
+						}
+					}
+
+					// pop the element off and reload the actual table that was created
+					pushOpcode(expression.context[1].bytecode, O_PopOne);
+					if (expression.context[0].global)
+					{
+						addGlobalSpaceLoad( expression.context[1].bytecode,
+											expression.context[0].token);
+					}
+					else
+					{
+						addLocalSpaceLoad( expression.context[1].bytecode,
+										   expression.context[0].token);
+					}
+				}
+					 
 
 				m_loadedToken = token2;
 				m_loadedValue = value2;
@@ -4181,9 +4203,10 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				operatorFound( t, expression.context, depth );
 				expression.context[depth].bytecode.all.shave(1);
 				expression.context[depth].bytecode.opcodes.shave(1);
-				pushOpcode( expression.context[depth].bytecode, O_IndexLiteral8 );
-				unsigned char c = 16;
+				pushOpcode( expression.context[depth].bytecode, O_LiteralInt8 );
+				unsigned char c = 0;
 				pushData( expression.context[depth].bytecode, &c, 1 );
+				pushOpcode( expression.context[depth].bytecode, O_InitArray );
 			}
 			else 
 			{
@@ -4265,6 +4288,49 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 	}
 
 	expression.context.setCount( expression.context.count() - 1 );
+
+	if ( depth == 2
+		 && expression.lValue
+		 && expression.context[0].type == EXTYPE_LABEL
+		 && expression.context[1].type == EXTYPE_OPERATION
+		 && expression.context[1].operation->opcode == O_Index
+		 && expression.context[1].bytecode.opcodes.size() > 0 )
+	{
+		unsigned int i = expression.context[1].bytecode.opcodes.size() - 1;
+		unsigned int a = expression.context[1].bytecode.all.size() - 1;
+		WROpcode o = (WROpcode)(expression.context[1].bytecode.opcodes[ i ]);
+		
+		switch( o )
+		{
+			case O_Index:
+			{
+				expression.context[1].bytecode.all[a] = O_InitArray;
+				break;
+			}
+
+			case O_IndexLiteral16:
+			{
+				if (a > 1)
+				{
+					expression.context[1].bytecode.all[a - 2] = O_LiteralInt16;
+					pushOpcode(expression.context[1].bytecode, O_InitArray);
+				}
+				break;
+			}
+			
+			case O_IndexLiteral8:
+			{
+				if (a > 0)
+				{
+					expression.context[1].bytecode.all[a - 1] = O_LiteralInt8;
+					pushOpcode(expression.context[1].bytecode, O_InitArray);
+				}
+				break;
+			}
+
+			default: break;
+		}
+	}
 
 	resolveExpression( expression );
 
@@ -5661,6 +5727,7 @@ parseAsVar:
 			WRExpression nex( m_units[unitIndex].bytecode.localSpace, m_units[unitIndex].bytecode.isStructSpace );
 			nex.context[0].token = token;
 			nex.context[0].value = ex.value;
+			nex.lValue = true;
 			m_loadedToken = token;
 			m_loadedValue = ex.value;
 			m_loadedQuoted = m_quoted;

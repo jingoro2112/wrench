@@ -139,7 +139,7 @@ resetState:
 				buf[0] = 0;
 				if ( listPtr < argn )
 				{
-					ptr = args[listPtr].c_str();
+					ptr = (char *)args[listPtr].array();
 					if ( !ptr )
 					{
 						return 0;
@@ -326,8 +326,10 @@ void wr_format( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		WRValue* args = stackTop - argn;
 		char outbuf[512];
+		char inbuf[512];
+		args[0].asString( inbuf, 512 );
 		
-		int size = wr_sprintfEx( outbuf, args[0].c_str(), args + 1, argn - 1 );
+		int size = wr_sprintfEx( outbuf, inbuf, args + 1, argn - 1 );
 
 		stackTop->p2 = INIT_AS_ARRAY;
 		stackTop->va = c->getSVA( size, SV_CHAR, false );
@@ -368,7 +370,9 @@ void wr_sprintf( WRValue* stackTop, const int argn, WRContext* c )
 	}
 
 	char outbuf[512];
-	stackTop->i = wr_sprintfEx( outbuf, args[1].c_str(), args + 2, argn - 2 );
+	char inbuf[512];
+	args[1].asString(inbuf);
+	stackTop->i = wr_sprintfEx( outbuf, inbuf, args + 2, argn - 2 );
 
 	args[0].r->p2 = INIT_AS_ARRAY;
 	args[0].r->va = c->getSVA( stackTop->i, SV_CHAR, false );
@@ -423,8 +427,8 @@ void wr_mid( WRValue* stackTop, const int argn, WRContext* c )
 
 	WRValue* args = stackTop - argn;
 	unsigned int len;
-	const char* data = args[0].c_str( &len );
-
+	const char* data = (char *)(args[0].array(&len));
+	
 	if( !data || len <= 0 )
 	{
 		return;
@@ -459,7 +463,7 @@ void wr_strchr( WRValue* stackTop, const int argn, WRContext* c )
 
 	WRValue* args = stackTop - argn;
 
-	const char* str = args[0].c_str();
+	const char* str = (const char*)(args[0].array());
 	if ( !str )
 	{
 		return;
@@ -496,7 +500,7 @@ void wr_tol( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 2 )
 	{
-		const char* str = stackTop[-2].c_str();
+		const char* str = (const char*)stackTop[-2].array();
 		if ( str )
 		{
 			stackTop->i = (int)strtol( str, 0, stackTop[-1].asInt() );
@@ -504,7 +508,7 @@ void wr_tol( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	else if ( argn == 1 )
 	{
-		const char* str = stackTop[-1].c_str();
+		const char* str = (const char*)stackTop[-1].array();
 		if ( str )
 		{
 			stackTop->i = (int)strtol( str, 0, 10 );
@@ -525,8 +529,8 @@ void wr_concat( WRValue* stackTop, const int argn, WRContext* c )
 	WRValue* args = stackTop - argn;
 	unsigned int len1 = 0;
 	unsigned int len2 = 0;
-	const char* data1 = args[0].c_str( &len1 );
-	const char* data2 = args[1].c_str( &len2 );
+	const char* data1 = (const char*)args[0].array( &len1 );
+	const char* data2 = (const char*)args[1].array( &len2 );
 
 	if( !data1 || !data2 )
 	{
@@ -551,7 +555,11 @@ void wr_left( WRValue* stackTop, const int argn, WRContext* c )
 
 	WRValue* args = stackTop - argn;
 	unsigned int len = 0;
-	const char* data = args[0].c_str( &len );
+	const char* data = (const char*)args[0].array(&len );
+	if ( !data )
+	{
+		return;
+	}
 	unsigned int chars = args[1].asInt();
 
 	stackTop->p2 = INIT_AS_ARRAY;
@@ -577,7 +585,11 @@ void wr_right( WRValue* stackTop, const int argn, WRContext* c )
 
 	WRValue* args = stackTop - argn;
 	unsigned int len = 0;
-	const char* data = args[0].c_str( &len );
+	const char* data = (const char*)args[0].array(&len );
+	if ( !data )
+	{
+		return;
+	}
 	unsigned int chars = args[1].asInt();
 
 	if ( chars > len )
@@ -599,7 +611,7 @@ void wr_trimright( WRValue* stackTop, const int argn, WRContext* c )
 	const char* data;
 	int len = 0;
 	
-	if ( argn < 1 || ((data = args->c_str((unsigned int *)&len)) == 0) )
+	if ( argn < 1 || ((data = (const char*)args->array((unsigned int *)&len)) == 0) )
 	{
 		return;
 	}
@@ -622,7 +634,7 @@ void wr_trimleft( WRValue* stackTop, const int argn, WRContext* c )
 	const char* data;
 	unsigned int len = 0;
 	
-	if ( argn < 1 || ((data = args->c_str(&len)) == 0) )
+	if ( argn < 1 || ((data = (const char*)args->array(&len)) == 0) )
 	{
 		return;
 	}
@@ -643,8 +655,7 @@ void wr_trim( WRValue* stackTop, const int argn, WRContext* c )
 	WRValue* args = stackTop - argn;
 	const char* data;
 	int len = 0;
-
-	if ( argn < 1 || ((data = args->c_str((unsigned int*)&len)) == 0) )
+	if ( argn < 1 || ((data = (const char*)args->array((unsigned int*)&len)) == 0) )
 	{
 		return;
 	}
@@ -674,8 +685,8 @@ void wr_insert( WRValue* stackTop, const int argn, WRContext* c )
 	WRValue* args = stackTop - argn;
 	unsigned int len1 = 0;
 	unsigned int len2 = 0;
-	const char* data1 = args[0].c_str( &len1 );
-	const char* data2 = args[1].c_str( &len2 );
+	const char* data1 = (const char*)args[0].array( &len1 );
+	const char* data2 = (const char*)args[1].array( &len2 );
 
 	if( !data1 || !data2 )
 	{

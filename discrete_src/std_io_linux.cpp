@@ -38,7 +38,7 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 	if ( argn == 1 )
 	{
 		WRValue* arg = stackTop - 1;
-		const char* fileName = arg->c_str();
+		const char* fileName = (const char*)arg->array();
 
 		struct stat sbuf;
 		int ret = stat( fileName, &sbuf );
@@ -71,14 +71,13 @@ void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		WRValue* arg1 = stackTop - 2;
 		unsigned int len;
-		char type;
-		const char* data = (char*)((stackTop - 1)->array(&len, &type));
-		if ( !data || type != SV_CHAR )
+		const char* data = (char*)((stackTop - 1)->array(&len));
+		if ( !data )
 		{
 			return;
 		}
 
-		const char* fileName = arg1->c_str();
+		const char* fileName = (const char*)arg1->array();
 		if ( !fileName )
 		{
 			return;
@@ -105,7 +104,7 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		int in = fgetc( stdin );
 
-		if ( in == EOF || in == '\n' || in == '\r' || pos >= 256 )   //@review: this isn't right - need to check for cr and lf
+		if ( in == EOF || in == '\n' || in == '\r' || pos >= 256 )
 		{ 
 			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( pos, SV_CHAR, false );
@@ -141,7 +140,7 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		WRValue* args = stackTop - argn;
 
-		const char* fileName = args->c_str();
+		const char* fileName = (const char*)args->array();
 		if ( fileName )
 		{
 			int mode = (argn > 1) ? args[1].asInt() : O_RDWR | O_CREAT;

@@ -37,7 +37,7 @@ only bytecode be executed. This flag allows the source code to be
 explicitly unavailable. Esp32-class processors have no trouble compiling
 on-the-fly but ATMega/SAMD21 are a no-go here.
 */
-#define WRENCH_WITHOUT_COMPILER
+//#define WRENCH_WITHOUT_COMPILER
 /***********************************************************************/
 
 /***********************************************************************
@@ -50,8 +50,8 @@ WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
 interpreter in favor of a giant switch(). This saves ~6k at the cost
 of a chunk of speed so only use it if you need to.
 */
-#define WRENCH_COMPACT           // saves a lot, costs some speed
-#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
+//#define WRENCH_COMPACT           // saves a lot, costs some speed
+//#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 /***********************************************************************/
 
 /***********************************************************************
@@ -560,6 +560,15 @@ enum WRExType : uint8_t
 	WR_EX_HASH_TABLE = 0xE0,  // 1110
 };
 
+//------------------------------------------------------------------------------
+enum WRGCObjectType
+{
+	SV_VALUE = 0x01,           // 0001
+	SV_CHAR = 0x02,            // 0010
+	SV_HASH_TABLE = 0x03,      // 0011
+	SV_VOID_HASH_TABLE = 0x04, // 0100 // used for wrench internals, not meant for VM to care about
+};
+
 #define EX_TYPE_MASK   0xE0
 #define IS_DEBUG_BREAK(X) ((X)==WR_EX_DEBUG_BREAK)
 #define IS_ARRAY_MEMBER(X) (((X)&EX_TYPE_MASK)==WR_EX_ARRAY_MEMBER)
@@ -650,28 +659,25 @@ struct WRValue
 
 	bool isFloat() const { return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
 	bool isInt() const { return type == WR_INT || (type == WR_REF && r->type == WR_INT); }
-	bool isWrenchArray() const { return (type == WR_EX) && IS_ARRAY_MEMBER(xtype); }
-	bool isRawArray() const { return (type == WR_EX) && IS_RAW_ARRAY(xtype); }
-	bool isHashTable() const { return (type == WR_EX) && IS_HASH_TABLE(xtype); }
+	bool isWrenchArray() const { return IS_ARRAY(xtype); }
+	bool isRawArray() const { return IS_RAW_ARRAY(xtype); }
+	bool isHashTable() const { return IS_HASH_TABLE(xtype); }
 
-	// return the element called for, if it is the appropriate type
-	// create: if true, this value will be converted into the
-	// appropriate type and the element returned, this guarantees
-	// success
-	WRValue* indexWrenchArray( WRContext* context, const int index, const bool create );
-	WRValue* indexWrenchHash( WRContext* context, WRValue const& key, const bool create );
+	// if this value is an array, return [or create] the 'index'-th element
+	// if create is true and this value is NOT an array, it will be converted into one
+	WRValue* indexArray( WRContext* context, const uint32_t index, const bool create );
+	
+	// if this value is a hash table, return [or create] the 'index' hash item
+	// if create is true and this value is NOT a hash, it will be converted into one
+	WRValue* indexHash( WRContext* context, const uint32_t hash, const bool create );
 	
 	// string: must point to a buffer long enough to contain at least len bytes.
-	// the pointer will be passed back
-	char* asString( char* string, size_t len ) const;
+	// the pointer will be passed back, if maxLen is 0 (not
+	// reccomended) the string is assumed to be unlimited size
+	char* asString( char* string, size_t maxLen =0 ) const;
 
-	// return a raw pointer to the raw data array if this is one, otherwise
-	// return null
-	void* array( unsigned int* len, char* arrayType =0 ) const;
-
-	// if this is a character array, return a pointer to that array,
-	// which IS null-terminated
-	const char* c_str( unsigned int* len =0 ) const; 
+	// return a raw pointer to the data array if this is one, otherwise null
+	void* array( unsigned int* len =0, char arrayType =SV_CHAR ) const;
 
 	inline void init() { p = 0; p2 = 0; } // call upon first create or when you're sure no memory is hanging from one
 
@@ -950,3 +956,4 @@ public:
 #endif
 
 #endif
+

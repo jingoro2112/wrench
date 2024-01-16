@@ -25,6 +25,37 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
+void elementToTarget( const uint32_t index, WRValue* target, WRValue* value )
+{
+	if ( target == value )
+	{
+		// this happens when a return value is used directly instead of
+		// assigned to something. So it should be safe to just
+		// dereference the value and use it directly rather than
+		// preserve the whole array
+
+		if ( value->va->m_type == SV_VALUE )
+		{
+			*target = value->va->m_Vdata[ index ];
+		}
+		else if ( value->va->m_type == SV_CHAR )
+		{
+			target->p2 = INIT_AS_INT;
+			target->ui = value->va->m_Cdata[ index ];
+		}
+		else // SV_HASH_TABLE, right?
+		{
+			*target = *(WRValue *)value->va->get( index );
+		}
+	}
+	else
+	{
+		target->r = value;
+		target->p2 = INIT_AS_ARRAY_MEMBER | ENCODE_ARRAY_ELEMENT_TO_P2( index );
+	}
+}
+
+//------------------------------------------------------------------------------
 void doIndexHash( WRValue* value, WRValue* target, uint32_t hash )
 {
 	if ( value->xtype == WR_EX_HASH_TABLE ) 
@@ -58,16 +89,14 @@ void doIndexHash( WRValue* value, WRValue* target, uint32_t hash )
 void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
 	// all we know is the value is not an array, so make it one
-	target->r = value;
-	target->p2 = INIT_AS_ARRAY_MEMBER;
-	ARRAY_ELEMENT_TO_P2( target->p2, index->i );
-
 	value->p2 = INIT_AS_ARRAY;
-	value->va = c->getSVA( index->i+1, SV_VALUE, true );
+	value->va = c->getSVA( index->ui + 1, SV_VALUE, true );
+	
+	elementToTarget( index->ui, target, value );
 }
 
 //------------------------------------------------------------------------------
-void doIndex_I_E(WRContext* c, WRValue* index, WRValue* value, WRValue* target)
+void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
 	value = &value->deref();
 	
@@ -82,11 +111,6 @@ void doIndex_I_E(WRContext* c, WRValue* index, WRValue* value, WRValue* target)
 		{
 			goto boundsFailed;
 		}
-
-		target->r = value;
-		target->p2 = INIT_AS_ARRAY_MEMBER;
-		ARRAY_ELEMENT_TO_P2( target->p2, index->ui );
-		return;
 	}
 	else if ( !(value->xtype == WR_EX_ARRAY) )
 	{
@@ -118,9 +142,7 @@ boundsFailed:
 		value->va = wr_growValueArray( value->va, index->ui );
 	}
 
-	target->r = value;
-	target->p2 = INIT_AS_ARRAY_MEMBER;
-	ARRAY_ELEMENT_TO_P2( target->p2, index->ui );
+	elementToTarget( index->ui, target, value );
 }
 
 //------------------------------------------------------------------------------

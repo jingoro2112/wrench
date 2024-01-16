@@ -35,7 +35,7 @@ void wr_function( WRValue* stackTop, const int argn, WRContext* c )
 	if ( argn > 0 )
 	{
 		WRValue* arg = stackTop - argn;
-		const char* name = arg->c_str();
+		const char* name = (char *)(arg->array());
 		if ( name )
 		{
 			uint32_t hash = wr_hashStr( name );

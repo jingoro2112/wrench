@@ -33,14 +33,12 @@ WRGCObject* wr_growValueArray( WRGCObject* va, int newSize )
 	newArray->m_next = va->m_next;
 	va->m_next = newArray;
 
-	int size_of = sizeof(WRValue);
-	if ( va->m_type == SV_CHAR )
-	{
-		size_of = 1;
-	}
-	
-	memcpy( newArray->m_Cdata, va->m_Cdata, va->m_size * size_of );
-	memset( newArray->m_Cdata + (va->m_size*size_of), 0, (newArray->m_size - va->m_size) * size_of );
+	int size_of = (va->m_type == SV_CHAR) ? 1 : sizeof(WRValue);
+
+	int size_el = va->m_size * size_of;
+	memcpy(newArray->m_Cdata, va->m_Cdata, size_el);
+	memset(newArray->m_Cdata + size_el, 0, (newArray->m_size * size_of) - size_el);
+
 	return newArray;
 }
 
@@ -74,7 +72,7 @@ WRValue& WRValue::deref() const
 	}
 
 	temp.p2 = INIT_AS_INT;
-	unsigned int s = ARRAY_ELEMENT_FROM_P2(p2);
+	unsigned int s = DECODE_ARRAY_ELEMENT_FROM_P2(p2);
 
 	if ( IS_RAW_ARRAY(r->xtype) )
 	{
@@ -121,7 +119,7 @@ uint32_t WRValue::getHashEx() const
 //------------------------------------------------------------------------------
 void wr_valueToArray( const WRValue* array, WRValue* value )
 {
-	uint32_t s = ARRAY_ELEMENT_FROM_P2(array->p2);
+	uint32_t s = DECODE_ARRAY_ELEMENT_FROM_P2(array->p2);
 
 	if ( IS_RAW_ARRAY(array->r->xtype ) )
 	{
@@ -143,6 +141,7 @@ void wr_valueToArray( const WRValue* array, WRValue* value )
 		{
 			array->r->va = wr_growValueArray(array->r->va, s);
 		}
+
 		WRValue* V = array->r->va->m_Vdata + s;
 		wr_assign[(V->type<<2)+value->type](V, value);
 	}
@@ -301,7 +300,7 @@ void doAssign_E_E( WRValue* to, WRValue* from )
 			  && IS_EXARRAY_TYPE(to->r->xtype)
 			  && (to->r->va->m_type == SV_VALUE) )
 	{
-		unsigned int index = ARRAY_ELEMENT_FROM_P2(to->p2);
+		unsigned int index = DECODE_ARRAY_ELEMENT_FROM_P2(to->p2);
 
 		if ( index > to->r->va->m_size )
 		{
@@ -959,6 +958,9 @@ X_INT_BINARY( wr_OR, | );
 X_INT_BINARY( wr_XOR, ^ );
 
 
+
+
+
 #define X_COMPARE( NAME, OPERATION ) \
 bool NAME##_E_E( WRValue* to, WRValue* from )\
 {\
@@ -1009,7 +1011,81 @@ X_COMPARE( wr_CompareGT, > );
 X_COMPARE( wr_CompareLT, < );
 X_COMPARE( wr_LogicalAND, && );
 X_COMPARE( wr_LogicalOR, || );
-X_COMPARE( wr_CompareEQ, == );
+//X_COMPARE( wr_CompareEQ, == );
+
+
+
+bool wr_CompareEQ_E_E( WRValue* to, WRValue* from )
+{
+	WRValue V1 = to->singleValue();
+	WRValue& V2 = from->singleValue();
+	return wr_CompareEQ[(V1.type<<2)|V2.type](&V1, &V2);
+}
+bool wr_CompareEQ_E_I( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+	return wr_CompareEQ[(V.type<<2)|WR_INT](&V, from);
+}
+bool wr_CompareEQ_E_F( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+	return wr_CompareEQ[(V.type<<2)|WR_FLOAT](&V, from);
+}
+bool wr_CompareEQ_I_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	return wr_CompareEQ[(WR_INT<<2)|V.type](to, &V);
+}
+bool wr_CompareEQ_F_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	return wr_CompareEQ[(WR_FLOAT<<2)|V.type](to, &V);
+}
+
+bool wr_CompareEQ_R_E( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|WR_EX](to->r, from); }
+bool wr_CompareEQ_E_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_EX<<2)|from->r->type](to, from->r); }
+bool wr_CompareEQ_R_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|from->r->type](to->r, from->r); }
+bool wr_CompareEQ_R_I( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|WR_INT](to->r, from); }
+bool wr_CompareEQ_R_F( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|WR_FLOAT](to->r, from); }
+bool wr_CompareEQ_I_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_INT<<2)+from->r->type](to, from->r); }
+bool wr_CompareEQ_F_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_FLOAT<<2)+from->r->type](to, from->r); }
+bool wr_CompareEQ_I_I( WRValue* to, WRValue* from ) { return to->i == from->i; }
+bool wr_CompareEQ_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; return to->f == from->f; }
+bool wr_CompareEQ_F_I( WRValue* to, WRValue* from ) { return to->f == (float)from->i; }
+bool wr_CompareEQ_F_F( WRValue* to, WRValue* from ) { return to->f == from->f; }
+
+WRReturnFunc wr_CompareEQ[16] = 
+{
+	wr_CompareEQ_I_I, wr_CompareEQ_I_F, wr_CompareEQ_I_R, wr_CompareEQ_I_E,
+	wr_CompareEQ_F_I, wr_CompareEQ_F_F, wr_CompareEQ_F_R, wr_CompareEQ_F_E,
+	wr_CompareEQ_R_I, wr_CompareEQ_R_F, wr_CompareEQ_R_R, wr_CompareEQ_R_E,
+	wr_CompareEQ_E_I, wr_CompareEQ_E_F, wr_CompareEQ_E_R, wr_CompareEQ_E_E,
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 //------------------------------------------------------------------------------
 #define X_UNARY_PRE( NAME, OPERATION ) \

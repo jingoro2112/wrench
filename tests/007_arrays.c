@@ -8,6 +8,42 @@ two
 seven
 ~*/
 
+
+sb[5] = { 3 };
+sa[sb[0]] = {1};
+if(sa._count != 3 ) println("size 10");
+
+
+var s1000[1000];
+if ( s1000._count != 1000 ) println("size 0");
+var s10[10];
+if ( s10._count != 10 ) println("size 1");
+s2000[2000];
+if ( s2000._count != 2000 ) println("size 10");
+
+s3[10];
+if ( s3._count != 10 ) println("size 2");
+s1[] = {};
+if ( s1._count != 0 ) println("size 3");
+s2[] = {0};
+if ( s2._count != 1 ) println("size 4");
+s22[] = {0,1,2,3};
+if ( s22._count != 4 ) println("size 5");
+
+function retCheck()
+{
+	a[] = { 1, 2, 3 };
+	return a;
+}
+
+b = retCheck();
+if ( b[0] != 1 ) println( "rc 3");
+if ( b[1] != 2 ) println( "rc 4");
+if ( retCheck()[0] != 1 ) println("rc 0");
+if ( retCheck()[1] != 2 ) println("rc 1");
+if ( retCheck()[2] != 3 ) println("rc 2");
+
+
  
 hashTable = { 1:"one", 2:"two", 3:3, "str":6 };
 
@@ -54,8 +90,8 @@ if ( ff[1] != 7.8 ) { println("ff6"); }
 
 aa[10];
 a[500] = { aa };
-if ( a[0]._count != 11 ) println("bad size2");
-if ( a._count!= 501 ) println("bad size");
+if ( a[0]._count != 10 ) println("bad size 10");
+if ( a._count!= 500 ) println("bad size 500");
 
 
 
@@ -254,4 +290,5 @@ function leakCheck( value )
 	if ( value != 20 ) println("B1");
 	if ( 20 != value ) println("B2");
 }
+
 

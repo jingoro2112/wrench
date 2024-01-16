@@ -317,21 +317,60 @@ void WRValue::setFloat( const float val )
 }
 
 //------------------------------------------------------------------------------
-void* WRValue::array( unsigned int* len, char* arrayType ) const
+WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bool create )
+{
+	if ( !IS_ARRAY(xtype) || va->m_type != SV_VALUE )
+	{
+		if ( !create )
+		{
+			return 0;
+		}
+
+		p2 = INIT_AS_ARRAY;
+		va = context->getSVA( index + 1, SV_VALUE, true );
+	}
+
+	if ( index >= va->m_size )
+	{
+		if ( !create )
+		{
+			return 0;
+		}
+		
+		va = wr_growValueArray( va, index );
+	}
+
+	return va->m_Vdata + index;
+}
+
+//------------------------------------------------------------------------------
+WRValue* WRValue::indexHash( WRContext* context, const uint32_t hash, const bool create )
+{
+	if ( !IS_HASH_TABLE(xtype) )
+	{
+		if ( !create )
+		{
+			return 0;
+		}
+
+		p2 = INIT_AS_HASH_TABLE;
+		va = context->getSVA( 0, SV_HASH_TABLE, false );
+	}
+
+	return create ? (WRValue*)va->get(hash) : va->exists(hash, false, false);
+}
+
+//------------------------------------------------------------------------------
+void* WRValue::array( unsigned int* len, char arrayType ) const
 {
 	if ( type == WR_REF )
 	{
 		return r->array( len, arrayType );
 	}
 
-	if ( (xtype != WR_EX_ARRAY) || (va->m_type != SV_CHAR) )
+	if ( (xtype != WR_EX_ARRAY) || (va->m_type != arrayType) )
 	{
 		return 0;
-	}
-
-	if ( arrayType )
-	{
-		*arrayType = va->m_type;
 	}
 
 	if ( len )
@@ -343,34 +382,26 @@ void* WRValue::array( unsigned int* len, char* arrayType ) const
 }
 
 //------------------------------------------------------------------------------
-const char* WRValue::c_str( unsigned int* len ) const
-{
-	char arrayType = 0;
-	void* ret = array( len, &arrayType );
-	return (arrayType == SV_CHAR) ? (char*)ret : 0;
-}
-
-//------------------------------------------------------------------------------
-char* WRValue::asString( char* string, size_t len ) const
+char* WRValue::asString( char* string, size_t maxLen ) const
 {
 	if ( type == WR_REF )
 	{
-		return r->asString( string, len );
+		return r->asString( string, maxLen );
 	}
 	else if ( type == WR_FLOAT )
 	{
-		wr_ftoa( f, string, len );
+		wr_ftoa( f, string, maxLen );
 	}
 	else if ( type == WR_INT )
 	{
-		wr_itoa( i, string, len );
+		wr_itoa( i, string, maxLen );
 	}
 	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
 	{
 		unsigned int s = 0;
 		while( (string[s] = va->m_Cdata[s]) )
 		{
-			if ( s >= len )
+			if ( (s >= va->m_size) || (maxLen && (s >= maxLen)) )
 			{
 				string[s] = '\0';
 				break;
@@ -381,7 +412,7 @@ char* WRValue::asString( char* string, size_t len ) const
 	}
 	else
 	{
-		singleValue().asString( string, len ); // never give up, never surrender	
+		singleValue().asString( string, maxLen ); // never give up, never surrender	
 	}
 
 	return string;

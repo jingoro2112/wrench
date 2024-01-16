@@ -1,5 +1,7 @@
 /*~ ~*/
 
+res[] = { newState, newStateDuration, resetCollision };
+
 //------------------------------------------------------------------------------
 function userCheck( data )
 {
@@ -63,4 +65,15 @@ function stringCheck( string )
 	if ( string != "test string" ) println("bs1");
 	c = string;
 	if ( c != "test string" ) println ("bs2" );
+}
+
+function arrayCheck()
+{
+	newState = "some string";
+	newStateDuration = 0.0;
+	resetCollision = false;
+
+	res[] = { newState, newStateDuration, resetCollision };
+
+	return  res;
 }

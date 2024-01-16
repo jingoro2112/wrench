@@ -1,5 +1,9 @@
 3.2.4 ----------------------------------------------------------------------------------
 - added directives to compile for the esp8266 toolchain
+- integrated code optimization from Manfred, thank you!
+- force the open in std::open to use the O_BINARY flag in all cases
+- added array init function so they are exactly the right size
+- specifically added array-handling functionality for returned values
 
 3.2.3 ----------------------------------------------------------------------------------
 - wr_compile(...) now returns a WRError type

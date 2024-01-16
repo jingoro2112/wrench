@@ -381,17 +381,6 @@ private:
 
 WRGCObject* wr_growValueArray( WRGCObject* va, int newSize );
 
-//------------------------------------------------------------------------------
-enum WRGCObjectType
-{
-	SV_VALUE = 0x01,           // 0001
-	SV_CHAR = 0x02,            // 0010
-
-	SV_VOID_HASH_TABLE = 0x04, // 0100
-
-	SV_HASH_TABLE = 0x03,      // 0011
-};
-
 #define IS_SVA_VALUE_TYPE(V) ((V)->m_type & 0x1)
 
 #define INIT_AS_LIB_CONST    0xFFFFFFFC
@@ -408,8 +397,8 @@ enum WRGCObjectType
 #define INIT_AS_INT      WR_INT
 #define INIT_AS_FLOAT    WR_FLOAT
 
-#define ARRAY_ELEMENT_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
-#define ARRAY_ELEMENT_TO_P2(P,E) { (P)&=0xE00000FF; (P)|=(E<<8); }
+#define ENCODE_ARRAY_ELEMENT_TO_P2(E) ((E)<<8)
+#define DECODE_ARRAY_ELEMENT_FROM_P2(E) (((E)&0x1FFFFF00) >> 8)
 
 #define IS_EXARRAY_TYPE(P)   ((P)&0xC0)
 #define EX_RAW_ARRAY_SIZE_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)

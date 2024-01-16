@@ -33,18 +33,18 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 void wr_loadIOLib( WRState* w )
 {
-	wr_registerLibraryFunction( w, "io::readFile", wr_read_file );
-	wr_registerLibraryFunction( w, "io::writeFile", wr_write_file );
-	wr_registerLibraryFunction( w, "io::getline", wr_getline );
+	wr_registerLibraryFunction( w, "io::readFile", wr_read_file ); // open+read+close a file
+	wr_registerLibraryFunction( w, "io::writeFile", wr_write_file ); // open+write+close a file
+	wr_registerLibraryFunction( w, "io::getline", wr_getline ); // get a line of text from input
 	
-	wr_registerLibraryFunction( w, "time::clock", wr_clock );
-	wr_registerLibraryFunction( w, "time::ms", wr_clock );
+	wr_registerLibraryFunction( w, "time::clock", wr_clock ); // return current unix time
+	wr_registerLibraryFunction( w, "time::ms", wr_clock ); // return ms count that always increases
 
-	wr_registerLibraryFunction( w, "io::open", wr_ioOpen );//( name, flags, mode ); // returning a file handle 'fd' ; 'mode' specifies unix file access permissions.
-	wr_registerLibraryFunction( w, "io::close", wr_ioClose );//( fd );
-	wr_registerLibraryFunction( w, "io::read", wr_ioRead ); //( fd, data[], max_cnt );
-	wr_registerLibraryFunction( w, "io::write", wr_ioWrite );//( fd, data[], cnt ); // don't know whether it's possible to give an array (by reference) as arg so that it's writable - or not?
-	wr_registerLibraryFunction( w, "io::seek", wr_ioSeek ); //( fd, offset, whence );
+	wr_registerLibraryFunction( w, "io::open", wr_ioOpen ); //( name, flags, mode ); // returning a file handle 'fd' ; 'mode' specifies unix file access permissions.
+	wr_registerLibraryFunction( w, "io::close", wr_ioClose ); //( fd );
+	wr_registerLibraryFunction( w, "io::read", wr_ioRead );  //( fd, data, max_count );
+	wr_registerLibraryFunction( w, "io::write", wr_ioWrite ); //( fd, data, count );
+	wr_registerLibraryFunction( w, "io::seek", wr_ioSeek );  //( fd, offset, whence );
 
 	wr_ioPushConstants( w );
 }
