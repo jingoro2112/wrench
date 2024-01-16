@@ -12537,21 +12537,13 @@ WRValue& wr_makeFloat( WRValue* val, float f )
 }
 
 //------------------------------------------------------------------------------
-WRValue& wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len )
+WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, const int len )
 {
+	const int slen = len ? len : strlen(data);
 	val->p2 = INIT_AS_ARRAY;
-	val->va = (WRGCObject*)malloc( sizeof(WRGCObject) );
-	val->va->init( len, SV_CHAR );
-	val->va->m_skipGC = 1;
-	memcpy( (unsigned char *)val->va->m_data, data, len );
+	val->va = context->getSVA( slen, SV_CHAR, false );
+	memcpy( (unsigned char *)val->va->m_data, data, slen );
 	return *val;
-}
-
-//------------------------------------------------------------------------------
-void wr_freeString( WRValue* val )
-{
-	val->va->clear();
-	free( val->va );
 }
 
 //------------------------------------------------------------------------------
@@ -14247,81 +14239,7 @@ X_COMPARE( wr_CompareGT, > );
 X_COMPARE( wr_CompareLT, < );
 X_COMPARE( wr_LogicalAND, && );
 X_COMPARE( wr_LogicalOR, || );
-//X_COMPARE( wr_CompareEQ, == );
-
-
-
-bool wr_CompareEQ_E_E( WRValue* to, WRValue* from )
-{
-	WRValue V1 = to->singleValue();
-	WRValue& V2 = from->singleValue();
-	return wr_CompareEQ[(V1.type<<2)|V2.type](&V1, &V2);
-}
-bool wr_CompareEQ_E_I( WRValue* to, WRValue* from )
-{
-	WRValue& V = to->singleValue();
-	return wr_CompareEQ[(V.type<<2)|WR_INT](&V, from);
-}
-bool wr_CompareEQ_E_F( WRValue* to, WRValue* from )
-{
-	WRValue& V = to->singleValue();
-	return wr_CompareEQ[(V.type<<2)|WR_FLOAT](&V, from);
-}
-bool wr_CompareEQ_I_E( WRValue* to, WRValue* from )
-{
-	WRValue& V = from->singleValue();
-	return wr_CompareEQ[(WR_INT<<2)|V.type](to, &V);
-}
-bool wr_CompareEQ_F_E( WRValue* to, WRValue* from )
-{
-	WRValue& V = from->singleValue();
-	return wr_CompareEQ[(WR_FLOAT<<2)|V.type](to, &V);
-}
-
-bool wr_CompareEQ_R_E( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|WR_EX](to->r, from); }
-bool wr_CompareEQ_E_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_EX<<2)|from->r->type](to, from->r); }
-bool wr_CompareEQ_R_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|from->r->type](to->r, from->r); }
-bool wr_CompareEQ_R_I( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|WR_INT](to->r, from); }
-bool wr_CompareEQ_R_F( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|WR_FLOAT](to->r, from); }
-bool wr_CompareEQ_I_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_INT<<2)+from->r->type](to, from->r); }
-bool wr_CompareEQ_F_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_FLOAT<<2)+from->r->type](to, from->r); }
-bool wr_CompareEQ_I_I( WRValue* to, WRValue* from ) { return to->i == from->i; }
-bool wr_CompareEQ_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; return to->f == from->f; }
-bool wr_CompareEQ_F_I( WRValue* to, WRValue* from ) { return to->f == (float)from->i; }
-bool wr_CompareEQ_F_F( WRValue* to, WRValue* from ) { return to->f == from->f; }
-
-WRReturnFunc wr_CompareEQ[16] = 
-{
-	wr_CompareEQ_I_I, wr_CompareEQ_I_F, wr_CompareEQ_I_R, wr_CompareEQ_I_E,
-	wr_CompareEQ_F_I, wr_CompareEQ_F_F, wr_CompareEQ_F_R, wr_CompareEQ_F_E,
-	wr_CompareEQ_R_I, wr_CompareEQ_R_F, wr_CompareEQ_R_R, wr_CompareEQ_R_E,
-	wr_CompareEQ_E_I, wr_CompareEQ_E_F, wr_CompareEQ_E_R, wr_CompareEQ_E_E,
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+X_COMPARE( wr_CompareEQ, == );
 
 //------------------------------------------------------------------------------
 #define X_UNARY_PRE( NAME, OPERATION ) \

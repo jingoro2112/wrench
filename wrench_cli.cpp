@@ -618,11 +618,13 @@ int runTests( int number )
 						assert( someArray[1] == 'c' );
 					}
 
-					unsigned char testString[12] = "test string";
+					char testString[12] = "test string";
 					WRValue val;
 					wr_makeString( context, &val, testString, 11 );
 					wr_callFunction( context, "stringCheck", &val, 1 );
-					wr_freeString( &val );
+					wr_callFunction( context, "stringCheck", &val, 1 );
+					wr_callFunction( context, "stringCheck", &val, 1 );
+					wr_callFunction( context, "stringCheck", &val, 1 );
 
 					V = wr_callFunction( context, "arrayCheck" );
 					if ( V )
@@ -637,7 +639,9 @@ int runTests( int number )
 						assert( V->indexArray(context, 3, true)->asInt() == 0  );
 					}
 
-					
+					WRValue s;
+					wr_makeString( context, &s, "test string" );
+					wr_callFunction( context, "stringCheck", &s, 1 );
 				}
 
 				if ( err )

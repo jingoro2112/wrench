@@ -390,14 +390,8 @@ void wr_loadAllArduinoLibs( WRState* w );
 WRValue& wr_makeInt( WRValue* val, int i );
 WRValue& wr_makeFloat( WRValue* val, float f );
 
-// a string has to exist in a context so it can be worked with, but the
-// memory is managed by the caller, so wr_freeString() must be called
-WRValue& wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len );
-
-// WARNING: If the memory is used/saved inside the context then
-// deleting it here will cause a segfault. Be sure the script is done
-// using it before calling this.
-void wr_freeString( WRValue* val );
+// a string has to exist in a context so it can be worked with
+WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, const int len =0 );
 
 // turning a value into a container allocates a hash table which must
 // be released with destroy!

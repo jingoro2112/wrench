@@ -527,21 +527,13 @@ WRValue& wr_makeFloat( WRValue* val, float f )
 }
 
 //------------------------------------------------------------------------------
-WRValue& wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len )
+WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, const int len )
 {
+	const int slen = len ? len : strlen(data);
 	val->p2 = INIT_AS_ARRAY;
-	val->va = (WRGCObject*)malloc( sizeof(WRGCObject) );
-	val->va->init( len, SV_CHAR );
-	val->va->m_skipGC = 1;
-	memcpy( (unsigned char *)val->va->m_data, data, len );
+	val->va = context->getSVA( slen, SV_CHAR, false );
+	memcpy( (unsigned char *)val->va->m_data, data, slen );
 	return *val;
-}
-
-//------------------------------------------------------------------------------
-void wr_freeString( WRValue* val )
-{
-	val->va->clear();
-	free( val->va );
 }
 
 //------------------------------------------------------------------------------
