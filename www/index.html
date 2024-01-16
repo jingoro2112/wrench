@@ -138,25 +138,31 @@ scripting language that can fit into a very small space but
 retain full power, flexibility, and speed.</h3>
 
 <ul>
-<li><b>Embedable:</b>Fits into less than 30K of Flash, and runs with
+<li><b>Embedable: </b>Fits into less than 30K of Flash, and runs with
 a ~1k memory footprint
-<li><p><b>Comprehensible:</b>c-like syntax, weakly typed, garbage
+<li><p><b>Comprehensible: </b>c-like syntax, weakly typed, garbage
 collected.
 
-<li><p><b>Fast:</b>as a comparison: fast as or faster than lua (non-JIT of course) 
+<li><p><b>Fast: </b>as a comparison: fast as or faster than lua (non-JIT of course) 
 
-<li><p><b>Compact:</b>Bytecode images a small fraction of other
+<li><p><b>Compact: </b>Bytecode images a small fraction of other
 interpreters
 <li><b>Easy To Integrate:</b>
  <ul>
   <li>two source files: <code>wrench.cpp and wrench.h</code>
   <li>architecture/endian neutral, compile anywhere run anywhere else
   <li>c++98 clean and compliant, nothing fancy.
-  <li>no third-party libs, its all included.
+  <li>no third-party libs, everything you need is right here
  </ul>
 
-<li><p><b>Bare-Metal:</b>Wrench can address native c/c++ data and arrays
+<li><p><b>Bare-Metal: </b>Wrench can address native c/c++ data and arrays
 directly from script.
+
+
+<li><p><b>Tested: </b>A full test-suite must pass
+<a href="https://valgrind.org/">valgrind</a> with zero
+warnings/errors/leaks.
+
 </ul>
 
 <p><b>Short Version:</b>
@@ -283,8 +289,7 @@ The arduino example provided has a stack of 32, which
 should be plenty to run even a pretty intricate script.
 
 
-<pre><code>#define WRENCH_COMPACT
-#define WRENCH_FLOAT_SPRINTF
+<pre><code>#define WRENCH_FLOAT_SPRINTF
 </pre></code>
 <p>wrench is kept tight and small, if you want full floating point
 sprintf-style formatting from std::sprintf then define this. Not
@@ -306,7 +311,19 @@ them.
 
 
 
-
+<pre><code>//#define READ_32_FROM_PC( P )
+//#define READ_16_FROM_PC( P )
+//#define READ_8_FROM_PC( P )
+</pre></code>
+These three macros are defined automatically inside wrench to read
+bytes from the code stream, if the Endian-ness of the architectures
+are all <code>little</code> then they default to simple dereference:
+<pre><code>#define READ_32_FROM_PC(P) *(uint32_t *)(P)
+#define READ_16_FROM_PC(P) *(uint16_t *)(P)
+#define READ_8_FROM_PC(P) *(uint8_t *)(P)
+</pre></code>
+Some embedded devices might need special pre-compiler directives to
+read from their EPROM, so this is left to you to define if needed.
 
 
 <p>To add functions to extend wrench, as well as calling into it are
@@ -314,8 +331,6 @@ dead simple and super low overhead. Some examples are provided, but
 frankly if you actually got this far and are interested, the code in
 wrench.h is very clear and well commented, and there are quite a few
 examples.
-<p>[TODO]-- actually document this instead of phoning it in :P
-
 
 <h2>Creating data to pass to wrench</h2>
 
@@ -333,30 +348,26 @@ global values</i>
 <pre><code>class WrenchValue
 {
 public:
-		
-	WrenchValue( WRContext* context, const char* label ) : m_context(context), m_value( wr_getGlobalRef(context, label) ) {}
-	WrenchValue( WRContext* context, WRValue* value ) : m_context(context), m_value(value) {}
+	WrenchValue( WRContext* context, const char* label )
+	WrenchValue( WRContext* context, WRValue* value )
 
-	bool isValid() const { return m_value ? true : false; }
+	bool isValid();
 
 	// if the value is not the correct type it will be converted to
 	// that type, preserving the value as best it can
-	operator int* () { return asInt(); }
-	int* asInt() { return (m_value->type == WR_INT) ? &(m_value->i) : makeInt(); }
+	operator int32_t* ();
+	int* asInt();
 	
-	operator float* () { return asFloat(); }
-	float* asFloat() { return (m_value->type == WR_FLOAT) ? &(m_value->f) : makeFloat(); }
+	operator float* ();
+	float* asFloat();
 
-	WRValue& operator[] ( const int index ) { return *asArrayMember( index ); }
+	WRValue& operator[] ( const int index );
 	WRValue* asArrayMember( const int index );
+	int arraySize();
 
 	// convert the value in-place and return a pointer to it
 	int* makeInt();
 	float* makeFloat();
-
-private:
-	WRContext* m_context;
-	WRValue* m_value;
 };
 </pre></code>
 
@@ -389,21 +400,21 @@ bool isWrenchArray() const
 bool isRawArray() const
 bool isHashTable() const
 
-// return the element called for, if it is the appropriate type
-// create: if true, this value will be converted into the
-// appropriate type and the element returned, this guarantees
-// success
-WRValue* indexWrenchArray( WRContext* context, const int index, const bool create );
-WRValue* indexWrenchHash( WRContext* context, WRValue const& key, const bool create );
+// if this value is an array, return [or create] the 'index'-th element
+// if create is true and this value is NOT an array, it will be converted into one
+WRValue* indexArray( WRContext* context, const uint32_t index, const bool create );
+	
+// if this value is a hash table, return [or create] the 'index' hash item
+// if create is true and this value is NOT a hash, it will be converted into one
+WRValue* indexHash( WRContext* context, const uint32_t hash, const bool create );
 	
 // string: must point to a buffer long enough to contain at least len bytes.
 // the pointer will be passed back
-char* asString( char* string, size_t len ) const;
+char* asString( char* string, size_t maxLen =0 ) const;
 
 // return a raw pointer to the raw data array if this is one, otherwise
 // return null
 void* array( unsigned int* len, char* arrayType =0 ) const; 
-const char* c_str( unsigned int* len =0 ) const; 
 </code></pre>
 
 <br> a string has to exist in a context so it can be worked with, but the
@@ -873,7 +884,6 @@ with the built-in accessors:
 <p>asInt();
 <br>asFloat();
 <br>asString(...);
-<br>c_str();
 <br>array(...);
 
 <p>For safety the return value should use the value constructors
@@ -973,13 +983,22 @@ side for a rarely used (but necessary!) parameter; the WRState* value contained 
 <hr><h2><a name="calls"></a>Calls</h2></hr>
 
 <p>once wrench code is run for the first time with wr_run() the state
-is preserved and can be re-entered.
+is preserved and can be re-entered using the various forms of
+<code>wr_callFunction</code>:
+<pre><code>WRValue* wr_callFunction( WRContext* context, const char* functionName, const WRValue* argv =0, const int argn =0 );
+WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue* argv =0, const int argn =0 );
+WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
+</pre></code>:
+They all return a WRValue from the called function, this pointer will
+be NULL if the called function was not found.
+
 <br>given this simple script:
 
-<pre><code>a = 20;
+<pre><code>g_a = 20;
 function wrenchFunction()
 {
-    ::a += 30;
+   g_a += 30;
+   return g_a;
 }</pre></code>
 
 <p>A program that would call "wrenchFunction()" might look like this:
@@ -987,7 +1006,15 @@ function wrenchFunction()
 <pre><code>WRState* w = wr_newState();
 WRContext* context = wr_run( w, someByteCode ); // 'a' will be 20
 
-wr_callFunction( context, "wrenchFunction" ); // 'a' will now be 50
+WRValue* retval = wr_callFunction( context, "wrenchFunction" );
+if ( !retval )
+{
+   // error!
+}
+else
+{
+   retval->asInt(); // this will return '50'
+}
 </code></pre>
 
 <p>An array of arguments can be passed to the function:
@@ -1006,36 +1033,36 @@ wr_makeInt( &value[1], 3 );
 wr_callFunction( context, "wrenchFunction", values, 2 ); // 'a' will now be 26
 </code></pre>
 
-<p> the return value from any call is available with <code>WRValue*
-wr_returnValueFromLastCall( WRState* w )</code>
 
 
-<pre><code>function wrenchFunction( b, c )
+<p>An example returning an array, the wrench code might be:
+<pre><code>function arrayCheck()
 {
-    return b * c;
-}</pre></code>
-<pre><code>WRState* w = wr_newState();
-WRContext* context = wr_run( w, someByteCode ); // must run to establish context
+	newState = "some string";
+	newStateDuration = 0.0;
+	resetCollision = false;
 
-WRValue values[2];
-wr_makeInt( &value[0], 4 );
-wr_makeInt( &value[1], 5 );
-wr_callFunction( context, "wrenchFunction", values, 2 );
+	res[] = { newState, newStateDuration, resetCollision };
 
-WRValue* ret = wr_returnValueFromLastCall( w ); // ret->asInt() will contain 20
-</code></pre>
+	return  res;
+}
+</pre></code>
 
+Accessed with this user-space program, which is acutally used
+as part of the test suite:
 
-
-
-
-
-
-
-
-
-
-
+<pre><code>WRValue* V = wr_callFunction( context, "arrayCheck" );
+if ( V )
+{
+	assert( V->isWrenchArray() );
+	char someString[256];
+	assert( WRstr(V->indexArray(context, 0, false)->asString(someString)) == "some string" );
+	assert( V->indexArray(context, 1, false)->asFloat() == 0.0f );
+	assert( V->indexArray(context, 2, false)->asInt() == 0);
+	assert( !V->indexArray(context, 3, false)  );
+	assert( V->indexArray(context, 3, true)->asInt() == 0  );
+}
+</pre></code>
 
 
 
@@ -1101,7 +1128,7 @@ io::open( name, flags, mode ); // returns a file descriptor
                                // mode is octal unix file mode: 
 io::close( fd );
 io::read( fd, data[], max_cnt );
-io::write( fd, data[], cnt ); // don't know whether it's possible to give an array (by reference) as arg so that it's writable - or not?
+io::write( fd, data[], cnt );
 io::seek( fd, offset, whence ); 
 
 
