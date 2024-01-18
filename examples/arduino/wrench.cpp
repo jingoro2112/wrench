@@ -33,7 +33,6 @@ int wr_ftoa( float f, char* string, size_t len );
 unsigned char* wr_pack16( int16_t i, unsigned char* buf );
 unsigned char* wr_pack32( int32_t l, unsigned char* buf );
 
-
 #ifndef WRENCH_WITHOUT_COMPILER
 
 //-----------------------------------------------------------------------------
@@ -406,6 +405,89 @@ WRGCObject* wr_growValueArray( WRGCObject* va, int newSize );
 #define IS_EX_SINGLE_CHAR_RAW_P2(P) ((P) == (((uint32_t)WR_EX) | (((uint32_t)WR_EX_RAW_ARRAY<<24)) | (1<<8)))
 
 int wr_addI( int a, int b );
+
+#endif
+/*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+#ifndef _SERIALIZER_H
+#define _SERIALIZER_H
+/*------------------------------------------------------------------------------*/
+
+struct WRValue;
+struct WRContext;
+
+//------------------------------------------------------------------------------
+class WRValueSerializer
+{
+public:
+	
+	WRValueSerializer() : m_pos(0), m_size(0), m_buf(0) {}
+	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size), m_buf((char *)malloc(size)) { memcpy(m_buf, data, size); }
+	~WRValueSerializer() { free(m_buf); }
+
+	void getOwnership( char** buf, int* len )
+	{
+		*buf = m_buf;
+		*len = m_pos;
+		m_buf = 0;
+	}
+	
+	int size() const { return m_pos; }
+
+	bool read( char* data, const int size )
+	{
+		if ( m_pos + size > m_size )
+		{
+			return false;
+		}
+
+		memcpy( data, m_buf + m_pos, size );
+		m_pos += size;
+		return true;
+	}
+
+	void write( const char* data, const int size )
+	{
+		if ( m_pos + size >= m_size )
+		{
+			m_size += (size*2) + 8;
+			m_buf = (char *)realloc( m_buf, m_size );
+		}
+
+		memcpy( m_buf + m_pos, data, size );
+		m_pos += size;
+	}
+
+private:
+
+	int m_pos;
+	int m_size;
+	char* m_buf;
+};
+
+bool wr_serialize( WRValueSerializer& serializer, const WRValue& value );
+bool wr_deserialize( WRValue& value, WRValueSerializer& serializer, WRContext* context );
 
 #endif
 #ifndef SIMPLE_LL_H
@@ -9902,7 +9984,7 @@ debugContinue:
 					return 0;
 				}
 
-				register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
+				register1->ccb( context, stackTop - args, args, *stackTop, register1->usr );
 
 				// DO care about return value, which will be at the top
 				// of the stack
@@ -9936,7 +10018,7 @@ debugContinue:
 					return 0;
 				}
 
-				register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
+				register1->ccb( context, stackTop - args, args, *stackTop, register1->usr );
 
 				stackTop -= args;
 				pc += 4;
@@ -12637,6 +12719,243 @@ const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markB
 
 #endif
 /*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
+//------------------------------------------------------------------------------
+bool serializeEx( WRValueSerializer& serializer, const WRValue& val )
+{
+	char temp;
+	uint16_t temp16;
+	
+	const WRValue& value = val.deref();
+
+	serializer.write( &(temp = value.type), 1 );
+
+	switch( (uint8_t)value.type )
+	{
+		case WR_INT:
+		case WR_FLOAT:
+		{
+			serializer.write( (char *)&value.ui, 4 );
+			return true;
+		}
+
+		case WR_EX:
+		{
+			serializer.write( &(temp = value.xtype), 1 );
+
+			switch( (uint8_t)value.xtype )
+			{
+				case WR_EX_ARRAY:
+				{
+					serializer.write( &(temp = value.va->m_type), 1 );
+					serializer.write( (char *)&(temp16 = value.va->m_size), 2 );
+
+					if ( value.va->m_type == SV_CHAR )
+					{
+						serializer.write( value.va->m_SCdata, value.va->m_size );
+						return true;
+					}
+					else if ( value.va->m_type == SV_VALUE )
+					{
+						for( uint32_t i=0; i<value.va->m_size; ++i )
+						{
+							if ( !serializeEx(serializer, value.va->m_Vdata[i]) )
+							{
+								return false;
+							}
+						}
+					}
+
+					return true;
+				}
+
+				case WR_EX_HASH_TABLE:
+				{
+					serializer.write( (char *)&(temp16 = value.va->m_mod), 2 );
+
+					for( uint32_t i=0; i<value.va->m_mod; ++i )
+					{
+						if ( !value.va->m_hashTable[i] )
+						{
+							serializer.write( &(temp = 0), 1 );
+						}
+
+						serializer.write( &(temp = 1), 1 );
+
+						serializeEx( serializer, value.va->m_Vdata[i<<1] );
+						serializeEx( serializer, value.va->m_Vdata[(i<<1) + 1] );
+					}
+
+					return true;
+				}
+				
+				default: break;
+			}
+		}
+	}
+
+	return false;
+}
+
+//------------------------------------------------------------------------------
+bool deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext* context )
+{
+	char temp;
+	uint16_t temp16;
+
+	if ( !serializer.read(&temp , 1) )
+	{
+		return false;
+	}
+
+	value.p2 = (int)temp;
+
+	switch( (uint8_t)temp )
+	{
+		case WR_INT:
+		case WR_FLOAT:
+		{
+			return serializer.read( (char *)&value.ui, 4 ); // bitpattern
+		}
+
+		case WR_EX:
+		{
+			if ( !serializer.read(&temp, 1) )
+			{
+				return false;
+			}
+
+			switch( (uint8_t)temp )
+			{
+				case WR_EX_ARRAY:
+				{
+					if ( !serializer.read(&temp, 1)  // type
+						 || !serializer.read((char *)&temp16, 2) ) // size
+					{
+						return false;
+					}
+
+					value.p2 = INIT_AS_ARRAY;
+					
+					switch( (uint8_t)temp )
+					{
+						case SV_CHAR:
+						{
+							value.va = context->getSVA( temp16, SV_CHAR, false );
+							if ( !serializer.read(value.va->m_SCdata, temp16) )
+							{
+								return false;
+							}
+							return true;
+						}
+
+						case SV_VALUE:
+						{
+							value.va = context->getSVA( temp16, SV_VALUE, false );
+							for( uint16_t i=0; i<temp16; ++i )
+							{
+								if ( !deserializeEx(value.va->m_Vdata[i], serializer, context) )
+								{
+									return false;
+								}
+							}
+
+							return true;
+						}
+					}
+
+					break;
+				}
+
+				case WR_EX_HASH_TABLE:
+				{
+					if ( !serializer.read((char *)&temp16, 2) ) // size
+					{
+						return false;
+					}
+
+					value.p2 = INIT_AS_HASH_TABLE;
+					value.va = context->getSVA( temp16 - 1, SV_HASH_TABLE, false );
+
+					for( uint16_t i=0; i<temp16; ++i )
+					{
+						if ( !serializer.read(&temp, 1) )
+						{
+							return false;
+						}
+
+						if ( !temp )
+						{
+							value.va->m_Vdata[i<<1].init();
+							value.va->m_Vdata[(i<<1) + 1].init();
+							value.va->m_hashTable[i] = 0;
+						}
+						else
+						{
+							if ( !deserializeEx(value.va->m_Vdata[i<<1], serializer, context)
+								 || !deserializeEx(value.va->m_Vdata[(i<<1)+1], serializer, context) )
+							{
+								return false;
+							}
+							value.va->m_hashTable[i] = value.va->m_Vdata[(i<<1)+1].getHash() ^ HASH_SCRAMBLER;
+						}
+					}
+					
+					return true;
+				}
+
+				default: break;
+			}
+		}
+	}
+
+	return false;
+}
+
+//------------------------------------------------------------------------------
+bool wr_serialize( char** buf, int* len, const WRValue& value )
+{
+	WRValueSerializer S;
+	if ( !serializeEx(S, value) )
+	{
+		return false;
+	}
+
+	S.getOwnership( buf, len );
+	return true;
+}
+
+//------------------------------------------------------------------------------
+bool wr_deserialize( WRContext* context, WRValue& value, const char* buf, const int len )
+{
+	WRValueSerializer S( buf, len );
+	return deserializeEx( value, S, context );
+}
+/*******************************************************************************
 Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
@@ -13261,21 +13580,35 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-WRGCObject* wr_growValueArray( WRGCObject* va, int newSize )
+WRGCObject* wr_growValueArray( WRGCObject* va, int newMinIndex )
 {
+	int size_of = (va->m_type == SV_CHAR) ? 1 : sizeof(WRValue);
+
+#ifdef WRENCH_COMPACT
 	WRGCObject* newArray = (WRGCObject*)malloc( sizeof(WRGCObject) );
-	newArray->init( newSize + 1, (WRGCObjectType)va->m_type );
-	
+	newArray->init( newMinIndex + 1, (WRGCObjectType)va->m_type );
+
 	newArray->m_next = va->m_next;
 	va->m_next = newArray;
-
-	int size_of = (va->m_type == SV_CHAR) ? 1 : sizeof(WRValue);
 
 	int size_el = va->m_size * size_of;
 	memcpy(newArray->m_Cdata, va->m_Cdata, size_el);
 	memset(newArray->m_Cdata + size_el, 0, (newArray->m_size * size_of) - size_el);
 
 	return newArray;
+	
+#else 
+	// actually increases the size because this is the only place
+	// "realloc" is used so that code gets pulled in
+	va->m_data = realloc( va->m_data, size_of * (newMinIndex+1) );
+	
+	int size_el = va->m_size * size_of;
+	va->m_size = newMinIndex + 1;
+
+	memset(va->m_Cdata + size_el, 0, (va->m_size * size_of) - size_el);
+
+	return va;
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -14748,6 +15081,7 @@ void wr_loadAllLibs( WRState* w )
 	wr_loadStringLib( w );
 	wr_loadMessageLib( w );
 	wr_loadSysLib( w );
+	wr_loadSerializeLib( w );
 }
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
@@ -16003,7 +16337,21 @@ void wr_tolower( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
-		stackTop->i = (int)tolower( (stackTop - 1)->asInt() );
+		WRValue& value = (stackTop - 1)->deref();
+		if ( value.xtype == WR_EX_ARRAY && value.va->m_type == SV_CHAR )
+		{
+			stackTop->p2 = INIT_AS_ARRAY;
+			stackTop->va = c->getSVA( value.va->m_size, SV_CHAR, false );
+
+			for( uint32_t i=0; i<value.va->m_size; ++i )
+			{
+				stackTop->va->m_SCdata[i] = tolower(value.va->m_SCdata[i]);
+			}
+		}
+		else if ( value.type == WR_INT )
+		{
+			stackTop->i = (int)tolower( (stackTop - 1)->asInt() );
+		}
 	}
 }
 
@@ -16012,7 +16360,22 @@ void wr_toupper( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
-		stackTop->i = (int)toupper( (stackTop - 1)->asInt() );
+		WRValue& value = (stackTop - 1)->deref();
+		if ( value.xtype == WR_EX_ARRAY && value.va->m_type == SV_CHAR )
+		{
+			stackTop->p2 = INIT_AS_ARRAY;
+			stackTop->va = c->getSVA( value.va->m_size, SV_CHAR, false );
+
+			for( uint32_t i=0; i<value.va->m_size; ++i )
+			{
+				stackTop->va->m_SCdata[i] = toupper(value.va->m_SCdata[i]);
+			}
+		}
+		else if ( value.type == WR_INT )
+		{
+			stackTop->i = (int)toupper( (stackTop - 1)->asInt() );
+		}
+
 	}
 }
 
@@ -16715,11 +17078,75 @@ void wr_loadSysLib( WRState* w )
 {
 	wr_registerLibraryFunction( w, "sys::function", wr_function );
 	wr_registerLibraryFunction( w, "sys::gcPause", wr_gcPause );
-
-//	wr_registerLibraryFunction( w, "sys::serializeValue", wr_serializeValue );
-//	wr_registerLibraryFunction( w, "sys::deserializeValue", wr_deserializeValue );
-
 }/*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
+//------------------------------------------------------------------------------
+void wr_stdSerialize( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+	if ( argn )
+	{
+		char* buf;
+		int len;
+		if ( wr_serialize(&buf, &len, *(stackTop - argn) ) )
+		{
+			stackTop->p2 = INIT_AS_ARRAY;
+			stackTop->va = c->getSVA( 0, SV_CHAR, false );
+			free( stackTop->va->m_Cdata );
+			stackTop->va->m_data = buf;
+			stackTop->va->m_size = len;
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_stdDeserialize( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+	if ( argn )
+	{
+		WRValue& V = (stackTop - argn)->deref();
+		if ( IS_ARRAY(V.xtype) && V.va->m_type == SV_CHAR )
+		{
+			if ( !wr_deserialize( c, *stackTop, V.va->m_SCdata, V.va->m_size ) )
+			{
+				stackTop->init();
+			}
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_loadSerializeLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "std::serialize", wr_stdSerialize );
+	wr_registerLibraryFunction( w, "std::deserialize", wr_stdDeserialize );
+}
+/*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence

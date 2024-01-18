@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 
-void print( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+void print( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	char buf[1024];
 	for( int i=0; i<argn; ++i )

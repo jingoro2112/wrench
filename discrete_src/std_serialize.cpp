@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -25,46 +25,44 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-// returns : 0 - function  does not exist
-//         : 1 - function is native (callback)
-//         : 2 - function is in wrench (was in source code)
-void wr_function( WRValue* stackTop, const int argn, WRContext* c )
+void wr_stdSerialize( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
-
-	if ( argn > 0 )
+	if ( argn )
 	{
-		WRValue* arg = stackTop - argn;
-		const char* name = (char *)(arg->array());
-		if ( name )
+		char* buf;
+		int len;
+		if ( wr_serialize(&buf, &len, *(stackTop - argn) ) )
 		{
-			uint32_t hash = wr_hashStr( name );
-			if ( c->w->globalRegistry.exists(hash, true, false) )
+			stackTop->p2 = INIT_AS_ARRAY;
+			stackTop->va = c->getSVA( 0, SV_CHAR, false );
+			free( stackTop->va->m_Cdata );
+			stackTop->va->m_data = buf;
+			stackTop->va->m_size = len;
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_stdDeserialize( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+	if ( argn )
+	{
+		WRValue& V = (stackTop - argn)->deref();
+		if ( IS_ARRAY(V.xtype) && V.va->m_type == SV_CHAR )
+		{
+			if ( !wr_deserialize( c, *stackTop, V.va->m_SCdata, V.va->m_size ) )
 			{
-				stackTop->i = 1;
-			}
-			else if ( c->registry.exists(hash, true, false) )
-			{
-				stackTop->i = 2;
+				stackTop->init();
 			}
 		}
 	}
 }
 
 //------------------------------------------------------------------------------
-// takes a single argument: how many invokations to ignore
-void wr_gcPause( WRValue* stackTop, const int argn, WRContext* c )
+void wr_loadSerializeLib( WRState* w )
 {
-	if ( argn > 0 )
-	{
-		WRValue* arg = stackTop - argn;
-		c->gcPauseCount = arg->asInt();
-	}
-}
-
-//------------------------------------------------------------------------------
-void wr_loadSysLib( WRState* w )
-{
-	wr_registerLibraryFunction( w, "sys::function", wr_function );
-	wr_registerLibraryFunction( w, "sys::gcPause", wr_gcPause );
+	wr_registerLibraryFunction( w, "std::serialize", wr_stdSerialize );
+	wr_registerLibraryFunction( w, "std::deserialize", wr_stdDeserialize );
 }

@@ -292,7 +292,7 @@ should be plenty to run even a pretty intricate script.
 <pre><code>#define WRENCH_FLOAT_SPRINTF
 </pre></code>
 <p>wrench is kept tight and small, if you want full floating point
-sprintf-style formatting from std::sprintf then define this. Not
+sprintf-style formatting from str::sprintf then define this. Not
 a huge amount of code but unecessary for most embedded aplications
 
 
@@ -417,10 +417,8 @@ char* asString( char* string, size_t maxLen =0 ) const;
 void* array( unsigned int* len, char* arrayType =0 ) const; 
 </code></pre>
 
-<br> a string has to exist in a context so it can be worked with, but the
-memory is managed by the caller, so wr_freeString() must be called
-<code><pre>void wr_makeString( WRContext* context, WRValue* val, const unsigned char* data, const int len );
-void wr_freeString( WRValue* val );
+<br> a string has to exist in a context so it can be worked with
+<code><pre>WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, const int len =0 );
 </code></pre>
 
 Turning a value into a container allocates a hash table which must be released with destroy!
@@ -850,7 +848,7 @@ wrench
 function is called (may be null)
 
 
-<pre><code>void myFunction( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+<pre><code>void myFunction( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
     // do something
 }
@@ -866,9 +864,9 @@ void main()
 Every time <code>myFunction()</code> is called from wrench the
 external c function will be called.
 
-<p>void <b>myFunction</b>( WRState* <b>w</b>, const WRValue* <b>argv</b>, const
+<p>void <b>myFunction</b>( WRContext* <b>c</b>, const WRValue* <b>argv</b>, const
 int <b>argn</b>, WRValue& <b>retVal</b>, void* <b>usr</b> )
-<br><br>WRState* <b>w</b> Pointer to the state that made the call
+<br><br>WRContext* <b>c</b> context the call is from
 <br>const WRValue* <b>argv</b> a list of zero or more
 <code>WRValue</code> that are the arguments the function was called
 with
@@ -1069,10 +1067,29 @@ if ( V )
 
 <hr><h1><a name="library"></a>4.0 Library</h1></hr>
 library functions are provided as well. These functions are only
-available if loaded.
+available if loaded, which by default they are <i>not</I>. There is no
+overhead associated with having these calls resident other than a RAM
+cost.
+
+<pre><code>void wr_loadSysLib( WRState* w ); // system/internal functions
+void wr_loadMathLib( WRState* w ); // provides most of the calls in math.h
+void wr_loadStdLib( WRState* w ); // standard functions like sprintf/rand/
+void wr_loadIOLib( WRState* w ); // IO funcs (time/file/io)
+void wr_loadStringLib( WRState* w ); // string functions
+void wr_loadMessageLib( WRState* w ); // messaging between contexts
+void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
+</pre></code>
+
+<p>note: If space is not a concern then blast them all in with:
+<pre><code>void wr_loadAllLibs( WRState* w )</code></pre>
 
 
-<code><pre>math::sin( f );
+<code><pre>// SysLib:
+sys::function( "funcName" ); // return true IFF funcName is a callable
+                             // function, ie loaded: wr_registerFunction(...)
+
+</code></pre><pre><code>// MathLib:
+math::sin( f );
 math::cos( f );
 math::tan( f );
 math::sinh( f );
@@ -1097,43 +1114,57 @@ math::ldexp( a, b );
 math::deg2rad( f );
 math::rad2deg( f );
 
-str::strlen( str );
-str::sprintf( str, fmt, ... );
-str::printf( fmt, ... );
-str::format( fmt, ... );
-str::isspace( char );
-str::isdigit( char );
-str::isalpha( char );
+</code></pre><pre><code>// Std:
+std::rand( a [,b] ); // returns a psuedo-random number between a and b OR
+                     // 0 to a if only a is provided
+std::srand( seed );  // seed the rand()
+std::time();         // return unix time on systems that support it
+
+</code></pre><pre><code>// Str:
+str::strlen( s ); // return the length of s (s._count also works)
+str::sprintf( str, fmt, ... ); // as c sprintf
+str::printf( fmt, ... ); // as c printf
+str::format( fmt, ... ); // same as printf but return the string
+str::isspace( char ); // as c 
+str::isdigit( char ); // as c
+str::isalpha( char ); // as c
 str::mid( str, start, len ); // return the middle of a string starting
                              // at 'start' for 'len' chars
-str::strchr( str, char ); // returns -1 if not found
-str::tolower( str );
-str::toupper( str );
-
+str::chr( str, char ); // as c strchr; returns -1 if not found
+str::tolower( str/char ); // convert and return this character or string to lowercase
+str::toupper( str/char ); // convert and return this character or string to uppercase
 str::concat( str1, str2, ... ); // return str1+str2+...
+                                // NOTE: str1 + str2 also works!
 str::left( str, len ); // return string from left side 0 to len 
+str::trunc( str, len ); // [alist for left() see above]
 str::right( str, len ); // return string from right side of len chars
 str::substr( str, start, len); // [alias for mid() see above]
 str::trimright( str ); // remove trailing whitespace
 str::trimleft( str ); // remove leading whitespace
 str::trim( str ); // remove leading and trailing whitespace
-str::trunc( str, len ); // [alist for left() see above]
 str::insert( str1, str2, pos ); // insert str2 into str1 at pos
 
-io::fileRead( name ); // returns an array representing the data
-io::fileWrite( name, data[] ); // expects an array of data to write to "name"
+</code></pre><pre><code>// IO:
+io::fileRead( name ); // returns a WRValue char array representing the file
+                      // data, default is binary, and CAN include null's
+io::fileWrite( name, data ); // writes 'data' to a file, expecting an array of data to write to "name"
 io::open( name, flags, mode ); // returns a file descriptor
                                // flags can be any OR of:
-                               //  O_RDONLY | O_WRONLY | O_CREAT | O_TRUNC | O_APPEND
+                               // io::O_RDONLY | io::O_RDWR | io::O_CREAT | O_APPEND
                                // mode is octal unix file mode: 
-io::close( fd );
-io::read( fd, data[], max_cnt );
-io::write( fd, data[], cnt );
-io::seek( fd, offset, whence ); 
-
+io::close( fd ); // close fd returned by open
+io::read( fd, data, max_count ); // read the FD into data array, up to
+                               // max_cnt. returns actual number of bytes read
+io::write( fd, data, count );  // same as fileWrite() above but with
+                               // the fd returned by open
+io::seek( fd, offset, whence ); // set the read point of a fd returned
+                                // by open() above
+                                // whence value can be one of: io::SEEK_SET, io::SEEK_CUR, io::SEEK_END
+                                // as c (default io::SEEK_CUR)
 
 io::getline(); // return a line of text input with fgetc(stdin)
 
+</code></pre><pre><code>// MessageLib:
 // messages are global to all contexts currently running, this allows
 // inter-context communication.
 msg::read( key, [clear default:false] )  // read a message, optionally clear
@@ -1141,6 +1172,12 @@ msg::write( key, message )
 msg::clear( key )
 msg::peek( key ) // return true if the key has a message
 
+</code></pre><pre><code>// SerializeLib:
+std::serialize( value ); // serializes any value type/combination of
+                         // int/float/hash/array/string into a
+                         // character string suitable for writing to a file
+std::deserialize( string ); // given the string output from
+                            // std::serialize(), return the original value, full restored
 </code></pre>
 
 <hr><h1><a name="benchmarks"></a>5.0 Benchmarks</h1></hr>

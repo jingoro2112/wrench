@@ -32,7 +32,6 @@ int wr_ftoa( float f, char* string, size_t len );
 unsigned char* wr_pack16( int16_t i, unsigned char* buf );
 unsigned char* wr_pack32( int32_t l, unsigned char* buf );
 
-
 #ifndef WRENCH_WITHOUT_COMPILER
 
 //-----------------------------------------------------------------------------

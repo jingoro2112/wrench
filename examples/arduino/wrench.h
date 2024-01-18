@@ -37,7 +37,7 @@ only bytecode be executed. This flag allows the source code to be
 explicitly unavailable. Esp32-class processors have no trouble compiling
 on-the-fly but ATMega/SAMD21 are a no-go here.
 */
-#define WRENCH_WITHOUT_COMPILER
+//#define WRENCH_WITHOUT_COMPILER
 /***********************************************************************/
 
 /***********************************************************************
@@ -50,12 +50,11 @@ WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
 interpreter in favor of a giant switch(). This saves ~6k at the cost
 of a chunk of speed so only use it if you need to.
 */
-#define WRENCH_COMPACT           // saves a lot, costs some speed
-#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
+//#define WRENCH_COMPACT           // saves a lot, costs some speed
+//#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 /***********************************************************************/
 
 /***********************************************************************
-Cause the interpreter to compile into the smallest program size
 Some architectures (most embedded) really don't like reading more than
 8 bits on an unaligned memory location. If your architecture
 allows it (all PC, Mac, linux, uniz etc..) this is a good optimization
@@ -310,13 +309,13 @@ void wr_destroyContext( WRContext* context );
 // register a function inside a state that can be called (by ALL
 // contexts)
 // callback will contain:
-// w:             state it was called back from
+// c:             context called from
 // argv:          pointer to arguments function was called
 //                with (may be null!)
 // argn:          how many arguments it was called with
 // retVal:        this value will be passed back, default: integer zero
 // usr:           opaque pointer function was registered with
-typedef void (*WR_C_CALLBACK)(WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr );
+typedef void (*WR_C_CALLBACK)(WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr );
 
 // IMPORTANT: The values passed may be references (keepin' it real) so
 // always use the getters inside the WRValue class:
@@ -340,6 +339,11 @@ typedef void (*WR_C_CALLBACK)(WRState* w, const WRValue* argv, const int argn, W
 // function: callback (see typdef above)
 // usr:      opaque pointer that will be passed to the callback (optional)
 void wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr =0 );
+
+// serialize WRValues to and from binary
+// NOTE: on success, wr_serialize returns a malloc()'d buffer that must be freed!
+bool wr_serialize( char** buf, int* len, const WRValue& value ); 
+bool wr_deserialize( WRContext* context, WRValue& value, const char* buf, const int len );
 
 /***************************************************************/
 /***************************************************************/
@@ -378,6 +382,7 @@ void wr_loadStdLib( WRState* w ); // standard functions like sprintf/rand/
 void wr_loadIOLib( WRState* w ); // IO funcs (time/file/io)
 void wr_loadStringLib( WRState* w ); // string functions
 void wr_loadMessageLib( WRState* w ); // messaging between contexts
+void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
 
 // arduino-specific functions, be sure to add arduino_lib.cpp to your
 // sketch. much thanks to Koepel for contributing
@@ -949,6 +954,7 @@ public:
 #include "utils.h"
 #include "simple_ll.h"
 #include "gc_object.h"
+#include "serializer.h"
 #include "vm.h"
 #include "opcode.h"
 #include "str.h"

@@ -17,3 +17,4 @@ tests/015_switch.c
 tests/016_bug9.c
 tests/017_bug12.c
 tests/018_this.c
+tests/019_serialize.c

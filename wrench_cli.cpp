@@ -155,6 +155,7 @@ void blobToAssemblyInc( WRstr const& blob, WRstr const& variableName, WRstr& hea
 const char* sourceOrder[]=
 {
 	"/utils.h",
+	"/serializer.h",
 	"/simple_ll.h",
 	"/gc_object.h",
 	"/vm.h",
@@ -167,6 +168,7 @@ const char* sourceOrder[]=
 	"/cc.cpp",
 	"/vm.cpp",
 	"/utils.cpp",
+	"/serializer.cpp",
 	"/wrench_client_debug.cpp",
 	"/wrench_server_debug.cpp",
 	"/operations.cpp",
@@ -181,6 +183,7 @@ const char* sourceOrder[]=
 	"/std_math.cpp",
 	"/std_msg.cpp",
 	"/std_sys.cpp",
+	"/std_serialize.cpp",
 	"/esp32_lib.cpp",
 	"/arduino_lib.cpp",
 	""
@@ -225,7 +228,7 @@ int usage()
 }
 
 //------------------------------------------------------------------------------
-static void println( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+static void println( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
@@ -239,7 +242,7 @@ static void println( WRState* w, const WRValue* argv, const int argn, WRValue& r
 }
 
 //------------------------------------------------------------------------------
-static void print( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+static void print( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
@@ -274,9 +277,9 @@ int main( int argn, char* argv[] )
 	
 	if ( command == "t" )
 	{
-		setup();
-
 		runTests( (argn >= 3) ? atoi(argv[2]) : 0 );
+		setup();
+		printf("\n");
 	}
 	else if ( (command == "d") && (argn == 3) )
 	{
@@ -460,7 +463,7 @@ int main( int argn, char* argv[] )
 }
 
 //------------------------------------------------------------------------------
-static void emit( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+static void emit( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
@@ -472,7 +475,7 @@ static void emit( WRState* s, const WRValue* argv, const int argn, WRValue& retV
 }
 
 //------------------------------------------------------------------------------
-static void emitln( WRState* s, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+static void emitln( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
@@ -556,7 +559,6 @@ int runTests( int number )
 
 	wr_loadAllLibs( w );
 	
-
 	while( fgets(buf, 255, tfile) && (err==0) )
 	{
 		if ( !number || (number == fileNumber) )
@@ -960,10 +962,13 @@ const unsigned char Pbasic_bytecode[]=
 };
 
 
+void logBlank( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	
+}
 
 
-
-void log2( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+void log2( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	char buf[512];
 	for( int i=0; i<argn; ++i )
@@ -987,7 +992,7 @@ void setup()
 
 	WRState* w = wr_newState(); // create the state
 
-	wr_registerFunction( w, "print", print ); // bind a function
+	wr_registerFunction( w, "print", logBlank ); // bind a function
 
 	unsigned char* outBytes; // compiled code is alloc'ed
 	int outLen;

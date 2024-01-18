@@ -60,6 +60,12 @@
     <ClCompile Include="..\discrete_src\std_io_win32.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\discrete_src\serializer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\std_serialize.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\discrete_src\cc.h">
@@ -87,6 +93,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\discrete_src\wrench_debug.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\discrete_src\serializer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

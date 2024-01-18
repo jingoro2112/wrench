@@ -247,4 +247,5 @@ void wr_loadAllLibs( WRState* w )
 	wr_loadStringLib( w );
 	wr_loadMessageLib( w );
 	wr_loadSysLib( w );
+	wr_loadSerializeLib( w );
 }

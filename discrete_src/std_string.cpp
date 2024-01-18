@@ -482,7 +482,21 @@ void wr_tolower( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
-		stackTop->i = (int)tolower( (stackTop - 1)->asInt() );
+		WRValue& value = (stackTop - 1)->deref();
+		if ( value.xtype == WR_EX_ARRAY && value.va->m_type == SV_CHAR )
+		{
+			stackTop->p2 = INIT_AS_ARRAY;
+			stackTop->va = c->getSVA( value.va->m_size, SV_CHAR, false );
+
+			for( uint32_t i=0; i<value.va->m_size; ++i )
+			{
+				stackTop->va->m_SCdata[i] = tolower(value.va->m_SCdata[i]);
+			}
+		}
+		else if ( value.type == WR_INT )
+		{
+			stackTop->i = (int)tolower( (stackTop - 1)->asInt() );
+		}
 	}
 }
 
@@ -491,7 +505,22 @@ void wr_toupper( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
-		stackTop->i = (int)toupper( (stackTop - 1)->asInt() );
+		WRValue& value = (stackTop - 1)->deref();
+		if ( value.xtype == WR_EX_ARRAY && value.va->m_type == SV_CHAR )
+		{
+			stackTop->p2 = INIT_AS_ARRAY;
+			stackTop->va = c->getSVA( value.va->m_size, SV_CHAR, false );
+
+			for( uint32_t i=0; i<value.va->m_size; ++i )
+			{
+				stackTop->va->m_SCdata[i] = toupper(value.va->m_SCdata[i]);
+			}
+		}
+		else if ( value.type == WR_INT )
+		{
+			stackTop->i = (int)toupper( (stackTop - 1)->asInt() );
+		}
+
 	}
 }
 

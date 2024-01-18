@@ -1,5 +1,10 @@
 3.2.5 ----------------------------------------------------------------------------------
 - fixed esp/embedded issue with unaligned 16/32 bit reads
+- added a serializer! this will encode/decode WRValue including int, float, string, array,
+  hash tables in any combination, refer to /tests/019_serialize.c for intended usage
+- pursuant to the above, it is also possible to write/read serialized WRValues in a 
+  single operation
+
 
 3.2.4 ----------------------------------------------------------------------------------
 - added directives to compile for the esp8266 toolchain

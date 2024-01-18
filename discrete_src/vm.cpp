@@ -1102,7 +1102,7 @@ debugContinue:
 					return 0;
 				}
 
-				register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
+				register1->ccb( context, stackTop - args, args, *stackTop, register1->usr );
 
 				// DO care about return value, which will be at the top
 				// of the stack
@@ -1136,7 +1136,7 @@ debugContinue:
 					return 0;
 				}
 
-				register1->ccb( w, stackTop - args, args, *stackTop, register1->usr );
+				register1->ccb( context, stackTop - args, args, *stackTop, register1->usr );
 
 				stackTop -= args;
 				pc += 4;

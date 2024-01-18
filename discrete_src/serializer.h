@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -21,50 +21,63 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
+#ifndef _SERIALIZER_H
+#define _SERIALIZER_H
+/*------------------------------------------------------------------------------*/
 
-#include "wrench.h"
+struct WRValue;
+struct WRContext;
 
 //------------------------------------------------------------------------------
-// returns : 0 - function  does not exist
-//         : 1 - function is native (callback)
-//         : 2 - function is in wrench (was in source code)
-void wr_function( WRValue* stackTop, const int argn, WRContext* c )
+class WRValueSerializer
 {
-	stackTop->init();
+public:
+	
+	WRValueSerializer() : m_pos(0), m_size(0), m_buf(0) {}
+	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size), m_buf((char *)malloc(size)) { memcpy(m_buf, data, size); }
+	~WRValueSerializer() { free(m_buf); }
 
-	if ( argn > 0 )
+	void getOwnership( char** buf, int* len )
 	{
-		WRValue* arg = stackTop - argn;
-		const char* name = (char *)(arg->array());
-		if ( name )
+		*buf = m_buf;
+		*len = m_pos;
+		m_buf = 0;
+	}
+	
+	int size() const { return m_pos; }
+
+	bool read( char* data, const int size )
+	{
+		if ( m_pos + size > m_size )
 		{
-			uint32_t hash = wr_hashStr( name );
-			if ( c->w->globalRegistry.exists(hash, true, false) )
-			{
-				stackTop->i = 1;
-			}
-			else if ( c->registry.exists(hash, true, false) )
-			{
-				stackTop->i = 2;
-			}
+			return false;
 		}
-	}
-}
 
-//------------------------------------------------------------------------------
-// takes a single argument: how many invokations to ignore
-void wr_gcPause( WRValue* stackTop, const int argn, WRContext* c )
-{
-	if ( argn > 0 )
+		memcpy( data, m_buf + m_pos, size );
+		m_pos += size;
+		return true;
+	}
+
+	void write( const char* data, const int size )
 	{
-		WRValue* arg = stackTop - argn;
-		c->gcPauseCount = arg->asInt();
-	}
-}
+		if ( m_pos + size >= m_size )
+		{
+			m_size += (size*2) + 8;
+			m_buf = (char *)realloc( m_buf, m_size );
+		}
 
-//------------------------------------------------------------------------------
-void wr_loadSysLib( WRState* w )
-{
-	wr_registerLibraryFunction( w, "sys::function", wr_function );
-	wr_registerLibraryFunction( w, "sys::gcPause", wr_gcPause );
-}
+		memcpy( m_buf + m_pos, data, size );
+		m_pos += size;
+	}
+
+private:
+
+	int m_pos;
+	int m_size;
+	char* m_buf;
+};
+
+bool wr_serialize( WRValueSerializer& serializer, const WRValue& value );
+bool wr_deserialize( WRValue& value, WRValueSerializer& serializer, WRContext* context );
+
+#endif

@@ -25,21 +25,35 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-WRGCObject* wr_growValueArray( WRGCObject* va, int newSize )
+WRGCObject* wr_growValueArray( WRGCObject* va, int newMinIndex )
 {
+	int size_of = (va->m_type == SV_CHAR) ? 1 : sizeof(WRValue);
+
+#ifdef WRENCH_COMPACT
 	WRGCObject* newArray = (WRGCObject*)malloc( sizeof(WRGCObject) );
-	newArray->init( newSize + 1, (WRGCObjectType)va->m_type );
-	
+	newArray->init( newMinIndex + 1, (WRGCObjectType)va->m_type );
+
 	newArray->m_next = va->m_next;
 	va->m_next = newArray;
-
-	int size_of = (va->m_type == SV_CHAR) ? 1 : sizeof(WRValue);
 
 	int size_el = va->m_size * size_of;
 	memcpy(newArray->m_Cdata, va->m_Cdata, size_el);
 	memset(newArray->m_Cdata + size_el, 0, (newArray->m_size * size_of) - size_el);
 
 	return newArray;
+	
+#else 
+	// actually increases the size because this is the only place
+	// "realloc" is used so that code gets pulled in
+	va->m_data = realloc( va->m_data, size_of * (newMinIndex+1) );
+	
+	int size_el = va->m_size * size_of;
+	va->m_size = newMinIndex + 1;
+
+	memset(va->m_Cdata + size_el, 0, (va->m_size * size_of) - size_el);
+
+	return va;
+#endif
 }
 
 //------------------------------------------------------------------------------

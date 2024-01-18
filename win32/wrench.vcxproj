@@ -14,11 +14,13 @@
     <ClCompile Include="..\discrete_src\cc.cpp" />
     <ClCompile Include="..\discrete_src\index.cpp" />
     <ClCompile Include="..\discrete_src\operations.cpp" />
+    <ClCompile Include="..\discrete_src\serializer.cpp" />
     <ClCompile Include="..\discrete_src\std.cpp" />
     <ClCompile Include="..\discrete_src\std_io.cpp" />
     <ClCompile Include="..\discrete_src\std_io_win32.cpp" />
     <ClCompile Include="..\discrete_src\std_math.cpp" />
     <ClCompile Include="..\discrete_src\std_msg.cpp" />
+    <ClCompile Include="..\discrete_src\std_serialize.cpp" />
     <ClCompile Include="..\discrete_src\std_string.cpp" />
     <ClCompile Include="..\discrete_src\std_sys.cpp" />
     <ClCompile Include="..\discrete_src\utils.cpp" />
@@ -32,6 +34,7 @@
     <ClInclude Include="..\discrete_src\gc_object.h" />
     <ClInclude Include="..\discrete_src\opcode.h" />
     <ClInclude Include="..\discrete_src\opcode_stream.h" />
+    <ClInclude Include="..\discrete_src\serializer.h" />
     <ClInclude Include="..\discrete_src\str.h" />
     <ClInclude Include="..\discrete_src\utils.h" />
     <ClInclude Include="..\discrete_src\vm.h" />

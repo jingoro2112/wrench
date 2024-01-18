@@ -280,6 +280,8 @@ if ( str::insert( "11", "22", 1 ) != "1221" ) println("ins7");
 if ( str::insert( "11", "22", 2 ) != "1122" ) println("ins8");
 if ( str::insert( "11", "22", 12 ) != "1122" ) println("ins9");
 
+if ( str::tolower( "PPlPP" ) != "pplpp" ) println("tol0");
+if ( str::toupper( "hNh" ) != "HNH" ) println("tou0");
 
 function f1() { }
 

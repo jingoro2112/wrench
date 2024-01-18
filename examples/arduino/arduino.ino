@@ -27,7 +27,7 @@ const unsigned char basic_bytecode[]=
 	0x13, 0x99, 0x3E, 0xEC, 0xB6, // 53
 };
 
-void print( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+void print( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	char buf[512];
 	for( int i=0; i<argn; ++i )
