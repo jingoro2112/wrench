@@ -160,10 +160,6 @@ WRError WRCompilationContext::compile( const char* source,
 
 	}
 
-//	WRstr str;
-//	wr_asciiDump( *out, *outLen, str );
-//	printf( "%d:\n%s\n", *outLen, str.c_str() );
-
 	return m_err;
 }
 
@@ -2078,9 +2074,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 //------------------------------------------------------------------------------
 void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int param )
 {
-#ifndef WRENCH_INCLUDE_DEBUG_CODE
-	return;
-#endif  
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
 	if ( !m_addDebugLineNumbers )
 	{
 		return;
@@ -2105,6 +2099,8 @@ void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int p
 //	uint16_t codeword = code | ((uint16_t)param & PayloadMask);
 //	unsigned char data[2];
 //	pushData( bytecode, wr_pack16(codeword, data), 2 );
+#endif  
+
 }
 
 //------------------------------------------------------------------------------
@@ -5890,7 +5886,9 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 	code += (unsigned char)(m_units[0].bytecode.localSpace.count()); // globals count
 
 	unsigned char data[4];
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
 	unsigned int units = m_units.count();
+#endif
 	unsigned int globals = m_units[0].bytecode.localSpace.count();
 
 	// register the function signatures
@@ -5913,6 +5911,12 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 
 		code += O_RegisterFunction;
 	}
+
+	WRstr str;
+
+//	wr_asciiDump( code.p_str(), code.size(), str );
+//	printf( "header:\n%d:\n%s\n", code.size(), str.c_str() );
+
 
 	// append all the unit code
 	for( unsigned int u=0; u<m_units.count(); ++u )
@@ -5957,7 +5961,13 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 
 		int base = code.size();
 
+//		wr_asciiDump( m_units[u].bytecode.all, m_units[u].bytecode.all.size(), str );
+//		printf( "unit %d\n%d:\n%s\n", u, code.size(), str.c_str() );
+
 		code.append( m_units[u].bytecode.all, m_units[u].bytecode.all.size() );
+
+//		wr_asciiDump(code.p_str(), code.size(), str);
+//		printf("header:\n%d:\n%s\n", code.size(), str.c_str());
 
 		// load new's
 		for( unsigned int f=0; f<m_units[u].bytecode.unitObjectSpace.count(); ++f )
@@ -6016,13 +6026,14 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 				for( ; u2<m_units.count(); ++u2 )
 				{
 					if ( m_units[u2].hash == N.hash )
-					{	
+					{
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
 						if ( m_addDebugLineNumbers )
 						{
 							uint16_t codeword = (uint16_t)FunctionCall | ((uint16_t)(u2 - 1) & PayloadMask);
 							wr_pack16( codeword, (unsigned char *)code.p_str(index - 2) );
 						}
-
+#endif
 						code[index] = O_CallFunctionByIndex;
 
 						code[index+2] = (char)(u2 - 1);
@@ -6066,7 +6077,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 //	[h][#globals][bytes] / [global data|global data crc] / [CRC]
 // 	[h][#globals][bytes] |[[debug options + crc]|/ [global data|global data crc] / [CRC]
 
-
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
 	if ( m_addDebugLineNumbers || m_embedSourceCode )
 	{
 		WRstr symbolBlock;
@@ -6094,7 +6105,6 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 			}
 		}
 
-
 		uint32_t sourceOffset = m_embedSourceCode ? code.size() : 0;
 		if ( m_embedSourceCode )
 		{
@@ -6115,6 +6125,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 
 		code.append( wr_pack32(wr_hash(code.p_str(debugBlockBase), 24), data), 4 ); // 24
 	}
+#endif
 
 	if ( m_embedGlobalSymbols && globals )
 	{

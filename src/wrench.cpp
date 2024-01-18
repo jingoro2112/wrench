@@ -490,6 +490,7 @@ bool wr_serialize( WRValueSerializer& serializer, const WRValue& value );
 bool wr_deserialize( WRValue& value, WRValueSerializer& serializer, WRContext* context );
 
 #endif
+
 #ifndef SIMPLE_LL_H
 #define SIMPLE_LL_H
 /*------------------------------------------------------------------------------*/
@@ -649,7 +650,14 @@ SOFTWARE.
 
 #include <assert.h>
 
-#define HASH_SCRAMBLER 0x5656ABAB
+/* the what? in order for hash '0' to be both the number (integers are their own hashes) AND "no hash" I intgroduce a scrambler
+   constant that is XORed with all hashes. That way "0" is the scrambler itself, and actual 0 is the null hash. The only
+   danger with this is if your string happens to collide with the scrambler value, a 1:4bil chance but that same possibility
+   exists with using null as the null hash, thats what bitcoin is :)
+   I guess it would be annoying if you wanted to use the numeric value of the scrambler as an integer hash key, so I chose
+   a very large+negative value to minimize that risk*/
+#define HASH_SCRAMBLER 0xA656ABAB // 2790697899 or -1504269397 or -7.44788182526385e-16 all unlikely intentional constants
+
 
 //------------------------------------------------------------------------------
 class WRGCObject
@@ -2893,10 +2901,6 @@ WRError WRCompilationContext::compile( const char* source,
 
 	}
 
-//	WRstr str;
-//	wr_asciiDump( *out, *outLen, str );
-//	printf( "%d:\n%s\n", *outLen, str.c_str() );
-
 	return m_err;
 }
 
@@ -4811,9 +4815,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 //------------------------------------------------------------------------------
 void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int param )
 {
-#ifndef WRENCH_INCLUDE_DEBUG_CODE
-	return;
-#endif  
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
 	if ( !m_addDebugLineNumbers )
 	{
 		return;
@@ -4838,6 +4840,8 @@ void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int p
 //	uint16_t codeword = code | ((uint16_t)param & PayloadMask);
 //	unsigned char data[2];
 //	pushData( bytecode, wr_pack16(codeword, data), 2 );
+#endif  
+
 }
 
 //------------------------------------------------------------------------------
@@ -8623,7 +8627,9 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 	code += (unsigned char)(m_units[0].bytecode.localSpace.count()); // globals count
 
 	unsigned char data[4];
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
 	unsigned int units = m_units.count();
+#endif
 	unsigned int globals = m_units[0].bytecode.localSpace.count();
 
 	// register the function signatures
@@ -8646,6 +8652,12 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 
 		code += O_RegisterFunction;
 	}
+
+	WRstr str;
+
+//	wr_asciiDump( code.p_str(), code.size(), str );
+//	printf( "header:\n%d:\n%s\n", code.size(), str.c_str() );
+
 
 	// append all the unit code
 	for( unsigned int u=0; u<m_units.count(); ++u )
@@ -8690,7 +8702,13 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 
 		int base = code.size();
 
+//		wr_asciiDump( m_units[u].bytecode.all, m_units[u].bytecode.all.size(), str );
+//		printf( "unit %d\n%d:\n%s\n", u, code.size(), str.c_str() );
+
 		code.append( m_units[u].bytecode.all, m_units[u].bytecode.all.size() );
+
+//		wr_asciiDump(code.p_str(), code.size(), str);
+//		printf("header:\n%d:\n%s\n", code.size(), str.c_str());
 
 		// load new's
 		for( unsigned int f=0; f<m_units[u].bytecode.unitObjectSpace.count(); ++f )
@@ -8749,13 +8767,14 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 				for( ; u2<m_units.count(); ++u2 )
 				{
 					if ( m_units[u2].hash == N.hash )
-					{	
+					{
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
 						if ( m_addDebugLineNumbers )
 						{
 							uint16_t codeword = (uint16_t)FunctionCall | ((uint16_t)(u2 - 1) & PayloadMask);
 							wr_pack16( codeword, (unsigned char *)code.p_str(index - 2) );
 						}
-
+#endif
 						code[index] = O_CallFunctionByIndex;
 
 						code[index+2] = (char)(u2 - 1);
@@ -8799,7 +8818,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 //	[h][#globals][bytes] / [global data|global data crc] / [CRC]
 // 	[h][#globals][bytes] |[[debug options + crc]|/ [global data|global data crc] / [CRC]
 
-
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
 	if ( m_addDebugLineNumbers || m_embedSourceCode )
 	{
 		WRstr symbolBlock;
@@ -8827,7 +8846,6 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 			}
 		}
 
-
 		uint32_t sourceOffset = m_embedSourceCode ? code.size() : 0;
 		if ( m_embedSourceCode )
 		{
@@ -8848,6 +8866,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 
 		code.append( wr_pack32(wr_hash(code.p_str(debugBlockBase), 24), data), 4 ); // 24
 	}
+#endif
 
 	if ( m_embedGlobalSymbols && globals )
 	{
@@ -9856,18 +9875,20 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 				hash = (stackTop -= 3)->i;
 
 				findex = hash;
-				context->localFunctions[findex].arguments = (unsigned char)(hash>>8);
-				context->localFunctions[findex].frameSpaceNeeded = (unsigned char)(hash>>16);
+				WRFunction* localFunctions = context->localFunctions + findex;
 
-				context->localFunctions[findex].hash = (stackTop + 1)->i;
+				localFunctions->arguments = (unsigned char)(hash >> 8);
+				localFunctions->frameSpaceNeeded = (unsigned char)(hash >> 16);
 
-				context->localFunctions[findex].offset = bottom + (stackTop + 2)->i;
+				localFunctions->hash = (stackTop + 1)->i;
 
-				context->localFunctions[findex].frameBaseAdjustment = 1
-																	  + context->localFunctions[findex].frameSpaceNeeded
-																	  + context->localFunctions[findex].arguments;
-				
-				context->registry.getAsRawValueHashTable(context->localFunctions[findex].hash)->wrf = context->localFunctions + findex;
+				localFunctions->offset = bottom + (stackTop + 2)->i;
+
+				localFunctions->frameBaseAdjustment = 1
+													  + localFunctions->frameSpaceNeeded
+													  + localFunctions->arguments;
+
+				context->registry.getAsRawValueHashTable(localFunctions->hash)->wrf = localFunctions;
 
 				CONTINUE;
 			}
@@ -9896,14 +9917,14 @@ literalZero:
 
 			CASE(LiteralString):
 			{
-				uint16_t len = (uint16_t)READ_16_FROM_PC(pc);
+				hash = (uint16_t)READ_16_FROM_PC(pc);
 				pc += 2;
 				
 				context->gc( stackTop );
 				stackTop->p2 = INIT_AS_ARRAY;
-				stackTop->va = context->getSVA( len, SV_CHAR, false );
+				stackTop->va = context->getSVA( hash, SV_CHAR, false );
 
-				for ( char* to = (char *)(stackTop++)->va->m_data ; len ; --len )
+				for ( char* to = (char *)(stackTop++)->va->m_data ; hash ; --hash )
 				{
 					*to++ = READ_8_FROM_PC(pc++);
 				}
@@ -9961,7 +9982,6 @@ debugContinue:
 				pc += 2;
 				CONTINUE;
 			}
-
 
 			CASE(CallFunctionByHash):
 			{
@@ -11446,9 +11466,9 @@ compactCompareGG8:
 
 			
 //-------------------------------------------------------------------------------------------------------------
-#else //-------------------------------------------------------------------------------------------------------
+#else 
 //-------------------------------------------------------------------------------------------------------------
-
+// NON-COMPACT version
 			
 			CASE(PostIncrement):
 			{
@@ -12091,7 +12111,7 @@ targetFuncStoreLocalOp:
 
 #ifndef WRENCH_JUMPTABLE_INTERPRETER
 	#ifdef _MSC_VER
-			default: __assume(0); // tells the compiler to make this a jump-table
+			default: __assume(0); // tells the compiler to make this a jump table
 	#endif
 		}
 	}
@@ -15287,7 +15307,7 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 		if ( fileName )
 		{
 			int mode = (argn > 1) ? args[1].asInt() : O_RDWR | O_CREAT;
-			stackTop->i = open( fileName, mode );
+			stackTop->i = open( fileName, mode, 0666 );
 		}
 	}
 }
@@ -15390,14 +15410,16 @@ void wr_ioPushConstants( WRState* w )
 {
 	WRValue C;
 
-	wr_registerLibraryConstant( w, "io::O_RDONLY", wr_makeInt(&C, O_RDONLY) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::O_RDWR", wr_makeInt(&C, O_RDWR) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::O_APPEND", wr_makeInt(&C, O_APPEND) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::O_CREAT", wr_makeInt(&C, O_CREAT) ); //( fd, offset, whence );
+	wr_registerLibraryConstant( w, "io::O_RDONLY", wr_makeInt(&C, O_RDONLY) );
+	wr_registerLibraryConstant( w, "io::O_RDWR", wr_makeInt(&C, O_RDWR) );
+	wr_registerLibraryConstant( w, "io::O_APPEND", wr_makeInt(&C, O_APPEND) );
+	wr_registerLibraryConstant( w, "io::O_CREAT", wr_makeInt(&C, O_CREAT) );
+	wr_registerLibraryConstant( w, "io::O_TRUNC", wr_makeInt(&C, O_TRUNC) );
+	wr_registerLibraryConstant( w, "io::O_EXCL", wr_makeInt(&C, O_EXCL) );
 
-	wr_registerLibraryConstant( w, "io::SEEK_SET", wr_makeInt(&C, SEEK_SET) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::SEEK_CUR", wr_makeInt(&C, SEEK_CUR) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::SEEK_END", wr_makeInt(&C, SEEK_END) ); //( fd, offset, whence );
+	wr_registerLibraryConstant( w, "io::SEEK_SET", wr_makeInt(&C, SEEK_SET) );
+	wr_registerLibraryConstant( w, "io::SEEK_CUR", wr_makeInt(&C, SEEK_CUR) );
+	wr_registerLibraryConstant( w, "io::SEEK_END", wr_makeInt(&C, SEEK_END) );
 }
 
 #endif
@@ -15657,6 +15679,8 @@ void wr_ioPushConstants( WRState* w )
 	wr_registerLibraryConstant( w, "io::O_RDWR", wr_makeInt(&C, O_RDWR) );
 	wr_registerLibraryConstant( w, "io::O_APPEND", wr_makeInt(&C, O_APPEND) );
 	wr_registerLibraryConstant( w, "io::O_CREAT", wr_makeInt(&C, O_CREAT) );
+	wr_registerLibraryConstant( w, "io::O_TRUNC", wr_makeInt(&C, O_TRUNC) );
+	wr_registerLibraryConstant( w, "io::O_EXCL", wr_makeInt(&C, O_EXCL) );
 
 	wr_registerLibraryConstant( w, "io::SEEK_SET", wr_makeInt(&C, SEEK_SET) );
 	wr_registerLibraryConstant( w, "io::SEEK_CUR", wr_makeInt(&C, SEEK_CUR) );

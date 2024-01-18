@@ -81,3 +81,4 @@ bool wr_serialize( WRValueSerializer& serializer, const WRValue& value );
 bool wr_deserialize( WRValue& value, WRValueSerializer& serializer, WRContext* context );
 
 #endif
+

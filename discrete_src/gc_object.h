@@ -29,7 +29,14 @@ SOFTWARE.
 
 #include <assert.h>
 
-#define HASH_SCRAMBLER 0x5656ABAB
+/* the what? in order for hash '0' to be both the number (integers are their own hashes) AND "no hash" I intgroduce a scrambler
+   constant that is XORed with all hashes. That way "0" is the scrambler itself, and actual 0 is the null hash. The only
+   danger with this is if your string happens to collide with the scrambler value, a 1:4bil chance but that same possibility
+   exists with using null as the null hash, thats what bitcoin is :)
+   I guess it would be annoying if you wanted to use the numeric value of the scrambler as an integer hash key, so I chose
+   a very large+negative value to minimize that risk*/
+#define HASH_SCRAMBLER 0xA656ABAB // 2790697899 or -1504269397 or -7.44788182526385e-16 all unlikely intentional constants
+
 
 //------------------------------------------------------------------------------
 class WRGCObject

@@ -56,7 +56,7 @@ of a chunk of speed so only use it if you need to.
 /***********************************************************************
 Some architectures (most embedded) really don't like reading more than
 8 bits on an unaligned memory location. If your architecture
-allows it (all PC, Mac, linux, uniz etc..) this is a good optimization
+allows it (PC, Mac, linux, unix etc..) this is a good optimization
 */
 //#define WRENCH_UNALIGNED_READS
 /***********************************************************************/
@@ -349,18 +349,22 @@ bool wr_deserialize( WRContext* context, WRValue& value, const char* buf, const 
 //                   wrench Library calls
 
 // Wrench allows libraries to be loaded in the form of <name>::<func>
-// these calls are installed in such a way that they impose ZERO
-// overhead if not used, zero memory footprint, text segment, etc.
+// these calls impose no overhead if not used
 
 // library calls do assume a deep knowledge of the internal workings of
 // wrench so the callback is an absolute minimum of info:
 // stackTop: current top of the stack, arguments have been pushed here,
-//           and any return value must be placed here, not pushed!
-//           since the code path is highly optimized it might be ignore
-//           by the calling code, see one of the many library examples
+//           and any return value must be placed here, not pushed! see
+//           one of the many library examples
 // argn:     how many arguments this function was called with. no
 //           guarantees are made about matching a function signature,
 //           library calls validate if they care.
+// stackTop         : [return value]
+// stackTop - 1     : [argN ]
+// stackTop - 2     : [argN-1]
+// ...
+// stackTop - (N-1) : [arg2]
+// stackTop - N     : [arg1]
 typedef void (*WR_LIB_CALLBACK)( WRValue* stackTop, const int argn, WRContext* context );
 
 // w:         state to register with (will be available to all contexts)
@@ -385,11 +389,11 @@ void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
 
 // arduino-specific functions, be sure to add arduino_lib.cpp to your
 // sketch. much thanks to Koepel for contributing
+void wr_loadAllArduinoLibs( WRState* w );
+
 void wr_loadArduinoSTDLib( WRState* w ); 
 void wr_loadArduinoIOLib( WRState* w ); 
 void wr_loadArduinoLCDLib( WRState* w ); 
-
-void wr_loadAllArduinoLibs( WRState* w ); 
 
 /***************************************************************/
 /***************************************************************/
@@ -678,8 +682,8 @@ struct WRValue
 	// if create is true and this value is NOT a hash, it will be converted into one
 	WRValue* indexHash( WRContext* context, const uint32_t hash, const bool create );
 	
-	// string: must point to a buffer long enough to contain at least len bytes.
-	// the pointer will be passed back, if maxLen is 0 (not
+	// string: must point to a buffer long enough to contain at least maxLen bytes.
+	// the "string" pointer will be passed back, if maxLen is 0 (not
 	// reccomended) the string is assumed to be unlimited size
 	char* asString( char* string, size_t maxLen =0 ) const;
 

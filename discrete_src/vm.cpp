@@ -974,18 +974,20 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 				hash = (stackTop -= 3)->i;
 
 				findex = hash;
-				context->localFunctions[findex].arguments = (unsigned char)(hash>>8);
-				context->localFunctions[findex].frameSpaceNeeded = (unsigned char)(hash>>16);
+				WRFunction* localFunctions = context->localFunctions + findex;
 
-				context->localFunctions[findex].hash = (stackTop + 1)->i;
+				localFunctions->arguments = (unsigned char)(hash >> 8);
+				localFunctions->frameSpaceNeeded = (unsigned char)(hash >> 16);
 
-				context->localFunctions[findex].offset = bottom + (stackTop + 2)->i;
+				localFunctions->hash = (stackTop + 1)->i;
 
-				context->localFunctions[findex].frameBaseAdjustment = 1
-																	  + context->localFunctions[findex].frameSpaceNeeded
-																	  + context->localFunctions[findex].arguments;
-				
-				context->registry.getAsRawValueHashTable(context->localFunctions[findex].hash)->wrf = context->localFunctions + findex;
+				localFunctions->offset = bottom + (stackTop + 2)->i;
+
+				localFunctions->frameBaseAdjustment = 1
+													  + localFunctions->frameSpaceNeeded
+													  + localFunctions->arguments;
+
+				context->registry.getAsRawValueHashTable(localFunctions->hash)->wrf = localFunctions;
 
 				CONTINUE;
 			}
@@ -1014,14 +1016,14 @@ literalZero:
 
 			CASE(LiteralString):
 			{
-				uint16_t len = (uint16_t)READ_16_FROM_PC(pc);
+				hash = (uint16_t)READ_16_FROM_PC(pc);
 				pc += 2;
 				
 				context->gc( stackTop );
 				stackTop->p2 = INIT_AS_ARRAY;
-				stackTop->va = context->getSVA( len, SV_CHAR, false );
+				stackTop->va = context->getSVA( hash, SV_CHAR, false );
 
-				for ( char* to = (char *)(stackTop++)->va->m_data ; len ; --len )
+				for ( char* to = (char *)(stackTop++)->va->m_data ; hash ; --hash )
 				{
 					*to++ = READ_8_FROM_PC(pc++);
 				}
@@ -1079,7 +1081,6 @@ debugContinue:
 				pc += 2;
 				CONTINUE;
 			}
-
 
 			CASE(CallFunctionByHash):
 			{
@@ -2564,9 +2565,9 @@ compactCompareGG8:
 
 			
 //-------------------------------------------------------------------------------------------------------------
-#else //-------------------------------------------------------------------------------------------------------
+#else 
 //-------------------------------------------------------------------------------------------------------------
-
+// NON-COMPACT version
 			
 			CASE(PostIncrement):
 			{
@@ -3209,7 +3210,7 @@ targetFuncStoreLocalOp:
 
 #ifndef WRENCH_JUMPTABLE_INTERPRETER
 	#ifdef _MSC_VER
-			default: __assume(0); // tells the compiler to make this a jump-table
+			default: __assume(0); // tells the compiler to make this a jump table
 	#endif
 		}
 	}
