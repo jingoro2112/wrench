@@ -11,10 +11,9 @@ void print( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, 
 	}
 }
 
-
 const char* wrenchCode = 
 "print( \"Hello World!\\n\" );"
-"for( i=0; i<10; i++ )        "
+"for( var i=0; i<10; i++ )        "
 "{                            "
 "    print( i );              "
 "}                            "

@@ -8,7 +8,7 @@ $ wrench ch basic.w basic.h basic
 
 print( "Hello World!\n" );
 
-for( i=0; i<10; i++ )       
+for( var i=0; i<10; i++ )       
 {
     print( i );
 }

@@ -1,6 +1,6 @@
 #define WRENCH_COMBINED
 /*******************************************************************************
-Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -26,86 +26,85 @@ SOFTWARE.
 #define _WRENCH_H
 /*------------------------------------------------------------------------------*/
 
-#define WRENCH_VERSION_MAJOR 3
-#define WRENCH_VERSION_MINOR 2
-#define WRENCH_VERSION_BUILD 5
+#define WRENCH_VERSION_MAJOR 4
+#define WRENCH_VERSION_MINOR 0
+#define WRENCH_VERSION_BUILD 0
 
 /************************************************************************
-The compiler was not designed to be particularly memory or space efficient, for
+The compiler is not particularly memory or space efficient, for
 small embedded systems it is strongly reccommeded (nay, required) that
-only bytecode be executed. This flag allows the source code to be
-explicitly unavailable. Esp32-class processors have no trouble compiling
-on-the-fly but ATMega/SAMD21 are a no-go here.
+only bytecode be executed. This flag explicitly removes the compiler
+(although just not calling it should allow a smart linker to remove it
+anyway)
 */
 //#define WRENCH_WITHOUT_COMPILER
-/***********************************************************************/
+
 
 /***********************************************************************
 Cause the interpreter to compile into the smallest program size
 possible at the cost of some speed. This loss is from the removal of
-unrolled loops and inlined functionality, it also makes
-use of some goto spaghetti which can play havok with branch-prediction
-and actually slow down PC-class processors.
+unrolled loops and inlined functionality, also making use of some goto.
+
 WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
-interpreter in favor of a giant switch(). This saves ~6k at the cost
-of a chunk of speed so only use it if you need to.
+interpreter in favor of a giant switch(). This savings comes at the cost
+of more speed so only use it if you need to.
+
+WRENCH_INCLUDE_DEBUG_CODE costs about ~1k to support debugging, without
+it debug-enabled code runs but has no effect.
 */
 //#define WRENCH_COMPACT           // saves a lot, costs some speed
 //#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
-/***********************************************************************/
+#define WRENCH_INCLUDE_DEBUG_CODE
+
+// Default implementations are provided for these architectures, define
+// one so the sample_client will compile
+//#define WRENCH_WIN32_SERIAL
+//#define WRENCH_ARDUINO_SERIAL
+//#define WRENCH_LINUX_SERIAL
+bool wr_serialOpen( const char* name );
+void wr_serialClose();
+bool wr_serialSend( const char* data, const int size );
+bool wr_serialReceive( char* data, const int expected );
+int wr_serialBytesAvailable();
+
 
 /***********************************************************************
-Some architectures (most embedded) really don't like reading more than
-8 bits on an unaligned memory location. If your architecture
-allows it (PC, Mac, linux, unix etc..) this is a good optimization
+Some architectures (mostly embedded) really don't like reading more than
+8 bits on an unaligned memory location and will bus fault! If your architecture
+allows it (x86/64, Mac, most *nix etc..) this is a decent optimization
 */
 //#define WRENCH_UNALIGNED_READS
-/***********************************************************************/
 
 /***********************************************************************
-wrench automatically detect endian-ness and defines these three
+wrench automatically detects endian-ness and defines these three
 macros for reading data from the code stream, if you have special
-memory requirements, as some embedded systems to, you may re-defines
+memory requirements, as some embedded systems do, you may re-define
 them here, but they MUST match the endian-ness of the target
 architecture, see vm.h for the current definitions
 */
-//#define READ_32_FROM_PC( P )
+//#define READ_32_FROM_PC( P ) 
 //#define READ_16_FROM_PC( P )
 //#define READ_8_FROM_PC( P )
-/***********************************************************************/
+
 
 /************************************************************************
-how many stack locations the wrench state will pre-allocate. The stack
-cannot be grown so this needs to be enough for the life of the process.
-this does NOT include global/array space which is allocated separately, just
-function calls. Unless you are using piles of local data AND recursing
-like crazy a modest size should be more than enough.
-
-This will consume 8 bytes per stack entry
+The stack is statically allocated but only used for function
+calls/locals NOT structs/arrays/hashes which are malloc'ed. Unless your
+applications uses lots of recursion+local variables, a modest size should
+be more than enough.
+To really reduce RAM footprint this can be lowered considerably
+depending on usage. (consumes 8 bytes per stack entry)
 */
 #define WRENCH_DEFAULT_STACK_SIZE 64
-/***********************************************************************/
+
 
 /************************************************************************
-including debug functionality incurs NO performance penalty on the VM
-
-..BUT
-
-it does add a small size penalty. If you are trying to cram wrench
-into the smallest possible space, this compiles out the debug functions.
-You can still run debug-enabled code, the VM will just skip it.
-*/
-//!!!!!!!!!!!!! EXPERIMENTAL DO NOT USE
-//#define WRENCH_INCLUDE_DEBUG_CODE
-
-/************************************************************************
-if you WANT full sprintf support for floats (%f/%g) this adds it, at
-the cost of using the standard c library for it, not for small embedded
-systems but larger ones? who cares.
+if you WANT full sprintf support for floats (%f/%g) this adds it at
+the cost of using the standard c library for it (stdlib.h), which can incur a
+decent code-size penalty. Without this %f/%g is ignored.
 */
 //#define WRENCH_FLOAT_SPRINTF
 
-/***********************************************************************/
 
 /************************************************************************
 File operations: define ONE of these. If you use "Custom" then you
@@ -123,8 +122,8 @@ examples are in
 */
 //#define WRENCH_WIN32_FILE_IO
 //#define WRENCH_LINUX_FILE_IO
-//#define WRENCH_SPIFFS_FILE_IO    // !!!!!!!!!!!! PRE-RELEASE DO NOT USE
-//#define WRENCH_LITTLEFS_FILE_IO  // !!!!!!!!!!!! PRE-RELEASE DO NOT USE
+//#define WRENCH_SPIFFS_FILE_IO
+//#define WRENCH_LITTLEFS_FILE_IO
 //#define WRENCH_CUSTOM_FILE_IO    
 /***********************************************************************/
 
@@ -136,13 +135,12 @@ struct WRValue;
 struct WRContext;
 struct WRFunction;
 
-// hashing function used inside wrench, it's a stripped down murmer,
-// not academically fantastic but very good and very fast
-uint32_t wr_hash( const void* dat, const int len );
-uint32_t wr_hashStr( const char* dat );
-
-// in order to minimize text segment size, only a minimum of strings
+//------------------------------------------------------------------------------
+// to minimize text segment size, only a minimum of strings
 // are embedded in the code. error messages are very verbose enums
+// also provided as an array of strings which are _not_ referenced
+// by the VM or Compiler, so normally will not be linked in.
+extern const char* c_errStrings[];
 enum WRError
 {
 	WR_ERR_None = 0,
@@ -166,6 +164,7 @@ enum WRError
 	WR_ERR_compiler_panic,
 	WR_ERR_constant_redefined,
 	WR_ERR_struct_in_struct,
+	WR_ERR_var_not_seen_before_label,
 
 	WR_ERR_run_must_be_called_by_itself_first,
 	WR_ERR_hash_table_size_exceeded,
@@ -199,13 +198,18 @@ enum WRError
 };
 
 /***************************************************************/
-/**************************************************************/
+/***************************************************************/
 //                       State Management
 
 // create/destroy a WRState object that can run multiple contexts/threads
 WRState* wr_newState( int stackSize =WRENCH_DEFAULT_STACK_SIZE );
 void wr_destroyState( WRState* w );
 
+
+// hashing function used inside wrench, it's a stripped down murmer,
+// not academically fantastic but very good and very fast
+uint32_t wr_hash( const void* dat, const int len );
+uint32_t wr_hashStr( const char* dat );
 
 /***************************************************************/
 /**************************************************************/
@@ -217,15 +221,17 @@ void wr_destroyState( WRState* w );
 // optionally an "errMsg" buffer can be passed which will output a
 //     human-readable string of what went wrong and where.
 // compilerOptionFlags : OR'ed mask of of WrenchCompilerOptionFlags:
-enum WrenchCompilerOptionFlags
+enum WrenchCompilerFlags
 {
-	WR_INCLUDE_GLOBALS = 1<<0,	// include all globals NOTE: wr_getGlobalRef(...)
-								// will not function without this
+	WR_INCLUDE_GLOBALS   = 1<<0, // include all globals NOTE: wr_getGlobalRef(...)
+								 // will not function without this
 	
-	WR_EMBED_DEBUG_CODE = 1<<1,	// include per-instruction NOTE: WrenchDebugInterface
-								// will not function without this
+	WR_EMBED_DEBUG_CODE  = 1<<1, // include per-instruction NOTE: WrenchDebugInterface
+								 // will not function without this
 	
-	WR_EMBED_SOURCE_CODE = 1<<2,// include a copy of the source code
+	WR_EMBED_SOURCE_CODE = 1<<2, // include a copy of the source code
+	
+	WR_NON_STRICT_VAR    = 1<<3, // require 'var' to declare a variable (default true)
 };
 
 WRError wr_compile( const char* source,
@@ -233,20 +239,23 @@ WRError wr_compile( const char* source,
 					unsigned char** out,
 					int* outLen,
 					char* errMsg =0,
-					const unsigned int compilerOptionFlags = WR_INCLUDE_GLOBALS );
+					const uint8_t compilerOptionFlags = WR_INCLUDE_GLOBALS );
 
 // w:          state (see wr_newState)
 // block:      location of bytecode
 // blockSize:  number of bytes in the block
 
 // RETURNS:    an allocated WRContext
-//             NOTE: This Context is automatically destyroyed when
+//             NOTE: This Context is automatically destroyed when
 //             wr_destroyState() is called, but can be manually deleted
 //             with wr_destroyContext(...) (see below)
 WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize );
 
 // macro for automatically freeing the WRContext
 #define wr_runOnce( w, block, blockSize ) wr_destroyContext( wr_run((w),(block),(blockSize)) )
+
+// Run the source code as an atomic operation
+bool wr_runCommand( WRState* w, const char* sourceCode, const int size =-1 );
 
 // After wr_run(...) or wr_callFunction(...) has run, there is always a
 // return value (default 0) this function fetches it
@@ -260,7 +269,7 @@ WRValue* wr_executeContext( WRContext* context );
 // after wr_run() this allows any function in the script to be
 // called with the given arguments, returning a single value
 //
-// contextId:    the context in which the function was loaded
+// contexd:      the context in which the function was loaded
 // functionName: plaintext name of the function to be called
 // argv:         array of WRValues to call the function with (optional)
 // argn:         how many arguments argv contains (optional, but if
@@ -301,6 +310,11 @@ WRValue* wr_getGlobalRef( WRContext* context, const char* label );
 //       is called, it it NOT necessary to call this on each context
 void wr_destroyContext( WRContext* context );
 
+// how many bytes of memory must be allocated before the gc will run, default
+// set here, can be adjusted at runtime with the
+// wr_setAllocatedMemoryGCHint()
+#define WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT 4000
+void wr_setAllocatedMemoryGCHint( WRContext* context, const uint16_t bytes );
 
 /***************************************************************/
 /***************************************************************/
@@ -387,6 +401,7 @@ void wr_loadIOLib( WRState* w ); // IO funcs (time/file/io)
 void wr_loadStringLib( WRState* w ); // string functions
 void wr_loadMessageLib( WRState* w ); // messaging between contexts
 void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
+void wr_loadDebugLib( WRState* w ); // debuger-interact functions
 
 // arduino-specific functions, be sure to add arduino_lib.cpp to your
 // sketch. much thanks to Koepel for contributing
@@ -588,71 +603,18 @@ enum WRGCObjectType
 #define IS_ITERATOR(X) ((X)==WR_EX_ITERATOR)
 #define IS_RAW_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_RAW_ARRAY)
 #define IS_HASH_TABLE(X) ((X)==WR_EX_HASH_TABLE)
-
-#define EXPECTS_HASH_INDEX(X) ( ((X) == WR_EX_STRUCT) || ((X)==WR_EX_HASH_TABLE) )
-
-#if !defined(ARDUINO) && (__arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__ || __GNUC__)
-#include <memory.h>
-#include <stdio.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <cstring>
-#include <cstdlib>
-#endif
+#define EXPECTS_HASH_INDEX(X) ( ((X)==WR_EX_STRUCT) || ((X)==WR_EX_HASH_TABLE) )
 
 #ifdef ARDUINO
 #include <Arduino.h>
-#ifdef BYTE_ORDER
-#if BYTE_ORDER == LITTLE_ENDIAN
-#define ARDUINO_LITTLE_ENDIAN
-#elif BYTE_ORDER == BIG_ENDIAN
-#define ARDUINO_BIG_ENDIAN
-#else
-#error
 #endif
 
+#if (defined(BYTE_ORDER) && BYTE_ORDER == BIG_ENDIAN) || (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__) || (defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN) || defined(__BIG_ENDIAN__) || defined(__ARMEB__) || defined(__THUMBEB__) || defined(__AARCH64EB__) || defined(_MIBSEB) || defined(__MIBSEB) || defined(__MIBSEB__) || defined(ARDUINO_BIG_ENDIAN)
+  #define WRENCH_BIG_ENDIAN
+#elif (defined(BYTE_ORDER) && BYTE_ORDER == LITTLE_ENDIAN) || (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) || (defined(__BYTE_ORDER) && __BYTE_ORDER == __LITTLE_ENDIAN) || defined(__LITTLE_ENDIAN__) || defined(__ARMEL__) || defined(_M_PPC) || defined(__THUMBEL__) || defined(__AARCH64EL__) || defined(_MSC_VER) || defined(_MIPSEL) || defined(__MIPSEL) || defined(__MIPSEL__) || defined(ARDUINO_LITTLE_ENDIAN)
+  #define WRENCH_LITTLE_ENDIAN
 #else
-
-#define TEST_LITTLE_ENDIAN (((union { unsigned x; unsigned char c; }){1}).c)
-#ifdef TEST_LITTLE_ENDIAN
-#define ARDUINO_LITTLE_ENDIAN
-#else
-#define ARDUINO_BIG_ENDIAN
-#endif
-
-#endif
-#endif
-
-#if defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN || \
-						  defined(__BIG_ENDIAN__) || \
-						  defined(__ARMEB__) || \
-						  defined(__THUMBEB__) || \
-						  defined(__AARCH64EB__) || \
-						  defined(_MIBSEB) || defined(__MIBSEB) || defined(__MIBSEB__) || \
-						  defined(ARDUINO_BIG_ENDIAN)
-#define WRENCH_BIG_ENDIAN
-#elif defined(__BYTE_ORDER) && __BYTE_ORDER == __LITTLE_ENDIAN || \
-							defined(__LITTLE_ENDIAN__) || \
-							defined(__ARMEL__) || \
-							defined(_M_PPC) || \
-							defined(__THUMBEL__) || \
-							defined(__AARCH64EL__) || \
-							defined(_MSC_VER) || \
-							defined(_MIPSEL) || defined(__MIPSEL) || defined(__MIPSEL__) || \
-							defined(ARDUINO_LITTLE_ENDIAN)
-#define WRENCH_LITTLE_ENDIAN
-#elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
- #define WRENCH_LITTLE_ENDIAN
-#elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
- #define WRENCH_BIG_ENDIAN
-
-#else
-
-// if you are reading this, please define the appropriate endian-ness
-// here for your compiler(WRENCH_LITTLE_ENDIAN / WRENCH_BIG_ENDIAN) and:
-#error "Endian-ness not detected! Please contact curt.hartung@gmail.com so it can be added"
-
+  #error "Endian-ness not detected! Please contact curt.hartung@gmail.com so it can be added <01>"
 #endif
 
 class WRGCObject;
@@ -688,13 +650,16 @@ struct WRValue
 	// reccomended) the string is assumed to be unlimited size
 	char* asString( char* string, size_t maxLen =0 ) const;
 
+	// same as "asString" but will print it in a more debug-symbol-y
+	char* technicalAsString( char* string, size_t maxLen, bool valuesInHex =false ) const;
+
 	// return a raw pointer to the data array if this is one, otherwise null
 	void* array( unsigned int* len =0, char arrayType =SV_CHAR ) const;
 
-	inline void init() { p = 0; p2 = 0; } // call upon first create or when you're sure no memory is hanging from one
-
 //private: // is what this SHOULD be.. but that's impractical since the
-		   // VM is not an object that can be friended.
+	// VM is not an object that can be friended.
+
+	inline void init() { p = 0; p2 = 0; } // call upon first create or when you're sure no memory is hanging from one
 
 	WRValue& singleValue() const; // return a single value for comparison
 	WRValue& deref() const; // if this value is a ARRAY_MEMBER, copy the referred value in
@@ -710,7 +675,7 @@ struct WRValue
 		return getHashEx();
 	}
 
-	union // first 4 bytes (or 8 on a 64-bit system but.. what are you doing here?)
+	union // first 4 bytes 
 	{
 		int32_t i;
 		uint32_t ui;
@@ -759,7 +724,6 @@ struct WRValue
 #endif
 		};
 #endif
-		
 		uint32_t p2;
 		union
 		{
@@ -769,7 +733,9 @@ struct WRValue
 		};
 	};
 
+	WRValue() {}
 	inline WRValue& operator= (const WRValue& V) { r1 = V.r1; r2 = V.r2; return *this; }
+	inline WRValue(const WRValue& V) { r1 = V.r1; r2 = V.r2; }
 };
 
 //------------------------------------------------------------------------------
@@ -786,158 +752,147 @@ public:
 
 	// if the value is not the correct type it will be converted to
 	// that type, preserving the value as best it can
-	operator int32_t* () { return asInt(); }
-	int32_t* asInt() { return (m_value->type == WR_INT) ? &(m_value->i) : makeInt(); }
+	operator int32_t* () { return Int(); }
+	int32_t* Int();
 	
-	operator float* () { return asFloat(); }
-	float* asFloat() { return (m_value->type == WR_FLOAT) ? &(m_value->f) : makeFloat(); }
+	operator float* () { return Float(); }
+	float* Float();
 
 	// this will convert it to an array if it isn't one
 	WRValue& operator[] ( const int index ) { return *asArrayMember( index ); }
 	WRValue* asArrayMember( const int index );
 	int arraySize(); // returns -1 if this is not an array
 
-	// convert the value in-place and return a pointer to it
-	int32_t* makeInt();
-	float* makeFloat();
-
 private:
 	WRContext* m_context;
 	WRValue* m_value;
 };
 
-struct WrenchPacket;
-struct WrenchSymbol;
-struct WrenchFunction;
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+#ifndef WRENCH_COMBINED
+#include "utils/simple_ll.h"
+#endif
 
+struct WrenchPacket;
+class WRDebugServerInterface;
+class WRDebugServerInterfacePrivate;
+class WRDebugClientInterfacePrivate;
 template<class> class SimpleLL;
 
+
 //------------------------------------------------------------------------------
-class WRDebugServerInterface
+struct WrenchSymbol
 {
-public:
-
-	WRDebugServerInterface( WRState* w,
-							const unsigned char* bytes =0,
-							const int len =0,
-							bool (*receiveFunction)( char* data, const size_t length, const int timeoutMilliseconds ) =0,
-							size_t (*writeFunction)( const char* data, const size_t length ) =0 );
-
-	~WRDebugServerInterface();
-
-	WRContext* loadBytes( const unsigned char* bytes, const int len );
-	char* m_localBytes;
-	int m_localBytesLen;
-
-//private: again.. TECHNICALLY.. but we are keeping things simple
-
-	int m_steppingOverReturnVector;
-	int m_lineSteps;
-	int m_opcodeSteps;
-
-	struct LineBreak
-	{
-		int line;
-		LineBreak* next;
-	};
-	SimpleLL<LineBreak>* m_lineBreaks;
-	SimpleLL<WrenchPacket>* m_packetQ;
-
-	void codewordEncountered( uint16_t codeword, WRValue* stackTop );
-
-	void processPacket( WrenchPacket* packet );
-
-	WRState* m_w;
-	bool (*m_receiveFunction)( char* data, const size_t length, const int timeoutMilliseconds );
-	size_t (*m_writeFunction)( const char* data, const size_t length );
-
-	int m_onLine;
-	int m_onFunction;
-	bool m_firstCall;
-
-	const unsigned char* m_embeddedSource;
-	int m_embeddedSourceSize;
-	int m_embeddedSourceHash;
-
-	const unsigned char* m_symbolBlock;
-	int m_symbolBlockSize;
-	
-	WRContext* m_context;
-	const WRValue* m_argv;
-	int m_argn;
-	const unsigned char* m_pc;
-	WRValue* m_frameBase;
-	WRValue* m_stackTop;
-	
-	bool m_brk;
+	char label[64];
 };
 
 //------------------------------------------------------------------------------
+struct WrenchFunction
+{
+	char name[64];
+	int arguments;
+	SimpleLL<WrenchSymbol>* vars;
+};
+
+//------------------------------------------------------------------------------
+struct WrenchCallStackEntry
+{
+	int32_t onLine;
+
+	uint8_t fromUnitIndex;
+	uint8_t thisUnitIndex;
+	uint16_t locals;
+
+	uint8_t arguments;
+	uint8_t stackOffset;
+};
+
+//------------------------------------------------------------------------------
+enum WRP_ProcState
+{
+	WRP_Unloaded =0,
+	WRP_Loaded,
+	WRP_Running,
+	WRP_Complete
+};
+
+//------------------------------------------------------------------------------
+// This object runs as the main interface to a running debug image, it
+// can drive it remotely over a serial (or whatever) link or directly
+// through a pointer.
 class WRDebugClientInterface
 {
 public:
+	// server is remote, define these methods to talk to it
+	WRDebugClientInterface( bool (*receiveFunction)( char* data, const int length ),
+							bool (*sendFunction)( const char* data, const int length ),
+							int  (*bytesAvailableFunction)() );
 
-	WRDebugClientInterface( size_t (*receiveFunction)( char* data, const size_t length, const int timeoutMilliseconds ),
-							size_t (*writeFunction)( const char* data, const size_t length ) );
-
+	// used for when the server is local in-core
 	WRDebugClientInterface( WRDebugServerInterface* localServer );
 
-	~WRDebugClientInterface();
-	
-//	const WRDebugMessage& status();
-
 	// load and prepare a program for running
-	// if byteCode/size is null then it re-loads it's existing program
+	// if byteCode/size is null then previoous code is re-loaded
 	void load( const char* byteCode =0, const int size =0 ); 
-	void run(); // run or continue
 
-	bool getSourceCode( const char** data, int* len );
-	uint32_t getSourceCodeHash();
+	bool getSourceCode( const char** data, int* len ); // get a new'ed pointer to the source code
+	uint32_t getSourceCodeHash(); // get the crc of the code that was compiled
 
-	const WRValue* getGlobalValue( const char* name );
-	const char* getGlobalName( const int index );
-	void setGlobalValue( const char* name, WRValue const& value );
+	SimpleLL<WrenchFunction>& getFunctions(); // global is function[0] 
 
-	const WRValue* getLocalValue( const char* name );
-	const char* getLocalName( const int index );
-	void setLocalValue( const char* name, WRValue const& value );
+	// 0 is global, 1,2,3... etc are frames
+	SimpleLL<WrenchCallStackEntry>* getCallstack();
+	
+	const char* getFunctionLabel( const int index );
+	const char* getValueLabel( const int index, const int depth );
+	WRValue* getValue( WRValue& value, const int index, const int depth );
 
-	void stepOverLine( const int steps =1 );
-	void stepOverOpcode( const int steps =1 );
+	void run( const int toLine =0 );
 
-	void stepIntoLine( const int steps =1 );
-	void stepIntoOpcode( const int steps =1 );
+	void stepInto( const int steps =1 );
+	void stepOver( const int steps =1 );
 
 	void setBreakpoint( const int lineNumber );
 	void clearBreakpoint( const int lineNumber );
 
-//private:
+	WRP_ProcState getProcState();
 
-	bool transmit( WrenchPacket& packet );\
-	WrenchPacket* receive( const int timeoutMilliseconds =0 );
-	
-	void loadSourceBlock();
-	void loadSymbols();
-	
+	// "hidden" internals to keep header clean
+	WRDebugClientInterfacePrivate* I;
+	~WRDebugClientInterface();
+
 	void init();
-
-	char* m_sourceBlock;
-	int m_sourceBlockLen;
-	uint32_t m_sourceBlockHash;
-	WrenchPacket* m_packet;
-	
-	SimpleLL<WrenchPacket>* m_packetQ;
-
-	void populateSymbols( const char* block, const int size );
-	SimpleLL<WrenchSymbol>* m_globals;
-	SimpleLL<WrenchFunction>* m_functions;
-	bool m_symbolsLoaded;
-	
-	WRDebugServerInterface* m_localServer;
-	size_t (*m_receiveFunction)( char* data, const size_t length, const int timeoutMilliseconds );
-	size_t (*m_writeFunction)( const char* data, const size_t length );
 };
 
+//------------------------------------------------------------------------------
+// This object is run on the target machine to manage the running
+// image. It has a minimal interface and is meant to be driven entirely
+// by WRDebugClientInterface
+class WRDebugServerInterface
+{
+public:
+	// for local, just wait to be talked to directly
+	WRDebugServerInterface( WRState* w );
+
+	// for remote, define these functions to send/receive data AND call
+	// tick() periodically!
+	WRDebugServerInterface( WRState* w,
+							bool (*receiveFunction)( char* data, const int length ),
+							bool (*sendFunction)( const char* data, const int length ),
+							int  (*bytesAvailableFunction)() );
+
+	// needs to be called periodically if this is a remote instance only
+	void tick();
+
+	// NOTE: loadBytes() does NOT make a local copy! bytes must remain valid for the life of this object!
+	WRContext* loadBytes( const uint8_t* bytes, const int len );
+
+	// "hidden" internals to keep header clean
+	WRDebugServerInterfacePrivate *I;
+	~WRDebugServerInterface();
+};
+
+#endif
 
 #ifdef WRENCH_REALLY_COMPACT
 #ifndef WRENCH_COMPACT
@@ -945,28 +900,29 @@ public:
 #endif
 #endif
 
-#define WRENCH_JUMPTABLE_INTERPRETER
-#ifdef WRENCH_REALLY_COMPACT
-  #undef WRENCH_JUMPTABLE_INTERPRETER
-#elif !defined(__clang__)
-  #if _MSC_VER
-	#undef WRENCH_JUMPTABLE_INTERPRETER
-  #endif
+#if !defined(ARDUINO) && (__arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__ || __GNUC__)
+#include <memory.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <cstring>
+#include <cstdlib>
 #endif
 
 #ifndef WRENCH_COMBINED
-#include "utils.h"
-#include "simple_ll.h"
-#include "gc_object.h"
-#include "serializer.h"
-#include "vm.h"
-#include "opcode.h"
-#include "str.h"
-#include "opcode_stream.h"
-#include "wrench_debug.h"
-#include "cc.h"
-#include "std_io_defs.h"
+#include "utils/utils.h"
+#include "vm/gc_object.h"
+#include "utils/serializer.h"
+#include "utils/simple_args.h"
+#include "vm/vm.h"
+#include "utils/opcode.h"
+#include "cc/str.h"
+#include "cc/opcode_stream.h"
+#include "debug/wrench_debug.h"
+#include "utils/debug_client.h"
+#include "cc/cc.h"
+#include "lib/std_io_defs.h"
 #endif
 
 #endif
-

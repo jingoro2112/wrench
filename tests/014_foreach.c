@@ -31,7 +31,6 @@ if ( on != 3 ) println( "f3");
 
 something = { 1, 2, 3 };
 somethingH = { 1:10, 2:20, "bill?":30, 500:"bob", 12:13 };
-
 on = 0;
 for( key,value2 : somethingH )
 {
@@ -39,6 +38,15 @@ for( key,value2 : somethingH )
 	if ( somethingH[key] != value2 ) println("key err 1");
 }
 if ( on != 5 ) println( "wrong on" );
+
+somethingH = { -1:10, 0:20, 1:30 };
+on2 = 0;
+for( key,value2 : somethingH )
+{
+	on2++;
+}
+if ( on2 != 3 ) println( "wrong on2" );
+
 
 for( value2 : something )
 {

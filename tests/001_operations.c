@@ -56,14 +56,14 @@ hello world
 
 
 
-y = "hello";
+var y = "hello";
 y += "hi";
 if ( y != "hellohi" ) print("failconcat");
 
 
 y = "BB";
-z = "CC";
-y1 = y + z;
+var z = "CC";
+var y1 = y + z;
 y = y + z;
 if ( y1 != "BBCC" ) print("fail bin1");
 if ( y != "BBCC" ) print("fail bin1");
@@ -335,3 +335,18 @@ function local()
 	c = ::ag | ::bg;if ( c != 11 ) println("F6");
 	
 }
+
+var gn = 30;
+function foo()
+{
+	var gn = 2;  // local 'n' is 2
+	if ( ::gn != 30 ) println("gn0");
+	::gn = 40;   // global 'n' was 30, will now be 40
+	if ( gn != 2 ) println("gn1");
+	if ( ::gn != 40 ) println("gn2");
+}
+
+if ( gn != 30 ) println("gn3");
+foo();
+if ( gn != 40 ) println("gn4");
+if ( ::gn != 40 ) println("gn5");

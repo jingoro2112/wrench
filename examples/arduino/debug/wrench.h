@@ -122,8 +122,8 @@ examples are in
 */
 //#define WRENCH_WIN32_FILE_IO
 //#define WRENCH_LINUX_FILE_IO
-//#define WRENCH_SPIFFS_FILE_IO
-//#define WRENCH_LITTLEFS_FILE_IO
+//#define WRENCH_SPIFFS_FILE_IO    // !!!!!!!!!!!! PRE-RELEASE DO NOT USE
+//#define WRENCH_LITTLEFS_FILE_IO  // !!!!!!!!!!!! PRE-RELEASE DO NOT USE
 //#define WRENCH_CUSTOM_FILE_IO    
 /***********************************************************************/
 
@@ -398,7 +398,6 @@ void wr_loadIOLib( WRState* w ); // IO funcs (time/file/io)
 void wr_loadStringLib( WRState* w ); // string functions
 void wr_loadMessageLib( WRState* w ); // messaging between contexts
 void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
-void wr_loadDebugLib( WRState* w ); // debuger-interact functions
 
 // arduino-specific functions, be sure to add arduino_lib.cpp to your
 // sketch. much thanks to Koepel for contributing
@@ -771,6 +770,8 @@ private:
 #endif
 
 struct WrenchPacket;
+struct WrenchSymbol;
+struct WrenchFunction;
 class WRDebugServerInterface;
 class WRDebugServerInterfacePrivate;
 class WRDebugClientInterfacePrivate;
@@ -787,6 +788,7 @@ struct WrenchSymbol
 struct WrenchFunction
 {
 	char name[64];
+	int index;
 	int arguments;
 	SimpleLL<WrenchSymbol>* vars;
 };
@@ -796,8 +798,8 @@ struct WrenchCallStackEntry
 {
 	int32_t onLine;
 
-	uint8_t fromUnitIndex;
-	uint8_t thisUnitIndex;
+	uint8_t fromUnit;
+	uint8_t thisUnit;
 	uint16_t locals;
 
 	uint8_t arguments;
@@ -837,12 +839,18 @@ public:
 
 	SimpleLL<WrenchFunction>& getFunctions(); // global is function[0] 
 
-	// 0 is global, 1,2,3... etc are frames
 	SimpleLL<WrenchCallStackEntry>* getCallstack();
-	
+
 	const char* getFunctionLabel( const int index );
+
+	// in all cases for "depth" 0 is current function, -1 is "global"
+	int getVariableCount( const int depth );
 	const char* getValueLabel( const int index, const int depth );
 	WRValue* getValue( WRValue& value, const int index, const int depth );
+
+	int getFunctionArgCount( const int depth );
+	int getFunctionIndex( const int depth );
+	int getFunctionLocalCount( const int depth );
 
 	void run( const int toLine =0 );
 
@@ -857,7 +865,6 @@ public:
 	// "hidden" internals to keep header clean
 	WRDebugClientInterfacePrivate* I;
 	~WRDebugClientInterface();
-
 	void init();
 };
 
@@ -917,7 +924,7 @@ public:
 #include "cc/str.h"
 #include "cc/opcode_stream.h"
 #include "debug/wrench_debug.h"
-#include "utils/debug_client.h"
+#include "debug/sample_client.h"
 #include "cc/cc.h"
 #include "lib/std_io_defs.h"
 #endif

@@ -494,7 +494,7 @@ private:
 #endif
 
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -554,7 +554,7 @@ public:
 		int cur = 0;
 		for( Node* N = m_head; N ; N = N->next, ++cur )
 		{
-			if( cur >= i )
+			if( cur == i )
 			{
 				return &(N->item);
 			}
@@ -750,6 +750,7 @@ public:
 	void clear() { while( m_head ) { popHead(); }  }
 
 private:
+
 	struct Node
 	{
 		Node( Node* n=0 ) : next(n) {}
@@ -761,27 +762,6 @@ private:
 	Node* m_head;
 	Node* m_tail;
 	void (*m_clearFunc)( L& item );
-
-public:
-	class Iterator
-	{
-	public:
-		Iterator( SimpleLL<L> const& list ) { iterate(list); }
-		Iterator() : m_list(0), m_current(0) {}
-			
-		bool operator!=( const Iterator& other ) { return m_current != other.m_current; }
-		L& operator* () const { return m_current->item; }
-
-		const Iterator operator++() { if ( m_current ) m_current = m_current->next; return *this; }
-		void iterate( SimpleLL<L> const& list ) { m_list = &list; m_current = m_list->m_head; }
-
-	private:
-		SimpleLL<L> const* m_list;
-		Node *m_current;
-	};
-
-	Iterator begin() const { return Iterator(*this); }
-	Iterator end() const { return Iterator(); }
 };
 
 
@@ -938,10 +918,10 @@ inline const char* SimpleArgs::get( int argn, char *argv[], int index, char* par
 //------------------------------------------------------------------------------
 inline const char* SimpleArgs::get( int argn, char *argv[], const char* opt, char* param, const int maxParamLen )
 {
-//	int len = strlen(opt);
+	int len = strlen(opt);
 	for( int a=0; a<argn; ++a )
 	{
-		if ( strncmp(argv[a], opt, strlen(argv[a])) )
+		if ( strncmp(argv[a], opt, len) )
 		{
 			continue;
 		}
@@ -2802,11 +2782,10 @@ private:
 	bool m_embedSourceCode;
 	bool m_needVar;
 	
+	int m_lastLineNumber;
 	uint16_t m_lastCode;
-	uint16_t m_lastParam;
-	void pushDebug( uint16_t code, WRBytecode& bytecode,int param );
-	int getSourcePosition();
-	int getSourcePosition( int& onLine, int& onChar, WRstr* line =0 );
+	void pushDebug( uint16_t code, WRBytecode& bytecode,int param =-1 );
+	void getSourcePosition( int& onLine, int& onChar, WRstr* line =0 );
 	
 	int addRelativeJumpTarget( WRBytecode& bytecode );
 	void setRelativeJumpTarget( WRBytecode& bytecode, int relativeJumpTarget );
@@ -2937,15 +2916,33 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 
 //------------------------------------------------------------------------------
+// to allow the compiler to COMPILE debug code even if the VM does not
+// execute it
+enum WrenchDebugInfoType
+{
+	WRD_TypeMask =     0xC000,
+	WRD_PayloadMask =  0x3FFF,
+	WRD_GlobalStopFunction = 0x0100,
+	WRD_GlobalUnit = 0xFF,
+
+	WRD_FunctionCall = 0x0000, // payload is function index
+	WRD_LineNumber =   0x4000, // 14-bit line number
+	WRD_Return =       0x8000, // function has returned
+	WRD_RESERVED =     0xC000,
+};
+
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+
+void wr_PacketClearFunc( WrenchPacket*& packet );
+
+//------------------------------------------------------------------------------
 enum WrenchDebugComm
 {
 	WRD_None = 0,
 	WRD_Ok,
 	WRD_Run,
 	WRD_Load,
-
-	WRD_DebugOut,
-
+	
 	WRD_RequestCallstack,
 	WRD_RequestSymbolBlock,
 	WRD_RequestSourceBlock,
@@ -2955,13 +2952,13 @@ enum WrenchDebugComm
 	WRD_RequestStepInto,
 	WRD_RequestSetBreakpoint,
 	WRD_RequestClearBreakpoint,
-
+	
 	WRD_ReplyCallstack,
 	WRD_ReplySymbolBlock,
 	WRD_ReplySource,
 	WRD_ReplySourceHash,
 	WRD_ReplyValue,
-
+	
 	WRD_ReplyUnavailable,
 	WRD_Err,
 };
@@ -2978,36 +2975,27 @@ struct WrenchPacket
 	};
 	int32_t param1;
 	int32_t param2;
-
-	void setPayloadSize( uint32_t newsize ) { size = sizeof(WrenchPacket) + newsize; }
+	
 	uint32_t payloadSize() { return (size <= sizeof(WrenchPacket)) ? 0 : (size - sizeof(WrenchPacket)); }
 	uint8_t* payload( uint32_t offset =0 ) { return (uint8_t*)((char *)this + sizeof(WrenchPacket)) + offset; }
 	uint8_t operator[] ( const int offset ) { return *(uint8_t*)((char*)this + sizeof(WrenchPacket)) + offset; }
 
-	static WrenchPacket* alloc( WrenchPacket const& base );
-	static WrenchPacket* alloc( const uint32_t type, const uint32_t payloadSize =0 );
-	uint32_t xlate();
+	static WrenchPacket* alloc( const uint32_t type, const uint32_t payloadSize =0 )
+	{
+		WrenchPacket* packet = (WrenchPacket*)malloc( sizeof(WrenchPacket) + payloadSize );
+		packet->size = payloadSize + sizeof(WrenchPacket);
+		packet->t = type;
+		return packet;
+	}
+	
+	void xlate()
+	{
+		t = wr_x32( t );
+		size = wr_x32( size );
+		param1 = wr_x32( param1 );
+		param2 = wr_x32( param2 );
+	}
 };
-
-//------------------------------------------------------------------------------
-// to allow the compiler to COMPILE debug code even if the VM does not
-// execute it
-enum WrenchDebugInfoType
-{
-	WRD_TypeMask =     0xC000,
-	WRD_PayloadMask =  0x3FFF,
-	WRD_GlobalStopFunction = 0x0F00,
-	WRD_ExternalFunction = 0x0E00,
-
-	WRD_FunctionCall = 0x0000, // payload is function index
-	WRD_LineNumber =   0x4000, // 14-bit line number
-	WRD_Return =       0x8000, // function has returned
-	WRD_RESERVED =     0xC000,
-};
-
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-
-void wr_PacketClearFunc( WrenchPacket*& packet );
 
 //------------------------------------------------------------------------------
 class WrenchPacketScoped
@@ -3075,8 +3063,6 @@ public:
 	int m_stepOverDepth;
 	bool m_stepOut;
 
-	WrenchPacket m_lastPacket;
-
 	SimpleLL<int>* m_lineBreaks;
 	SimpleLL<WrenchPacket*>* m_packetQ;
 	SimpleLL<WrenchCallStackEntry>* m_callStack;
@@ -3138,8 +3124,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
-#ifndef _DEBUG_CLIENT_H
-#define _DEBUG_CLIENT_H
+#ifndef _SAMPLE_CLIENT_H
+#define _SAMPLE_CLIENT_H
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 
@@ -3156,7 +3142,6 @@ public:
 private:
 
 	bool init( const char* name, const char* port =0 );
-	bool loadSource( const char* name );
 
 	bool printVariable( WRstr& str );
 	WrenchCallStackEntry* getCurrentFrame();
@@ -3308,8 +3293,8 @@ WRError WRCompilationContext::compile( const char* source,
 	*outLen = 0;
 	*out = 0;
 
-	m_lastParam = 0;
-	m_lastCode = 0;
+	m_lastLineNumber = 0;
+	m_lastCode = 0xFFFF;
 
 	m_pos = 0;
 	m_err = WR_ERR_None;
@@ -3354,6 +3339,7 @@ WRError WRCompilationContext::compile( const char* source,
 		int onChar;
 		int onLine;
 		WRstr line;
+
 		getSourcePosition( onLine, onChar, &line );
 
 		msg.format( "line:%d\n", onLine );
@@ -5129,6 +5115,7 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 						}
 						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_FUNCTION_CALL_PLACEHOLDER )
 						{
+							//bytecode.all[a] = bytecode.all[a-1];
 							bytecode.all[a-2] = O_AssignToGlobalAndPop;
 							bytecode.all.shave(1);
 							bytecode.opcodes[o] = O_AssignToGlobalAndPop;
@@ -5314,14 +5301,20 @@ void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int p
 		return;
 	}
 
-	if ( code == m_lastCode && param == m_lastParam )
+	if ( param == -1 )
 	{
-		return;
+		int onChar;
+		getSourcePosition( param, onChar );
+
+		if ( param == m_lastLineNumber && code == m_lastCode )
+		{
+			return;
+		}
+	
+		m_lastLineNumber = param;
+		m_lastCode = code;
 	}
 
-	m_lastParam = param;
-	m_lastCode = code;
-	
 	pushOpcode( bytecode, O_DebugInfo );
 
 	uint16_t codeword = code | ((uint16_t)param & WRD_PayloadMask);
@@ -5330,15 +5323,7 @@ void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int p
 }
 
 //------------------------------------------------------------------------------
-int WRCompilationContext::getSourcePosition()
-{
-	int onChar;
-	int onLine;
-	return getSourcePosition( onLine, onChar, 0 );
-}
-
-//------------------------------------------------------------------------------
-int WRCompilationContext::getSourcePosition( int& onLine, int& onChar, WRstr* line )
+void WRCompilationContext::getSourcePosition( int& onLine, int& onChar, WRstr* line )
 {
 	onChar = 0;
 	onLine = 1;
@@ -5369,8 +5354,6 @@ int WRCompilationContext::getSourcePosition( int& onLine, int& onChar, WRstr* li
 			onChar++;
 		}
 	}
-
-	return onLine;
 }
 
 //------------------------------------------------------------------------------
@@ -6718,14 +6701,12 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		}
 	}
 
-	pushDebug( WRD_LineNumber, expression.context[depth].bytecode, getSourcePosition() );
-	pushDebug( WRD_FunctionCall, expression.context[depth].bytecode, WRD_ExternalFunction );
+	pushDebug( WRD_FunctionCall, expression.context[depth].bytecode, wr_hashStr(prefix) );
 
 	if ( prefix.size() )
 	{
 		prefix += "::";
 		prefix += functionName;
-
 
 		unsigned char buf[4];
 		wr_pack32( wr_hashStr(prefix), buf );
@@ -6876,7 +6857,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			break;
 		}
 
-		pushDebug( WRD_LineNumber, expression.bytecode, getSourcePosition() );
+		pushDebug( WRD_LineNumber, expression.bytecode );
 		
 		if ( token == "var" )
 		{
@@ -7700,7 +7681,7 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 
 	if ( !returnCalled )
 	{
-		pushDebug( WRD_LineNumber, m_units[m_unitTop].bytecode, getSourcePosition() );
+		pushDebug( WRD_LineNumber, m_units[m_unitTop].bytecode );
 		pushOpcode( m_units[m_unitTop].bytecode, O_LiteralZero );
 		pushOpcode( m_units[m_unitTop].bytecode, O_Return );
 	}
@@ -8820,7 +8801,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				appendBytecode( m_units[unitIndex].bytecode, nex.bytecode );
 			}
 
-			pushDebug( WRD_LineNumber, m_units[m_unitTop].bytecode, getSourcePosition() );
+			pushDebug( WRD_LineNumber, m_units[m_unitTop].bytecode );
 			pushOpcode( m_units[unitIndex].bytecode, opcodeToReturn );
 		}
 		else if ( !m_quoted && token == "struct" )
@@ -9322,12 +9303,11 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 
 				for( ; u2<m_units.count(); ++u2 )
 				{
-					if ( m_units[u2].hash == N.hash ) // local function! call it, manage preserving retval
+					if ( m_units[u2].hash == N.hash )
 					{
 						if ( m_addDebugSymbols )
 						{
-							// fill in the codeword with internal function number
-							uint16_t codeword = (uint16_t)WRD_FunctionCall | (uint16_t)u2;
+							uint16_t codeword = (uint16_t)WRD_FunctionCall | ((uint16_t)(u2 - 1) & WRD_PayloadMask);
 							wr_pack16( codeword, (unsigned char *)code.p_str(index - 2) );
 						}
 						
@@ -9353,7 +9333,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 					}
 				}
 
-				if ( u2 >= m_units.count() ) // no local function found, rely on it being found run-time
+				if ( u2 >= m_units.count() )
 				{
 					if ( code[index+5] == O_PopOne )
 					{
@@ -10353,7 +10333,7 @@ callFunction:
 				if ( table > bottom )
 				{
 					// if unit was called with no arguments from global
-					// level there are no "free" stack entries to
+					// level there are not "free" stack entries to
 					// gnab, so create it here, but preserve the
 					// first value
 
@@ -10383,10 +10363,13 @@ callFunction:
 
 					if ( --count > 0 )
 					{
+//						uint8_t offset = READ_8_FROM_PC(table);
+
+
 						memcpy( (char*)register0, stackTop + READ_8_FROM_PC(table) + 1, count*sizeof(WRValue) );
 					}
 
-					context->gc(++stackTop); // take care of any memory the 'new' allocated
+					context->gc(++stackTop); // do this here to take care of any memory the 'new' allocated
 				}
 				else
 				{
@@ -12302,7 +12285,7 @@ targetFuncStoreLocalOp:
 }
 
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -13739,6 +13722,7 @@ void WRDebugClientInterface::load( const char* byteCode, const int size )
 {
 	I->m_scratchContext->gc(0);
 
+	// SPECIAL CASE: the ownership of this memory is handed off to the 'load' process
 	WrenchPacket* packet = WrenchPacket::alloc( WRD_Load, size );
 	memcpy( packet->payload(), byteCode, size );
 	
@@ -13758,24 +13742,9 @@ void WRDebugClientInterface::run( const int toLine )
 	I->m_scratchContext->gc(0);
 	I->m_callstackDirty = true;
 
-	for(;;)
-	{
-		WrenchPacket* packet = WrenchPacket::alloc( WRD_Run );
-		packet->param1 = toLine;
-
-		WrenchPacket *reply = I->transmit( packet );
-		if ( reply->type == WRD_DebugOut )
-		{
-			printf( "%s", (char*)reply->payload() );
-			free( reply );
-			continue;
-		}
-		else
-		{
-			free( reply );
-			break;
-		}
-	}
+	WrenchPacket* packet = WrenchPacket::alloc( WRD_Run );
+	packet->param1 = toLine;
+	free( I->transmit(packet) );
 }
 
 //------------------------------------------------------------------------------
@@ -13824,11 +13793,30 @@ SimpleLL<WrenchFunction>& WRDebugClientInterface::getFunctions()
 }
 
 //------------------------------------------------------------------------------
+int WRDebugClientInterface::getVariableCount( const int depth )
+{
+	getCallstack();
+	if ( !I->m_callStack )
+	{
+		return 0;
+	}
+
+	return (depth == WRD_GlobalUnit) ?  I->m_callStack->tail()->locals : (*I->m_callStack)[depth]->locals;
+}
+
+//------------------------------------------------------------------------------
 const char* WRDebugClientInterface::getFunctionLabel( const int index )
 {
 	SimpleLL<WrenchFunction>& funcs = getFunctions();
-	WrenchFunction *f = funcs[index];
-	return f ? f->name : 0;
+	for( WrenchFunction *f = funcs.first(); f; f = funcs.next() )
+	{
+		if ( f->index == index )
+		{
+			return f->name;
+		}
+	}
+
+	return 0;
 }
 
 //------------------------------------------------------------------------------
@@ -13858,22 +13846,61 @@ WRValue* WRDebugClientInterface::getValue( WRValue& value, const int index, cons
 //------------------------------------------------------------------------------
 const char* WRDebugClientInterface::getValueLabel( const int index, const int depth )
 {
-	WrenchFunction* func = (*I->m_functions)[depth];
-	if (!func)
+	for( WrenchFunction* func = I->m_functions->first(); func; func = I->m_functions->next() )
 	{
-		return 0;
-	}
-		
-	int i = 0;
-	for( WrenchSymbol* sym = func->vars->first(); sym; sym = func->vars->next() )
-	{
-		if ( i++ == index )
+		if ( func->index == depth )
 		{
-			return sym->label;
+			int i = 0;
+			for( WrenchSymbol* sym = func->vars->first(); sym; sym = func->vars->next() )
+			{
+				if ( i++ == index )
+				{
+					return sym->label;
+				}
+			}
+
+			break;
 		}
 	}
 
 	return 0;
+}
+
+
+//------------------------------------------------------------------------------
+int WRDebugClientInterface::getFunctionArgCount( int depth )
+{
+	getCallstack();
+	if ( (depth == WRD_GlobalUnit) || !I->m_callStack || (((uint32_t)depth + 1) >= I->m_callStack->count()) )
+	{
+		return -1;
+	}
+
+	return ((*I->m_callStack)[depth])->arguments;
+}
+
+//------------------------------------------------------------------------------
+int WRDebugClientInterface::getFunctionIndex( int depth )
+{
+	getCallstack();
+	if ( (depth == WRD_GlobalUnit) || !I->m_callStack || (((uint32_t)depth + 1) >= I->m_callStack->count()) )
+	{
+		return -1;
+	}
+	
+	return ((*I->m_callStack)[depth])->thisUnit;
+}
+
+//------------------------------------------------------------------------------
+int WRDebugClientInterface::getFunctionLocalCount( int depth )
+{
+	getCallstack();
+	if ( (depth == WRD_GlobalUnit) || !I->m_callStack || (((uint32_t)depth + 1) >= I->m_callStack->count()) )
+	{
+		return -1;
+	}
+
+	return ((*I->m_callStack)[depth])->locals;
 }
 
 //------------------------------------------------------------------------------
@@ -13985,8 +14012,8 @@ WrenchPacket* WRDebugClientInterfacePrivate::transmit( WrenchPacket* packet )
 	}
 	else
 	{
-		uint32_t size = packet->xlate();
-		
+		packet->xlate();
+		uint32_t size = packet->size;
 		if ( m_sendFunction((char*)packet, size) )
 		{
 			WrenchPacket r;
@@ -14051,8 +14078,12 @@ void WRDebugClientInterfacePrivate::populateSymbols()
 		uint8_t count = READ_8_FROM_PC( block + pos );
 		++pos;
 
-		WrenchFunction* func = m_functions->addTail(); // so first is always "global"
-
+		WrenchFunction* func = m_functions->addTail();
+		func->index = f - 1;
+		if ( func->index == -1 )
+		{
+			func->index = WRD_GlobalUnit;
+		}
 		func->arguments = READ_8_FROM_PC( block + pos++ );
 		sscanf( block + pos, "%63s", func->name );
 
@@ -14097,41 +14128,6 @@ SOFTWARE.
 #include "wrench.h"
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
-
-//------------------------------------------------------------------------------
-WrenchPacket* WrenchPacket::alloc( WrenchPacket const& base )
-{
-	WrenchPacket* packet = (WrenchPacket*)malloc( base.size );
-	
-	memcpy( (char*)packet, (char*)&base, sizeof(WrenchPacket) );
-	return packet;
-}
-
-//------------------------------------------------------------------------------
-WrenchPacket* WrenchPacket::alloc( const uint32_t type, const uint32_t payloadSize )
-{
-	WrenchPacket* packet = (WrenchPacket*)malloc( sizeof(WrenchPacket) + payloadSize );
-
-	memset( (char*)packet, 0, sizeof(WrenchPacket) );
-
-	packet->t = type;
-	packet->setPayloadSize( payloadSize );
-
-	return packet;
-}
-
-//------------------------------------------------------------------------------
-uint32_t WrenchPacket::xlate()
-{
-	uint32_t s = size;
-
-	size = wr_x32( size );
-	t = wr_x32( t );
-	param1 = wr_x32( param1 );
-	param2 = wr_x32( param2 );
-
-	return s;
-}
 
 //------------------------------------------------------------------------------
 void wr_PacketClearFunc( WrenchPacket*& packet )
@@ -14183,13 +14179,15 @@ WRDebugServerInterfacePrivate::~WRDebugServerInterfacePrivate()
 	free( m_externalCodeBlock ); // MIGHT have been allocated
 
 	delete m_lineBreaks;
+
 	delete m_callStack;
 }
 
 //------------------------------------------------------------------------------
 void WRDebugServerInterface::tick()
 {
-	WrenchPacket* reply = 0;
+	WrenchPacket packet;
+	WrenchPacket* reply;
 	bool err = false;
 	
 	while( I->m_dataAvailableFunction() >= (int)sizeof(WrenchPacket) )
@@ -14199,30 +14197,32 @@ void WRDebugServerInterface::tick()
 			// on err, drain the q and restart
 			while( I->m_dataAvailableFunction() )
 			{
-				I->m_receiveFunction( (char *)&I->m_lastPacket, 1 );
+				I->m_receiveFunction( (char *)&packet, 1 );
 			}
 			err = false;
 			continue;
 		}
 		
-		if ( !I->m_receiveFunction( (char *)&I->m_lastPacket, sizeof(WrenchPacket)) )
+		if ( !I->m_receiveFunction( (char *)&packet, sizeof(WrenchPacket)) )
 		{
 			err = true;
 			continue;
 		}
-
-		I->m_lastPacket.xlate();
-
-		if ( I->m_lastPacket.payloadSize() == 0 )
+		
+		packet.xlate();
+		
+		if ( packet.payloadSize() == 0 )
 		{
-			reply = I->processPacket( &I->m_lastPacket );
+			reply = I->processPacket( &packet );
 		}
 		else
 		{
-			WrenchPacket *p = WrenchPacket::alloc( I->m_lastPacket );
-			if ( I->m_receiveFunction( (char*)p->payload(), p->payloadSize() ) )
+			WrenchPacket *q = WrenchPacket::alloc( packet.size );
+			memcpy( (char*)q, (char*)&packet, sizeof(WrenchPacket) );
+
+			if ( I->m_receiveFunction((char*)q->payload(), q->payloadSize()) )
 			{
-				reply = I->processPacket( p );
+				reply = I->processPacket( q );
 			}
 			else
 			{
@@ -14230,7 +14230,7 @@ void WRDebugServerInterface::tick()
 				reply = 0;
 			}
 
-			free( p );
+			free( q );
 		}
 
 		if ( reply )
@@ -14318,9 +14318,9 @@ bool WRDebugServerInterfacePrivate::codewordEncountered( const uint8_t* pc, uint
 	if ( type == WRD_LineNumber )
 	{
 		int line = codeword & WRD_PayloadMask;
-		m_callStack->tail()->onLine = line;
+		m_callStack->first()->onLine = line;
 
-		for( int* L = m_lineBreaks->first() ; L ; L = m_lineBreaks->next() )
+		for( int* L = m_lineBreaks->first(); L ; L = m_lineBreaks->next() )
 		{
 			if ( *L == line )
 			{
@@ -14351,25 +14351,19 @@ bool WRDebugServerInterfacePrivate::codewordEncountered( const uint8_t* pc, uint
 			return false;
 		}
 		
-		if ( (codeword & WRD_PayloadMask) == WRD_ExternalFunction )
-		{
-			// no need for bookkeeping, just skip it
-			return false;
-		}
-		
-		if ( m_stepOverDepth >= 0 ) // track stepping over/into functions
+		if ( m_stepOverDepth >= 0 )
 		{
 			++m_stepOverDepth;
 		}
 
-		WrenchCallStackEntry* from = m_callStack->tail();
-		WrenchCallStackEntry* entry = m_callStack->addTail();
-		entry->onLine = -1; // don't know yet!
-		entry->fromUnitIndex = from->thisUnitIndex;
-		entry->thisUnitIndex = codeword & WRD_PayloadMask;
+		WrenchCallStackEntry* from = m_callStack->first();
+		WrenchCallStackEntry* entry = m_callStack->addHead();
+		entry->onLine = from ? from->onLine : 0;
+		entry->fromUnit = from ? from->thisUnit : 0;
+		entry->thisUnit = codeword & WRD_PayloadMask;
 		entry->stackOffset = stackTop - m_w->stack;
 
-		WRFunction* func = m_context->localFunctions + (entry->thisUnitIndex - 1); // unit '0' is the global unit
+		WRFunction* func = m_context->localFunctions + entry->thisUnit;
 		entry->arguments = func->arguments;
 		entry->locals = func->frameSpaceNeeded;
 		
@@ -14427,22 +14421,21 @@ WrenchPacket* WRDebugServerInterfacePrivate::processPacket( WrenchPacket* packet
 WRDRun:
 			if ( !m_context || m_halted )
 			{
-				reply = WrenchPacket::alloc( WRD_Err );
 				break;
 			}
 
 			m_stopOnLine = packet->param1;
-
+			
 			if ( m_firstCall )
 			{ 
 				m_firstCall = false;
 				
 				m_callStack->clear();
 				
-				WrenchCallStackEntry* stack = m_callStack->addTail();
+				WrenchCallStackEntry* stack = m_callStack->addHead();
 				memset( (char*)stack, 0, sizeof(WrenchCallStackEntry) );
 				stack->locals = m_context->globals;
-				stack->thisUnitIndex = 0;
+				stack->thisUnit = WRD_GlobalUnit;
 
 				wr_executeContext( m_context );
 			}
@@ -14453,7 +14446,6 @@ WRDRun:
 				wr_callFunction( m_context, &f, 0, 0 ); // signal "continue"
 			}
 
-			reply = WrenchPacket::alloc( WRD_Ok );
 			break;
 		}
 
@@ -14469,7 +14461,6 @@ WRDRun:
 				}
 				
 				memcpy( m_externalCodeBlock, packet->payload(), size );
-				
 				m_parent->loadBytes( m_externalCodeBlock, m_externalCodeBlockSize );
 			}
 			else
@@ -14557,13 +14548,17 @@ WRDRun:
 
 				WRValueSerializer serializer;
 
-				if (depth == 0) // globals are stored separately
+				if ( depth == WRD_GlobalUnit ) // global
 				{
-					wr_serializeEx( serializer, ((WRValue *)(m_context + 1))[index] );
+					wr_serializeEx( serializer, *(((WRValue*)(m_context + 1)) + index) );
 				}
 				else
 				{
-					WrenchCallStackEntry* frame = (*m_callStack)[depth];
+					WrenchCallStackEntry* frame = m_callStack->first();
+					for( int level = 0; level<depth && frame; ++level )
+					{
+						frame = m_callStack->next();
+					}
 					
 					if ( !frame )
 					{
@@ -14571,7 +14566,7 @@ WRDRun:
 					}
 					else
 					{
-						WRValue* stackFrame = m_w->stack + (frame->stackOffset - frame->arguments);
+						WRValue* stackFrame = m_w->stack + frame->stackOffset;
 						
 						wr_serializeEx( serializer, *(stackFrame + index) );
 					}
@@ -14605,13 +14600,13 @@ WRDRun:
 				reply->param2 = (int32_t)( m_firstCall ? WRP_Loaded : WRP_Running );
 				
 				WrenchCallStackEntry* pack = (WrenchCallStackEntry *)reply->payload();
-
-				for( WrenchCallStackEntry* E = m_callStack->first(); E; E = m_callStack->next() )
+				
+				count = 0;
+				for( WrenchCallStackEntry* entry = m_callStack->first(); entry; entry = m_callStack->next(), ++count )
 				{
-					*pack = *E;
-					pack->onLine = wr_x32( pack->onLine );
-					pack->locals = wr_x16( pack->locals );
-					++pack;
+					pack[count] = *entry;
+					pack[count].onLine = wr_x32( pack[count].onLine );
+					pack[count].locals = wr_x16( pack[count].locals );
 				}
 			}
 			
@@ -16164,6 +16159,13 @@ void wr_std_time( WRValue* stackTop, const int argn, WRContext* c )
 }
 #endif
 
+//------------------------------------------------------------------------------
+void wr_clock( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->p2 = INIT_AS_INT;
+	stackTop->i = (int)clock();
+}
+
 #ifdef __linux__
 #include <unistd.h>
 #include <sys/time.h>
@@ -16195,7 +16197,8 @@ void wr_loadStdLib( WRState* w )
 	wr_registerLibraryFunction( w, "std::srand", wr_std_srand );
 	wr_registerLibraryFunction( w, "std::time", wr_std_time );
 
-	wr_registerLibraryFunction( w, "time::ms", wr_milliseconds ); // return ms count that always increases
+//	wr_registerLibraryFunction( w, "time::clock", wr_clock ); // return current unix time
+//	wr_registerLibraryFunction( w, "time::ms", wr_milliseconds ); // return ms count that always increases
 }
 
 //------------------------------------------------------------------------------
@@ -16208,7 +16211,6 @@ void wr_loadAllLibs( WRState* w )
 	wr_loadMessageLib( w );
 	wr_loadSysLib( w );
 	wr_loadSerializeLib( w );
-	wr_loadDebugLib( w );
 }
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
@@ -16866,7 +16868,7 @@ struct WRFSFile
 WRFSFile* g_OpenFiles =0;
 
 //------------------------------------------------------------------------------
-WRFSFile* wr_safeGetFile( const void* p )
+WRFSFile* wr_safeGetFile( void* p )
 {
 	for( WRFSFile* safe = g_OpenFiles; safe; safe = safe->next )
 	{
@@ -16897,7 +16899,7 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		stackTop->p2 = INIT_AS_ARRAY;
 		stackTop->va = c->getSVA( file.size(), SV_CHAR, false );
-		if ( file.readBytes( stackTop->va->m_SCdata, file.size() ) != file.size() )
+		if ( file.readBytes( stackTop->va->m_Cdata, file.size() ) != file.size() )
 		{
 			stackTop->init();
 		}
@@ -16935,7 +16937,7 @@ void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 		return;
 	}
 
-	stackTop->i = file.write( (uint8_t *)data, len );
+	stackTop->i = file.write( data, len );
 
 	file.close();
 }
@@ -16970,28 +16972,26 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 	
 	WRValue* args = stackTop - argn;
 
-	int mode = LFS_RDWR;
-	if ( argn > 1 )
-	{
-		mode = args[1].asInt();
-	}
-
 	const char* fileName = (const char*)args->array();
 	if ( fileName )
 	{
 		WRFSFile* entry = (WRFSFile *)malloc( sizeof(WRFSFile) );
 
+		LFS_READ   = 0x1,
+		LFS_RDWR   = 0x2,
+		LFS_APPEND = 0x4,
+
 		if ( mode & LFS_READ )
 		{
-			entry->file = FILE_OBJ.open( fileName, FILE_READ );
+			entry->file = fs.open( name, FILE_READ );
 		}
-		else if ( (mode & LFS_RDWR) || (mode & LFS_APPEND) )
+		else if ( mode & LFS_RDWR ) || (mode & LFS_APPEND) )
 		{
-			entry->file = FILE_OBJ.open( fileName, FILE_WRITE );
+			entry->file = fs.open( name, FILE_WRITE );
 		}
-		else if ( mode & LFS_APPEND )
+		else if ( mode & LFS_APPEN )
 		{
-			entry->file = FILE_OBJ.open( fileName, FILE_APPEND );
+			entry->file = fs.open( name, FILE_APPEND );
 		}
 		else
 		{
@@ -17074,7 +17074,7 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 		
 	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
 
-	int result = fd->file.readBytes( stackTop->va->m_SCdata, toRead );
+	int result = fd->file.readBytes( stackTop->va->m_Cdata, toRead );
 	
 	stackTop->va->m_size = (result > 0) ? result : 0;
 }
@@ -17123,7 +17123,7 @@ void wr_ioWrite( WRValue* stackTop, const int argn, WRContext* c )
 			size = args[2].asInt();
 		}
 
-		stackTop->ui = fd->file.write( (const uint8_t *)data.r->c, (size > EX_RAW_ARRAY_SIZE_FROM_P2(data.r->p2)) ? EX_RAW_ARRAY_SIZE_FROM_P2(data.r->p2) : size );
+		stackTop->ui = fd->file.write( data.r->c, (size > EX_RAW_ARRAY_SIZE_FROM_P2(data.r->p2)) ? EX_RAW_ARRAY_SIZE_FROM_P2(data.r->p2) : size );
 	}
 }
 
@@ -17549,16 +17549,17 @@ void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
 
+#ifdef WRENCH_STD_FILE
 	if( argn >= 1 )
 	{
 		WRValue* args = stackTop - argn;
 
-		char inbuf[512];
 		char outbuf[512];
-		stackTop->i = wr_sprintfEx( outbuf, args[0].asString(inbuf), args + 1, argn - 1 );
+		stackTop->i = wr_sprintfEx( outbuf, args[0].c_str(), args + 1, argn - 1 );
 		
 		printf( "%s", outbuf );
 	}
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -18504,86 +18505,6 @@ void wr_loadSerializeLib( WRState* w )
 	wr_registerLibraryFunction( w, "std::serialize", wr_stdSerialize );
 	wr_registerLibraryFunction( w, "std::deserialize", wr_stdDeserialize );
 }
-
-/*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
-
-MIT Licence
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*******************************************************************************/
-
-#include "wrench.h"
-
-int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn );
-
-//------------------------------------------------------------------------------
-void wr_debugPrintEx( WRValue* stackTop, const int argn, WRContext* c, const char* append )
-{
-	if( argn >= 1 && c->debugInterface )
-	{
-		WRValue* args = stackTop - argn;
-
-		char inbuf[512];
-
-		WrenchPacket* P = WrenchPacket::alloc( WRD_DebugOut, 520 );
-
-		int size = wr_sprintfEx( (char*)P->payload(), args[0].asString(inbuf), args + 1, argn - 1);
-
-		for( int a=0; append && append[a]; ++a )
-		{
-			*(P->payload() + size) = append[a];
-			++size;
-		}
-
-		*(P->payload() + size++) = 0;
-		P->setPayloadSize( size );
-
-		if ( c->debugInterface->I->m_sendFunction )
-		{
-			c->debugInterface->I->m_sendFunction( (char *)P, P->xlate() );
-		}
-		else
-		{
-			printf("%s", P->payload() );
-		}
-	}
-}
-
-//------------------------------------------------------------------------------
-void wr_debugPrint( WRValue* stackTop, const int argn, WRContext* c )
-{
-	wr_debugPrintEx( stackTop, argn, c, 0 );
-}
-
-//------------------------------------------------------------------------------
-void wr_debugPrintln( WRValue* stackTop, const int argn, WRContext* c )
-{
-	wr_debugPrintEx( stackTop, argn, c, "\r\n" );
-}
-
-//------------------------------------------------------------------------------
-void wr_loadDebugLib( WRState* w )
-{
-	wr_registerLibraryFunction( w, "debug::print", wr_debugPrint );
-	wr_registerLibraryFunction( w, "debug::println", wr_debugPrintln );
-}
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
@@ -18887,7 +18808,7 @@ int wr_serialBytesAvailable()
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -18913,8 +18834,8 @@ SOFTWARE.
 #ifdef WRENCH_WIN32_SERIAL
 
 #include "wrench.h"
-#include <windows.h>
 #include <atlstr.h>
+
 static HANDLE s_comm = INVALID_HANDLE_VALUE;
 
 //------------------------------------------------------------------------------

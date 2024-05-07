@@ -202,3 +202,23 @@ fa();
 println(a);
 g_fa();
 println(a);
+
+
+function farray( a )
+{
+	a[0] = 21;
+}
+
+function farg( a )
+{
+	a = 25;
+}
+
+a[1] = {0};
+farray( a );
+if ( a[0] != 21 ) println("ferr 0");
+
+//work = 40;
+//println( work );
+//farg( work );
+//println( work );

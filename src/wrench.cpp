@@ -1,6 +1,6 @@
 #include "wrench.h"
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -25,7 +25,6 @@ SOFTWARE.
 #ifndef _UTILS_H
 #define _UTILS_H
 /*------------------------------------------------------------------------------*/
-
 
 int wr_itoa( int i, char* string, size_t len );
 int wr_ftoa( float f, char* string, size_t len );
@@ -250,7 +249,7 @@ const uint16_t c_primeTable[] =
 template <class T> class WRHashTable
 {
 public:
-	WRHashTable( int sizeHint =0 )
+	WRHashTable( unsigned int sizeHint =0 )
 	{
 		for( uint16_t i=0; c_primeTable[i]; ++i )
 		{
@@ -310,7 +309,7 @@ public:
 		}
 
 		// otherwise there was a collision, expand the table
-		int newMod = m_mod;
+		unsigned int newMod = m_mod;
 		for(;;)
 		{
 			for( int t=0; c_primeTable[t]; ++t )
@@ -379,7 +378,7 @@ private:
 
 #endif
 
-WRGCObject* wr_growValueArray( WRGCObject* va, int newSize );
+void wr_growValueArray( WRGCObject* va, int newSize );
 
 #define IS_SVA_VALUE_TYPE(V) ((V)->m_type & 0x1)
 
@@ -436,6 +435,11 @@ SOFTWARE.
 
 struct WRValue;
 struct WRContext;
+class WRValueSerializer;
+
+//------------------------------------------------------------------------------
+bool wr_serializeEx( WRValueSerializer& serializer, const WRValue& val );
+bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext* context );
 
 //------------------------------------------------------------------------------
 class WRValueSerializer
@@ -454,6 +458,7 @@ public:
 	}
 	
 	int size() const { return m_pos; }
+	const char* data() const { return m_buf; }
 
 	bool read( char* data, const int size )
 	{
@@ -486,28 +491,62 @@ private:
 	char* m_buf;
 };
 
-bool wr_serialize( WRValueSerializer& serializer, const WRValue& value );
-bool wr_deserialize( WRValue& value, WRValueSerializer& serializer, WRContext* context );
-
 #endif
+
+/*******************************************************************************
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
 
 #ifndef SIMPLE_LL_H
 #define SIMPLE_LL_H
 /*------------------------------------------------------------------------------*/
 
-// for queue's and stacks implemented as a LL
+// only used in debug code, but it is used on the target machine so keep it compact!
+
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
 
 //-----------------------------------------------------------------------------
 template<class L> class SimpleLL
 {
 public:
 
-	SimpleLL() : m_iter(0), m_head(0), m_tail(0) {}
+	SimpleLL( void (*clearFunc)( L& item ) =0 ) : m_iter(0), m_head(0), m_tail(0), m_clearFunc(clearFunc) {}
 	~SimpleLL() { clear(); }
 
 	//------------------------------------------------------------------------------
 	L* first() { return m_head ? &(m_iter = m_head)->item : 0; }
 	L* next() { return m_iter ? &((m_iter = m_iter->next)->item) : 0; }
+	L* head() { return first(); }
+	L* tail() { return m_tail ? &(m_tail->item) : 0; }
+
+	//------------------------------------------------------------------------------
+	// brute-force
+	uint32_t count()
+	{
+		uint32_t c=0;
+		for( L* item = first(); item; item = next(), ++c );
+		return c;
+	}
 
 	//------------------------------------------------------------------------------
 	L* operator[]( const int i )
@@ -515,7 +554,7 @@ public:
 		int cur = 0;
 		for( Node* N = m_head; N ; N = N->next, ++cur )
 		{
-			if( cur == i )
+			if( cur >= i )
 			{
 				return &(N->item);
 			}
@@ -539,6 +578,7 @@ public:
 		}
 		return &(m_head->item);
 	}
+	
 	//------------------------------------------------------------------------------
 	L* addTail()
 	{
@@ -556,35 +596,131 @@ public:
 	}
 
 	//------------------------------------------------------------------------------
-	L* head() { return m_head ? &(m_head->item) : 0; }
-	L* tail() { return m_tail ? &(m_tail->item) : 0; }
+	void popAt( const int index, L* item =0 )
+	{
+		if ( index == 0 )
+		{
+			return popHead( item );
+		}
+
+		Node* prev = 0;
+		int c=0;
+		for( Node* N = m_head; N; N = N->next, ++c )
+		{
+			if ( c == index )
+			{
+				if ( N == m_tail )
+				{
+					return popTail( item );
+				}
+				
+				prev->next = N->next;
+				if ( m_iter == N )
+				{
+					m_iter = N->next;
+				}
+
+				if ( item )
+				{
+					*item = N->item;
+				}
+				else if ( m_clearFunc )
+				{
+					m_clearFunc( N->item );
+				}
+
+				delete N;
+				break;
+			}
+
+			prev = N;
+		}
+	}
 
 	//------------------------------------------------------------------------------
-	void popHead()
+	void popItem( L* item )
+	{
+		if ( !m_head )
+		{
+			return;
+		}
+		else if ( &(m_head->item) == item )
+		{
+			popHead();
+		}
+		else if ( &(m_tail->item) == item )
+		{
+			popTail();
+		}
+
+		Node* prev = 0;
+		for( Node* N = m_head; N; N = N->next )
+		{
+			if ( &(N->item) == item )
+			{
+				prev->next = N->next;
+				if ( m_iter == N )
+				{
+					m_iter = N->next;
+				}
+
+				if ( m_clearFunc )
+				{
+					m_clearFunc( N->item );
+				}
+
+				delete N;
+				break;
+			}
+
+			prev = N;
+		}
+	}
+
+	//------------------------------------------------------------------------------
+	void popHead( L* item =0 )
 	{
 		if ( m_head )
 		{
-			if ( m_tail == m_head )
+			if ( m_iter == m_head )
 			{
-				delete m_head;
+				m_iter = m_head->next;
+			}
+
+			Node* N = m_head;
+			if ( m_tail == N )
+			{
 				m_head = 0;
 				m_tail = 0;
 			}
 			else
 			{
-				Node* N = m_head;
 				m_head = m_head->next;
-				delete N;
 			}
+
+			if ( item )
+			{
+				*item = N->item;
+			}
+			else if ( m_clearFunc )
+			{
+				m_clearFunc( N->item );
+			}
+			delete N;
 		}
 	}
 
 	//------------------------------------------------------------------------------
-	void popTail()
+	void popTail( L* item =0 )
 	{
+		if ( m_iter == m_tail )
+		{
+			m_iter = 0;
+		}
+
 		if ( m_head == m_tail )
 		{
-			clear();
+			popHead( item );
 		}
 		else
 		{
@@ -592,7 +728,16 @@ public:
 			{
 				if ( N->next == m_tail )
 				{
+					if ( item )
+					{
+						*item = N->next->item;
+					}
+					else if ( m_clearFunc )
+					{
+						m_clearFunc( N->next->item );
+					}
 					delete N->next;
+					
 					N->next = 0;
 					m_tail = N;
 					break;
@@ -605,7 +750,6 @@ public:
 	void clear() { while( m_head ) { popHead(); }  }
 
 private:
-
 	struct Node
 	{
 		Node( Node* n=0 ) : next(n) {}
@@ -616,7 +760,211 @@ private:
 	Node* m_iter;
 	Node* m_head;
 	Node* m_tail;
+	void (*m_clearFunc)( L& item );
+
+public:
+	class Iterator
+	{
+	public:
+		Iterator( SimpleLL<L> const& list ) { iterate(list); }
+		Iterator() : m_list(0), m_current(0) {}
+			
+		bool operator!=( const Iterator& other ) { return m_current != other.m_current; }
+		L& operator* () const { return m_current->item; }
+
+		const Iterator operator++() { if ( m_current ) m_current = m_current->next; return *this; }
+		void iterate( SimpleLL<L> const& list ) { m_list = &list; m_current = m_list->m_head; }
+
+	private:
+		SimpleLL<L> const* m_list;
+		Node *m_current;
+	};
+
+	Iterator begin() const { return Iterator(*this); }
+	Iterator end() const { return Iterator(); }
 };
+
+
+#ifdef TEST_LL
+#include <assert.h>
+#include <stdio.h>
+inline void testLL()
+{
+	SimpleLL<int> list;
+
+	*list.addHead() = 10;
+	assert( list.count() == 1 );
+	assert( *list.head() == 10 );
+	list.popHead();
+	assert( list.count() == 0 );
+
+	*list.addHead() = 10;
+	*list.addHead() = 5;
+	*list.addTail() = 15;
+
+	assert( *list.first() == 5 );
+	assert( *list.next() == 10 );
+	assert( *list.next() == 15 );
+	assert( !list.next() );
+
+	int i;
+	list.popTail( &i );
+	assert( i == 15 );
+
+	assert( *list.first() == 5 );
+	assert( *list.next() == 10 );
+	assert( !list.next() );
+
+	list.popHead( &i );
+	assert( i == 5 );
+	assert( *list.first() == 10 );
+	assert( !list.next() );
+
+
+	list.popTail();
+	assert( !list.first() );
+
+
+	*list.addHead() = 10;
+	*list.addHead() = 5;
+	*list.addTail() = 15;
+	list.popAt( 1 );
+	assert( *list.first() == 5 );
+	assert( *list.next() == 15 );
+	assert( !list.next() );
+	list.popAt(0);
+	list.popAt(0);
+
+	*list.addHead() = 10;
+	*list.addHead() = 5;
+	*list.addTail() = 15;
+
+	assert(*list.first() == 5);
+	assert(*list.next() == 10);
+	assert(*list.next() == 15);
+	assert(!list.next());
+
+	list.popAt( 0 );
+	assert( *list.first() == 10 );
+	assert( *list.next() == 15 );
+	assert( !list.next() );
+	list.popAt(0);
+	list.popAt(0);
+
+	*list.addHead() = 10;
+	*list.addHead() = 5;
+	*list.addTail() = 15;
+	list.popAt( 2 );
+	assert( *list.first() == 5 );
+	assert( *list.next() == 10 );
+	assert( !list.next() );
+	list.popAt(0);
+	list.popAt(0);
+}
+#endif
+
+#endif
+
+#endif
+/*******************************************************************************
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+#ifndef SIMPLE_ARGS_H
+#define SIMPLE_ARGS_H
+//------------------------------------------------------------------------------
+
+#include <string.h>
+
+//------------------------------------------------------------------------------
+namespace SimpleArgs
+{
+
+//   by index: 0,1,2... first, second, third  -1, -2, -3... last, second to last..
+// returns pointer to argv if found
+inline const char* get( int argn, char *argv[], int index, char* param =0, const int maxParamLen=0 );
+
+//   by option
+// returns true if found, opt is filled in with whatever follows it,
+// so:
+// returns pointer to argv found.
+// IF param is specified, returns a pointer to param found
+// if not found returns null
+inline const char* get( int argn, char *argv[], const char* opt, char* param =0, const int maxParamLen=0 );
+
+}
+
+//------------------------------------------------------------------------------
+inline const char* SimpleArgs::get( int argn, char *argv[], int index, char* param, const int maxParamLen )
+{
+	int a = index;
+	if ( a < 0 )
+	{
+		a = argn + a;
+	}
+
+	if ( a >= argn )
+	{
+		return 0;
+	}
+
+	if ( param )
+	{
+		strncpy( param, argv[a], maxParamLen ? maxParamLen : SIZE_MAX );
+	}
+
+	return argv[a];
+}
+
+//------------------------------------------------------------------------------
+inline const char* SimpleArgs::get( int argn, char *argv[], const char* opt, char* param, const int maxParamLen )
+{
+	for( int a=0; a<argn; ++a )
+	{
+		if ( strncmp(argv[a], opt, strlen(opt))
+			 || (strlen(argv[a]) != strlen(opt)) )
+		{
+			continue;
+		}
+
+		if ( param )
+		{
+			param[0] = 0;
+			if ( ++a < argn )
+			{
+				strncpy( param, argv[a], maxParamLen ? maxParamLen : SIZE_MAX );
+			}
+			else
+			{
+				return 0; // no param and we wanted it, so nope
+			}
+		}
+
+		return argv[a];
+	}
+
+	return 0;
+}
+
 
 #endif
 /*******************************************************************************
@@ -650,13 +998,11 @@ SOFTWARE.
 
 #include <assert.h>
 
-/* the what? in order for hash '0' to be both the number (integers are their own hashes) AND "no hash" I intgroduce a scrambler
-   constant that is XORed with all hashes. That way "0" is the scrambler itself, and actual 0 is the null hash. The only
-   danger with this is if your string happens to collide with the scrambler value, a 1:4bil chance but that same possibility
-   exists with using null as the null hash, thats what bitcoin is :)
-   I guess it would be annoying if you wanted to use the numeric value of the scrambler as an integer hash key, so I chose
-   a very large+negative value to minimize that risk*/
-#define HASH_SCRAMBLER 0xA656ABAB // 2790697899 or -1504269397 or -7.44788182526385e-16 all unlikely intentional constants
+// ever solve a rubik's cube? You have if you define your current
+// arrangement as "solved" since it is exactly as unique as the
+// traditional solid-color "solve". That's what this is, so int/floats
+// can be their own hash (0x0 needing to be valid)
+#define WRENCH_NULL_HASH 0xABABABAB  // -1414812757 / -1.2197928214371934e-12
 
 
 //------------------------------------------------------------------------------
@@ -685,13 +1031,10 @@ public:
 
 	union
 	{
-		const void* m_constData;
 		void* m_data;
-		int* m_Idata;
 		char* m_SCdata;
 		unsigned char* m_Cdata;
 		WRValue* m_Vdata;
-		float* m_Fdata;
 	};
 
 	union
@@ -700,9 +1043,8 @@ public:
 		void* m_vNext;
 	};
 
-	
 	//------------------------------------------------------------------------------
-	void init( const unsigned int size, const WRGCObjectType type )
+	void init( const unsigned int size, const WRGCObjectType type, bool clear )
 	{
 		memset( (unsigned char*)this, 0, sizeof(WRGCObject) );
 
@@ -710,16 +1052,28 @@ public:
 		{
 			m_size = size;
 			m_Vdata = (WRValue*)malloc( m_size * sizeof(WRValue) );
+			if ( clear )
+			{
+				memset( m_SCdata, 0, m_size * sizeof(WRValue) );
+			}
+
 		}
 		else if ( m_type == SV_CHAR )
 		{
 			m_size = size;
 			m_Cdata = (unsigned char*)malloc( m_size + 1 );
-			m_Cdata[size] = 0;
+			if ( clear )
+			{
+				memset( m_SCdata, 0, m_size + 1 );
+			}
+			else
+			{
+				m_Cdata[size] = 0;
+			}
 		}
 		else
 		{
-			growHash( 0, size );
+			growHash( WRENCH_NULL_HASH, size );
 		}
 	}
 
@@ -741,11 +1095,6 @@ public:
 	{
 #ifdef WRENCH_COMPACT
 		uint32_t index = getIndexOfHit( hash, false );
-		// m_Vdata MIGHT CHANGE and therefore the index has to be
-		// computed before the return, the obvious optimization of
-		// m_Vdata + getIndexOfHit( hash, false );
-		// will FAIL
-		return m_Vdata + index;
 #else
 		uint32_t index = hash % m_mod;
 		if ( m_hashTable[index] != hash )
@@ -762,22 +1111,22 @@ public:
 			}
 		}
 #endif
+		
 		return m_Vdata + index;
 	}
 
 	//------------------------------------------------------------------------------
-	WRValue* exists( const uint32_t hash, bool rawValueHash, bool removeIfPresent )
+	WRValue* exists( const uint32_t hash, bool removeIfPresent )
 	{
-		const uint32_t h = rawValueHash ? hash : hash ^ HASH_SCRAMBLER;
-		uint32_t index = h % m_mod;
+		uint32_t index = hash % m_mod;
 
-		if ( m_hashTable[index] != h )
+		if ( m_hashTable[index] != hash )
 		{
 			int tries = 3;
 			do
 			{
 				index = (index + 1) % m_mod;
-				if ( m_hashTable[index] == h )
+				if ( m_hashTable[index] == hash )
 				{
 					goto foundExists;
 				}
@@ -791,7 +1140,7 @@ foundExists:
 
 		if ( removeIfPresent )
 		{
-			m_hashTable[index] = 0;
+			m_hashTable[index] = WRENCH_NULL_HASH;
 		}
 		
 		return m_Vdata + index;
@@ -808,16 +1157,7 @@ foundExists:
 		}
 		else if ( m_type == SV_HASH_TABLE )
 		{
-			// zero remains "null hash" by scrambling. Which means
-			// a hash of HASH_SCRAMBLER will break the system. If you
-			// are reading this comment then I'm sorry, the only
-			// way out is to re-architect so this hash is not
-			// generated by your program
-			assert( l != HASH_SCRAMBLER );
-
-			uint32_t hash = l ^ HASH_SCRAMBLER; 
-
-			s = getIndexOfHit(hash, false) << 1;
+			s = getIndexOfHit(l, false) << 1;
 		}
 		else if ( m_type == SV_VOID_HASH_TABLE )
 		{
@@ -842,7 +1182,7 @@ private:
 		int tries = 3;
 		do
 		{
-			if ( insert && m_hashTable[index] == 0 )
+			if ( insert && m_hashTable[index] == WRENCH_NULL_HASH )
 			{
 				m_hashTable[index] = hash;
 				return index;
@@ -889,16 +1229,20 @@ tryAgain:
 			uint32_t* proposed = (uint32_t*)malloc( total );
 
 			memset( (unsigned char *)proposed, 0, total );
+			for( int n = 0; n<newMod; ++n )
+			{
+				proposed[n] = WRENCH_NULL_HASH;
+			}
 
 			proposed[ hash % newMod ] = hash;
 
-			for( int h=0; h<m_mod; ++h )
+			for( unsigned int h=0; h<m_mod; ++h )
 			{
 				int tries = 3;
 				int newEntry = m_hashTable[h] % newMod;
 				for(;;)
 				{
-					if ( proposed[newEntry] == 0 )
+					if ( proposed[newEntry] == WRENCH_NULL_HASH )
 					{
 						proposed[newEntry] = m_hashTable[h];
 						break;
@@ -912,7 +1256,7 @@ tryAgain:
 						free( proposed );
 						++t;
 
-						assert( newMod != 49157 );
+						assert( (int)newMod != 49157 );
 
 						goto tryAgain;
 					}
@@ -929,7 +1273,7 @@ tryAgain:
 
 			for( int v=0; v<oldMod; ++v )
 			{
-				if ( !oldHashTable[v] )
+				if ( oldHashTable[v] == WRENCH_NULL_HASH )
 				{
 					continue;
 				}
@@ -1018,32 +1362,24 @@ struct WRFunction
 //------------------------------------------------------------------------------
 struct WRContext
 {
-	uint16_t gcPauseCount;
 	uint16_t globals;
 
-	union
-	{
-		WRFunction* localFunctions;
-		uint32_t contextId;
-	};
+	// how many bytes wrench must allocate before running the gc, default WRENCH_DEFAULT_ALLOCATED_MEMORY_LIMIT
+	uint16_t allocatedMemoryLimit;
 	
-	union
-	{
-		const unsigned char* bottom;
-		const unsigned char* bytes;
-	};
-	union
-	{
-		int bottomSize;
-		int bytesLen;
-	};
+	uint32_t allocatedMemoryHint;
+	WRFunction* localFunctions;
+	
+	const unsigned char* bottom;
+	const unsigned char* codeStart;
+	int bottomSize;
 	
 	const unsigned char* stopLocation;
 	
 	WRGCObject* svAllocated;
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
-	WRDebugServerInterface* debugInterface; 
+	WRDebugServerInterface* debugInterface;
 #endif
 
 	WRState* w;
@@ -1056,6 +1392,14 @@ struct WRContext
 };
 
 //------------------------------------------------------------------------------
+struct WRLibraryCleanup
+{
+	void (*cleanupFunction)(WRState *w, void* param);
+	void* param;
+	WRLibraryCleanup* next;
+};
+
+//------------------------------------------------------------------------------
 struct WRState
 {
 	uint16_t stackSize;
@@ -1065,11 +1409,13 @@ struct WRState
 
 	WRContext* contextList;
 
+	WRLibraryCleanup* libCleanupFunctions;
+	
 	WRGCObject globalRegistry;
 };
 
-void wr_intValueToArray( const WRValue* array, int32_t I );
-void wr_floatValueToArray( const WRValue* array, float F );
+void wr_addLibraryCleanupFunction( WRState* w, void(*function)(WRState *w, void* param), void* param );
+
 void wr_countOfArrayElement( WRValue* array, WRValue* target );
 
 typedef void (*WRVoidFunc)( WRValue* to, WRValue* from );
@@ -1512,8 +1858,6 @@ enum WROpcode
 	O_LGBinaryDivision,
 	O_LLBinaryDivision,
 
-	O_GC_Command,
-
 	O_GPushIterator,
 	O_LPushIterator,
 	O_GGNextKeyValueOrJump,
@@ -1533,15 +1877,18 @@ enum WROpcode
 
 	O_LoadLibConstant,
 	O_InitArray,
+	O_InitVar,
 	
 	O_DebugInfo,
-			
+				
 	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,
 	O_FUNCTION_CALL_PLACEHOLDER,
 
 	O_LAST,
 };
+
+extern const char* c_opcodeName[];
 
 #endif
 /*******************************************************************************
@@ -2167,6 +2514,7 @@ enum WRExpressionType
 	EXTYPE_LITERAL,
 	EXTYPE_LIB_CONSTANT,
 	EXTYPE_LABEL,
+	EXTYPE_LABEL_AND_NULL,
 	EXTYPE_OPERATION,
 	EXTYPE_RESOLVED,
 	EXTYPE_BYTECODE_RESULT,
@@ -2246,6 +2594,7 @@ struct WRExpressionContext
 	bool spaceBefore;
 	bool spaceAfter;
 	bool global;
+	bool varSeen;
 	WRstr prefix;
 	WRstr token;
 	WRValue value;
@@ -2272,7 +2621,7 @@ struct WRExpressionContext
 	WRExpressionContext* reset()
 	{
 		type = EXTYPE_NONE;
-
+		varSeen = false;
 		spaceBefore = false;
 		spaceAfter = false;
 		global = false;
@@ -2386,8 +2735,9 @@ struct ConstantValue
 //------------------------------------------------------------------------------
 struct WRUnitContext
 {
+	WRstr name;
 	uint32_t hash; // hashed name of this unit
-	int arguments; // how many arguments it expects
+	uint32_t arguments; // how many arguments it expects
 	int offsetInBytecode; // where in the bytecode it resides
 
 	WRarray<ConstantValue> constantValues;
@@ -2403,11 +2753,15 @@ struct WRUnitContext
 	WRUnitContext() { reset(); }
 	void reset()
 	{
-		parentUnitIndex = 0;
+		name = "";
 		hash = 0;
 		arguments = 0;
-		offsetInBytecode = 0;
+		arguments = 0;
+		parentUnitIndex = 0;
+		constantValues.clear();
 		offsetOfLocalHashMap = 0;
+		bytecode.clear();
+		parentUnitIndex = 0;
 	}
 };
 
@@ -2420,7 +2774,7 @@ public:
 					 unsigned char** out,
 					 int* outLen,
 					 char* erroMsg,
-					 const unsigned int compilerOptionFlags );
+					 const uint8_t compilerOptionFlags );
 
 	void createListing( const char* bytecode, WRstr& listing );
 	
@@ -2443,14 +2797,16 @@ private:
 
 	int getBytecodePosition( WRBytecode& bytecode ) { return bytecode.all.size(); }
 
-	bool m_addDebugLineNumbers;
+	bool m_addDebugSymbols;
 	bool m_embedGlobalSymbols;
 	bool m_embedSourceCode;
+	bool m_needVar;
 	
-	int m_lastLineNumber;
 	uint16_t m_lastCode;
-	void pushDebug( uint16_t code, WRBytecode& bytecode,int param =-1 );
-	void getSourcePosition( int& onLine, int& onChar, WRstr* line =0 );
+	uint16_t m_lastParam;
+	void pushDebug( uint16_t code, WRBytecode& bytecode,int param );
+	int getSourcePosition();
+	int getSourcePosition( int& onLine, int& onChar, WRstr* line =0 );
 	
 	int addRelativeJumpTarget( WRBytecode& bytecode );
 	void setRelativeJumpTarget( WRBytecode& bytecode, int relativeJumpTarget );
@@ -2462,8 +2818,8 @@ private:
 	
 	void pushLiteral( WRBytecode& bytecode, WRExpressionContext& context );
 	void pushLibConstant( WRBytecode& bytecode, WRExpressionContext& context );
-	int addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly =false );
-	int addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly =false );
+	int addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen );
+	int addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen );
 	void addFunctionToHashSpace( WRBytecode& result, WRstr& token );
 	void loadExpressionContext( WRExpression& expression, int depth, int operation );
 	void resolveExpression( WRExpression& expression );
@@ -2485,7 +2841,7 @@ private:
 	bool parseStatement( int unitIndex, char end, bool& returnCalled, WROpcode opcodeToReturn );
 
 	void createLocalHashMap( WRUnitContext& unit, unsigned char** buf, int* size );
-	void link( unsigned char** out, int* outLen, const unsigned int compilerOptionFlags );
+	void link( unsigned char** out, int* outLen, const uint8_t compilerOptionFlags );
 
 	const char* m_source;
 	int m_sourceLen;
@@ -2583,115 +2939,261 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 enum WrenchDebugComm
 {
-	Run,
-	Load,
-	
-	RequestStatus,
-	RequestSymbolBlock,
-	RequestSourceBlock,
-	RequestSourceHash,
+	WRD_None = 0,
+	WRD_Ok,
+	WRD_Run,
+	WRD_Load,
 
-	ReplyStatus,
-	ReplySymbolBlock,
-	ReplySource,
-	ReplySourceHash,
-	
-	ReplyUnavailable,
-	Err,
-	Halted,
+	WRD_DebugOut,
 
-};
+	WRD_RequestCallstack,
+	WRD_RequestSymbolBlock,
+	WRD_RequestSourceBlock,
+	WRD_RequestSourceHash,
+	WRD_RequestValue,
+	WRD_RequestStepOver,
+	WRD_RequestStepInto,
+	WRD_RequestSetBreakpoint,
+	WRD_RequestClearBreakpoint,
 
-//------------------------------------------------------------------------------
-struct WrenchPacketGenericPayload
-{
-	int32_t hash;
+	WRD_ReplyCallstack,
+	WRD_ReplySymbolBlock,
+	WRD_ReplySource,
+	WRD_ReplySourceHash,
+	WRD_ReplyValue,
 
-	void xlate()
-	{
-		hash = wr_x32(hash);
-	}
+	WRD_ReplyUnavailable,
+	WRD_Err,
 };
 
 //------------------------------------------------------------------------------
 struct WrenchPacket
 {
-	int32_t payloadSize;
-	char type;
-	char* payload;
+	uint32_t size; // TOTAL size including any additional payload (always first)
 
-	WrenchPacket() { memset(this, 0, sizeof(*this)); }
-	~WrenchPacket() { clear(); }
-
-	WrenchPacket( WrenchPacket& other )
+	union
 	{
-		*this = other;
-		other.payload = 0;
-	}
+		uint32_t t; // type this is
+		WrenchDebugComm _type;
+	};
+	int32_t param1;
+	int32_t param2;
 
-	WrenchPacket& operator=( WrenchPacket& other )
-	{
-		if ( this != &other )
-		{
-			*this = other;
-			other.payload = 0;
-		}
+	void setPayloadSize( uint32_t newsize ) { size = sizeof(WrenchPacket) + newsize; }
+	uint32_t payloadSize() { return (size <= sizeof(WrenchPacket)) ? 0 : (size - sizeof(WrenchPacket)); }
+	uint8_t* payload( uint32_t offset =0 ) { return (uint8_t*)((char *)this + sizeof(WrenchPacket)) + offset; }
+	uint8_t operator[] ( const int offset ) { return *(uint8_t*)((char*)this + sizeof(WrenchPacket)) + offset; }
 
-		return *this;
-	}
-	
-
-	void clear() { free(payload); payload = 0; }
-	
-	void xlate() { payloadSize = wr_x32(payloadSize); }
-
-	char* allocate( int size )
-	{
-		if ( payload )
-		{
-			free( payload );
-		}
-		return (payload = (char*)malloc(size));
-	}
-	
-	WrenchPacketGenericPayload* genericPayload()
-	{
-		return (WrenchPacketGenericPayload *)allocate( sizeof(WrenchPacketGenericPayload) );
-	}
-
-private:
-	WrenchPacket( const WrenchPacket& other );
-	WrenchPacket& operator=( const WrenchPacket& other );
+	WrenchPacket() {}
+	WrenchPacket( const WrenchDebugComm, const uint32_t payloadSize =0 );
+	WrenchPacket( const int32_t type, const uint32_t payloadSize =0 );
+	static WrenchPacket* alloc( WrenchPacket const& base );
+	static WrenchPacket* alloc( const uint32_t type, const uint32_t payloadSize =0 );
+	uint32_t xlate();
 };
 
 //------------------------------------------------------------------------------
+// to allow the compiler to COMPILE debug code even if the VM does not
+// execute it
 enum WrenchDebugInfoType
 {
-	TypeMask =     0xC000,
-	PayloadMask =  0x3FFF,
+	WRD_TypeMask =     0xC000,
+	WRD_PayloadMask =  0x3FFF,
+	WRD_GlobalStopFunction = 0x0F00,
+	WRD_ExternalFunction = 0x0E00,
+
+	WRD_FunctionCall = 0x0000, // payload is function index
+	WRD_LineNumber =   0x4000, // 14-bit line number
+	WRD_Return =       0x8000, // function has returned
+	WRD_RESERVED =     0xC000,
+};
+
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+
+void wr_PacketClearFunc( WrenchPacket*& packet );
+
+//------------------------------------------------------------------------------
+class WrenchPacketScoped
+{
+public:
+
+	WrenchPacket* packet;
+
+	operator WrenchPacket* () { return packet; }
+
+	WrenchPacketScoped( WrenchPacket* manage ) : packet(manage) {}
+	WrenchPacketScoped( const uint32_t type, const uint32_t size =0 ) : packet( WrenchPacket::alloc(type, size) ) {}
+	~WrenchPacketScoped() { free( packet ); }
+};
+
+//------------------------------------------------------------------------------
+class WRDebugClientInterfacePrivate
+{
+public:
+	WRDebugClientInterfacePrivate();
+	~WRDebugClientInterfacePrivate();
+
+	void init();
+
+	WrenchPacket* transmit( WrenchPacket* packet );
+
+	char* m_sourceBlock;
+	uint32_t m_sourceBlockLen;
+	uint32_t m_sourceBlockHash;
+
+	SimpleLL<WrenchPacket*>* m_packetQ;
+
+	void populateSymbols();
 	
-	FunctionCall = 0x0000, // size: 1 the next opcode is a function call, step into or over?
-	LineNumber =   0x4000, // 14-bit line number
-	Returned =     0x8000, // function has returned
-	Reserved2 =    0xC000,
+	bool m_symbolsLoaded;
+	SimpleLL<WrenchSymbol>* m_globals;
+	SimpleLL<WrenchFunction>* m_functions;
+
+	bool m_callstackDirty;
+	SimpleLL<WrenchCallStackEntry>* m_callStack;
+	WRP_ProcState m_procState;
+
+	WRDebugServerInterface* m_localServer;
+	bool (*m_receiveFunction)( char* data, const int length );
+	bool (*m_sendFunction)( const char* data, const int length );
+	int (*m_dataAvailableFunction)();
+
+	WRState* m_scratchState;
+	WRContext* m_scratchContext;
+
+	void trapRunOutput( WrenchPacket const& packet );
 };
 
 //------------------------------------------------------------------------------
-struct WrenchSymbol
+class WRDebugServerInterfacePrivate
 {
-	char label[64];
-};
+public:
+	WRDebugServerInterfacePrivate( WRDebugServerInterface* parent );
+	~WRDebugServerInterfacePrivate();
 
-//------------------------------------------------------------------------------
-struct WrenchFunction
-{
-	char label[64];
-	SimpleLL<WrenchSymbol> locals;
+	bool codewordEncountered( const uint8_t* pc, uint16_t codeword, WRValue* stackTop );
+	void clearBreakpoint( const int bp );
+	WrenchPacket* processPacket( WrenchPacket* packet );
+
+	int m_steppingOverReturnVector;
+	int m_lineSteps;
+	int m_stepOverDepth;
+	bool m_stepOut;
+
+	WrenchPacket m_lastPacket;
+
+	SimpleLL<int>* m_lineBreaks;
+	SimpleLL<WrenchPacket*>* m_packetQ;
+	SimpleLL<WrenchCallStackEntry>* m_callStack;
+
+	WRState* m_w;
+	bool (*m_receiveFunction)( char* data, const int length );
+	bool (*m_sendFunction)( const char* data, const int length );
+	int (*m_dataAvailableFunction)();
+
+	WRDebugServerInterface* m_parent;
+	bool m_firstCall;
+	int32_t m_stopOnLine;
+	
+	uint8_t* m_externalCodeBlock;
+	uint32_t m_externalCodeBlockSize;	
+	
+	const uint8_t* m_embeddedSource;
+	uint32_t m_embeddedSourceLen;
+	uint32_t m_embeddedSourceHash;
+	uint8_t m_compilerFlags;
+
+	const uint8_t* m_symbolBlock;
+	uint32_t m_symbolBlockLen;
+
+	// for resuming a function call
+	WRContext* m_context;
+	const WRValue* m_argv;
+	int m_argn;
+	const unsigned char* m_pc;
+	WRValue* m_frameBase;
+	WRValue* m_stackTop;
+
+	bool m_halted;
 };
 
 #endif
 
+#endif
 /*******************************************************************************
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+#ifndef _DEBUG_CLIENT_H
+#define _DEBUG_CLIENT_H
+
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+
+//------------------------------------------------------------------------------
+class WrenchDebugClient
+{
+public:
+
+	void enter( const char* sourceFileName, const char* port =0 );
+
+	WrenchDebugClient( WRState* w =0 ); // use provided state or make a new one
+	~WrenchDebugClient();
+
+private:
+
+	bool init( const char* name, const char* port =0 );
+	bool loadSource( const char* name );
+
+	bool printVariable( WRstr& str );
+	WrenchCallStackEntry* getCurrentFrame();
+	void showCurrentCallStack();
+	void showCurrentCodePosition();
+
+	void showBreakpoint( int bp =-1 );
+
+	int splitArgs( const char* str, SimpleLL<WRstr>& args );
+	void splitNL( const char* str );
+
+	bool m_printInHex;
+	int m_currentDepth;
+
+	SimpleLL<WRstr> m_listing;
+	SimpleLL<int> m_breakpoints;
+	SimpleLL<WRstr> m_displayPerStep;
+
+	WRState* m_w;
+	WRContext* m_context;
+	bool m_ownState;
+
+	unsigned char* m_code;
+	int m_codeLen;
+
+	WRDebugServerInterface* m_server;
+	WRDebugClientInterface* m_client;
+};
+
+#endif
+
+#endif/*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
@@ -2725,16 +3227,16 @@ struct WRState;
 
 void wr_read_file( WRValue* stackTop, const int argn, WRContext* c );
 void wr_write_file( WRValue* stackTop, const int argn, WRContext* c );
+void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c );
 
 void wr_getline( WRValue* stackTop, const int argn, WRContext* c );
-void wr_clock( WRValue* stackTop, const int argn, WRContext* c );
-void wr_milliseconds(WRValue* stackTop, const int argn, WRContext* c );
 
 void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c );
 void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c );
 void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c );
 void wr_ioWrite( WRValue* stackTop, const int argn, WRContext* c );
 void wr_ioSeek( WRValue* stackTop, const int argn, WRContext* c );
+void wr_ioFSync( WRValue* stackTop, const int argn, WRContext* c );
 
 void wr_ioPushConstants( WRState* w );
 
@@ -2794,7 +3296,6 @@ const char* c_reserved[] =
 	"null",
 	"struct",
 	"goto",
-	"gc_pause",
 	""
 };
 
@@ -2804,7 +3305,7 @@ WRError WRCompilationContext::compile( const char* source,
 									   unsigned char** out,
 									   int* outLen,
 									   char* errorMsg,
-									   const unsigned int compilerOptionFlags )
+									   const uint8_t compilerOptionFlags )
 {
 	m_source = source;
 	m_sourceLen = size;
@@ -2812,8 +3313,8 @@ WRError WRCompilationContext::compile( const char* source,
 	*outLen = 0;
 	*out = 0;
 
-	m_lastLineNumber = 0;
-	m_lastCode = 0xFFFF;
+	m_lastParam = 0;
+	m_lastCode = 0;
 
 	m_pos = 0;
 	m_err = WR_ERR_None;
@@ -2828,9 +3329,10 @@ WRError WRCompilationContext::compile( const char* source,
 
 	m_loadedValue.p2 = INIT_AS_REF;
 
-	m_addDebugLineNumbers = compilerOptionFlags & WR_EMBED_DEBUG_CODE;
+	m_addDebugSymbols = compilerOptionFlags & WR_EMBED_DEBUG_CODE;
 	m_embedSourceCode = compilerOptionFlags & WR_EMBED_SOURCE_CODE;
-	m_embedGlobalSymbols = compilerOptionFlags != 0; // if any options are set, embed them
+	m_embedGlobalSymbols = compilerOptionFlags != 0; // (WR_INCLUDE_GLOBALS)
+	m_needVar = !(compilerOptionFlags & WR_NON_STRICT_VAR);
 
 	do
 	{
@@ -2857,7 +3359,6 @@ WRError WRCompilationContext::compile( const char* source,
 		int onChar;
 		int onLine;
 		WRstr line;
-
 		getSourcePosition( onLine, onChar, &line );
 
 		msg.format( "line:%d\n", onLine );
@@ -2910,7 +3411,7 @@ WRError wr_compile( const char* source,
 					unsigned char** out,
 					int* outLen,
 					char* errMsg,
-					const unsigned int compilerOptionFlags )
+					const uint8_t compilerOptionFlags )
 {
 	assert( sizeof(float) == 4 );
 	assert( sizeof(int) == 4 );
@@ -3821,7 +4322,6 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 
 		--o;
 		unsigned int a = bytecode.all.size() - 1;
-
 		if ( opcode == O_Return
 			 && bytecode.opcodes[o] == O_LiteralZero )
 		{
@@ -4634,7 +5134,6 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 						}
 						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_FUNCTION_CALL_PLACEHOLDER )
 						{
-							//bytecode.all[a] = bytecode.all[a-1];
 							bytecode.all[a-2] = O_AssignToGlobalAndPop;
 							bytecode.all.shave(1);
 							bytecode.opcodes[o] = O_AssignToGlobalAndPop;
@@ -4815,37 +5314,36 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 //------------------------------------------------------------------------------
 void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int param )
 {
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-	if ( !m_addDebugLineNumbers )
+	if ( !m_addDebugSymbols )
 	{
 		return;
 	}
 
-	if ( param == -1 )
+	if ( code == m_lastCode && param == m_lastParam )
 	{
-		int onChar;
-		getSourcePosition( param, onChar );
-
-		if ( param == m_lastLineNumber && code == m_lastCode )
-		{
-			return;
-		}
-	
-		m_lastLineNumber = param;
-		m_lastCode = code;
+		return;
 	}
 
+	m_lastParam = param;
+	m_lastCode = code;
+	
 	pushOpcode( bytecode, O_DebugInfo );
 
-//	uint16_t codeword = code | ((uint16_t)param & PayloadMask);
-//	unsigned char data[2];
-//	pushData( bytecode, wr_pack16(codeword, data), 2 );
-#endif  
-
+	uint16_t codeword = code | ((uint16_t)param & WRD_PayloadMask);
+	unsigned char data[2];
+	pushData( bytecode, wr_pack16(codeword, data), 2 );
 }
 
 //------------------------------------------------------------------------------
-void WRCompilationContext::getSourcePosition( int& onLine, int& onChar, WRstr* line )
+int WRCompilationContext::getSourcePosition()
+{
+	int onChar;
+	int onLine;
+	return getSourcePosition( onLine, onChar, 0 );
+}
+
+//------------------------------------------------------------------------------
+int WRCompilationContext::getSourcePosition( int& onLine, int& onChar, WRstr* line )
 {
 	onChar = 0;
 	onLine = 1;
@@ -4876,6 +5374,8 @@ void WRCompilationContext::getSourcePosition( int& onLine, int& onChar, WRstr* l
 			onChar++;
 		}
 	}
+
+	return onLine;
 }
 
 //------------------------------------------------------------------------------
@@ -5599,11 +6099,11 @@ void WRCompilationContext::pushLibConstant( WRBytecode& bytecode, WRExpressionCo
 }
 
 //------------------------------------------------------------------------------
-int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly )
+int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen )
 {
 	if ( m_unitTop == 0 )
 	{
-		return addGlobalSpaceLoad( bytecode, token, addOnly );
+		return addGlobalSpaceLoad( bytecode, token, addOnly, varSeen );
 	}
 
 	uint32_t hash = wr_hashStr(token);
@@ -5618,35 +6118,44 @@ int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token,
 		}
 	}
 
-	if ( i >= bytecode.localSpace.count() && !addOnly )
+	if ( i >= bytecode.localSpace.count() )
 	{
-		WRstr t2;
-		if (token[0] == ':' && token[1] == ':')
+		if ( !addOnly )
 		{
-			t2 = token;
-		}
-		else
-		{
-			t2.format("::%s", token.c_str());
-		}
-
-		uint32_t ghash = wr_hashStr(t2);
-
-		// was NOT found locally which is possible for a "global" if
-		// the argument list names it, now check global with the global
-		// hash
-		if ( !bytecode.isStructSpace ) // structs are immune to this
-		{
-			for (unsigned int j = 0; j < m_units[0].bytecode.localSpace.count(); ++j)
+			WRstr t2;
+			if ( varSeen || (token[0] == ':' && token[1] == ':') )
 			{
-				if (m_units[0].bytecode.localSpace[j].hash == ghash)
+				t2 = token;
+			}
+			else
+			{
+				t2.format("::%s", token.c_str());
+			}
+
+			uint32_t ghash = wr_hashStr(t2);
+
+			// was NOT found locally which is possible for a "global" if
+			// the argument list names it, now check global with the global
+			// hash
+			if ( !bytecode.isStructSpace || varSeen ) // structs and explicit 'var' are immune to this
+			{
+				for (unsigned int j = 0; j < m_units[0].bytecode.localSpace.count(); ++j)
 				{
-					pushOpcode(bytecode, O_LoadFromGlobal);
-					unsigned char c = j;
-					pushData(bytecode, &c, 1);
-					return j;
+					if (m_units[0].bytecode.localSpace[j].hash == ghash)
+					{
+						pushOpcode(bytecode, O_LoadFromGlobal);
+						unsigned char c = j;
+						pushData(bytecode, &c, 1);
+						return j;
+					}
 				}
 			}
+		}
+
+		if ( m_needVar && !varSeen )
+		{
+			m_err = WR_ERR_var_not_seen_before_label;
+			return 0;
 		}
 	}
 
@@ -5664,7 +6173,7 @@ int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token,
 }
 
 //------------------------------------------------------------------------------
-int WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly )
+int WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen )
 {
 	uint32_t hash;
 	WRstr t2;
@@ -5686,6 +6195,12 @@ int WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token
 		{
 			break;
 		}
+	}
+
+	if ( m_needVar && !varSeen && i >= m_units[0].bytecode.localSpace.count() )
+	{
+		m_err = WR_ERR_var_not_seen_before_label;
+		return 0;
 	}
 	
 	m_units[0].bytecode.localSpace[i].hash = hash;
@@ -5732,19 +6247,30 @@ void WRCompilationContext::loadExpressionContext( WRExpression& expression, int 
 				break;
 			}
 
+			case EXTYPE_LABEL_AND_NULL:
 			case EXTYPE_LABEL:
 			{
 				if ( expression.context[depth].global )
 				{
 					addGlobalSpaceLoad( expression.bytecode,
-										expression.context[depth].token );
+										expression.context[depth].token,
+										false,
+										expression.context[depth].varSeen );
 				}
 				else
 				{
 					addLocalSpaceLoad( expression.bytecode,
-									   expression.context[depth].token );
+									   expression.context[depth].token,
+									   false,
+									   expression.context[depth].varSeen );
 				}
 
+				if ( expression.context[depth].type == EXTYPE_LABEL_AND_NULL )
+				{
+					expression.bytecode.all += O_InitVar;
+					expression.bytecode.opcodes += O_InitVar;
+				}
+						
 				break;
 			}
 
@@ -6168,7 +6694,7 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 
 			if ( nex.bytecode.opcodes.size() > 0 )
 			{
-				char op = nex.bytecode.opcodes[nex.bytecode.opcodes.size() - 1];
+				uint8_t op = nex.bytecode.opcodes[nex.bytecode.opcodes.size() - 1];
 				if ( op == O_Index
 					 || op == O_IndexSkipLoad
 					 || op == O_IndexLiteral8
@@ -6197,12 +6723,14 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		}
 	}
 
-	pushDebug( FunctionCall, expression.context[depth].bytecode, wr_hashStr(prefix) );
+	pushDebug( WRD_LineNumber, expression.context[depth].bytecode, getSourcePosition() );
+	pushDebug( WRD_FunctionCall, expression.context[depth].bytecode, WRD_ExternalFunction );
 
 	if ( prefix.size() )
 	{
 		prefix += "::";
 		prefix += functionName;
+
 
 		unsigned char buf[4];
 		wr_pack32( wr_hashStr(prefix), buf );
@@ -6243,8 +6771,6 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		// the return value a call to copy-down must be
 		// inserted
 	}
-
-	pushDebug( Returned, expression.context[depth].bytecode );
 
 	return true;
 }
@@ -6327,8 +6853,6 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			return 0;
 		}
 
-		pushDebug( LineNumber, expression.bytecode );
-
 		if ( value.type != WR_REF )
 		{
 			if ( (depth > 0) 
@@ -6357,7 +6881,14 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			break;
 		}
 
-		if ( token == "{" )
+		pushDebug( WRD_LineNumber, expression.bytecode, getSourcePosition() );
+		
+		if ( token == "var" )
+		{
+			expression.context[depth].varSeen = true;
+			continue;
+		}
+		else if ( token == "{" )
 		{
 			if ( depth == 0 )
 			{
@@ -6393,7 +6924,6 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					m_err = WR_ERR_unexpected_token;
 					return 0;
 				}
-
 
 				if ( depth == 3
 					 && expression.context[0].type == EXTYPE_LABEL
@@ -6437,7 +6967,15 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 						default: break;
 					}
 				}
-
+				else if ( expression.context[0].type != EXTYPE_LABEL )
+				{
+					m_err = WR_ERR_unexpected_token;
+					return 0;
+				}
+				else
+				{
+					expression.context[0].type = EXTYPE_LABEL_AND_NULL; // whatever it was, RE-init it to clear old sizes
+				}
 			
 				expression.context.remove( depth - 1, 1 ); // knock off the equate
 				depth--;
@@ -6578,12 +7116,16 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					if (expression.context[0].global)
 					{
 						addGlobalSpaceLoad( expression.context[1].bytecode,
-											expression.context[0].token);
+											expression.context[0].token,
+											false,
+											expression.context[0].varSeen);
 					}
 					else
 					{
 						addLocalSpaceLoad( expression.context[1].bytecode,
-										   expression.context[0].token);
+										   expression.context[0].token,
+										   false,
+										   expression.context[0].varSeen );
 					}
 				}
 					 
@@ -6704,15 +7246,6 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				WRstr& token3 = expression.context[depth].token;
 				WRValue& value3 = expression.context[depth].value;
 
-				// we know we're about to create at least X new
-				// commands in a row, unless the function calls
-				// allocate memory (a distinct possibility) no GC will
-				// be required, so pause it by the number of
-				// allocations (TBD) 
-				pushOpcode( expression.context[depth].bytecode, O_GC_Command );
-				unsigned int gcOffset = expression.context[depth].bytecode.all.size();
-				pushData( expression.context[depth].bytecode, "\0\0", 2 );
-
 				if ( !getToken(expression.context[depth], "{") )
 				{
 					m_err = WR_ERR_unexpected_token;
@@ -6808,8 +7341,6 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					m_err = WR_ERR_unexpected_token;
 					return 0;
 				}
-
-				wr_pack16( initializer, expression.context[depth].bytecode.all.p_str(gcOffset) );
 
 				++depth;
 				continue;
@@ -7103,6 +7634,7 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 		return false;
 	}
 
+	m_units[m_unitTop].name = token;
 	m_units[m_unitTop].hash = wr_hash( token, token.size() );
 	m_units[m_unitTop].bytecode.isStructSpace = isStruct;
 
@@ -7133,7 +7665,10 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 			++m_units[m_unitTop].arguments;
 
 			// register the argument on the hash stack
-			addLocalSpaceLoad( m_units[m_unitTop].bytecode, token, true );
+			addLocalSpaceLoad( m_units[m_unitTop].bytecode,
+							   token,
+							   true,
+							   true );
 
 			if ( !getToken(ex) )
 			{
@@ -7170,6 +7705,7 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 
 	if ( !returnCalled )
 	{
+		pushDebug( WRD_LineNumber, m_units[m_unitTop].bytecode, getSourcePosition() );
 		pushOpcode( m_units[m_unitTop].bytecode, O_LiteralZero );
 		pushOpcode( m_units[m_unitTop].bytecode, O_Return );
 	}
@@ -7439,7 +7975,7 @@ A:
 
 					WRstr T;
 					T.format( "foreach:%d", m_foreachHash++ );
-					g = (unsigned char)(addGlobalSpaceLoad( m_units[0].bytecode, T, true ));
+					g = (unsigned char)(addGlobalSpaceLoad( m_units[0].bytecode, T, true, nex.context[0].varSeen ));
 
 					if ( nex.bytecode.opcodes[0] == O_LoadFromLocal )
 					{
@@ -8230,11 +8766,12 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 {
 	WRExpressionContext ex;
 	returnCalled = false;
+	bool varSeen = false;
 
 	for(;;)
 	{
 		WRstr& token = ex.token;
-		WRValue& value = ex.value;
+//		WRValue& value = ex.value;
 
 		if ( !getToken(ex) ) // if we run out of tokens that's fine as long as we were not waiting for a }
 		{
@@ -8288,6 +8825,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				appendBytecode( m_units[unitIndex].bytecode, nex.bytecode );
 			}
 
+			pushDebug( WRD_LineNumber, m_units[m_unitTop].bytecode, getSourcePosition() );
 			pushOpcode( m_units[unitIndex].bytecode, opcodeToReturn );
 		}
 		else if ( !m_quoted && token == "struct" )
@@ -8378,39 +8916,6 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 
 			addRelativeJumpSource( m_units[unitIndex].bytecode, O_RelativeJump, *m_continueTargets.tail() );
 		}
-		else if ( !m_quoted && token == "gc_pause" )
-		{
-			if ( !getToken(ex, "(") )
-			{
-				m_err = WR_ERR_bad_expression;
-				return false;
-			}
-
-			if ( !getToken(ex) || value.type != WR_INT )
-			{
-				m_err = WR_ERR_bad_expression;
-				return false;
-			}
-
-			uint16_t cycle = value.ui;
-
-			pushOpcode( m_units[unitIndex].bytecode, O_GC_Command );
-			unsigned char count[2];
-			wr_pack16( cycle, count );
-			pushData( m_units[unitIndex].bytecode, count, 2 );
-
-			if ( !getToken(ex, ")") )
-			{
-				m_err = WR_ERR_bad_expression;
-				return false;
-			}
-			
-			if ( !getToken(ex, ";") )
-			{
-				m_err = WR_ERR_bad_expression;
-				return false;
-			}
-		}
 		else if ( !m_quoted && token == "goto" )
 		{
 			if ( !getToken(ex) ) // if we run out of tokens that's fine as long as we were not waiting for a }
@@ -8439,6 +8944,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 		}
+/*
 		else if ( !m_quoted && token == "var" )
 		{
 			if ( !getToken(ex) ) // if we run out of tokens that's fine as long as we were not waiting for a }
@@ -8455,13 +8961,18 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				m_err = WR_ERR_bad_goto_label;
 				return false;
 			}
-
+			
+			varSeen = true;
 			goto parseAsVar;
 		}
 		else
 		{
 parseAsVar:
+*/
+		else
+		{
 			WRExpression nex( m_units[unitIndex].bytecode.localSpace, m_units[unitIndex].bytecode.isStructSpace );
+			nex.context[0].varSeen = varSeen;
 			nex.context[0].token = token;
 			nex.context[0].value = ex.value;
 			nex.lValue = true;
@@ -8484,7 +8995,7 @@ parseAsVar:
 		}
 	}
 
-	return true;
+	return m_err ? false : true;
 }
 
 //------------------------------------------------------------------------------
@@ -8619,19 +9130,66 @@ bool WRCompilationContext::readCurlyBlock( WRstr& block )
 }
 
 //------------------------------------------------------------------------------
-void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigned int compilerOptionFlags )
+void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t compilerOptionFlags )
 {
 	WROpcodeStream code;
 
-	code += (unsigned char)(m_units.count() - 1); // function count
-	code += (unsigned char)(m_units[0].bytecode.localSpace.count()); // globals count
+	code += (unsigned char)(m_units.count() - 1); // function count (for VM allocation)
+	code += (unsigned char)(m_units[0].bytecode.localSpace.count()); // globals count (for VM allocation)
+	code += (unsigned char)compilerOptionFlags;
 
+	m_units[0].name = "::global";
+	
 	unsigned char data[4];
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-	unsigned int units = m_units.count();
-#endif
 	unsigned int globals = m_units[0].bytecode.localSpace.count();
 
+	if ( compilerOptionFlags & WR_INCLUDE_GLOBALS )
+	{
+		for( unsigned int i=0; i<globals; ++i )
+		{
+			code.append( wr_pack32(m_units[0].bytecode.localSpace[i].hash, data), 4 );
+		}
+	}
+
+	if ( compilerOptionFlags & WR_EMBED_DEBUG_CODE
+		 || compilerOptionFlags & WR_EMBED_SOURCE_CODE )
+	{
+		// hash of source compiled for this
+		code.append( wr_pack32(wr_hash(m_source, m_sourceLen), data), 4 ); 
+
+		WRstr symbols;
+
+		uint16_t functions = m_units.count();
+		symbols.append( (char*)wr_pack16(functions, data), 2 );
+		
+		data[0] = 0; // terminator
+		for( unsigned int u=0; u<m_units.count(); ++u ) // all the local labels by unit
+		{
+			data[1] = m_units[u].bytecode.localSpace.count();
+			data[2] = m_units[u].arguments;
+			symbols.append( (char *)(data + 1), 2 );
+			
+			symbols.append( m_units[u].name );
+			symbols.append( (char *)data, 1 ); 
+
+			for( unsigned int s=0; s<m_units[u].bytecode.localSpace.count(); ++s )
+			{
+				symbols.append( m_units[u].bytecode.localSpace[s].label );
+				symbols.append( (char *)data, 1 ); 
+			}
+		}
+
+		uint16_t symbolSize = symbols.size();
+		code.append( wr_pack16(symbolSize, data), 2 );
+		code.append( (uint8_t*)symbols.p_str(), symbols.size() );
+	}
+	
+	if ( compilerOptionFlags & WR_EMBED_SOURCE_CODE )
+	{
+		code.append( wr_pack32(m_sourceLen, data), 4 );
+		code.append( (uint8_t*)m_source, m_sourceLen );
+	}
+	
 	// register the function signatures
 	for( unsigned int u=1; u<m_units.count(); ++u )
 	{
@@ -8654,10 +9212,8 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 	}
 
 	WRstr str;
-
 //	wr_asciiDump( code.p_str(), code.size(), str );
 //	printf( "header:\n%d:\n%s\n", code.size(), str.c_str() );
-
 
 	// append all the unit code
 	for( unsigned int u=0; u<m_units.count(); ++u )
@@ -8703,12 +9259,13 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 		int base = code.size();
 
 //		wr_asciiDump( m_units[u].bytecode.all, m_units[u].bytecode.all.size(), str );
-//		printf( "unit %d\n%d:\n%s\n", u, code.size(), str.c_str() );
+//		printf( "Adding Unit %d\n%s\n", u, str.c_str() );
 
 		code.append( m_units[u].bytecode.all, m_units[u].bytecode.all.size() );
 
-//		wr_asciiDump(code.p_str(), code.size(), str);
-//		printf("header:\n%d:\n%s\n", code.size(), str.c_str());
+//		wr_asciiDump( code.p_str(), code.size(), str );
+//		printf( "now\n%s\n", str.c_str() );
+
 
 		// load new's
 		for( unsigned int f=0; f<m_units[u].bytecode.unitObjectSpace.count(); ++f )
@@ -8737,6 +9294,10 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 							buf[1] = m_units[u2].arguments;
 							m_units[u2].offsetOfLocalHashMap = code.size();
 							code.append( buf, size );
+
+//							wr_asciiDump( buf, size, str );
+//							printf( "Adding\n%s\n", str.c_str() );
+
 						}
 
 						delete[] buf;
@@ -8766,15 +9327,15 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 
 				for( ; u2<m_units.count(); ++u2 )
 				{
-					if ( m_units[u2].hash == N.hash )
+					if ( m_units[u2].hash == N.hash ) // local function! call it, manage preserving retval
 					{
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-						if ( m_addDebugLineNumbers )
+						if ( m_addDebugSymbols )
 						{
-							uint16_t codeword = (uint16_t)FunctionCall | ((uint16_t)(u2 - 1) & PayloadMask);
+							// fill in the codeword with internal function number
+							uint16_t codeword = (uint16_t)WRD_FunctionCall | (uint16_t)u2;
 							wr_pack16( codeword, (unsigned char *)code.p_str(index - 2) );
 						}
-#endif
+						
 						code[index] = O_CallFunctionByIndex;
 
 						code[index+2] = (char)(u2 - 1);
@@ -8797,7 +9358,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 					}
 				}
 
-				if ( u2 >= m_units.count() )
+				if ( u2 >= m_units.count() ) // no local function found, rely on it being found run-time
 				{
 					if ( code[index+5] == O_PopOne )
 					{
@@ -8814,73 +9375,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 		}
 	}
 
-
-//	[h][#globals][bytes] / [global data|global data crc] / [CRC]
-// 	[h][#globals][bytes] |[[debug options + crc]|/ [global data|global data crc] / [CRC]
-
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-	if ( m_addDebugLineNumbers || m_embedSourceCode )
-	{
-		WRstr symbolBlock;
-		if ( m_addDebugLineNumbers || m_embedSourceCode )
-		{
-			symbolBlock.append( (char *)wr_pack16(globals, data), 2 ); // globals
-			symbolBlock.append( (char *)wr_pack16(units - 1, data), 2 ); // functions
-
-			data[0] = 0;
-			for( unsigned int g=0; g<globals; ++g )
-			{
-				symbolBlock.append( m_units[0].bytecode.localSpace[g].label );
-				symbolBlock.append( (char *)data, 1 ); 
-			}
-
-			for( unsigned int u=1; u<units; ++u )
-			{
-				data[1] = m_units[u].bytecode.localSpace.count();
-				symbolBlock.append( (char *)(data + 1), 1 );
-				for( unsigned int s=0; s<m_units[u].bytecode.localSpace.count(); ++s )
-				{
-					symbolBlock.append( m_units[u].bytecode.localSpace[s].label );
-					symbolBlock.append( (char *)data, 1 ); 
-				}
-			}
-		}
-
-		uint32_t sourceOffset = m_embedSourceCode ? code.size() : 0;
-		if ( m_embedSourceCode )
-		{
-			code.append( (const unsigned char*)m_source, m_sourceLen );
-		}
-
-		uint32_t symbolBlockOffset = code.size();
-		code.append( (unsigned char *)symbolBlock.c_str(), symbolBlock.size() );
-
-		uint32_t debugBlockBase = code.size();
-
-		code.append( wr_pack32(compilerOptionFlags, data), 4 ); // 0: flags
-		code.append( wr_pack32(m_sourceLen, data), 4 ); // 4:source Length
-		code.append( wr_pack32(wr_hash(m_source, m_sourceLen), data), 4 ); // 8:source Hash
-		code.append( wr_pack32(sourceOffset, data), 4 ); // 12:source Offset
-		code.append( wr_pack32(symbolBlock.size(), data), 4 ); // 16:symbol Block Size
-		code.append( wr_pack32(symbolBlockOffset, data), 4 ); // 20:symbol Offset
-
-		code.append( wr_pack32(wr_hash(code.p_str(debugBlockBase), 24), data), 4 ); // 24
-	}
-#endif
-
-	if ( m_embedGlobalSymbols && globals )
-	{
-		uint32_t* globalsBlock = new uint32_t[globals + 1];
-		for( unsigned int s = 0; s<globals; ++s )
-		{
-			wr_pack32( m_units[0].bytecode.localSpace[s].hash, (unsigned char *)(globalsBlock + s) );
-		}
-
-		wr_pack32( wr_hash(globalsBlock, globals * sizeof(uint32_t)), (unsigned char *)(globalsBlock + globals) );
-		code.append( (unsigned char *)globalsBlock, (globals + 1) * sizeof(uint32_t) );
-		delete[] globalsBlock;
-	}
-
+	// append a CRC
 	code.append( wr_pack32(wr_hash(code, code.size()), data), 4 );
 
 	if ( !m_err )
@@ -8892,11 +9387,15 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const unsigne
 
 #else // WRENCH_WITHOUT_COMPILER
 
-WRError wr_compile( const char* source, const int size, unsigned char** out, int* outLen, char* errMsg, bool includeSymbols )
+WRError wr_compile( const char* source,
+					const int size,
+					unsigned char** out,
+					int* outLen,
+					char* errMsg,
+					const uint8_t compilerOptionFlags )
 {
 	return WR_ERR_compiler_not_loaded;
 }
-
 	
 #endif
 /*******************************************************************************
@@ -8924,312 +9423,6 @@ SOFTWARE.
 *******************************************************************************/
 
 #include "wrench.h"
-
-//------------------------------------------------------------------------------
-//#define DEBUG_OPCODE_NAMES
-#ifdef DEBUG_OPCODE_NAMES
-const char* c_opcodeName[] = 
-{
-	"RegisterFunction",
-
-	"LiteralInt32",
-	"LiteralZero",
-	"LiteralFloat",
-	"LiteralString",
-
-	"CallFunctionByHash",
-	"CallFunctionByHashAndPop",
-	"CallFunctionByIndex",
-	"PushIndexFunctionReturnValue",
-
-	"CallLibFunction",
-	"CallLibFunctionAndPop",
-
-	"NewObjectTable",
-	"AssignToObjectTableByOffset",
-
-	"AssignToHashTableAndPop",
-	"Remove",
-	"HashEntryExists",
-
-	"PopOne",
-	"ReturnZero",
-	"Return",
-	"Stop",
-
-	"Dereference",
-	"Index",
-	"IndexSkipLoad",
-	"CountOf",
-	"HashOf",
-
-	"StackIndexHash",
-	"GlobalIndexHash",
-	"LocalIndexHash",
-
-	"StackSwap",
-	"SwapTwoToTop",
-
-	"LoadFromLocal",
-	"LoadFromGlobal",
-
-	"LLValues",
-	"LGValues",
-	"GLValues",
-	"GGValues",
-
-	"BinaryRightShiftSkipLoad",
-	"BinaryLeftShiftSkipLoad",
-	"BinaryAndSkipLoad",
-	"BinaryOrSkipLoad",
-	"BinaryXORSkipLoad",
-	"BinaryModSkipLoad",
-
-	"BinaryMultiplication",
-	"BinarySubtraction",
-	"BinaryDivision",
-	"BinaryRightShift",
-	"BinaryLeftShift",
-	"BinaryMod",
-	"BinaryOr",
-	"BinaryXOR",
-	"BinaryAnd",
-	"BinaryAddition",
-
-	"BitwiseNOT",
-
-	"RelativeJump",
-	"RelativeJump8",
-
-	"BZ",
-	"BZ8",
-
-	"LogicalAnd",
-	"LogicalOr",
-	"CompareLE",
-	"CompareGE",
-	"CompareGT",
-	"CompareLT",
-	"CompareEQ",
-	"CompareNE",
-
-	"GGCompareGT",
-	"GGCompareGE",
-	"GGCompareLT",
-	"GGCompareLE",
-	"GGCompareEQ", 
-	"GGCompareNE", 
-
-	"LLCompareGT",
-	"LLCompareGE",
-	"LLCompareLT",
-	"LLCompareLE",
-	"LLCompareEQ", 
-	"LLCompareNE", 
-
-	"GSCompareEQ",
-	"LSCompareEQ", 
-	"GSCompareNE", 
-	"LSCompareNE", 
-	"GSCompareGE",
-	"LSCompareGE",
-	"GSCompareLE",
-	"LSCompareLE",
-	"GSCompareGT",
-	"LSCompareGT",
-	"GSCompareLT",
-	"LSCompareLT",
-
-	"GSCompareEQBZ", 
-	"LSCompareEQBZ", 
-	"GSCompareNEBZ", 
-	"LSCompareNEBZ", 
-	"GSCompareGEBZ",
-	"LSCompareGEBZ",
-	"GSCompareLEBZ",
-	"LSCompareLEBZ",
-	"GSCompareGTBZ",
-	"LSCompareGTBZ",
-	"GSCompareLTBZ",
-	"LSCompareLTBZ",
-
-	"GSCompareEQBZ8",
-	"LSCompareEQBZ8",
-	"GSCompareNEBZ8",
-	"LSCompareNEBZ8",
-	"GSCompareGEBZ8",
-	"LSCompareGEBZ8",
-	"GSCompareLEBZ8",
-	"LSCompareLEBZ8",
-	"GSCompareGTBZ8",
-	"LSCompareGTBZ8",
-	"GSCompareLTBZ8",
-	"LSCompareLTBZ8",
-
-	"LLCompareLTBZ",
-	"LLCompareLEBZ",
-	"LLCompareGTBZ",
-	"LLCompareGEBZ",
-	"LLCompareEQBZ",
-	"LLCompareNEBZ",
-
-	"GGCompareLTBZ",
-	"GGCompareLEBZ",
-	"GGCompareGTBZ",
-	"GGCompareGEBZ",
-	"GGCompareEQBZ",
-	"GGCompareNEBZ",
-
-	"LLCompareLTBZ8",
-	"LLCompareLEBZ8",
-	"LLCompareGTBZ8",
-	"LLCompareGEBZ8",
-	"LLCompareEQBZ8",
-	"LLCompareNEBZ8",
-
-	"GGCompareLTBZ8",
-	"GGCompareLEBZ8",
-	"GGCompareGTBZ8",
-	"GGCompareGEBZ8",
-	"GGCompareEQBZ8",
-	"GGCompareNEBZ8",
-
-	"PostIncrement",
-	"PostDecrement",
-	"PreIncrement",
-	"PreDecrement",
-
-	"PreIncrementAndPop",
-	"PreDecrementAndPop",
-
-	"IncGlobal",
-	"DecGlobal",
-	"IncLocal",
-	"DecLocal",
-
-	"Assign",
-	"AssignAndPop",
-	"AssignToGlobalAndPop",
-	"AssignToLocalAndPop",
-	"AssignToArrayAndPop",
-
-	"SubtractAssign",
-	"AddAssign",
-	"ModAssign",
-	"MultiplyAssign",
-	"DivideAssign",
-	"ORAssign",
-	"ANDAssign",
-	"XORAssign",
-	"RightShiftAssign",
-	"LeftShiftAssign",
-
-	"SubtractAssignAndPop",
-	"AddAssignAndPop",
-	"ModAssignAndPop",
-	"MultiplyAssignAndPop",
-	"DivideAssignAndPop",
-	"ORAssignAndPop",
-	"ANDAssignAndPop",
-	"XORAssignAndPop",
-	"RightShiftAssignAndPop",
-	"LeftShiftAssignAndPop",
-
-	"LogicalNot", //X
-	"Negate",
-
-	"LiteralInt8",
-	"LiteralInt16",
-
-	"IndexLiteral8",
-	"IndexLiteral16",
-
-	"IndexLocalLiteral8",
-	"IndexGlobalLiteral8",
-	"IndexLocalLiteral16",
-	"IndexGlobalLiteral16",
-
-	"BinaryAdditionAndStoreGlobal",
-	"BinarySubtractionAndStoreGlobal",
-	"BinaryMultiplicationAndStoreGlobal",
-	"BinaryDivisionAndStoreGlobal",
-
-	"BinaryAdditionAndStoreLocal",
-	"BinarySubtractionAndStoreLocal",
-	"BinaryMultiplicationAndStoreLocal",
-	"BinaryDivisionAndStoreLocal",
-
-	"CompareBEQ",
-	"CompareBNE",
-	"CompareBGE",
-	"CompareBLE",
-	"CompareBGT",
-	"CompareBLT",
-
-	"CompareBEQ8",
-	"CompareBNE8",
-	"CompareBGE8",
-	"CompareBLE8",
-	"CompareBGT8",
-	"CompareBLT8",
-
-	"BLA",
-	"BLA8",
-	"BLO",
-	"BLO8",
-
-	"LiteralInt8ToGlobal",
-	"LiteralInt16ToGlobal",
-	"LiteralInt32ToLocal",
-	"LiteralInt8ToLocal",
-	"LiteralInt16ToLocal",
-	"LiteralFloatToGlobal",
-	"LiteralFloatToLocal",
-	"LiteralInt32ToGlobal",
-
-	"GGBinaryMultiplication",
-	"GLBinaryMultiplication",
-	"LLBinaryMultiplication",
-
-	"GGBinaryAddition",
-	"GLBinaryAddition",
-	"LLBinaryAddition",
-
-	"GGBinarySubtraction",
-	"GLBinarySubtraction",
-	"LGBinarySubtraction",
-	"LLBinarySubtraction",
-
-	"GGBinaryDivision",
-	"GLBinaryDivision",
-	"LGBinaryDivision",
-	"LLBinaryDivision",
-
-	"GC_Command",
-
-	"GPushIterator",
-	"LPushIterator",
-	"GGNextKeyValueOrJump",
-	"GLNextKeyValueOrJump",
-	"LGNextKeyValueOrJump",
-	"LLNextKeyValueOrJump",
-	"GNextValueOrJump",
-	"LNextValueOrJump",
-
-	"Switch",
-	"SwitchLinear",
-
-	"GlobalStop",
-
-	"ToInt",
-	"ToFloat",
-
-	"LoadLibConstant",
-	"InitArray",
-
-	"DebugInfo",
-};
-#endif
 
 //------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
@@ -9263,7 +9456,7 @@ void WRContext::mark( WRValue* s )
 	{
 		for( uint32_t i=0; i<sva->m_mod; ++i )
 		{
-			if ( sva->m_hashTable[i] )
+			if ( sva->m_hashTable[i] != WRENCH_NULL_HASH )
 			{
 				uint32_t item = i<<1;
 				mark( sva->m_Vdata + item++ );
@@ -9278,16 +9471,12 @@ void WRContext::mark( WRValue* s )
 //------------------------------------------------------------------------------
 void WRContext::gc( WRValue* stackTop )
 {
-	if ( !svAllocated )
+	if ( allocatedMemoryHint < allocatedMemoryLimit )
 	{
 		return;
 	}
 
-	if ( gcPauseCount )
-	{
-		--gcPauseCount;
-		return;
-	}
+	allocatedMemoryHint = 0;
 
 	// mark stack
 	for( WRValue* s=w->stack; s<stackTop; ++s)
@@ -9299,7 +9488,7 @@ void WRContext::gc( WRValue* stackTop )
 	// mark context's globals
 	WRValue* globalSpace = (WRValue *)(this + 1); // globals are allocated directly after this context
 
-	for( int i=0; i<globals; ++i, ++globalSpace )
+	for( unsigned int i=0; i<globals; ++i, ++globalSpace )
 	{
 		mark( globalSpace );
 	}
@@ -9341,15 +9530,21 @@ void WRContext::gc( WRValue* stackTop )
 WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 {
 	WRGCObject* ret = (WRGCObject*)malloc( sizeof(WRGCObject) );
-	ret->init( size, type );
-	if ( init )
-	{
-		memset( (char*)ret->m_Vdata, 0, sizeof(WRValue) * size);
-	}
+	ret->init( size, type, init );
 
 	if ( type == SV_CHAR )
 	{
 		ret->m_creatorContext = this;
+		allocatedMemoryHint += size;
+	}
+	else if ( type == SV_VALUE )
+	{
+		ret->m_creatorContext = this;
+		allocatedMemoryHint += size * sizeof(WRValue);
+	}
+	else
+	{
+		allocatedMemoryHint += ret->m_size * sizeof(WRValue);
 	}
 	
 	ret->m_next = svAllocated;
@@ -9372,7 +9567,7 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	{
 		for( ; element<iterator->va->m_mod; ++element )
 		{
-			if ( iterator->va->m_hashTable[element] )
+			if ( iterator->va->m_hashTable[element] != WRENCH_NULL_HASH )
 			{
 				iterator->p2 = INIT_AS_ITERATOR | ENCODE_ARRAY_ELEMENT_TO_P2(element+1);
 				
@@ -9414,11 +9609,16 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	return true;
 }
 
-//#define D_OPCODE
-#ifdef D_OPCODE
- #define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)READ_8_FROM_PC(pc), c_opcodeName[READ_8_FROM_PC(pc)]);
-#else
- #define PER_INSTRUCTION
+// #define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)READ_8_FROM_PC(pc), c_opcodeName[READ_8_FROM_PC(pc)]);
+#define PER_INSTRUCTION
+
+#define WRENCH_JUMPTABLE_INTERPRETER
+#ifdef WRENCH_REALLY_COMPACT
+#undef WRENCH_JUMPTABLE_INTERPRETER
+#elif !defined(__clang__)
+#if _MSC_VER
+#undef WRENCH_JUMPTABLE_INTERPRETER
+#endif
 #endif
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
@@ -9759,8 +9959,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&LGBinaryDivision,
 		&&LLBinaryDivision,
 
-		&&GC_Command,
-
 		&&GPushIterator,
 		&&LPushIterator,
 		&&GGNextKeyValueOrJump,
@@ -9780,6 +9978,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 		&&LoadLibConstant,
 		&&InitArray,
+		&&InitVar,
 
 		&&DebugInfo,
 	};
@@ -9835,9 +10034,9 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		if ( !function->offset ) // impossible offset, this is a re-entry!
 		{
 			// pop state
-			pc = context->debugInterface->m_pc;
-			frameBase = context->debugInterface->m_frameBase;
-			stackTop = context->debugInterface->m_stackTop;
+			pc = context->debugInterface->I->m_pc;
+			frameBase = context->debugInterface->I->m_frameBase;
+			stackTop = context->debugInterface->I->m_stackTop;
 			goto debugContinue;
 		}
 	}
@@ -9857,7 +10056,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		goto callFunction;
 	}
 
-	pc = bottom + 2;
+	pc = context->codeStart;
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 
@@ -9956,25 +10155,29 @@ literalZero:
 				CONTINUE;
 			}
 
+			CASE(InitVar):
+			{
+				(stackTop - 1)->deref().init();
+				CONTINUE;
+			}
+			
 			CASE(DebugInfo):
 			{
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
-				if ( context->debugInterface )
+				if ( context->debugInterface
+					 && context->debugInterface->I->codewordEncountered(pc, READ_16_FROM_PC(pc), stackTop) )
 				{
-					context->debugInterface->codewordEncountered( READ_16_FROM_PC(pc), stackTop );
-					if ( context->debugInterface->m_brk )
-					{
-						// push state
-						context->debugInterface->m_argv = argv;
-						context->debugInterface->m_argn = argn;
-						context->debugInterface->m_pc = pc;
-						context->debugInterface->m_frameBase = frameBase;
-						context->debugInterface->m_stackTop = stackTop;
-						context->debugInterface->m_brk = false;
-						
-						stackTop->p2 = INIT_AS_DEBUG_BREAK;
-						return stackTop;
-					}
+debugReturn:
+					WRDebugServerInterfacePrivate *I = context->debugInterface->I;
+					// push state
+					I->m_argv = argv;
+					I->m_argn = argn;
+					I->m_pc = pc;
+					I->m_frameBase = frameBase;
+					I->m_stackTop = stackTop;
+					
+					stackTop->p2 = INIT_AS_DEBUG_BREAK;
+					return stackTop;
 				}
 
 debugContinue:
@@ -9994,12 +10197,6 @@ debugContinue:
 
 				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb) )
 				{
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-					if ( context->debugInterface )
-					{
-						
-					}					
-#endif
 					w->err = WR_ERR_function_hash_signature_not_found;
 					return 0;
 				}
@@ -10028,12 +10225,6 @@ debugContinue:
 
 				if ( !((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb) )
 				{
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-					if ( context->debugInterface )
-					{
-
-					}					
-#endif
 					w->err = WR_ERR_function_hash_signature_not_found;
 					return 0;
 				}
@@ -10087,7 +10278,7 @@ callFunction:
 				// temp value contains return vector/frame base
 				register0 = stackTop++; // return vector
 				register0->frame = frameBase;
-				register0->returnOffset = pc - bottom; // can't use "pc" because it might set the "gc me" bit, this is guaranteed to be small enough to never do that
+				register0->returnOffset = pc - bottom; // can't use "pc" because it might set the "gc me" bit, this is guaranteed to be small enough
 
 				pc = function->offset;
 
@@ -10114,12 +10305,6 @@ callFunction:
 
 				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb) )
 				{
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-					if ( context->debugInterface )
-					{
-
-					}					
-#endif
 					w->err = WR_ERR_function_hash_signature_not_found;
 					return 0;
 				}
@@ -10153,12 +10338,6 @@ callFunction:
 
 				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb) )
 				{
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-					if ( context->debugInterface )
-					{
-
-					}					
-#endif
 					w->err = WR_ERR_function_hash_signature_not_found;
 					return 0;
 				}
@@ -10179,7 +10358,7 @@ callFunction:
 				if ( table > bottom )
 				{
 					// if unit was called with no arguments from global
-					// level there are not "free" stack entries to
+					// level there are no "free" stack entries to
 					// gnab, so create it here, but preserve the
 					// first value
 
@@ -10212,7 +10391,7 @@ callFunction:
 						memcpy( (char*)register0, stackTop + READ_8_FROM_PC(table) + 1, count*sizeof(WRValue) );
 					}
 
-					context->gc(++stackTop); // dop this here to take care of any memory the 'new' allocated
+					context->gc(++stackTop); // take care of any memory the 'new' allocated
 				}
 				else
 				{
@@ -10254,7 +10433,7 @@ callFunction:
 				register0 = &((stackTop - 1)->deref());
 				if ( register0->xtype == WR_EX_HASH_TABLE )
 				{
-					register0->va->exists( hash, false, true );
+					register0->va->exists( hash, true );
 				}
 				CONTINUE;	
 			}
@@ -10265,7 +10444,7 @@ callFunction:
 				register1 = (stackTop - 1);
 				register2 = &(register1->deref());
 				register1->p2 = INIT_AS_INT;
-				register1->i = ((register2->xtype == WR_EX_HASH_TABLE) && register2->va->exists(register0->getHash(), false, false)) ? 1 : 0;
+				register1->i = ((register2->xtype == WR_EX_HASH_TABLE) && register2->va->exists(register0->getHash(), false)) ? 1 : 0;
 				
 				CONTINUE;	
 			}
@@ -10287,7 +10466,17 @@ callFunction:
 				pc = bottom + register0->returnOffset; // grab return PC
 
 				stackTop = frameBase;
+				
 				frameBase = register0->frame;
+
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+				if ( context->debugInterface
+					 && context->debugInterface->I->codewordEncountered(pc, WRD_Return, stackTop) )
+				{
+					goto debugReturn;
+				}
+#endif
+				
 				CONTINUE;
 			}
 
@@ -10316,6 +10505,12 @@ callFunction:
 			{
 				*w->stack = *(register0 + 1);
 				context->stopLocation = pc - 1;
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+				if ( context->debugInterface )
+				{
+					context->debugInterface->I->codewordEncountered( pc, WRD_FunctionCall | WRD_GlobalStopFunction, stackTop );
+				}
+#endif
 				return &(w->stack)->deref();
 			}
 
@@ -10697,13 +10892,6 @@ doAssignToLocalAndPop:
 load32ToTemp:
 				register0->i = READ_32_FROM_PC(pc);
 				pc += 4;
-				CONTINUE;
-			}
-
-			CASE(GC_Command):
-			{
-				context->gcPauseCount = READ_16_FROM_PC(pc);
-				pc += 2;
 				CONTINUE;
 			}
 			
@@ -12119,7 +12307,7 @@ targetFuncStoreLocalOp:
 }
 
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -12178,19 +12366,30 @@ int16_t wr_x16( const int16_t val )
 }
 #endif
 
+
+// convert the value in-place and return a pointer to it
+int32_t* makeInt();
+float* makeFloat();
+
 //------------------------------------------------------------------------------
-int32_t* WrenchValue::makeInt()
+int32_t* WrenchValue::Int()
 {
-	m_value->i = m_value->asInt();
-	m_value->p2 = INIT_AS_INT;
+	if ( m_value->type != WR_INT )
+	{
+		m_value->i = m_value->asInt();
+		m_value->p2 = INIT_AS_INT;
+	}
 	return &(m_value->i);
 }
 
 //------------------------------------------------------------------------------
-float* WrenchValue::makeFloat()
+float* WrenchValue::Float()
 {
-	m_value->f = m_value->asFloat();
-	m_value->p2 = INIT_AS_FLOAT;
+	if ( m_value->type != WR_FLOAT )
+	{
+		m_value->f = m_value->asFloat();
+		m_value->p2 = INIT_AS_FLOAT;
+	}
 	return &(m_value->f);
 }
 
@@ -12205,7 +12404,8 @@ WRValue* WrenchValue::asArrayMember( const int index )
 	}
 	else if ( index >= (int)m_value->va->m_size )
 	{
-		m_value->va = wr_growValueArray( m_value->va, index );
+		wr_growValueArray( m_value->va, index );
+		m_context->allocatedMemoryHint += index * ((m_value->va->m_type == SV_CHAR) ? 1 : sizeof(WRValue));
 	}
 
 	return (WRValue*)m_value->va->get( index );
@@ -12220,7 +12420,7 @@ WRState* wr_newState( int stackSize )
 	state->stackSize = stackSize;
 	state->stack = (WRValue *)((unsigned char *)state + sizeof(WRState));
 
-	state->globalRegistry.init( 0, SV_VOID_HASH_TABLE );
+	state->globalRegistry.init( 0, SV_VOID_HASH_TABLE, false );
 
 	return state;
 }
@@ -12228,6 +12428,14 @@ WRState* wr_newState( int stackSize )
 //------------------------------------------------------------------------------
 void wr_destroyState( WRState* w )
 {
+	while( w->libCleanupFunctions )
+	{
+		w->libCleanupFunctions->cleanupFunction( w, w->libCleanupFunctions->param );
+		WRLibraryCleanup *next = w->libCleanupFunctions->next;
+		free( w->libCleanupFunctions );
+		w->libCleanupFunctions = next;
+	}
+
 	while( w->contextList )
 	{
 		wr_destroyContext( w->contextList );
@@ -12254,8 +12462,7 @@ bool wr_executeFunctionZero( WRContext* context )
 WRContext* wr_newContext( WRState* w, const unsigned char* block, const int blockSize )
 {
 	// CRC the code block, at least is it what the compiler intended?
-	const unsigned char* p = block + (blockSize - 4);
-	uint32_t hash = READ_32_FROM_PC( p );
+	uint32_t hash = READ_32_FROM_PC( block + (blockSize - 4) );
 	if ( hash != wr_hash_read8(block, (blockSize - 4)) )
 	{
 		w->err = WR_ERR_bad_bytecode_CRC;
@@ -12270,15 +12477,37 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 
 	memset((char*)C, 0, needed);
 
-	C->globals = READ_8_FROM_PC(block+1);
+	C->globals = READ_8_FROM_PC(block + 1);
+
+	C->allocatedMemoryLimit = WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT;
+	
 	C->w = w;
 
 	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + C->globals * sizeof(WRValue));
 
-	C->registry.init( 0, SV_VOID_HASH_TABLE );
+	C->registry.init( 0, SV_VOID_HASH_TABLE, false );
 	C->registry.m_vNext = w->contextList;
 	C->bottom = block;
+	C->codeStart = block + 3;
 	C->bottomSize = blockSize;
+
+	uint8_t compilerFlags = READ_8_FROM_PC( block + 2 );
+	
+	if ( compilerFlags & WR_INCLUDE_GLOBALS )
+	{
+		C->codeStart += C->globals * sizeof(uint32_t); // these are lazily loaded, just skip over them for now
+	}
+	
+	if ( (compilerFlags & WR_EMBED_DEBUG_CODE) || (compilerFlags & WR_EMBED_SOURCE_CODE) )
+	{
+		uint16_t symbolsSize = READ_16_FROM_PC( C->codeStart + 4 );
+		C->codeStart += 6 + symbolsSize; // 6 = 4 for code hash + 2 for size
+	}
+
+	if ( compilerFlags & WR_EMBED_SOURCE_CODE )
+	{
+		C->codeStart += 4 + READ_32_FROM_PC( C->codeStart );		
+	}
 
 	return (w->contextList = C);
 }
@@ -12318,10 +12547,6 @@ void wr_destroyContext( WRContext* context )
 		return;
 	}
 
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-	free( context->debugInterface ); // in case it had been created
-#endif
-
 	WRContext* prev = 0;
 
 	// unlink it
@@ -12339,8 +12564,8 @@ void wr_destroyContext( WRContext* context )
 			}
 
 			// free all memory allocations by forcing the gc to collect everything
-			context->gcPauseCount = 0; 
 			context->globals = 0;
+			context->allocatedMemoryHint = context->allocatedMemoryLimit;
 			context->gc( 0 );
 
 			context->registry.clear();
@@ -12354,11 +12579,37 @@ void wr_destroyContext( WRContext* context )
 }
 
 //------------------------------------------------------------------------------
+bool wr_runCommand( WRState* w, const char* sourceCode, const int size )
+{
+	int len = size == -1 ? strlen(sourceCode) : size;
+
+	unsigned char* outBytes;
+	int outLen;
+	if ( !wr_compile(sourceCode, len, &outBytes, &outLen) )
+	{
+		wr_runOnce( w, outBytes, outLen );
+		delete[] outBytes;
+		return true;
+	}
+
+	return false;
+}
+
+//------------------------------------------------------------------------------
+void wr_setAllocatedMemoryGCHint( WRContext* context, const uint16_t bytes )
+{
+	context->allocatedMemoryLimit = bytes;
+}
+
+//------------------------------------------------------------------------------
 void wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr )
 {
 	WRValue* V = w->globalRegistry.getAsRawValueHashTable( wr_hashStr(name) );
-	V->usr = usr;
-	V->ccb = function;
+	if ( V != (void*)WRENCH_NULL_HASH )
+	{
+		V->usr = usr;
+		V->ccb = function;
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -12457,7 +12708,8 @@ WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bo
 			return 0;
 		}
 		
-		va = wr_growValueArray( va, index );
+		wr_growValueArray( va, index );
+		context->allocatedMemoryHint += index * ((va->m_type == SV_CHAR) ? 1 : sizeof(WRValue));
 	}
 
 	return va->m_Vdata + index;
@@ -12477,7 +12729,7 @@ WRValue* WRValue::indexHash( WRContext* context, const uint32_t hash, const bool
 		va = context->getSVA( 0, SV_HASH_TABLE, false );
 	}
 
-	return create ? (WRValue*)va->get(hash) : va->exists(hash, false, false);
+	return create ? (WRValue*)va->get(hash) : va->exists(hash, false);
 }
 
 //------------------------------------------------------------------------------
@@ -12499,6 +12751,109 @@ void* WRValue::array( unsigned int* len, char arrayType ) const
 	}
 
 	return va->m_data;
+}
+
+//------------------------------------------------------------------------------
+int wr_technicalAsStringEx( char* string, const WRValue* value, size_t pos, size_t maxLen, bool valuesInHex )
+{
+	if ( pos >= maxLen )
+	{
+		return maxLen - 1;
+	}
+	
+	if ( value->type == WR_REF )
+	{
+		strncpy( (string + pos), "ref: ", maxLen - pos );
+		pos += 5;
+		return wr_technicalAsStringEx( string, value->r, pos, maxLen, valuesInHex );
+	}
+	else if ( value->type == WR_FLOAT )
+	{
+		return pos + snprintf( string + pos, maxLen - pos, "%g", value->f );
+	}
+	else if ( value->type == WR_INT )
+	{
+		return pos + (valuesInHex ? snprintf(string + pos, maxLen - pos, "0x%08lX", (unsigned long int)value->ui )
+			: snprintf(string + pos, maxLen - pos, "%ld", (long int)value->i));
+				
+	}
+	else if ( value->xtype == WR_EX_ARRAY )
+	{
+		if ( value->va->m_type == SV_VALUE )
+		{
+			pos += snprintf( string + pos, maxLen - pos, "[ " );
+
+			bool first = true;
+			for( uint32_t i=0; pos<maxLen && i<value->va->m_size; ++i )
+			{
+				if ( !first )
+				{
+					pos += snprintf( string + pos, maxLen - pos, ", " );
+				}
+				first = false;
+				pos = wr_technicalAsStringEx( string, value->va->m_Vdata + i, pos, maxLen, valuesInHex );
+			}
+
+			if ( pos >= maxLen )
+			{
+				return maxLen;
+			}
+
+			pos += snprintf( string + pos, maxLen - pos, " ]" );
+		}
+		else if ( value->va->m_type == SV_CHAR )
+		{
+			pos += snprintf( string + pos, maxLen - pos, "\"" );
+
+			for( uint32_t i=0; pos<maxLen && i<value->va->m_size; ++i )
+			{
+				string[pos++] = value->va->m_SCdata[i];
+			}
+
+			if ( pos >= maxLen )
+			{
+				return maxLen;
+			}
+
+			pos += snprintf( string + pos, maxLen - pos, "\"" );
+		}
+		else
+		{
+			pos += snprintf( string + pos, maxLen - pos, "<raw array>" );
+		}
+	}
+	else if ( value->xtype == WR_EX_HASH_TABLE )
+	{
+		pos += snprintf( string + pos, maxLen - pos, "{ " );
+		
+		bool first = true;
+		for( int32_t element=0; element<value->va->m_mod; ++element )
+		{
+			if ( value->va->m_hashTable[element] != WRENCH_NULL_HASH )
+			{
+				if ( !first )
+				{
+					pos += snprintf( string + pos, maxLen - pos, ", " );
+				}
+				first = false;
+				int32_t index = element << 1;
+				pos = wr_technicalAsStringEx( string, value->va->m_Vdata + index + 1, pos, maxLen, valuesInHex );
+				pos += snprintf( string + pos, maxLen - pos, ":" );
+				pos = wr_technicalAsStringEx( string, value->va->m_Vdata + index, pos, maxLen, valuesInHex );
+			}
+		}
+
+		pos += snprintf( string + pos, maxLen - pos, " }" );
+	}
+
+	return (pos >= maxLen) ? maxLen : pos;
+}
+
+//------------------------------------------------------------------------------
+char* WRValue::technicalAsString( char* string, size_t maxLen, bool valuesInHex ) const
+{
+	string[ wr_technicalAsStringEx(string, this, 0, maxLen, valuesInHex) ] = 0;
+	return string;
 }
 
 //------------------------------------------------------------------------------
@@ -12585,7 +12940,7 @@ WRFunction* wr_getFunction( WRContext* context, const char* functionName )
 WRValue* wr_getGlobalRef( WRContext* context, const char* label )
 {
 	char globalLabel[64] = "::";
-	if ( !label )
+	if ( !label || !(READ_8_FROM_PC(context->bottom + 2) & WR_INCLUDE_GLOBALS) )
 	{
 		return 0;
 	}
@@ -12600,27 +12955,11 @@ WRValue* wr_getGlobalRef( WRContext* context, const char* label )
 		strncpy( globalLabel + 2, label, 61 );
 		match = wr_hashStr( globalLabel );
 	}
-	
-	// grab the globals block if it exists (check hash)
-	if ( (int)((context->globals + 2) * sizeof(uint32_t)) > context->bottomSize )
-	{
-		return 0; // not enough room for globals to exist
-	}
 
-	const unsigned char* symbolsBlock = (context->bottom + (context->bottomSize -
-											 (sizeof(uint32_t) // code hash
-											  + sizeof(uint32_t) // symbols hash
-											  + context->globals * sizeof(uint32_t)))); // globals
-	
-	uint32_t hash = READ_32_FROM_PC( symbolsBlock + context->globals*sizeof(uint32_t) );
-	if ( hash != wr_hash_read8( symbolsBlock, context->globals * sizeof(uint32_t) ) )
+	const unsigned char* symbolsBlock = context->bottom + 3;
+	for( unsigned int i=0; i<context->globals; ++i, symbolsBlock += 4 )
 	{
-		return 0; // bad CRC
-	}
-
-	for( unsigned int i=0; i<context->globals; ++i )
-	{
-		uint32_t symbolHash = READ_32_FROM_PC(symbolsBlock + i*sizeof(uint32_t));
+		uint32_t symbolHash = READ_32_FROM_PC( symbolsBlock );
 		if ( match == symbolHash )
 		{
 			return ((WRValue *)(context + 1)) + i; // global space lives immediately past the context
@@ -12661,7 +13000,7 @@ void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 {
 	val->p2 = INIT_AS_HASH_TABLE;
 	val->va = (WRGCObject*)malloc( sizeof(WRGCObject) );
-	val->va->init( sizeHint, SV_VOID_HASH_TABLE );
+	val->va->init( sizeHint, SV_VOID_HASH_TABLE, false );
 	val->va->m_skipGC = 1;
 }
 
@@ -12736,6 +13075,365 @@ const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markB
 	return str;
 }
 
+//------------------------------------------------------------------------------
+const char* c_opcodeName[] = 
+{
+	"RegisterFunction",
+
+	"LiteralInt32",
+	"LiteralZero",
+	"LiteralFloat",
+	"LiteralString",
+
+	"CallFunctionByHash",
+	"CallFunctionByHashAndPop",
+	"CallFunctionByIndex",
+	"PushIndexFunctionReturnValue",
+
+	"CallLibFunction",
+	"CallLibFunctionAndPop",
+
+	"NewObjectTable",
+	"AssignToObjectTableByOffset",
+
+	"AssignToHashTableAndPop",
+	"Remove",
+	"HashEntryExists",
+
+	"PopOne",
+	"ReturnZero",
+	"Return",
+	"Stop",
+
+	"Dereference",
+	"Index",
+	"IndexSkipLoad",
+	"CountOf",
+	"HashOf",
+
+	"StackIndexHash",
+	"GlobalIndexHash",
+	"LocalIndexHash",
+
+	"StackSwap",
+	"SwapTwoToTop",
+
+	"LoadFromLocal",
+	"LoadFromGlobal",
+
+	"LLValues",
+	"LGValues",
+	"GLValues",
+	"GGValues",
+
+	"BinaryRightShiftSkipLoad",
+	"BinaryLeftShiftSkipLoad",
+	"BinaryAndSkipLoad",
+	"BinaryOrSkipLoad",
+	"BinaryXORSkipLoad",
+	"BinaryModSkipLoad",
+
+	"BinaryMultiplication",
+	"BinarySubtraction",
+	"BinaryDivision",
+	"BinaryRightShift",
+	"BinaryLeftShift",
+	"BinaryMod",
+	"BinaryOr",
+	"BinaryXOR",
+	"BinaryAnd",
+	"BinaryAddition",
+
+	"BitwiseNOT",
+
+	"RelativeJump",
+	"RelativeJump8",
+
+	"BZ",
+	"BZ8",
+
+	"LogicalAnd",
+	"LogicalOr",
+	"CompareLE",
+	"CompareGE",
+	"CompareGT",
+	"CompareLT",
+	"CompareEQ",
+	"CompareNE",
+
+	"GGCompareGT",
+	"GGCompareGE",
+	"GGCompareLT",
+	"GGCompareLE",
+	"GGCompareEQ", 
+	"GGCompareNE", 
+
+	"LLCompareGT",
+	"LLCompareGE",
+	"LLCompareLT",
+	"LLCompareLE",
+	"LLCompareEQ", 
+	"LLCompareNE", 
+
+	"GSCompareEQ",
+	"LSCompareEQ", 
+	"GSCompareNE", 
+	"LSCompareNE", 
+	"GSCompareGE",
+	"LSCompareGE",
+	"GSCompareLE",
+	"LSCompareLE",
+	"GSCompareGT",
+	"LSCompareGT",
+	"GSCompareLT",
+	"LSCompareLT",
+
+	"GSCompareEQBZ", 
+	"LSCompareEQBZ", 
+	"GSCompareNEBZ", 
+	"LSCompareNEBZ", 
+	"GSCompareGEBZ",
+	"LSCompareGEBZ",
+	"GSCompareLEBZ",
+	"LSCompareLEBZ",
+	"GSCompareGTBZ",
+	"LSCompareGTBZ",
+	"GSCompareLTBZ",
+	"LSCompareLTBZ",
+
+	"GSCompareEQBZ8",
+	"LSCompareEQBZ8",
+	"GSCompareNEBZ8",
+	"LSCompareNEBZ8",
+	"GSCompareGEBZ8",
+	"LSCompareGEBZ8",
+	"GSCompareLEBZ8",
+	"LSCompareLEBZ8",
+	"GSCompareGTBZ8",
+	"LSCompareGTBZ8",
+	"GSCompareLTBZ8",
+	"LSCompareLTBZ8",
+
+	"LLCompareLTBZ",
+	"LLCompareLEBZ",
+	"LLCompareGTBZ",
+	"LLCompareGEBZ",
+	"LLCompareEQBZ",
+	"LLCompareNEBZ",
+
+	"GGCompareLTBZ",
+	"GGCompareLEBZ",
+	"GGCompareGTBZ",
+	"GGCompareGEBZ",
+	"GGCompareEQBZ",
+	"GGCompareNEBZ",
+
+	"LLCompareLTBZ8",
+	"LLCompareLEBZ8",
+	"LLCompareGTBZ8",
+	"LLCompareGEBZ8",
+	"LLCompareEQBZ8",
+	"LLCompareNEBZ8",
+
+	"GGCompareLTBZ8",
+	"GGCompareLEBZ8",
+	"GGCompareGTBZ8",
+	"GGCompareGEBZ8",
+	"GGCompareEQBZ8",
+	"GGCompareNEBZ8",
+
+	"PostIncrement",
+	"PostDecrement",
+	"PreIncrement",
+	"PreDecrement",
+
+	"PreIncrementAndPop",
+	"PreDecrementAndPop",
+
+	"IncGlobal",
+	"DecGlobal",
+	"IncLocal",
+	"DecLocal",
+
+	"Assign",
+	"AssignAndPop",
+	"AssignToGlobalAndPop",
+	"AssignToLocalAndPop",
+	"AssignToArrayAndPop",
+
+	"SubtractAssign",
+	"AddAssign",
+	"ModAssign",
+	"MultiplyAssign",
+	"DivideAssign",
+	"ORAssign",
+	"ANDAssign",
+	"XORAssign",
+	"RightShiftAssign",
+	"LeftShiftAssign",
+
+	"SubtractAssignAndPop",
+	"AddAssignAndPop",
+	"ModAssignAndPop",
+	"MultiplyAssignAndPop",
+	"DivideAssignAndPop",
+	"ORAssignAndPop",
+	"ANDAssignAndPop",
+	"XORAssignAndPop",
+	"RightShiftAssignAndPop",
+	"LeftShiftAssignAndPop",
+
+	"LogicalNot", //X
+	"Negate",
+
+	"LiteralInt8",
+	"LiteralInt16",
+
+	"IndexLiteral8",
+	"IndexLiteral16",
+
+	"IndexLocalLiteral8",
+	"IndexGlobalLiteral8",
+	"IndexLocalLiteral16",
+	"IndexGlobalLiteral16",
+
+	"BinaryAdditionAndStoreGlobal",
+	"BinarySubtractionAndStoreGlobal",
+	"BinaryMultiplicationAndStoreGlobal",
+	"BinaryDivisionAndStoreGlobal",
+
+	"BinaryAdditionAndStoreLocal",
+	"BinarySubtractionAndStoreLocal",
+	"BinaryMultiplicationAndStoreLocal",
+	"BinaryDivisionAndStoreLocal",
+
+	"CompareBEQ",
+	"CompareBNE",
+	"CompareBGE",
+	"CompareBLE",
+	"CompareBGT",
+	"CompareBLT",
+
+	"CompareBEQ8",
+	"CompareBNE8",
+	"CompareBGE8",
+	"CompareBLE8",
+	"CompareBGT8",
+	"CompareBLT8",
+
+	"BLA",
+	"BLA8",
+	"BLO",
+	"BLO8",
+
+	"LiteralInt8ToGlobal",
+	"LiteralInt16ToGlobal",
+	"LiteralInt32ToLocal",
+	"LiteralInt8ToLocal",
+	"LiteralInt16ToLocal",
+	"LiteralFloatToGlobal",
+	"LiteralFloatToLocal",
+	"LiteralInt32ToGlobal",
+
+	"GGBinaryMultiplication",
+	"GLBinaryMultiplication",
+	"LLBinaryMultiplication",
+
+	"GGBinaryAddition",
+	"GLBinaryAddition",
+	"LLBinaryAddition",
+
+	"GGBinarySubtraction",
+	"GLBinarySubtraction",
+	"LGBinarySubtraction",
+	"LLBinarySubtraction",
+
+	"GGBinaryDivision",
+	"GLBinaryDivision",
+	"LGBinaryDivision",
+	"LLBinaryDivision",
+
+	"GPushIterator",
+	"LPushIterator",
+	"GGNextKeyValueOrJump",
+	"GLNextKeyValueOrJump",
+	"LGNextKeyValueOrJump",
+	"LLNextKeyValueOrJump",
+	"GNextValueOrJump",
+	"LNextValueOrJump",
+
+	"Switch",
+	"SwitchLinear",
+
+	"GlobalStop",
+
+	"ToInt",
+	"ToFloat",
+
+	"LoadLibConstant",
+	"InitArray",
+	"InitVar",
+
+	"DebugInfo",
+};
+
+//------------------------------------------------------------------------------
+const char* c_errStrings[]=
+{
+	"WR_ERR_None",
+
+	"WR_ERR_compiler_not_loaded",
+	"WR_ERR_function_hash_signature_not_found",
+	"WR_ERR_library_constant_not_loaded",
+	"WR_ERR_unknown_opcode",
+	"WR_ERR_unexpected_EOF",
+	"WR_ERR_unexpected_token",
+	"WR_ERR_bad_expression",
+	"WR_ERR_bad_label",
+	"WR_ERR_statement_expected",
+	"WR_ERR_unterminated_string_literal",
+	"WR_ERR_newline_in_string_literal",
+	"WR_ERR_bad_string_escape_sequence",
+	"WR_ERR_tried_to_load_non_resolvable",
+	"WR_ERR_break_keyword_not_in_looping_structure",
+	"WR_ERR_continue_keyword_not_in_looping_structure",
+	"WR_ERR_expected_while",
+	"WR_ERR_compiler_panic",
+	"WR_ERR_constant_redefined",
+	"WR_ERR_struct_in_struct",
+	"WR_ERR_var_not_seen_before_label",
+
+	"WR_ERR_run_must_be_called_by_itself_first",
+	"WR_ERR_hash_table_size_exceeded",
+	"WR_ERR_wrench_function_not_found",
+	"WR_ERR_array_must_be_indexed",
+	"WR_ERR_context_not_found",
+
+	"WR_ERR_usr_data_template_already_exists",
+	"WR_ERR_usr_data_already_exists",
+	"WR_ERR_usr_data_template_not_found",
+	"WR_ERR_usr_data_refernce_not_found",
+
+	"WR_ERR_bad_goto_label",
+	"WR_ERR_bad_goto_location",
+	"WR_ERR_goto_target_not_found",
+
+	"WR_ERR_switch_with_no_cases",
+	"WR_ERR_switch_case_or_default_expected",
+	"WR_ERR_switch_construction_error",
+	"WR_ERR_switch_bad_case_hash",
+	"WR_ERR_switch_duplicate_case",
+
+	"WR_ERR_bad_bytecode_CRC",
+
+	"WR_ERR_execute_function_zero_called_more_than_once",
+
+	"WR_warning_enums_follow",
+
+	"WR_WARN_c_function_not_found",
+	"WR_WARN_lib_function_not_found",
+};
+
 
 #endif
 /*******************************************************************************
@@ -12765,10 +13463,11 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-bool serializeEx( WRValueSerializer& serializer, const WRValue& val )
+bool wr_serializeEx( WRValueSerializer& serializer, const WRValue& val )
 {
 	char temp;
 	uint16_t temp16;
+	uint32_t temp32;
 	
 	const WRValue& value = val.deref();
 
@@ -12779,7 +13478,8 @@ bool serializeEx( WRValueSerializer& serializer, const WRValue& val )
 		case WR_INT:
 		case WR_FLOAT:
 		{
-			serializer.write( (char *)&value.ui, 4 );
+			temp32 = wr_x32( value.ui );
+			serializer.write( (char *)&temp32, 4 );
 			return true;
 		}
 
@@ -12792,7 +13492,8 @@ bool serializeEx( WRValueSerializer& serializer, const WRValue& val )
 				case WR_EX_ARRAY:
 				{
 					serializer.write( &(temp = value.va->m_type), 1 );
-					serializer.write( (char *)&(temp16 = value.va->m_size), 2 );
+					temp16 = wr_x16( value.va->m_size );
+					serializer.write( (char*)&temp16, 2 );
 
 					if ( value.va->m_type == SV_CHAR )
 					{
@@ -12803,7 +13504,7 @@ bool serializeEx( WRValueSerializer& serializer, const WRValue& val )
 					{
 						for( uint32_t i=0; i<value.va->m_size; ++i )
 						{
-							if ( !serializeEx(serializer, value.va->m_Vdata[i]) )
+							if ( !wr_serializeEx(serializer, value.va->m_Vdata[i]) )
 							{
 								return false;
 							}
@@ -12815,19 +13516,22 @@ bool serializeEx( WRValueSerializer& serializer, const WRValue& val )
 
 				case WR_EX_HASH_TABLE:
 				{
-					serializer.write( (char *)&(temp16 = value.va->m_mod), 2 );
+					temp16 = wr_x16( value.va->m_mod );
+					serializer.write( (char *)&temp16, 2 );
 
 					for( uint32_t i=0; i<value.va->m_mod; ++i )
 					{
-						if ( !value.va->m_hashTable[i] )
+						if ( value.va->m_hashTable[i] == WRENCH_NULL_HASH )
 						{
 							serializer.write( &(temp = 0), 1 );
 						}
+						else
+						{
+							serializer.write( &(temp = 1), 1 );
 
-						serializer.write( &(temp = 1), 1 );
-
-						serializeEx( serializer, value.va->m_Vdata[i<<1] );
-						serializeEx( serializer, value.va->m_Vdata[(i<<1) + 1] );
+							wr_serializeEx( serializer, value.va->m_Vdata[i<<1] );
+							wr_serializeEx( serializer, value.va->m_Vdata[(i<<1) + 1] );
+						}
 					}
 
 					return true;
@@ -12842,7 +13546,7 @@ bool serializeEx( WRValueSerializer& serializer, const WRValue& val )
 }
 
 //------------------------------------------------------------------------------
-bool deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext* context )
+bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext* context )
 {
 	char temp;
 	uint16_t temp16;
@@ -12859,7 +13563,9 @@ bool deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext* co
 		case WR_INT:
 		case WR_FLOAT:
 		{
-			return serializer.read( (char *)&value.ui, 4 ); // bitpattern
+			bool ret = serializer.read( (char *)&value.ui, 4 );
+			value.ui = wr_x32( value.ui );
+			return ret;
 		}
 
 		case WR_EX:
@@ -12879,6 +13585,7 @@ bool deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext* co
 						return false;
 					}
 
+					temp16 = wr_x16( temp16 );
 					value.p2 = INIT_AS_ARRAY;
 					
 					switch( (uint8_t)temp )
@@ -12898,7 +13605,7 @@ bool deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext* co
 							value.va = context->getSVA( temp16, SV_VALUE, false );
 							for( uint16_t i=0; i<temp16; ++i )
 							{
-								if ( !deserializeEx(value.va->m_Vdata[i], serializer, context) )
+								if ( !wr_deserializeEx(value.va->m_Vdata[i], serializer, context) )
 								{
 									return false;
 								}
@@ -12918,6 +13625,8 @@ bool deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext* co
 						return false;
 					}
 
+					temp16 = wr_x16( temp16 );
+					
 					value.p2 = INIT_AS_HASH_TABLE;
 					value.va = context->getSVA( temp16 - 1, SV_HASH_TABLE, false );
 
@@ -12932,16 +13641,16 @@ bool deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext* co
 						{
 							value.va->m_Vdata[i<<1].init();
 							value.va->m_Vdata[(i<<1) + 1].init();
-							value.va->m_hashTable[i] = 0;
+							value.va->m_hashTable[i] = WRENCH_NULL_HASH;
 						}
 						else
 						{
-							if ( !deserializeEx(value.va->m_Vdata[i<<1], serializer, context)
-								 || !deserializeEx(value.va->m_Vdata[(i<<1)+1], serializer, context) )
+							if ( !wr_deserializeEx(value.va->m_Vdata[i<<1], serializer, context)
+								 || !wr_deserializeEx(value.va->m_Vdata[(i<<1)+1], serializer, context) )
 							{
 								return false;
 							}
-							value.va->m_hashTable[i] = value.va->m_Vdata[(i<<1)+1].getHash() ^ HASH_SCRAMBLER;
+							value.va->m_hashTable[i] = value.va->m_Vdata[(i<<1)+1].getHash();
 						}
 					}
 					
@@ -12960,7 +13669,7 @@ bool deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext* co
 bool wr_serialize( char** buf, int* len, const WRValue& value )
 {
 	WRValueSerializer S;
-	if ( !serializeEx(S, value) )
+	if ( !wr_serializeEx(S, value) )
 	{
 		return false;
 	}
@@ -12973,7 +13682,7 @@ bool wr_serialize( char** buf, int* len, const WRValue& value )
 bool wr_deserialize( WRContext* context, WRValue& value, const char* buf, const int len )
 {
 	WRValueSerializer S( buf, len );
-	return deserializeEx( value, S, context );
+	return wr_deserializeEx( value, S, context );
 }
 /*******************************************************************************
 Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
@@ -13001,173 +13710,195 @@ SOFTWARE.
 
 #include "wrench.h"
 
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+
+const int wr_blankSize=10;
+const unsigned char wr_blankCode[]=
+{
+	0x00, 0x00, 0x01, 0x02, 0xEE, 0x13, 0x25, 0xE1, 0xA4, 0x5A, // 10
+};
 
 //------------------------------------------------------------------------------
-WRDebugClientInterface::WRDebugClientInterface( size_t (*receiveFunction)( char* data, const size_t length, const int timeoutMilliseconds ),
-												size_t (*writeFunction)( const char* data, const size_t length ) )
+// hide this from the wrench.h header to keep it cleaner
+void WRDebugClientInterface::init()
 {
+	I->m_scratchState = wr_newState();
+	I->m_scratchContext = wr_newContext( I->m_scratchState, wr_blankCode, wr_blankSize );
+	I->m_scratchContext->allocatedMemoryHint = 0;
+}
+
+//------------------------------------------------------------------------------
+WRDebugClientInterface::WRDebugClientInterface( bool (*receiveFunction)( char* data, const int length ),
+												bool (*sendFunction)( const char* data, const int length ),
+												int (*dataAvailableFunction)() )
+{
+	I = new WRDebugClientInterfacePrivate;
+	I->m_receiveFunction = receiveFunction;
+	I->m_sendFunction = sendFunction;
+	I->m_dataAvailableFunction = dataAvailableFunction;
+
 	init();
-	
-	m_receiveFunction = receiveFunction;
-	m_writeFunction = writeFunction;
 }
 
 //------------------------------------------------------------------------------
 WRDebugClientInterface::WRDebugClientInterface( WRDebugServerInterface* localServer )
 {
-	init();
+	I = new WRDebugClientInterfacePrivate;
+	I->m_localServer = localServer;
 	
-	m_localServer = localServer;
-}
-
-//------------------------------------------------------------------------------
-void WRDebugClientInterface::init()
-{
-	memset( this, 0, sizeof(*this) );
-
-	m_packetQ = new SimpleLL<WrenchPacket>();
-	m_globals = new SimpleLL<WrenchSymbol>();
-	m_functions = new SimpleLL<WrenchFunction>();
-	m_packet = new WrenchPacket;
+	init();
 }
 
 //------------------------------------------------------------------------------
 WRDebugClientInterface::~WRDebugClientInterface()
 {
-	delete m_packetQ;
-	delete m_globals;
-	delete m_functions;
-	delete m_packet;
-	
-	delete[] m_sourceBlock;
+	wr_destroyState( I->m_scratchState );
+	delete I;
 }
 
-/*
-//------------------------------------------------------------------------------
-const WRDebugMessage& WRDebugClientInterface::status()
-{
-	if ( m_localServer )
-	{
-		return m_localServer->m_msg;
-	}
-	else if ( m_writeFunction && m_receiveFunction )
-	{
-		WrenchPacket packet;
-		packet.type = RequestStatus;
-
-		char data[1 + (4 * 2)];
-		m_msg.type = Err;
-		
-		if ( m_writeFunction((char *)&packet, sizeof(WrenchPacket)) == sizeof(WrenchPacket)
-			 && m_receiveFunction(data, 4*2, -1) )
-		{
-			m_msg.type = data[0];
-			m_msg.line = READ_32_FROM_PC( (const unsigned char *)(data + 1) );
-			m_msg.function = READ_32_FROM_PC( (const unsigned char *)(data + 5) );
-		}
-	}
-	else
-	{
-		m_msg.type = Err;
-	}
-			
-	return m_msg;
-}
-*/
 //------------------------------------------------------------------------------
 void WRDebugClientInterface::load( const char* byteCode, const int size )
 {
-	WrenchPacket packet;
-	packet.type = Load;
-	wr_pack32( size, (unsigned char *)&packet.payloadSize );
-	if ( size )
-	{
-		packet.payload = (char*)malloc( size );
-		memcpy( packet.payload, byteCode, size );
-	}
+	I->m_scratchContext->gc(0);
 
-	transmit( packet );
+	WrenchPacket* packet = WrenchPacket::alloc( WRD_Load, size );
+	memcpy( packet->payload(), byteCode, size );
+	
+	free( I->transmit(packet) );
+
+	delete[] I->m_sourceBlock;
+	I->m_sourceBlock = 0;
+	I->m_functions->clear();
+	I->m_callstackDirty = true;
+	I->m_symbolsLoaded = false;
+	I->populateSymbols();
+}
+
+
+//------------------------------------------------------------------------------
+void WRDebugClientInterfacePrivate::trapRunOutput( WrenchPacket const& packet )
+{
+	for(;;)
+	{
+		WrenchPacket *reply = transmit( WrenchPacket::alloc(packet) );
+		if ( reply->_type == WRD_DebugOut )
+		{
+			printf( "%s", (char*)reply->payload() );
+			free( reply );
+			continue;
+		}
+		else
+		{
+			free( reply );
+			break;
+		}
+	}
 }
 
 //------------------------------------------------------------------------------
-void WRDebugClientInterface::run()
+void WRDebugClientInterface::run( const int toLine ) 
 {
-	WrenchPacket packet;
-	packet.type = Run;
-	
-	transmit( packet );
+	I->m_scratchContext->gc(0);
+	I->m_callstackDirty = true;
+
+	WrenchPacket packet( WRD_Run );
+	packet.param1 = toLine;
+
+	I->trapRunOutput( packet );
 }
 
 //------------------------------------------------------------------------------
 bool WRDebugClientInterface::getSourceCode( const char** data, int* len )
 {
-	WrenchPacket packet;
-	packet.type = RequestSourceBlock;
+	if ( !I->m_sourceBlock )
+	{
+		WrenchPacketScoped r( I->transmit(WrenchPacketScoped(WRD_RequestSourceBlock)) );
+		
+		if ( !r.packet || r.packet->_type != WRD_ReplySource )
+		{
+			return false;
+		}
+		
+		delete[] I->m_sourceBlock;
+		I->m_sourceBlockLen = r.packet->payloadSize();
+		I->m_sourceBlock = new char[ r.packet->payloadSize() + 1 ];
+		
+		memcpy( I->m_sourceBlock, r.packet->payload(), r.packet->payloadSize() );
+		I->m_sourceBlock[ r.packet->payloadSize() ] = 0;
+	}
 	
-	if ( !transmit(packet) )
-	{
-		return false;
-	}
-
-	WrenchPacket* P = receive();
-	if ( !P || (P->type != ReplySource) )
-	{
-		return false;
-	}
-
-	m_sourceBlock = new char[ P->payloadSize ];
-	memcpy( m_sourceBlock, P->payload, P->payloadSize );
-	*len = P->payloadSize;
-	*data = m_sourceBlock;
+	*data = I->m_sourceBlock;
+	*len = I->m_sourceBlockLen;
+	
 	return true;
 }
 
 //------------------------------------------------------------------------------
 uint32_t WRDebugClientInterface::getSourceCodeHash()
 {
-	WrenchPacket packet;
-	packet.type = RequestSourceBlock;
-
-	if ( !transmit(packet) )
+	WrenchPacketScoped r( I->transmit(WrenchPacketScoped(WRD_RequestSourceHash)) );
+	if ( !r.packet || r.packet->_type != WRD_ReplySourceHash )
 	{
 		return 0;
 	}
 
-	return 1;
+	return r.packet->param1;
 }
 
 //------------------------------------------------------------------------------
-WrenchPacket* WRDebugClientInterface::receive( const int timeoutMilliseconds )
+SimpleLL<WrenchFunction>& WRDebugClientInterface::getFunctions()
 {
-	if ( m_localServer )
+	I->populateSymbols();
+	return *I->m_functions;
+}
+
+//------------------------------------------------------------------------------
+const char* WRDebugClientInterface::getFunctionLabel( const int index )
+{
+	SimpleLL<WrenchFunction>& funcs = getFunctions();
+	WrenchFunction *f = funcs[index];
+	return f ? f->name : 0;
+}
+
+//------------------------------------------------------------------------------
+WRValue* WRDebugClientInterface::getValue( WRValue& value, const int index, const int depth )
+{
+	value.init();
+
+	WrenchPacketScoped p( WRD_RequestValue );
+	p.packet->param1 = index;
+	p.packet->param2 = depth;
+
+	WrenchPacketScoped r( I->transmit(p.packet) );
+
+	if ( !r.packet || r.packet->_type != WRD_ReplyValue )
 	{
-		WrenchPacket* p = m_localServer->m_packetQ->head();
-		if ( p )
-		{
-			*m_packet = *p;
-			m_localServer->m_packetQ->popHead();
-			return m_packet;
-		}
+		return 0;
 	}
-	else
+
+	WRValueSerializer serializer( (char *)r.packet->payload(), r.packet->payloadSize() );
+
+	wr_deserializeEx( value, serializer, I->m_scratchContext );
+
+	return &value;
+
+}
+
+//------------------------------------------------------------------------------
+const char* WRDebugClientInterface::getValueLabel( const int index, const int depth )
+{
+	WrenchFunction* func = (*I->m_functions)[depth];
+	if (!func)
 	{
-		m_packet->clear();
+		return 0;
+	}
 		
-		size_t read = m_receiveFunction( (char *)m_packet, sizeof(WrenchPacket), timeoutMilliseconds );
-		if ( read == sizeof(WrenchPacket) )
+	int i = 0;
+	for( WrenchSymbol* sym = func->vars->first(); sym; sym = func->vars->next() )
+	{
+		if ( i++ == index )
 		{
-			m_packet->xlate();
-			if ( m_packet->payloadSize )
-			{
-				m_packet->payload = (char *)malloc( m_packet->payloadSize );
-				if ( !m_receiveFunction(m_packet->allocate(m_packet->payloadSize), m_packet->payloadSize, timeoutMilliseconds) )
-				{
-					m_packet->clear();
-					return 0;
-				}
-			}
-	
-			return m_packet;
+			return sym->label;
 		}
 	}
 
@@ -13175,84 +13906,201 @@ WrenchPacket* WRDebugClientInterface::receive( const int timeoutMilliseconds )
 }
 
 //------------------------------------------------------------------------------
-bool WRDebugClientInterface::transmit( WrenchPacket& packet )
+SimpleLL<WrenchCallStackEntry>* WRDebugClientInterface::getCallstack()
 {
-	packet.xlate();
+	if ( !I->m_callstackDirty )
+	{
+		return I->m_callStack;
+	}
 
+	I->m_callStack->clear();
+
+	WrenchPacketScoped r( I->transmit(WrenchPacketScoped(WRD_RequestCallstack)) );
+	if ( !r.packet || (r.packet->_type != WRD_ReplyCallstack) )
+	{
+		return 0;
+	}
+
+	WrenchCallStackEntry* entries = (WrenchCallStackEntry *)r.packet->payload();
+
+	I->m_procState = (WRP_ProcState)r.packet->param2;
+
+	uint32_t count = r.packet->param1;
+	for( uint32_t i=0; i<count; ++i )
+	{
+		entries[i].onLine = wr_x32( entries[i].onLine );
+		entries[i].locals = wr_x16( entries[i].locals );
+		*I->m_callStack->addTail() = entries[i];
+	}
+
+	I->m_callstackDirty = false;
+	return I->m_callStack;
+}
+
+//------------------------------------------------------------------------------
+void WRDebugClientInterface::stepInto( const int steps )
+{
+	I->m_callstackDirty = true;
+	WrenchPacket packet( WRD_RequestStepInto );
+	I->trapRunOutput( packet );
+}
+
+//------------------------------------------------------------------------------
+void WRDebugClientInterface::stepOver( const int steps )
+{
+	I->m_callstackDirty = true;
+	WrenchPacket packet( WRD_RequestStepOver );
+	I->trapRunOutput( packet );
+}
+
+//------------------------------------------------------------------------------
+WRP_ProcState WRDebugClientInterface::getProcState()
+{
+	return I->m_procState;
+}
+
+//------------------------------------------------------------------------------
+void WRDebugClientInterface::setBreakpoint( const int lineNumber )
+{
+	WrenchPacketScoped b(WRD_RequestSetBreakpoint);
+	b.packet->param1 = lineNumber;
+	free( I->transmit(b) );
+}
+
+//------------------------------------------------------------------------------
+void WRDebugClientInterface::clearBreakpoint( const int lineNumber )
+{
+	WrenchPacketScoped b(WRD_RequestClearBreakpoint);
+	b.packet->param1 = lineNumber;
+	free (I->transmit(b) );
+}
+
+//------------------------------------------------------------------------------
+WRDebugClientInterfacePrivate::WRDebugClientInterfacePrivate()
+{
+	init();
+}
+
+//------------------------------------------------------------------------------
+void wr_FunctionClearFunc( WrenchFunction& F )
+{
+	delete F.vars;
+}
+							  
+//------------------------------------------------------------------------------
+void WRDebugClientInterfacePrivate::init()
+{
+	memset( this, 0, sizeof(*this) );
+	m_packetQ = new SimpleLL<WrenchPacket*>( wr_PacketClearFunc );
+	m_functions = new SimpleLL<WrenchFunction>( wr_FunctionClearFunc );
+	m_callStack = new SimpleLL<WrenchCallStackEntry>();
+}
+
+//------------------------------------------------------------------------------
+WRDebugClientInterfacePrivate::~WRDebugClientInterfacePrivate()
+{
+	delete[] m_sourceBlock;
+
+	delete m_packetQ;
+	delete m_functions;
+	delete m_callStack;
+}
+
+//------------------------------------------------------------------------------
+WrenchPacket* WRDebugClientInterfacePrivate::transmit( WrenchPacket* packet )
+{
+	WrenchPacket* reply = 0;
 	if ( m_localServer )
 	{
-		m_localServer->processPacket( &packet );
-		// memory will be free'd as if it came in off the wire
-		return true;
+		reply = m_localServer->I->processPacket( packet );
 	}
-	else if ( m_writeFunction )
+	else
 	{
-		size_t xmit = 5 + packet.payloadSize;
-		bool ret = m_writeFunction( (char*)&packet, xmit ) == xmit;
-
-		// must free any allocated memory if it was allocated
-		free( packet.payload );
+		uint32_t size = packet->xlate();
 		
-		return ret;
+		if ( m_sendFunction((char*)packet, size) )
+		{
+			WrenchPacket r;
+			if ( m_receiveFunction( (char*)&r, sizeof(WrenchPacket)) )
+			{
+				r.xlate();
+				reply = (WrenchPacket*)malloc( r.size );
+				memcpy( (char*)reply, (char*)&r, sizeof(WrenchPacket) );
+				
+				if ( r.payloadSize() )
+				{
+					if ( !m_receiveFunction((char*)reply->payload(), reply->payloadSize()) )
+					{
+						free( reply );
+						reply = 0;
+					}
+				}
+			}
+		}
+
+		if ( reply == 0 )
+		{
+			// there was an error, drain the q
+			while( m_dataAvailableFunction() )
+			{
+				char c;
+				m_receiveFunction( &c, 1 );
+			}
+		}
+
 	}
 
-	return false;
-
+	return reply;
 }
 
 //------------------------------------------------------------------------------
-void WRDebugClientInterface::loadSourceBlock()
-{
-	if ( m_sourceBlockHash )
-	{
-		return;
-	}
-}
-
-//------------------------------------------------------------------------------
-void WRDebugClientInterface::loadSymbols()
+void WRDebugClientInterfacePrivate::populateSymbols()
 {
 	if ( m_symbolsLoaded )
 	{
 		return;
 	}
-}
-
-//------------------------------------------------------------------------------
-void WRDebugClientInterface::populateSymbols( const char* block, const int size )
-{
-	m_globals->clear();
+	
 	m_functions->clear();
 
-	int pos = 0;
-	int globals = READ_16_FROM_PC( (const unsigned char *)block );
-	pos += 2;
-	int functions = READ_16_FROM_PC( (const unsigned char *)(block + pos) );
-	pos += 2;
+	WrenchPacketScoped r( transmit(WrenchPacketScoped(WRD_RequestSymbolBlock)) );
 
-	for( int g=0; g<globals; ++g )
+	if ( !r.packet || r.packet->_type != WRD_ReplySymbolBlock )
 	{
-		WrenchSymbol* s = m_globals->addTail();
-		sscanf( block + pos, "%63s", s->label );
-		while( block[pos++] );
+		return;
 	}
 
-	for( int f=0; f<functions; ++f )
-	{
-		WrenchFunction* func = m_functions->addTail();
-		sscanf( block + pos, "%63s", func->label );
-		while( block[pos++] );
+	m_symbolsLoaded = true;
+	
+	const unsigned char *block = (const unsigned char *)r.packet->payload();
+	
+	int functionCount = READ_16_FROM_PC( block );
+	int pos = 2;
 
-		int locals = (int)block[pos++];
-		
-		for( int l=0; l<locals; ++l )
+	for( int f=0; f<functionCount; ++f )
+	{
+		uint8_t count = READ_8_FROM_PC( block + pos );
+		++pos;
+
+		WrenchFunction* func = m_functions->addTail(); // so first is always "global"
+
+		func->arguments = READ_8_FROM_PC( block + pos++ );
+		sscanf( (const char *)(block + pos), "%63s", func->name );
+
+		while( block[pos++] ); // skip to next null
+
+		func->vars = new SimpleLL<WrenchSymbol>();
+		for( uint8_t v=0; v<count; ++v )
 		{
-			WrenchSymbol* s = func->locals.addTail();
-			sscanf( block + pos, "%63s", s->label );
+			WrenchSymbol* s = func->vars->addTail();
+			sscanf( (const char*)(block + pos), "%63s", s->label );
 			while( block[pos++] );
 		}
 	}
 }
+
+#endif
+
 /*******************************************************************************
 Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
 
@@ -13279,224 +14127,370 @@ SOFTWARE.
 
 #include "wrench.h"
 
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+
 //------------------------------------------------------------------------------
-WRDebugServerInterface::WRDebugServerInterface( WRState* w,
-												const unsigned char* bytes,
-												const int len,
-												bool (*receiveFunction)( char* data, const size_t length, const int timeoutMilliseconds ),
-												size_t (*writeFunction)( const char* data, const size_t length )  )
+WrenchPacket::WrenchPacket( const WrenchDebugComm type, const uint32_t payloadSize )
+{
+	memset( (char*)this, 0, sizeof(WrenchPacket) );
+	_type = type;
+	setPayloadSize( payloadSize );
+}
+
+//------------------------------------------------------------------------------
+WrenchPacket::WrenchPacket( const int32_t type, const uint32_t payloadSize )
+{
+	memset( (char*)this, 0, sizeof(WrenchPacket) );
+	t = type;
+	setPayloadSize( payloadSize );
+}
+
+//------------------------------------------------------------------------------
+WrenchPacket* WrenchPacket::alloc( WrenchPacket const& base )
+{
+	WrenchPacket* packet = (WrenchPacket*)malloc( base.size );
+	
+	memcpy( (char*)packet, (char*)&base, sizeof(WrenchPacket) );
+	return packet;
+}
+
+//------------------------------------------------------------------------------
+WrenchPacket* WrenchPacket::alloc( const uint32_t type, const uint32_t payloadSize )
+{
+	WrenchPacket* packet = (WrenchPacket*)malloc( sizeof(WrenchPacket) + payloadSize );
+
+	memset( (char*)packet, 0, sizeof(WrenchPacket) );
+
+	packet->t = type;
+	packet->setPayloadSize( payloadSize );
+
+	return packet;
+}
+
+//------------------------------------------------------------------------------
+uint32_t WrenchPacket::xlate()
+{
+	uint32_t s = size;
+
+	size = wr_x32( size );
+	t = wr_x32( t );
+	param1 = wr_x32( param1 );
+	param2 = wr_x32( param2 );
+
+	return s;
+}
+
+//------------------------------------------------------------------------------
+void wr_PacketClearFunc( WrenchPacket*& packet )
+{
+	delete packet;
+}
+
+//------------------------------------------------------------------------------
+WRDebugServerInterface::WRDebugServerInterface( WRState* w )
 {
 	memset( this, 0, sizeof(*this) );
+	I = new WRDebugServerInterfacePrivate( this );
+	I->m_w = w;
+}
 
-	m_lineBreaks = new SimpleLL<LineBreak>();
-	m_packetQ = new SimpleLL<WrenchPacket>();
+//------------------------------------------------------------------------------
+WRDebugServerInterface::WRDebugServerInterface( WRState* w,
+												bool (*receiveFunction)( char* data, const int length ),
+												bool (*sendFunction)( const char* data, const int length ),
+												int (*dataAvailableFunction)() )
+{
+	memset( this, 0, sizeof(*this) );
+	I = new WRDebugServerInterfacePrivate( this );
+	I->m_w = w;
 	
-	m_receiveFunction = receiveFunction;
-	m_writeFunction = writeFunction;
-	m_w = w;
-
-	loadBytes( bytes, len );
+	I->m_receiveFunction = receiveFunction;
+	I->m_sendFunction = sendFunction;
+	I->m_dataAvailableFunction = dataAvailableFunction;
 }
 
 //------------------------------------------------------------------------------
 WRDebugServerInterface::~WRDebugServerInterface()
 {
-	delete m_packetQ;
+	delete I;
+}
+
+//------------------------------------------------------------------------------
+WRDebugServerInterfacePrivate::WRDebugServerInterfacePrivate( WRDebugServerInterface* parent )
+{
+	memset( (char*)this, 0, sizeof(*this) );
+	m_parent = parent;
+	m_lineBreaks = new SimpleLL<int>();
+	m_callStack = new SimpleLL<WrenchCallStackEntry>();
+}
+
+//------------------------------------------------------------------------------
+WRDebugServerInterfacePrivate::~WRDebugServerInterfacePrivate()
+{
+	free( m_externalCodeBlock ); // MIGHT have been allocated
+
 	delete m_lineBreaks;
-
-	free( m_localBytes );
+	delete m_callStack;
 }
 
 //------------------------------------------------------------------------------
-WRContext* WRDebugServerInterface::loadBytes( const unsigned char* bytes, const int len )
+void WRDebugServerInterface::tick()
 {
-	if ( m_context )
-	{
-		wr_destroyContext( m_context );
-		m_context = 0;
-	}
-
-	if ( !bytes || !len )
-	{
-		return 0;
-	}
-
-	m_context = wr_newContext( m_w, bytes, len );
-	m_firstCall = true;
-
-	if ( !m_context )
-	{
-		return 0;
-	}
-
-	int debugBlockOffset = 4 // EOF hash
-						   + (m_context->globals ? (4 + m_context->globals*4) : 0) // globals block plus it's CRC
-						   + 28; // debug block plus it's crc
-
-	if ( debugBlockOffset < m_context->bottomSize )
-	{
-		const unsigned char* data = m_context->bottom + (m_context->bottomSize - debugBlockOffset);
-		uint32_t hash = wr_hash_read8( data, 24 );
-		
-		//flags = READ_32_FROM_PC( data );
-		data += 4; // flags
-
-		m_embeddedSourceSize = READ_32_FROM_PC( data );
-		data += 4;
-
-		m_embeddedSourceHash = READ_32_FROM_PC( data );
-		data += 4;
-
-		uint32_t offset = READ_32_FROM_PC( data );
-		data += 4;
-		m_embeddedSource = offset ? m_context->bottom + offset : 0;
-		
-		m_symbolBlockSize = READ_32_FROM_PC( data );
-		data += 4;
-
-		offset = READ_32_FROM_PC( data );
-		data += 4;
-		
-		m_symbolBlock = offset ? m_context->bottom + offset : 0;
-
-		if ( hash != (uint32_t)READ_32_FROM_PC( data ) )
-		{
-			return 0;
-		}
-	}
-		
-	return m_context;
-}
-
-/*
-//------------------------------------------------------------------------------
-void WRDebugInterface::setBreakpoint( const int lineNumber )
-{
-	unsigned char command[5];
-	command[0] = SetBreak;
-	wr_pack32( (int32_t)lineNumber, command + 1 );
-
-	transmit( command, 5 );
-}
-
-//------------------------------------------------------------------------------
-bool WRDebugInterface::getSourceCode( WRContext* context,
-									  const char** data,
-									  int* len )
-{
-	WrenchDebugBlock block;
-	if ( !context || !data || !block.populate(context) || !block.sourceCodeSize )
-	{
-		return false;
-	}
-
-	*data = (const char *)(context->bottom + block.sourceCodeOffset);
-	if ( len )
-	{
-		*len = block.sourceCodeSize;
-	}
-
-	return block.sourceCodeSize > 0;
-}
-
-//------------------------------------------------------------------------------
-uint32_t WRDebugInterface::getSourceCodeHash( WRContext* context )
-{
-	WrenchDebugBlock block;
-	return (context && block.populate(context)) ? block.sourceCodeCRC : 0;
-}
-
-//------------------------------------------------------------------------------
-void WRDebugInterface::injectDataFromWrench( const char* data, const int len )
-{
-	switch( data[0] )
-	{
-		case SetBreak:
-		{
-			int line = READ_32_FROM_PC( data + 1 );
-			int first = -1;
-			for( int i=0; i<wr_maxLineNumberBreaks; ++i )
-			{
-				if ( m_lineNumberBreaks[i] == 0 && first == -1 )
-				{
-					first = i;
-				}
-
-				if ( m_lineNumberBreaks[i] == line )
-				{
-					break; // already set
-				}
-
-				if ( first != -1 )
-				{
-					m_lineNumberBreaks[first] = line;
-				}
-			}
-			break;
-		}
-
-		default: break;
-	}
-}
-*/
-
-
-//------------------------------------------------------------------------------
-void WRDebugServerInterface::codewordEncountered( uint16_t codeword, WRValue* stackTop )
-{
-	int type = codeword & TypeMask;
+	WrenchPacket* reply = 0;
+	bool err = false;
 	
-	if ( type == LineNumber )
+	while( I->m_dataAvailableFunction() >= (int)sizeof(WrenchPacket) )
 	{
-		m_onLine = codeword & PayloadMask;
-
-		for( LineBreak* L = m_lineBreaks->first(); L ; L = m_lineBreaks->next() )
+		if ( err )
 		{
-			if ( L->line == m_onLine )
+			// on err, drain the q and restart
+			while( I->m_dataAvailableFunction() )
 			{
-				m_brk = true;
+				I->m_receiveFunction( (char *)&I->m_lastPacket, 1 );
+			}
+			err = false;
+			continue;
+		}
+		
+		if ( !I->m_receiveFunction( (char *)&I->m_lastPacket, sizeof(WrenchPacket)) )
+		{
+			err = true;
+			continue;
+		}
+
+		I->m_lastPacket.xlate();
+
+		if ( I->m_lastPacket.payloadSize() == 0 )
+		{
+			reply = I->processPacket( &I->m_lastPacket );
+		}
+		else
+		{
+			WrenchPacket *p = WrenchPacket::alloc( I->m_lastPacket );
+			if ( I->m_receiveFunction( (char*)p->payload(), p->payloadSize() ) )
+			{
+				reply = I->processPacket( p );
+			}
+			else
+			{
+				err = true;
+				reply = 0;
+			}
+
+			free( p );
+		}
+
+		if ( reply )
+		{
+			uint32_t size = reply->size;
+			
+			reply->xlate();
+			
+			I->m_sendFunction( (char*)reply, size );
+			free( reply );
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
+WRContext* WRDebugServerInterface::loadBytes( const uint8_t* bytes, const int len )
+{
+	if ( I->m_context )
+	{
+		wr_destroyContext( I->m_context );
+		I->m_context = 0;
+	}
+
+	if ( !bytes || !len || !I->m_w )
+	{
+		return 0;
+	}
+
+	WRContext* ret = wr_newContext( I->m_w, bytes, len );
+	I->m_context = ret;
+
+	if ( !ret )
+	{
+		return 0;
+	}
+
+	ret->debugInterface = this;
+	
+	I->m_steppingOverReturnVector = 0;
+	I->m_lineSteps = 0;
+	I->m_stepOverDepth = -1;
+
+	I->m_lineBreaks->clear();
+
+	I->m_stopOnLine = 0;
+	I->m_firstCall = true;
+	I->m_stepOut = false;
+	I->m_halted = false;
+ 	
+	const uint8_t* code = bytes + 2;
+	
+	I->m_compilerFlags = READ_8_FROM_PC( code++ );
+	
+	if ( I->m_compilerFlags & WR_INCLUDE_GLOBALS )
+	{
+		code += ret->globals * sizeof(uint32_t); // these are lazily loaded, just skip over them for now
+	}
+
+	if ( I->m_compilerFlags & WR_EMBED_DEBUG_CODE || I->m_compilerFlags & WR_EMBED_SOURCE_CODE )
+	{
+		I->m_embeddedSourceHash = READ_32_FROM_PC( code );
+		code += 4;
+
+		I->m_symbolBlockLen = READ_16_FROM_PC( code );
+		code += 2;
+
+		I->m_symbolBlock = code;
+		code += I->m_symbolBlockLen;
+	}
+
+	if ( I->m_compilerFlags & WR_EMBED_SOURCE_CODE )
+	{
+		I->m_embeddedSourceLen = READ_32_FROM_PC( code );
+		I->m_embeddedSource = code + 4;
+	}
+
+	return ret;
+}
+
+//------------------------------------------------------------------------------
+bool WRDebugServerInterfacePrivate::codewordEncountered( const uint8_t* pc, uint16_t codeword, WRValue* stackTop )
+{
+	unsigned int type = codeword & WRD_TypeMask;
+
+	if ( type == WRD_LineNumber )
+	{
+		int line = codeword & WRD_PayloadMask;
+		m_callStack->tail()->onLine = line;
+
+		for( int* L = m_lineBreaks->first() ; L ; L = m_lineBreaks->next() )
+		{
+			if ( *L == line )
+			{
+				return true;
+			}
+		}
+
+		if ( m_stepOverDepth <= 0
+			 && m_lineSteps
+			 && !--m_lineSteps )
+		{
+			m_stopOnLine = 0;
+			m_stepOverDepth = -1;
+			return true;
+		}
+
+		if ( line == m_stopOnLine )
+		{
+			m_stopOnLine = 0;
+			return true;
+		}
+	}
+	else if ( type == WRD_FunctionCall )
+	{
+		if ( (codeword & WRD_PayloadMask) == WRD_GlobalStopFunction )
+		{
+			m_halted = true;
+			return false;
+		}
+		
+		if ( (codeword & WRD_PayloadMask) == WRD_ExternalFunction )
+		{
+			// no need for bookkeeping, just skip it
+			return false;
+		}
+		
+		if ( m_stepOverDepth >= 0 ) // track stepping over/into functions
+		{
+			++m_stepOverDepth;
+		}
+
+		WrenchCallStackEntry* from = m_callStack->tail();
+		WrenchCallStackEntry* entry = m_callStack->addTail();
+		entry->onLine = -1; // don't know yet!
+		entry->fromUnitIndex = from->thisUnitIndex;
+		entry->thisUnitIndex = codeword & WRD_PayloadMask;
+		entry->stackOffset = stackTop - m_w->stack;
+
+		WRFunction* func = m_context->localFunctions + (entry->thisUnitIndex - 1); // unit '0' is the global unit
+		entry->arguments = func->arguments;
+		entry->locals = func->frameSpaceNeeded;
+		
+		//printf( "Calling[%d] @ line[%d] stack[%d]\n", m_status.onFunction, m_status.onLine, (int)(stackTop - m_context->w->stack) );
+	}
+	else if ( type == WRD_Return )
+	{
+		m_callStack->popHead();
+
+		if ( m_stepOverDepth >= 0 )
+		{
+			--m_stepOverDepth;
+		}
+	}
+	
+	return false;
+}
+
+//------------------------------------------------------------------------------
+void WRDebugServerInterfacePrivate::clearBreakpoint( const int bp )
+{
+	for( int* L = m_lineBreaks->first(); L ; L = m_lineBreaks->next() )
+	{
+		if ( *L == bp )
+		{
+			m_lineBreaks->popItem( L );
+			return;
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
+WrenchPacket* WRDebugServerInterfacePrivate::processPacket( WrenchPacket* packet )
+{
+	WrenchPacket* reply = 0;
+	
+	switch( packet->_type )
+	{
+		case WRD_RequestStepOver:
+		{
+			m_lineSteps = 1;
+			m_stepOverDepth = 0;
+			goto WRDRun;
+		}
+
+		case WRD_RequestStepInto:
+		{
+			m_lineSteps = 1;
+			m_stepOverDepth = -1;
+			goto WRDRun;
+		}
+		
+		case WRD_Run:
+		{
+WRDRun:
+			if ( !m_context || m_halted )
+			{
+				reply = WrenchPacket::alloc( WRD_Err );
 				break;
 			}
-		}
 
-		if ( m_lineSteps && !--m_lineSteps )
-		{
-			m_brk = true;
-		}
+			m_stopOnLine = packet->param1;
 
-		m_brk = true;
-
-	}
-	else if ( type == FunctionCall )
-	{
-		m_onFunction = codeword & PayloadMask;
-
-		printf( "Calling[%d] @ line[%d] stack[%d]\n", m_onFunction, m_onLine, (int)(stackTop - m_context->w->stack) );
-	}
-	else if ( type == Returned )
-	{
-		printf( "returning @ stack[%d]\n", (int)(stackTop - m_context->w->stack) );
-	}
-}
-
-//------------------------------------------------------------------------------
-void WRDebugServerInterface::processPacket( WrenchPacket* packet )
-{
-	packet->xlate();
-
-	WrenchPacket* reply = m_packetQ->addTail();
-	
-	switch( packet->type )
-	{
-		case Run:
-		{
-			if ( !m_context )
-			{
-				reply->type = Err;
-			}
-			else if ( m_firstCall )
+			if ( m_firstCall )
 			{ 
 				m_firstCall = false;
+				
+				m_callStack->clear();
+				
+				WrenchCallStackEntry* stack = m_callStack->addTail();
+				memset( (char*)stack, 0, sizeof(WrenchCallStackEntry) );
+				stack->locals = m_context->globals;
+				stack->thisUnitIndex = 0;
+
 				wr_executeContext( m_context );
 			}
 			else
@@ -13506,73 +14500,197 @@ void WRDebugServerInterface::processPacket( WrenchPacket* packet )
 				wr_callFunction( m_context, &f, 0, 0 ); // signal "continue"
 			}
 
-			reply->type = Halted;
+			reply = WrenchPacket::alloc( WRD_Ok );
 			break;
 		}
 
-		case Load:
+		case WRD_Load:
 		{
-			int32_t size = packet->payloadSize;
+			uint32_t size = packet->payloadSize();
 			if ( size )
 			{
-				free( m_localBytes );
-				m_localBytes = packet->payload; // memory was "malloced" before being sent to us
-				m_localBytesLen = size;
-				loadBytes( (unsigned char*)m_localBytes, m_localBytesLen );
+				if ( m_externalCodeBlockSize < size )
+				{
+					m_externalCodeBlock = (uint8_t*)realloc( m_externalCodeBlock, size );
+					m_externalCodeBlockSize = size;
+				}
+				
+				memcpy( m_externalCodeBlock, packet->payload(), size );
+				
+				m_parent->loadBytes( m_externalCodeBlock, m_externalCodeBlockSize );
 			}
-			else if ( m_context )
+			else
 			{
-				loadBytes( m_context->bytes, m_context->bytesLen );
+				m_parent->loadBytes( m_context->bottom, m_context->bottomSize );
+			}
+
+			reply = WrenchPacket::alloc( WRD_Ok );
+			break;
+		}
+
+		case WRD_RequestSourceBlock:
+		{
+			if ( !m_context )
+			{
+				reply = WrenchPacket::alloc( WRD_Err );
+			}
+			else if ( !m_embeddedSourceLen )
+			{
+				reply = WrenchPacket::alloc( WRD_ReplyUnavailable );
+			}
+			else
+			{
+				uint32_t size = sizeof(WrenchPacket) + m_embeddedSourceLen + 1;
+				reply = WrenchPacket::alloc( WRD_ReplySource, size );
+				uint32_t i=0;
+				for( ; i< m_embeddedSourceLen; ++i )
+				{
+					*reply->payload( i ) = (uint8_t)READ_8_FROM_PC( m_embeddedSource + i );
+				}
+				*reply->payload( i ) = 0;
 			}
 			
 			break;
 		}
 
-		case RequestSourceBlock:
+		case WRD_RequestSymbolBlock:
 		{
 			if ( !m_context )
 			{
-				reply->type = Err;
+				reply = WrenchPacket::alloc( WRD_Err );
 			}
-			else if ( !m_embeddedSourceSize )
+			else if ( !m_symbolBlockLen )
 			{
-				reply->type = ReplyUnavailable;
+				reply = WrenchPacket::alloc( WRD_ReplyUnavailable );
 			}
 			else
 			{
-				reply->type = ReplySource;
-				reply->payload = (char *)malloc( m_embeddedSourceSize );
-				for( int i=0; i<m_embeddedSourceSize; ++i )
+				uint32_t size = sizeof(WrenchPacket) + m_symbolBlockLen;
+				reply = WrenchPacket::alloc( WRD_ReplySymbolBlock, size );
+				uint32_t i=0;
+				for( ; i < m_symbolBlockLen; ++i )
 				{
-					reply->payload[i] = (unsigned char)READ_8_FROM_PC( m_embeddedSource + i );
+					*reply->payload( i ) = (uint8_t)READ_8_FROM_PC( m_symbolBlock + i );
+				}
+			}				
+			
+			break;
+		}
+
+		case WRD_RequestSourceHash:
+		{
+			if ( !m_context )
+			{
+				reply = WrenchPacket::alloc( WRD_Err );
+			}
+			else
+			{
+				reply = WrenchPacket::alloc( WRD_ReplySourceHash );
+				reply->param1 = m_embeddedSourceHash;
+			}
+			break;
+		}
+
+		case WRD_RequestValue:
+		{
+			if ( !m_context )
+			{
+				reply = WrenchPacket::alloc( WRD_Err );
+			}
+			else
+			{
+				int index = packet->param1;
+				int depth = packet->param2;
+
+				WRValueSerializer serializer;
+
+				if (depth == 0) // globals are stored separately
+				{
+					wr_serializeEx( serializer, ((WRValue *)(m_context + 1))[index] );
+				}
+				else
+				{
+					WrenchCallStackEntry* frame = (*m_callStack)[depth];
+					
+					if ( !frame )
+					{
+						reply = WrenchPacket::alloc( WRD_Err );
+					}
+					else
+					{
+						WRValue* stackFrame = m_w->stack + (frame->stackOffset - frame->arguments);
+						
+						wr_serializeEx( serializer, *(stackFrame + index) );
+					}
+				}
+				
+				if ( !reply )
+				{
+					reply = WrenchPacket::alloc( WRD_ReplyValue, serializer.size() );
+					memcpy( reply->payload(), serializer.data(), serializer.size() );
+				}
+			}
+				
+			break;
+		}
+
+		case WRD_RequestCallstack:
+		{
+			if ( !m_context || m_halted )
+			{
+				reply = WrenchPacket::alloc( WRD_ReplyCallstack );
+				reply->param1 = 0;
+				reply->param2 = (int32_t)(m_context ? WRP_Complete : (m_firstCall ? WRP_Loaded : WRP_Unloaded) );
+			}
+			else
+			{
+				uint32_t count = m_callStack->count();
+
+				reply = WrenchPacket::alloc( WRD_ReplyCallstack, sizeof(WrenchCallStackEntry) * count );
+				reply->param1 = count;
+
+				reply->param2 = (int32_t)( m_firstCall ? WRP_Loaded : WRP_Running );
+				
+				WrenchCallStackEntry* pack = (WrenchCallStackEntry *)reply->payload();
+
+				for( WrenchCallStackEntry* E = m_callStack->first(); E; E = m_callStack->next() )
+				{
+					*pack = *E;
+					pack->onLine = wr_x32( pack->onLine );
+					pack->locals = wr_x16( pack->locals );
+					++pack;
 				}
 			}
 			
 			break;
 		}
-		
-		case RequestSourceHash:
+
+		case WRD_RequestSetBreakpoint:
 		{
-			if ( !m_context )
-			{
-				reply->type = Err;
-			}
-			else
-			{
-				reply->type = ReplySourceHash;
-				WrenchPacketGenericPayload *p = reply->genericPayload();
-				p->hash = m_embeddedSourceHash;
-				p->xlate();
-			}
+			clearBreakpoint( packet->param1 );
+			*m_lineBreaks->addTail() = packet->param1;
+			reply = WrenchPacket::alloc( WRD_Ok );
+			break;
+		}
+
+		case WRD_RequestClearBreakpoint:
+		{
+			clearBreakpoint( packet->param1 );
+			reply = WrenchPacket::alloc( WRD_Ok );
 			break;
 		}
 
 		default:
 		{
+			reply = WrenchPacket::alloc( WRD_Err );
 			break;
 		}
 	}
+
+	return reply;
 }
+
+#endif
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
@@ -13600,35 +14718,35 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-WRGCObject* wr_growValueArray( WRGCObject* va, int newMinIndex )
+void wr_growValueArray( WRGCObject* va, int newMinIndex )
 {
 	int size_of = (va->m_type == SV_CHAR) ? 1 : sizeof(WRValue);
 
-#ifdef WRENCH_COMPACT
-	WRGCObject* newArray = (WRGCObject*)malloc( sizeof(WRGCObject) );
-	newArray->init( newMinIndex + 1, (WRGCObjectType)va->m_type );
-
-	newArray->m_next = va->m_next;
-	va->m_next = newArray;
-
-	int size_el = va->m_size * size_of;
-	memcpy(newArray->m_Cdata, va->m_Cdata, size_el);
-	memset(newArray->m_Cdata + size_el, 0, (newArray->m_size * size_of) - size_el);
-
-	return newArray;
-	
-#else 
-	// actually increases the size because this is the only place
-	// "realloc" is used so that code gets pulled in
-	va->m_data = realloc( va->m_data, size_of * (newMinIndex+1) );
-	
+	// increase size to accomodate new element
 	int size_el = va->m_size * size_of;
 	va->m_size = newMinIndex + 1;
 
-	memset(va->m_Cdata + size_el, 0, (va->m_size * size_of) - size_el);
+	// create new array to hold the data, and free the existing one
+	
+#ifdef WRENCH_COMPACT
 
-	return va;
+	uint8_t* old = va->m_Cdata;
+
+	va->m_Cdata = (uint8_t *)malloc( (newMinIndex + 1) * size_of );
+
+	memcpy( va->m_Cdata, old, size_el );
+
+	free( old );
+	
+#else 
+	// this increases the code size because this is the only place
+	// "realloc" is used, so the linker has to link it in
+	va->m_data = realloc( va->m_data, size_of * (newMinIndex+1) );
+
 #endif
+
+	// clear new entries
+	memset( va->m_Cdata + size_el, 0, (va->m_size * size_of) - size_el );
 }
 
 //------------------------------------------------------------------------------
@@ -13717,23 +14835,35 @@ void wr_valueToArray( const WRValue* array, WRValue* value )
 			array->r->c[s] = value->ui;
 		}
 	}
-	else if ( array->r->va->m_type == SV_CHAR)
-	{
-		if ( s < array->r->va->m_size ) 
-		{
-			array->r->va->m_Cdata[s] = value->ui;
-		}
-	}
 	else
 	{
 		if ( s >= array->r->va->m_size )
 		{
-			array->r->va = wr_growValueArray(array->r->va, s);
+			wr_growValueArray( array->r->va, s );
+			array->r->va->m_creatorContext->allocatedMemoryHint += s * ((array->r->va->m_type == SV_CHAR) ? 1 : sizeof(WRValue));
 		}
-
-		WRValue* V = array->r->va->m_Vdata + s;
-		wr_assign[(V->type<<2)+value->type](V, value);
+		
+		if ( array->r->va->m_type == SV_CHAR )
+		{
+			array->r->va->m_Cdata[s] = value->ui;
+		}
+		else 
+		{
+			WRValue* V = array->r->va->m_Vdata + s;
+			wr_assign[(V->type<<2)+value->type](V, value);
+		}
 	}
+}
+
+//------------------------------------------------------------------------------
+void wr_addLibraryCleanupFunction( WRState* w, void (*function)(WRState* w, void* param), void* param )
+{
+	WRLibraryCleanup* entry = (WRLibraryCleanup *)malloc(sizeof(WRLibraryCleanup));
+
+	entry->cleanupFunction = function;
+	entry->param = param;
+	entry->next = w->libCleanupFunctions;
+	w->libCleanupFunctions = entry;
 }
 
 //------------------------------------------------------------------------------
@@ -13898,7 +15028,7 @@ void doAssign_E_E( WRValue* to, WRValue* from )
 				return;
 			}
 
-			to->r->va = wr_growValueArray( to->r->va, index );	
+			wr_growValueArray( to->r->va, index );	
 		}
 
 		to->r->va->m_Vdata[index] = *from;
@@ -14303,7 +15433,7 @@ WRVoidFunc NAME##Assign[16] = \
 
 
 X_ASSIGN( wr_Subtract, - );
-//X_ASSIGN( wr_Add, + );
+//X_ASSIGN( wr_Add, + ); -- broken out so strings work
 X_ASSIGN( wr_Multiply, * );
 X_ASSIGN( wr_Divide, / );
 
@@ -14548,8 +15678,6 @@ X_INT_BINARY( wr_XOR, ^ );
 
 
 
-
-
 #define X_COMPARE( NAME, OPERATION ) \
 bool NAME##_E_E( WRValue* to, WRValue* from )\
 {\
@@ -14784,7 +15912,7 @@ boundsFailed:
 			return;
 		}
 
-		value->va = wr_growValueArray( value->va, index->ui );
+		wr_growValueArray( value->va, index->ui );
 	}
 
 	elementToTarget( index->ui, target, value );
@@ -15083,6 +16211,29 @@ void wr_std_time( WRValue* stackTop, const int argn, WRContext* c )
 }
 #endif
 
+#ifdef __linux__
+#include <unistd.h>
+#include <sys/time.h>
+#endif
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
+//------------------------------------------------------------------------------
+void wr_milliseconds(WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->p2 = INIT_AS_INT;
+
+#ifdef _WIN32
+	stackTop->ui = (uint32_t)GetTickCount();
+#endif
+#ifdef __linux__
+	struct timeval tv;
+	gettimeofday( &tv, NULL );
+	stackTop->ui = (uint32_t)((tv.tv_usec/1000) + (tv.tv_sec * 1000));
+#endif
+}
+
 
 //------------------------------------------------------------------------------
 void wr_loadStdLib( WRState* w )
@@ -15090,6 +16241,8 @@ void wr_loadStdLib( WRState* w )
 	wr_registerLibraryFunction( w, "std::rand", wr_std_rand );
 	wr_registerLibraryFunction( w, "std::srand", wr_std_srand );
 	wr_registerLibraryFunction( w, "std::time", wr_std_time );
+
+	wr_registerLibraryFunction( w, "time::ms", wr_milliseconds ); // return ms count that always increases
 }
 
 //------------------------------------------------------------------------------
@@ -15102,6 +16255,7 @@ void wr_loadAllLibs( WRState* w )
 	wr_loadMessageLib( w );
 	wr_loadSysLib( w );
 	wr_loadSerializeLib( w );
+	wr_loadDebugLib( w );
 }
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
@@ -15138,18 +16292,16 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 void wr_loadIOLib( WRState* w )
 {
-	wr_registerLibraryFunction( w, "io::readFile", wr_read_file ); // open+read+close a file
-	wr_registerLibraryFunction( w, "io::writeFile", wr_write_file ); // open+write+close a file
+	wr_registerLibraryFunction( w, "io::readFile", wr_read_file ); // (name) returns array which is file
+	wr_registerLibraryFunction( w, "io::writeFile", wr_write_file ); // (name, array) writes array
+	wr_registerLibraryFunction( w, "io::deleteFile", wr_delete_file ); // (name)
 	wr_registerLibraryFunction( w, "io::getline", wr_getline ); // get a line of text from input
-	
-	wr_registerLibraryFunction( w, "time::clock", wr_clock ); // return current unix time
-	wr_registerLibraryFunction( w, "time::ms", wr_clock ); // return ms count that always increases
-
 	wr_registerLibraryFunction( w, "io::open", wr_ioOpen ); //( name, flags, mode ); // returning a file handle 'fd' ; 'mode' specifies unix file access permissions.
 	wr_registerLibraryFunction( w, "io::close", wr_ioClose ); //( fd );
 	wr_registerLibraryFunction( w, "io::read", wr_ioRead );  //( fd, data, max_count );
 	wr_registerLibraryFunction( w, "io::write", wr_ioWrite ); //( fd, data, count );
 	wr_registerLibraryFunction( w, "io::seek", wr_ioSeek );  //( fd, offset, whence );
+	wr_registerLibraryFunction( w, "io::fsync", wr_ioFSync ); //( fd );
 
 	wr_ioPushConstants( w );
 }
@@ -15258,6 +16410,16 @@ void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
+void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c )
+{
+	if ( argn == 1 )
+	{
+		char buf[256];
+		unlink( (stackTop - 1)->asString(buf, 256) );
+	}
+}
+
+//------------------------------------------------------------------------------
 void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
@@ -15277,20 +16439,6 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 
 		buf[pos++] = in;
 	}
-}
-
-//------------------------------------------------------------------------------
-void wr_clock( WRValue* stackTop, const int argn, WRContext* c )
-{
-	stackTop->i = (int)clock();
-}
-
-//------------------------------------------------------------------------------
-void wr_milliseconds(WRValue* stackTop, const int argn, WRContext* c )
-{
-	struct timeval tv;
-	gettimeofday( &tv, NULL );
-	stackTop->ui = (uint32_t)((tv.tv_usec/1000) + (tv.tv_sec * 1000));
 }
 
 //------------------------------------------------------------------------------
@@ -15324,26 +16472,24 @@ void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->init();
 	
-	if ( argn > 1 )
+	if ( argn != 2 )
 	{
-		WRValue* args = stackTop - argn;
-		int toRead = args[1].asInt();
-		if ( toRead > 0 )
-		{
-			stackTop->va = c->getSVA( toRead, SV_CHAR, false );
-			
-			int result = read( args[0].asInt(), stackTop->va->m_Cdata, toRead );
-			if ( result > 0 )
-			{
-				stackTop->va->m_size = result;
-				return;
-			}
-		}
+		return;
 	}
 
-	stackTop->va = c->getSVA( 0, SV_CHAR, false );
+	WRValue* args = stackTop - argn;
+	int toRead = args[1].asInt();
+	if ( toRead <= 0 )
+	{
+		return;
+	}
+	
+	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+		
+	int result = read( args[0].asInt(), stackTop->va->m_Cdata, toRead );
+	stackTop->va->m_size = (result > 0) ? result : 0;
 }
 
 //------------------------------------------------------------------------------
@@ -15402,6 +16548,15 @@ void wr_ioSeek( WRValue* stackTop, const int argn, WRContext* c )
 		int whence = argn > 2 ? args[2].asInt() : SEEK_SET;
 
 		stackTop->ui = lseek( fd, offset, whence );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_ioFSync(WRValue* stackTop, const int argn, WRContext* c)
+{
+	if (argn)
+	{
+		stackTop->i = fsync( (stackTop - argn)->asInt() );
 	}
 }
 
@@ -15522,6 +16677,16 @@ void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
+void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c )
+{
+	if ( argn == 1 )
+	{
+		char buf[256];
+		_unlink( (stackTop - 1)->asString(buf, 256) );
+	}
+}
+
+//------------------------------------------------------------------------------
 void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
@@ -15544,18 +16709,6 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
-void wr_clock( WRValue* stackTop, const int argn, WRContext* c )
-{
-	stackTop->i = (int)clock();
-}
-
-//------------------------------------------------------------------------------
-void wr_milliseconds(WRValue* stackTop, const int argn, WRContext* c )
-{
-	stackTop->ui = (uint32_t)GetTickCount();
-}
-
-//------------------------------------------------------------------------------
 void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
@@ -15571,7 +16724,7 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 		{
 			int mode = (argn > 1) ? args[1].asInt() : O_RDWR | O_CREAT;
 
-			stackTop->i = _open( fileName, mode | O_BINARY );
+			stackTop->i = _open( fileName, mode | O_BINARY, _S_IREAD | _S_IWRITE /*0600*/ );
 		}
 	}
 }
@@ -15581,34 +16734,31 @@ void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn )
 	{
-		_close( (stackTop - argn)->i );
+		stackTop->i = _close( (stackTop - argn)->asInt() );
 	}
 }
 
 //------------------------------------------------------------------------------
 void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->p2 = INIT_AS_ARRAY;
+	stackTop->init();
 
-	if ( argn > 1 )
+	if ( argn != 2 )
 	{
-		WRValue* args = stackTop - argn;
-		int fd = args[0].asInt();
-		int toRead = args[1].asInt();
-		if ( toRead > 0 )
-		{
-			stackTop->va = c->getSVA( toRead, SV_CHAR, false );
-
-			int result = _read( fd, stackTop->va->m_Cdata, toRead );
-			if ( result > 0 )
-			{
-				stackTop->va->m_size = result;
-				return;
-			}
-		}
+		return;
 	}
 
-	stackTop->va = c->getSVA( 0, SV_CHAR, false );
+	WRValue* args = stackTop - argn;
+	int toRead = args[1].asInt();
+	if ( toRead <= 0 )
+	{
+		return;
+	}
+
+	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+
+	int result = _read( args[0].asInt(), stackTop->va->m_Cdata, toRead );
+	stackTop->va->m_size = (result > 0) ? result : 0;
 }
 
 //------------------------------------------------------------------------------
@@ -15671,6 +16821,15 @@ void wr_ioSeek( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
+void wr_ioFSync(WRValue* stackTop, const int argn, WRContext* c)
+{
+	if (argn)
+	{
+		stackTop->i = _commit( (stackTop - argn)->asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
 void wr_ioPushConstants( WRState* w )
 {
 	WRValue C;
@@ -15714,111 +16873,131 @@ SOFTWARE.
 
 #include "wrench.h"
 
-#ifdef WRENCH_SPIFFS_FILE_IO
+#if defined(WRENCH_LITTLEFS_FILE_IO) || defined(WRENCH_SPIFFS_FILE_IO)
 
-//------------------------------------------------------------------------------
-void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
-{
-}
-
-//------------------------------------------------------------------------------
-void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
-{
-}
-
-//------------------------------------------------------------------------------
-void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
-{
-}
-
-//------------------------------------------------------------------------------
-void wr_clock( WRValue* stackTop, const int argn, WRContext* c )
-{
-}
-
-//------------------------------------------------------------------------------
-void wr_milliseconds(WRValue* stackTop, const int argn, WRContext* c )
-{
-}
-
-//------------------------------------------------------------------------------
-void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
-{
-}
-
-//------------------------------------------------------------------------------
-void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
-{
-}
-
-//------------------------------------------------------------------------------
-void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
-{
-}
-
-//------------------------------------------------------------------------------
-void wr_ioWrite( WRValue* stackTop, const int argn, WRContext* c )
-{
-}
-
-//------------------------------------------------------------------------------
-void wr_ioSeek( WRValue* stackTop, const int argn, WRContext* c )
-{
-}
-
-//------------------------------------------------------------------------------
-void wr_ioPushConstants( WRState* w )
-{
-	WRValue C;
-
-	wr_registerLibraryConstant( w, "io::O_RDONLY", wr_makeInt(&C, O_RDONLY) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::O_RDWR", wr_makeInt(&C, O_RDWR) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::O_APPEND", wr_makeInt(&C, O_APPEND) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::O_CREAT", wr_makeInt(&C, O_CREAT) ); //( fd, offset, whence );
-
-	wr_registerLibraryConstant( w, "io::SEEK_SET", wr_makeInt(&C, SEEK_SET) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::SEEK_CUR", wr_makeInt(&C, SEEK_CUR) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::SEEK_END", wr_makeInt(&C, SEEK_END) ); //( fd, offset, whence );
-}
-
-#endif
-/*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
-
-MIT Licence
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*******************************************************************************/
-
-#include "wrench.h"
+#include <FS.h>
 
 #ifdef WRENCH_LITTLEFS_FILE_IO
+#include <LittleFS.h>
+#define FILE_OBJ LittleFS
+#endif
 
+#ifdef WRENCH_SPIFFS_FILE_IO
+#include <Spiffs.h>
+#define FILE_OBJ Spiffs
+#endif
+
+//------------------------------------------------------------------------------
+enum WRFSOpenModes
+{
+	LFS_READ   = 0x1,
+	LFS_RDWR   = 0x2,
+	LFS_APPEND = 0x4,
+};
+
+//------------------------------------------------------------------------------
+enum WRFSSeek
+{
+	LFS_SET = 0,
+	LFS_CUR,
+	LFS_END,
+};
+
+//------------------------------------------------------------------------------
+struct WRFSFile
+{
+	File file;
+	WRFSFile* next;
+};
+
+WRFSFile* g_OpenFiles =0;
+
+//------------------------------------------------------------------------------
+WRFSFile* wr_safeGetFile( const void* p )
+{
+	for( WRFSFile* safe = g_OpenFiles; safe; safe = safe->next )
+	{
+		if( safe == p )
+		{
+			return safe;
+		}
+	}
+
+	return 0;
+}
 
 //------------------------------------------------------------------------------
 void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->init();
+
+	if ( argn != 1 )
+	{
+		return;
+	}
+	
+	WRValue* arg = stackTop - 1;
+	const char* fileName = (const char*)arg->array();
+
+	File file = FILE_OBJ.open( fileName );
+	if ( file && !file.isDirectory() )
+	{
+		stackTop->p2 = INIT_AS_ARRAY;
+		stackTop->va = c->getSVA( file.size(), SV_CHAR, false );
+		if ( file.readBytes( stackTop->va->m_SCdata, file.size() ) != file.size() )
+		{
+			stackTop->init();
+		}
+
+		file.close();
+	}
 }
 
 //------------------------------------------------------------------------------
 void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->init();
+
+	if ( argn != 2 )
+	{
+		return;
+	}
+
+	const char* fileName = (const char*)(stackTop - 2)->array();
+	if ( !fileName )
+	{
+		return;
+	}
+	
+	unsigned int len;
+	const char* data = (char*)((stackTop - 1)->array(&len));
+	if ( !data )
+	{
+		return;
+	}
+
+	File file = FILE_OBJ.open( fileName, FILE_WRITE );
+	if ( !file )
+	{
+		return;
+	}
+
+	stackTop->i = file.write( (uint8_t *)data, len );
+
+	file.close();
+}
+
+//------------------------------------------------------------------------------
+void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c )
+{
+	if ( argn == 1 )
+	{
+		const char* fileName = (const char*)(stackTop - 1)->array();
+		if ( fileName )
+		{
+			FILE_OBJ.remove( fileName );
+		}
+	} 
 }
 
 //------------------------------------------------------------------------------
@@ -15827,38 +17006,229 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
-void wr_clock( WRValue* stackTop, const int argn, WRContext* c )
-{
-}
-
-//------------------------------------------------------------------------------
-void wr_milliseconds(WRValue* stackTop, const int argn, WRContext* c )
-{
-}
-
-//------------------------------------------------------------------------------
 void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->init();
+
+	if ( !argn )
+	{
+		return;
+	}
+	
+	WRValue* args = stackTop - argn;
+
+	int mode = LFS_RDWR;
+	if ( argn > 1 )
+	{
+		mode = args[1].asInt();
+	}
+
+	const char* fileName = (const char*)args->array();
+	if ( fileName )
+	{
+		WRFSFile* entry = (WRFSFile *)malloc( sizeof(WRFSFile) );
+
+		if ( mode & LFS_READ )
+		{
+			entry->file = FILE_OBJ.open( fileName, FILE_READ );
+		}
+		else if ( (mode & LFS_RDWR) || (mode & LFS_APPEND) )
+		{
+			entry->file = FILE_OBJ.open( fileName, FILE_WRITE );
+		}
+		else if ( mode & LFS_APPEND )
+		{
+			entry->file = FILE_OBJ.open( fileName, FILE_APPEND );
+		}
+		else
+		{
+			free( entry );
+			return;
+		}
+
+		if ( !entry->file )
+		{
+			free( entry );
+			return;
+		}
+
+		entry->next = g_OpenFiles;
+		g_OpenFiles = entry;
+		stackTop->p = entry;
+	}
 }
 
 //------------------------------------------------------------------------------
 void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 {
+	WRValue* args = stackTop - argn;
+	if ( !argn || !args->p )
+	{
+		return;
+	}
+
+	stackTop->init();
+
+	WRFSFile* prev = 0;
+	WRFSFile* cur = g_OpenFiles;
+	while( cur )
+	{
+		if ( cur == args->p )
+		{
+			cur->file.close();
+			
+			if ( !prev )
+			{
+				g_OpenFiles = g_OpenFiles->next;
+			}
+			else
+			{
+				prev->next = cur->next;
+			}
+			
+			free( cur );
+			break;
+		}
+
+		prev = cur;
+		cur = cur->next;
+	}
 }
 
 //------------------------------------------------------------------------------
 void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->init();
+
+	if ( argn != 2 )
+	{
+		return;
+	}
+	
+	WRValue* args = stackTop - argn;
+
+	int toRead = args[1].asInt();
+	if ( toRead <= 0 )
+	{
+		return;
+	}
+
+	WRFSFile* fd = wr_safeGetFile( args[0].p );
+	if ( !fd )
+	{
+		return;
+	}
+		
+	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+
+	int result = fd->file.readBytes( stackTop->va->m_SCdata, toRead );
+	
+	stackTop->va->m_size = (result > 0) ? result : 0;
 }
 
 //------------------------------------------------------------------------------
 void wr_ioWrite( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->init();
+
+	if ( argn != 2 )
+	{
+		return;
+	}
+
+	WRValue* args = stackTop - argn;
+
+	WRFSFile* fd = wr_safeGetFile( args[0].p );
+	if ( !fd )
+	{
+		return;
+	}
+
+	WRValue& data = args[1].deref();
+	if ( IS_ARRAY(data.xtype) )
+	{
+		uint32_t size = data.va->m_size;
+		if ( argn > 2 )
+		{
+			size = args[2].asInt();
+		}
+
+		if ( data.va->m_type == SV_CHAR )
+		{
+			stackTop->ui = fd->file.write( data.va->m_Cdata, (size > data.va->m_size) ? data.va->m_size : size );
+		}
+		else if ( data.va->m_type == SV_VALUE )
+		{
+			// .. does this even make sense?
+		}
+	}
+	else if ( IS_RAW_ARRAY(data.xtype) )
+	{
+		uint32_t size = EX_RAW_ARRAY_SIZE_FROM_P2(data.r->p2);
+		if ( argn > 2 )
+		{
+			size = args[2].asInt();
+		}
+
+		stackTop->ui = fd->file.write( (const uint8_t *)data.r->c, (size > EX_RAW_ARRAY_SIZE_FROM_P2(data.r->p2)) ? EX_RAW_ARRAY_SIZE_FROM_P2(data.r->p2) : size );
+	}
 }
 
 //------------------------------------------------------------------------------
 void wr_ioSeek( WRValue* stackTop, const int argn, WRContext* c )
 {
+	stackTop->init();
+
+	if ( argn > 1 )
+	{
+		WRValue* args = stackTop - argn;
+
+		WRFSFile* fd = wr_safeGetFile( args[0].p );
+		if ( !fd )
+		{
+			return;
+		}
+		
+		int offset = args[1].asInt();
+		int whence = argn > 2 ? args[2].asInt() : LFS_SET;
+
+		if ( whence == LFS_END )
+		{
+			offset += (int)fd->file.size();
+		}
+		else if ( whence == LFS_CUR )
+		{
+			offset += (int)fd->file.position();
+		}
+		
+		fd->file.seek( (unsigned long)offset );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_ioFSync(WRValue* stackTop, const int argn, WRContext* c)
+{
+	if ( argn == 1 )
+	{
+		WRFSFile* fd = wr_safeGetFile( (stackTop - 1)->p );
+		if ( fd )
+		{
+			fd->file.flush();
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_ioCleanupFunction( WRState* w, void* param )
+{
+	WRFSFile* g_OpenFiles =0;
+	while( g_OpenFiles )
+	{
+		WRFSFile* next = g_OpenFiles->next;
+		g_OpenFiles->file.close();
+		free( g_OpenFiles );
+		g_OpenFiles = next;
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -15866,14 +17236,19 @@ void wr_ioPushConstants( WRState* w )
 {
 	WRValue C;
 
-	wr_registerLibraryConstant( w, "io::O_RDONLY", wr_makeInt(&C, O_RDONLY) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::O_RDWR", wr_makeInt(&C, O_RDWR) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::O_APPEND", wr_makeInt(&C, O_APPEND) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::O_CREAT", wr_makeInt(&C, O_CREAT) ); //( fd, offset, whence );
+	wr_registerLibraryConstant( w, "io::O_RDONLY", wr_makeInt(&C, LFS_READ) );
+	wr_registerLibraryConstant( w, "io::O_RDWR", wr_makeInt(&C, LFS_RDWR) );
+	wr_registerLibraryConstant( w, "io::O_APPEND", wr_makeInt(&C, LFS_APPEND) );
+	wr_registerLibraryConstant( w, "io::O_CREAT", wr_makeInt(&C, LFS_RDWR) );
 
-	wr_registerLibraryConstant( w, "io::SEEK_SET", wr_makeInt(&C, SEEK_SET) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::SEEK_CUR", wr_makeInt(&C, SEEK_CUR) ); //( fd, offset, whence );
-	wr_registerLibraryConstant( w, "io::SEEK_END", wr_makeInt(&C, SEEK_END) ); //( fd, offset, whence );
+	wr_registerLibraryConstant( w, "io::SEEK_SET", wr_makeInt(&C, LFS_SET) );
+	wr_registerLibraryConstant( w, "io::SEEK_CUR", wr_makeInt(&C, LFS_CUR) );
+	wr_registerLibraryConstant( w, "io::SEEK_END", wr_makeInt(&C, LFS_END) );
+
+	FILE_OBJ.begin();
+
+	wr_addLibraryCleanupFunction( w, wr_ioCleanupFunction, 0 );
+
 }
 
 #endif
@@ -16221,17 +17596,16 @@ void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
 
-#ifdef WRENCH_STD_FILE
 	if( argn >= 1 )
 	{
 		WRValue* args = stackTop - argn;
 
+		char inbuf[512];
 		char outbuf[512];
-		stackTop->i = wr_sprintfEx( outbuf, args[0].c_str(), args + 1, argn - 1 );
+		stackTop->i = wr_sprintfEx( outbuf, args[0].asString(inbuf), args + 1, argn - 1 );
 		
 		printf( "%s", outbuf );
 	}
-#endif
 }
 
 //------------------------------------------------------------------------------
@@ -16616,6 +17990,19 @@ void wr_insert( WRValue* stackTop, const int argn, WRContext* c )
 	memcpy( stackTop->va->m_Cdata + pos + len2, data1 + pos, len1  - pos );
 }
 
+//------------------------------------------------------------------------------
+void wr_tprint( WRValue* stackTop, const int argn, WRContext* c )
+{
+	if ( argn )
+	{
+		char buf[4096];
+		(stackTop - argn)->technicalAsString( buf, 4096, false );
+		printf( "\n%s\n",  buf );
+		(stackTop - argn)->technicalAsString( buf, 4096, true );
+		printf( "%s\n",  buf );
+	}
+}
+
 
 //------------------------------------------------------------------------------
 void wr_loadStringLib( WRState* w )
@@ -16641,6 +18028,9 @@ void wr_loadStringLib( WRState* w )
 	wr_registerLibraryFunction( w, "str::trimleft", wr_trimleft );
 	wr_registerLibraryFunction( w, "str::trim", wr_trim );
 	wr_registerLibraryFunction( w, "str::insert", wr_insert );
+
+	wr_registerLibraryFunction( w, "str::tprint", wr_tprint );
+
 }
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
@@ -16906,6 +18296,29 @@ void wr_math_deg2rad( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
+void wr_intScale(WRValue* stackTop, const int argn, WRContext* c)
+{
+	stackTop->init();
+	int32_t res = 0;
+
+	if (argn > 2)
+	{
+		WRValue* args = stackTop - argn;
+		int32_t dvsr = args[2].asInt();
+
+		if (dvsr != 0)
+		{
+			int32_t fac1 = args[0].asInt();
+			int32_t fac2 = args[1].asInt();
+
+			res = (int32_t) (((int64_t)fac1 * fac2) / dvsr);
+		}
+	}
+
+	stackTop->i = res;
+}
+
+//------------------------------------------------------------------------------
 void wr_loadMathLib( WRState* w )
 {
 	wr_registerLibraryFunction( w, "math::sin", wr_math_sin );
@@ -16933,6 +18346,8 @@ void wr_loadMathLib( WRState* w )
 
 	wr_registerLibraryFunction( w, "math::deg2rad", wr_math_deg2rad );
 	wr_registerLibraryFunction( w, "math::rad2deg", wr_math_rad2deg );
+
+	wr_registerLibraryFunction( w, "math::iscale", wr_intScale);
 }
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
@@ -16972,7 +18387,7 @@ void wr_mboxRead( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue* args = stackTop - argn;
 		int clear = (argn > 1) ? args[1].asInt() : 0;
 
-		WRValue* msg = c->w->globalRegistry.exists( args[0].getHash(), true, clear );
+		WRValue* msg = c->w->globalRegistry.exists( args[0].getHash(), clear );
 
 		if ( msg )
 		{
@@ -16995,8 +18410,11 @@ void wr_mboxWrite( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue* args = stackTop - argn;
 
 		WRValue* msg = c->w->globalRegistry.getAsRawValueHashTable( args[0].getHash() );
-		msg->ui = args[1].getHash();
-		msg->p2 = INIT_AS_INT;
+		if ( msg != (void*)WRENCH_NULL_HASH )
+		{
+			msg->ui = args[1].getHash();
+			msg->p2 = INIT_AS_INT;
+		}
 	}
 }
 
@@ -17006,7 +18424,7 @@ void wr_mboxClear( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn > 0 )
 	{
-		c->w->globalRegistry.exists((stackTop - argn)->getHash(), true, true );
+		c->w->globalRegistry.exists((stackTop - argn)->getHash(), true );
 	}
 }
 
@@ -17019,7 +18437,7 @@ void wr_mboxPeek( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->init();
 
 	if ( argn > 0
-		 && c->w->globalRegistry.exists((stackTop - argn)->getHash(), true, false) )
+		 && c->w->globalRegistry.exists((stackTop - argn)->getHash(), false) )
 	{
 		stackTop->i = 1;
 	}
@@ -17074,11 +18492,11 @@ void wr_function( WRValue* stackTop, const int argn, WRContext* c )
 		if ( name )
 		{
 			uint32_t hash = wr_hashStr( name );
-			if ( c->w->globalRegistry.exists(hash, true, false) )
+			if ( c->w->globalRegistry.exists(hash, false) )
 			{
 				stackTop->i = 1;
 			}
-			else if ( c->registry.exists(hash, true, false) )
+			else if ( c->registry.exists(hash, false) )
 			{
 				stackTop->i = 2;
 			}
@@ -17087,21 +18505,9 @@ void wr_function( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
-// takes a single argument: how many invokations to ignore
-void wr_gcPause( WRValue* stackTop, const int argn, WRContext* c )
-{
-	if ( argn > 0 )
-	{
-		WRValue* arg = stackTop - argn;
-		c->gcPauseCount = arg->asInt();
-	}
-}
-
-//------------------------------------------------------------------------------
 void wr_loadSysLib( WRState* w )
 {
 	wr_registerLibraryFunction( w, "sys::function", wr_function );
-	wr_registerLibraryFunction( w, "sys::gcPause", wr_gcPause );
 }/*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
@@ -17169,6 +18575,86 @@ void wr_loadSerializeLib( WRState* w )
 {
 	wr_registerLibraryFunction( w, "std::serialize", wr_stdSerialize );
 	wr_registerLibraryFunction( w, "std::deserialize", wr_stdDeserialize );
+}
+
+/*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
+int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn );
+
+//------------------------------------------------------------------------------
+void wr_debugPrintEx( WRValue* stackTop, const int argn, WRContext* c, const char* append )
+{
+	if( argn >= 1 && c->debugInterface )
+	{
+		WRValue* args = stackTop - argn;
+
+		char inbuf[512];
+
+		WrenchPacket* P = WrenchPacket::alloc( WRD_DebugOut, 520 );
+
+		int size = wr_sprintfEx( (char*)P->payload(), args[0].asString(inbuf), args + 1, argn - 1);
+
+		for( int a=0; append && append[a]; ++a )
+		{
+			*(P->payload() + size) = append[a];
+			++size;
+		}
+
+		*(P->payload() + size++) = 0;
+		P->setPayloadSize( size );
+
+		if ( c->debugInterface->I->m_sendFunction )
+		{
+			c->debugInterface->I->m_sendFunction( (char *)P, P->xlate() );
+		}
+		else
+		{
+			printf("%s", P->payload() );
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_debugPrint( WRValue* stackTop, const int argn, WRContext* c )
+{
+	wr_debugPrintEx( stackTop, argn, c, 0 );
+}
+
+//------------------------------------------------------------------------------
+void wr_debugPrintln( WRValue* stackTop, const int argn, WRContext* c )
+{
+	wr_debugPrintEx( stackTop, argn, c, "\r\n" );
+}
+
+//------------------------------------------------------------------------------
+void wr_loadDebugLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "debug::print", wr_debugPrint );
+	wr_registerLibraryFunction( w, "debug::println", wr_debugPrintln );
 }
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
@@ -17415,6 +18901,202 @@ void wr_loadArduinoLib( WRState* w )
 	wr_loadArduinoIOLib( w );
 	wr_loadArduinoSTDLib( w );
 	wr_loadArduinoWireLib( w );
+}
+
+#endif
+/*******************************************************************************
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#ifdef WRENCH_ARDUINO_SERIAL
+
+#include "wrench.h"
+#include <Arduino.h>
+
+//------------------------------------------------------------------------------
+bool wr_serialOpen( const char* name )
+{
+	return false;
+}
+
+//------------------------------------------------------------------------------
+bool wr_serialSend( const char* data, const int size )
+{
+	return Serial.write(data, size) == size;
+}
+
+//------------------------------------------------------------------------------
+bool wr_serialReceive( char* data, const int expected )
+{
+	return Serial.readBytes(data, expected) == expected;
+}
+
+//------------------------------------------------------------------------------
+int wr_serialBytesAvailable()
+{
+	return Serial.available();
+}
+
+#endif
+/*******************************************************************************
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#ifdef WRENCH_WIN32_SERIAL
+
+#include "wrench.h"
+#include <windows.h>
+#include <atlstr.h>
+static HANDLE s_comm = INVALID_HANDLE_VALUE;
+
+//------------------------------------------------------------------------------
+bool wr_serialOpen( const char* name )
+{
+	CloseHandle( s_comm );
+	s_comm = INVALID_HANDLE_VALUE;
+
+	s_comm = CreateFile( CString(name),					 // Specify port device "COMx"
+						 GENERIC_READ | GENERIC_WRITE,   // Specify mode that open device.
+						 0,                              // the devide isn't shared.
+						 NULL,                           // the object gets a default security.
+						 OPEN_EXISTING,                  // Specify which action to take on file. 
+						 0,                              // default.
+						 NULL );
+	
+	return s_comm != INVALID_HANDLE_VALUE;
+}
+
+//------------------------------------------------------------------------------
+bool wr_serialSend( const char* data, const int size )
+{
+	DWORD bytes = 0;
+	if ( (WriteFile(s_comm, data, size, &bytes, NULL) == FALSE) || (bytes != size) )
+	{
+		return false;
+	}
+
+	return true;
+}
+
+//------------------------------------------------------------------------------
+bool wr_serialReceive( char* data, const int expected )
+{
+	if ( s_comm == INVALID_HANDLE_VALUE )
+	{
+		return false;
+	}
+
+	DWORD bytes = 0;
+	if (!ReadFile(s_comm, data, expected, &bytes, NULL))
+	{
+		return false;
+	} 
+	
+	return bytes == expected;
+}
+
+//------------------------------------------------------------------------------
+int wr_serialBytesAvailable()
+{
+	DWORD avail = 0;
+	if ( s_comm != INVALID_HANDLE_VALUE )
+	{
+		PeekNamedPipe( s_comm, 0, 0, 0, &avail, 0 );
+	}
+	return (int)avail;
+}
+
+#endif
+/*******************************************************************************
+Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#ifdef WRENCH_LINUX_SERIAL
+
+#include "wrench.h"
+
+//------------------------------------------------------------------------------
+bool wr_serialOpen( const char* name )
+{
+	return false;
+}
+
+//------------------------------------------------------------------------------
+bool wr_serialSend( const char* data, const int size )
+{
+	return false;
+}
+
+//------------------------------------------------------------------------------
+bool wr_serialReceive( char* data, const int expected )
+{
+	return false;
+}
+
+//------------------------------------------------------------------------------
+int wr_serialBytesAvailable()
+{
+	return 0;
 }
 
 #endif

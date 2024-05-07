@@ -58,8 +58,6 @@ if ( 023 != 19 ) println("err octal");
  */
 // comment
 
-gc_pause( 0xABCD );
-
 println( "hello" ); // eol comment
 println( /**/"hello"  /*  */ ); /*  *//*
 */

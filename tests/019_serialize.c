@@ -32,7 +32,7 @@ b1 = std::serialize( b );
 b2 = std::deserialize( b1 );
 if ( b2 != "a test string" ) println( "b0" );
 
-// and now ALL OF THEM
+// and now ALL OF THEM! fire zee missiles!
 e = { b, a, c, d };
 f = { 1:e, 2:e, 3:d };
 
@@ -43,11 +43,10 @@ if( f2[1][1] != 10.5 ) println( "f0" );
 if( f2[2][0] != "a test string" ) println( "f1" );
 if( f2[3]["3"] != "300" ) println( "f2" );
 
-// BTW encode/decode the 'busiest' one to make sure it plays well
+// BTW encode/decode the most complicated one to make sure it plays well
 // with the file system
 io::writeFile( "_serialize_test.bin", std::serialize(f) );
 g = std::deserialize( io::readFile( "_serialize_test.bin" ) );
 if( g[1][1] != 10.5 ) println( "g0" );
 if( g[2][0] != "a test string" ) println( "g1" );
 if( g[3]["3"] != "300" ) println( "g2" );
-
