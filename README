@@ -58,16 +58,12 @@ void print( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, 
 	}
 }
 
-
-const char* wrenchCode = 
-                         "print( \"Hello World!\\n\" );"
-                         "for( i=0; i<10; i++ )        "
+const char* wrenchCode = "print( \"Hello World!\\n\" );"
+                         "for( var i=0; i<10; i++ )    "
                          "{                            "
                          "    print( i );              "
                          "}                            "
                          "print(\"\\n\");              ";
-
-
 
 int main( int argn, char** argv )
 {

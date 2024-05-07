@@ -3,13 +3,16 @@ OPT ?= -O3
 
 PERF ?=
 
+#C_VER ?= -std=c++11
+C_VER ?= -std=c++98
+
 #FLAGS ?= $(OPT) $(PERF) -std=c++11
-FLAGS ?= $(OPT) $(PERF) -I. $(COMPACT) -std=c++98 -MD -DWRENCH_LINUX_FILE_IO
+FLAGS ?= $(OPT) $(PERF) -Idiscrete_src -I. $(COMPACT) $(C_VER) -MD -DWRENCH_LINUX_FILE_IO -DWRENCH_LINUX_SERIAL
 
 #FLAGS = $(OPT) -pg
 #FLAGS = $(OPT) $(PERF)
 
-all: wrench valgrind
+all: wrench
 
 OBJDIR = objs_linux
 
@@ -35,77 +38,86 @@ OBJS = \
 	$(OBJDIR)/std_msg.o \
 	$(OBJDIR)/std_sys.o \
 	$(OBJDIR)/std_serialize.o \
+	$(OBJDIR)/debug_lib.o \
+	$(OBJDIR)/linux_comm.o \
 
 clean:
 	-@rm -rf $(OBJDIR)
 	-@mkdir $(OBJDIR)
 	-@rm -f wrench
+	-@rm -f wrench_dev
 	-@rm -f wrench_v
 	-@rm -rf src
 	-@mkdir src
 
-valgrind: $(OBJS) wrench_cli.cpp
-	g++ -o wrench_v $(FLAGS) -Wall -Werror -I. -Idiscrete_src -O3 -ggdb $(OBJS) wrench_cli.cpp 
+valgrind: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/utils/debug_client.cpp
+	g++ -o wrench_v $(FLAGS) -Wall -Werror -I. -Idiscrete_src -O3 -ggdb $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/utils/debug_client.cpp
 
-test: $(OBJS) wrench_cli.cpp
-	g++ $(OBJS) -Wall -Werror wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_cli
-	./wrench_cli t
+test: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/utils/debug_client.cpp
+	g++ $(OBJS) -Wall -Werror discrete_src/utils/debug_client.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_dev
+	./wrench_dev t
 
 wrench_dev: dev_wrench
 
-dev_wrench: $(OBJS) wrench_cli.cpp
-	g++ $(OBJS) -Wall -Werror wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_cli
+dev_wrench: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/utils/debug_client.cpp
+	g++ $(OBJS) -Wall -Werror discrete_src/utils/wrench_cli.cpp discrete_src/utils/debug_client.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_dev
 
-wrench: $(OBJS) wrench_cli.cpp
-	g++ $(OBJS) -Wall -Werror wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_cli
-	./wrench_cli release discrete_src src/.
-	-@rm wrench_cli
-	g++ -o wrench -Wall -Werror $(FLAGS) -Isrc src/wrench.cpp wrench_cli.cpp
+wrench: $(OBJS) discrete_src/utils/wrench_cli.cpp
+	g++ $(OBJS) -Wall -Werror discrete_src/utils/debug_client.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_dev
+	./wrench_dev release discrete_src src/.
+	-@rm wrench_dev
+	g++ -o wrench -Wall -Werror $(FLAGS) -Isrc src/wrench.cpp discrete_src/utils/wrench_cli.cpp discrete_src/utils/debug_client.cpp
 
-$(OBJDIR)/cc.o: discrete_src/cc.cpp
+$(OBJDIR)/cc.o: discrete_src/cc/cc.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/operations.o: discrete_src/operations.cpp
+$(OBJDIR)/operations.o: discrete_src/vm/operations.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/index.o: discrete_src/index.cpp
+$(OBJDIR)/index.o: discrete_src/vm/index.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/vm.o: discrete_src/vm.cpp
+$(OBJDIR)/vm.o: discrete_src/vm/vm.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/utils.o: discrete_src/utils.cpp
+$(OBJDIR)/utils.o: discrete_src/utils/utils.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/serializer.o: discrete_src/serializer.cpp
+$(OBJDIR)/serializer.o: discrete_src/utils/serializer.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/std_serialize.o: discrete_src/std_serialize.cpp
+$(OBJDIR)/std_serialize.o: discrete_src/lib/std_serialize.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/wrench_server_debug.o: discrete_src/wrench_server_debug.cpp
+$(OBJDIR)/debug_lib.o: discrete_src/lib/debug_lib.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/wrench_client_debug.o: discrete_src/wrench_client_debug.cpp
+$(OBJDIR)/wrench_server_debug.o: discrete_src/debug/wrench_server_debug.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/std.o: discrete_src/std.cpp
+$(OBJDIR)/wrench_client_debug.o: discrete_src/debug/wrench_client_debug.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/std_io.o: discrete_src/std_io.cpp
+$(OBJDIR)/std.o: discrete_src/lib/std.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/std_io_linux.o: discrete_src/std_io_linux.cpp
+$(OBJDIR)/std_io.o: discrete_src/lib/std_io.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/std_string.o: discrete_src/std_string.cpp
+$(OBJDIR)/std_io_linux.o: discrete_src/lib/std_io_linux.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/std_math.o: discrete_src/std_math.cpp
+$(OBJDIR)/std_string.o: discrete_src/lib/std_string.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/std_msg.o: discrete_src/std_msg.cpp
+$(OBJDIR)/std_math.o: discrete_src/lib/std_math.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/std_sys.o: discrete_src/std_sys.cpp
+$(OBJDIR)/std_msg.o: discrete_src/lib/std_msg.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/std_sys.o: discrete_src/lib/std_sys.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/linux_comm.o: discrete_src/utils/linux_comm.cpp
 	$(CC) $@ $<

@@ -1,10 +1,42 @@
+4.0.0 ----------------------------------------------------------------------------------
+
+- !!! 'var' NOW REQUIRED to declare variables. This is to cut down on possible typos.
+  the non-strict version can still be used to compile older scripts. !!!
+
+- debugger added, VM can now pause/restart and exposes function/line calls
+- created debugger client
+- created local/remote/in-core debug implementations
+
+- changed the format of bytecode again, requiring a push to 4.*
+- created a hierarchy in the discrete_src directory, it was getting cluttered
+- added a memory counter to the GC so it won't run EVERY time, that was a 
+  convenient hack for a first pass but time to fix it, added:
+
+  #define WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT 4000
+  void wr_setAllocatedMemoryGCHint( WRContext* context, const uint16_t bytes );
+
+- pause_gc() opcode removed, tragic hack, especially in light of the above. That
+  should always have been library calls and if the need arises that
+  is where it will be ressurected
+- added WRValue::technicalAsString(char* string, size_t maxLen, bool valuesInHex)  
+  to support displaying debug values
+
+- fixed up the hash to work for everything without a scrambler
+- added delete to io:: lib
+- implemented LittleFS for arduino
+
+3.2.6 ----------------------------------------------------------------------------------
+- more code size optiomizations (thanks again Manfred)
+- io/file refinements for win32
+- made all text files cr/lf consistent (unix style)
+- added roadmap file
+
 3.2.5 ----------------------------------------------------------------------------------
 - fixed esp/embedded issue with unaligned 16/32 bit reads
 - added a serializer! this will encode/decode WRValue including int, float, string, array,
   hash tables in any combination, refer to /tests/019_serialize.c for intended usage
 - pursuant to the above, it is also possible to write/read serialized WRValues in a 
   single operation
-
 
 3.2.4 ----------------------------------------------------------------------------------
 - added directives to compile for the esp8266 toolchain
