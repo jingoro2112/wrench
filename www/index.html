@@ -77,6 +77,7 @@ pre code {
                 <span class="menu-title"><a href="#intro">Intro</a></span>
                 <span class="menu-title"><a href="#integration">Integration</a></span>
                 <span class="menu-title"><a href="#language">Language Reference</a></span>
+                <span class="menu-title"><a href="#debugger">Debugger</a></span>
                 <span class="menu-title"><a href="#extending">Extending Wrench</a></span>
                 <span class="menu-title"><a href="#library">Lib Reference</a></span>
                 <span class="menu-title"><a href="#benchmarks">Benchmarks</a></span>
@@ -140,8 +141,7 @@ retain full power, flexibility, and speed.</h3>
 <ul>
 <li><b>Embedable: </b>Fits into less than 30K of Flash, and runs with
 a ~1k memory footprint
-<li><p><b>Comprehensible: </b>c-like syntax, weakly typed, garbage
-collected.
+<li><p><b>Comprehensible: </b>c-like syntax, weakly typed
 
 <li><p><b>Fast: </b>as a comparison: fast as or faster than lua (non-JIT of course) 
 
@@ -155,13 +155,16 @@ interpreters
   <li>no third-party libs, everything you need is right here
  </ul>
 
-<li><p><b>Bare-Metal: </b>Wrench can address native c/c++ data and arrays
-directly from script.
+<li><p><b>Debuggable!: </b>full remote debugger included,
+run/step/inspect your code over a serial port.
+
+<li><p><b>Extend: </b>the whole idea is safe, low overhead calls to
+and from your main program.
 
 
 <li><p><b>Tested: </b>A full test-suite must pass
 <a href="https://valgrind.org/">valgrind</a> with zero
-warnings/errors/leaks.
+warnings/errors/leaks on multiple architectures.
 
 </ul>
 
@@ -183,8 +186,7 @@ here.</a>
 Now the easy part, wrench packages itself into two source files:
 
 I have to credit <a href="https://wren.io/">Wren</a> for this idea (at
-least that's where I saw it), it's brilliant and makes
-integration a breeze.
+least that's where I saw it), it's brilliant.
 <p>
 add:
 <pre><code>/src/wrench.h
@@ -197,7 +199,7 @@ to your project and compile. That's it, here is a complete
 #include &ltstring.h&gt
 #include &ltstdio.h&gt
 
-void print( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+void print( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	char buf[1024];
 	for( int i=0; i&ltargn; ++i )
@@ -208,7 +210,7 @@ void print( WRState* w, const WRValue* argv, const int argn, WRValue& retVal, vo
 
 const char* wrenchCode = 
 "print( \"Hello World!\\n\" );"
-"for( i=0; i&lt10; i++ )        "
+"for( var i=0; i&lt10; i++ )  "
 "{                            "
 "    print( i );              "
 "}                            "
@@ -251,7 +253,6 @@ target there are a few slight changes you might want to make:
 In <code>src/wrench.h</code> you might want
 to tweak
 
-
 <h2>build flags</h2>
 
 <pre><code>#define WRENCH_WITHOUT_COMPILER
@@ -266,6 +267,7 @@ header .h code for super-easy addition to the source.
 
 <pre><code>#define WRENCH_COMPACT
 #define WRENCH_REALLY_COMPACT
+#define WRENCH_INCLUDE_DEBUG_CODE
 </pre></code>
 
 <p>This causes wrench to compile into the smallest program size
@@ -275,6 +277,8 @@ some goto spaghetti)
 <p>REALLY_COMPACT switches the main message pump from computed-goto to
 a giant switch. This saves a few K of ram but is a constant
 performance hit so only use it if absolutely necessary
+<p>WRENCH_INCLUDE_DEBUG_CODE costs about 1k, without it debug-enabled
+code will run just fine but not trigger any functionality.
 
 
 <pre><code>#define WRENCH_DEFAULT_STACK_SIZE 64
@@ -337,7 +341,7 @@ examples.
 <p><b>globals</b>
 
 <p>globals are statically allocated in wrench, so can be accessed from
-c really easily, as long as they remain simple types using
+c via fixed pointers using:
 
 <pre><code>WRValue* wr_getGlobalRef( WRContext* context, const char* label );
 </pre></code>
@@ -355,30 +359,16 @@ public:
 
 	// if the value is not the correct type it will be converted to
 	// that type, preserving the value as best it can
-	operator int32_t* ();
-	int* asInt();
-	
-	operator float* ();
-	float* asFloat();
-
-	WRValue& operator[] ( const int index );
+	int* Int();
+	float* Float();
+	WRValue& operator[] ( const int index ) { return *asArrayMember( index ); }
 	WRValue* asArrayMember( const int index );
 	int arraySize();
-
-	// convert the value in-place and return a pointer to it
-	int* makeInt();
-	float* makeFloat();
 };
 </pre></code>
 
 
-<p>Data can be created outside of wrench, this includes containers,
-structures and strings and values and such but care must be taken,
-since some values allocate memory that wrench expects to be garbage
-collected.
-<p>This is pretty easy to handle, just use the provided methods to
-create the values, and then destroy them after the script runs and you
-won't have any trouble.
+<p>Data can be created outside of wrench, this includes containers, strings and values and such
 
 <p>Creating simple values allocates no memory and requires no cleanup:
 <code><pre>void wr_makeInt( WRValue* val, int i );
@@ -412,9 +402,12 @@ WRValue* indexHash( WRContext* context, const uint32_t hash, const bool create )
 // the pointer will be passed back
 char* asString( char* string, size_t maxLen =0 ) const;
 
+// same as "asString" but will print it in a more debug-symbol-y
+char* technicalAsString( char* string, size_t maxLen, bool valuesInHex =false ) const;
+
 // return a raw pointer to the raw data array if this is one, otherwise
 // return null
-void* array( unsigned int* len, char* arrayType =0 ) const; 
+void* array( unsigned int* len =0, char arrayType =SV_CHAR ) const;
 </code></pre>
 
 <br> a string has to exist in a context so it can be worked with
@@ -501,10 +494,12 @@ thing you'll be fine, wrench is intuitive and c-like, the syntax should be
 <i>very</i> familiar.
 
 <p><b>variables</b>
-<p>no special declaration is required to introduce a variable:
-<code><pre>a = 10;
-b = 3.4;
-string = "some string";
+<p>to create a variable use the <code>var</code> directive (NOTE: in
+previous version of wrench this was optional, to support that behavior
+a "non strict" flag can be used but is discouraged)
+<code><pre>var a = 10;
+var b = 3.4;
+var string = "some string";
 </code></pre>
 wrench natively handles 32 bit ints, floats and 8 bit character
 strings. Variable
@@ -553,7 +548,7 @@ a && b
 </code></pre>
 
 <p><b>comments</b>
-<code><pre>a = 10; // single-line c++ comments are supported
+<code><pre>var A = 10; // single-line c++ comments are supported
 /*
      as well as block-comment style
 */
@@ -561,21 +556,29 @@ a && b
 
 
 <p><b>arrays</b>
-<p>arrays can be declared with [] syntax, and can contain any legal
+<p>arrays are zero-based (duh) and can be declared with [] syntax, and can contain any legal
 type
-<code><pre>arrayOne[] = { 0, 1, 2 };
-arrayTwo[] = { "zero", 1, 3.55 };
-
+<code><pre>var arrayOne[] = { 0, 1, 2 };
 print( arrayOne[1] ); // will print "1"
 
+var arrayTwo[] = { "zero", 1, 3.55 };
+
+var blankArrayOfTen[10];
 </code></pre>
 
 <p><b>for</b>
 
-<p>follows the standard c syntax:
-<code><pre>for( a=0; a<10; ++a )
+<p>follows the standard c syntax, allowing a variable to be declared
+in the for convenience:
+<code><pre>var i = 0;
+for( i=0; i<5; i++ )
 {
+    // will loop 5 times
+}
 
+for( var a=0; a<10; ++a )
+{
+    // will loop 10 times
 }
 </code></pre>
 
@@ -584,12 +587,12 @@ print( arrayOne[1] ); // will print "1"
 key/value:
 
 <code><pre>somArray[] = {"zero", "one", "two" };
-for( v : somArray )
+for( var v : somArray )
 {
    // this loop will run 3 times, with v taking on "zero", "one" and "two"
 }
 
-for( k,v : somArray )
+for( var k,v : somArray )
 {
    // same as above but k will take on the value 0, 1 and 2
 }
@@ -610,6 +613,7 @@ also supports fall-through.
 <code><pre>switch( expression )
 {
     case 0:
+    case 1:
         break;
     defalt:
         break;
@@ -656,24 +660,26 @@ are ignored, un-specified arguments are set to zero (0)
    }
 }
 
-first = f(20); // first will be 'true' or '1'
-second = f(); // second will be 'false' because 'arg' was not
-              // specified, so set to 0
+var first = f(20); // first will be 'true' or '1'
+var second = f();  // second will be 'false' because 'arg' was not
+                   // specified, so set to 0
 </code></pre>
 
 <p>If a variable is declared in a function, it will be local unless a
 global version is encountered first. Global scope can be forced with
 the '::' operator:
-<code><pre>g = 20;
+<code><pre>var g = 20;
+var n = 30;
 
 function foo()
 {
-   g = 30;
-   ::n = 40;
+    var n = 2;  // local 'n' is 2
+    g = 30;     // the global 'g'
+    ::n = 40;   // global 'n' was 30, will now be 40
+    print( n ); // will print '2'
 }
 
-foo(); // after foo is called the global 'g' will be set to 30,
-       // and global variable 'n' will be set to 40
+foo();
 </code></pre>
 
 <p><b>struct</b>
@@ -687,7 +693,7 @@ constructors, and all the variables they declare are preserved:
    member2;
 };
 
-s = new S(); // s will be a struct with two uninitialized members (member1 and member2) 
+var s = new S(); // s will be a struct with two uninitialized members (member1 and member2) 
 
 // members are dereferenced with '.' notation:
 s.member1 = 20;
@@ -698,7 +704,7 @@ s.member2 = 50 + s.member1;
 A more complete example:
 <code><pre>struct S(arg1)
 {
-   member1 = arg1;
+   var member1 = arg1;
    if ( arg1 > 20 )
    {
 	  member2 = 0;
@@ -719,7 +725,7 @@ instance = new S(40); // s.member1 will be 40, s.member2 will be 0
    b;
 }
 
-bill = new S()
+var bill = new S()
 {
    a = 20,
    b = "some string",
@@ -738,7 +744,6 @@ null == 0
 
 
 
-
 <p><b>enums</b>
 <p>enums are syntactic sugar, when invoked they introduce variables
 into the namespace with automatic initliazation
@@ -750,9 +755,9 @@ into the namespace with automatic initliazation
 }
 
 // equivilant to:
-n0 = 0;
-n1 = 1;
-n2 = 2;
+var n0 = 0;
+var n1 = 1;
+var n2 = 2;
 </code></pre>
 
 
@@ -797,8 +802,8 @@ hashTable._exists( 2 ); // now false
 <p><b>casting/coersion</b>
 <p>it is often handy to force wrench to convert a float to an int or
 vice-versa, for example:
-<code><pre>divisor = 1000;
-result = 10 / divisor; // the result of this is '0' since divisor is an int
+<code><pre>var divisor = 1000;
+var result = 10 / divisor; // the result of this is '0' since divisor is an int
 
 result = 10 / (float)divisor; // now result will be 0.01
 
@@ -811,9 +816,13 @@ divisor = (float)divisor;
 
 
 
+<hr><h1><a name="debugger"></a>3.0 Debugger</h1></hr>
+Yes there is a build-in remote debugger allowing step/inspect with a
+simple command protocol that can function over any link.
 
 
-<hr><h1><a name="extending"></a>3.5 Extending Wrench</h1></hr>
+
+<hr><h1><a name="extending"></a>4.0 Extending Wrench</h1></hr>
 
 There are three ways wrench interacts with "native" c/c++ code:
 
@@ -1065,7 +1074,7 @@ if ( V )
 
 
 
-<hr><h1><a name="library"></a>4.0 Library</h1></hr>
+<hr><h1><a name="library"></a>5.0 Library</h1></hr>
 library functions are provided as well. These functions are only
 available if loaded, which by default they are <i>not</I>. There is no
 overhead associated with having these calls resident other than a RAM
@@ -1145,22 +1154,27 @@ str::trim( str ); // remove leading and trailing whitespace
 str::insert( str1, str2, pos ); // insert str2 into str1 at pos
 
 </code></pre><pre><code>// IO:
-io::fileRead( name ); // returns a WRValue char array representing the file
+io::readFile( name ); // returns a WRValue char array representing the file
                       // data, default is binary, and CAN include null's
-io::fileWrite( name, data ); // writes 'data' to a file, expecting an array of data to write to "name"
+io::writeFile( name, data ); // writes 'data' to a file, expecting an array of data to write to "name"
+io::deleteFile( name ); // unlink/delete this file
 io::open( name, flags, mode ); // returns a file descriptor
                                // flags can be any OR of:
-                               // io::O_RDONLY | io::O_RDWR | io::O_CREAT | O_APPEND
-                               // mode is octal unix file mode: 
+                               // io::O_RDONLY io::O_RDWR io::O_CREAT
+                               // io::O_APPEND io::O_TRUNC io::EXCL
+                               // mode is octal unix file mode: default 0666
 io::close( fd ); // close fd returned by open
-io::read( fd, data, max_count ); // read the FD into data array, up to
-                               // max_cnt. returns actual number of bytes read
+io::read( fd, max_count ); // read the FD into data array, up to
+                           // returns read data as string (0's are ok)
+                           // actual number of bytes read by str::strlen() or ret._count
 io::write( fd, data, count );  // same as fileWrite() above but with
                                // the fd returned by open
 io::seek( fd, offset, whence ); // set the read point of a fd returned
                                 // by open() above
                                 // whence value can be one of: io::SEEK_SET, io::SEEK_CUR, io::SEEK_END
                                 // as c (default io::SEEK_CUR)
+io::sync( fd ); // make sure all data is committed (flush)
+
 
 io::getline(); // return a line of text input with fgetc(stdin)
 
@@ -1180,7 +1194,7 @@ std::deserialize( string ); // given the string output from
                             // std::serialize(), return the original value, full restored
 </code></pre>
 
-<hr><h1><a name="benchmarks"></a>5.0 Benchmarks</h1></hr>
+<hr><h1><a name="benchmarks"></a>6.0 Benchmarks</h1></hr>
 
 <h2>Memory Benchmarks</h2>
 <p>The whole point of this interpreter is to run on small embedded
@@ -1364,7 +1378,7 @@ speed
 </table>
  
 
-<hr><h1><a name="faq"></a>6.0 FAQ</h1></hr>
+<hr><h1><a name="faq"></a>7.0 FAQ</h1></hr>
 
 <p><b>... why? Aren't there enough interpreters out there? Surely one of
 them would have worked?</b><cr>
