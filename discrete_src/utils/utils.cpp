@@ -161,8 +161,9 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 		return 0;
 	}
 
+	int funcs = READ_8_FROM_PC(block);
 	int needed = sizeof(WRContext) // class
-				 + READ_8_FROM_PC(block) * sizeof(WRFunction) // local functions
+				 + funcs * sizeof(WRFunction) // local functions
 				 + READ_8_FROM_PC(block+1) * sizeof(WRValue);  // globals
 				 
 	WRContext* C = (WRContext *)malloc( needed );
@@ -614,6 +615,12 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 	}
 
 	return wr_callFunction( context, cF ? cF->wrf : 0, argv, argn );
+}
+
+//------------------------------------------------------------------------------
+WRValue* wr_callFunction( WRFunction* function, const WRValue* argv, const int argn )
+{
+	return wr_callFunction(function->context, function, argv, argn);
 }
 
 //------------------------------------------------------------------------------

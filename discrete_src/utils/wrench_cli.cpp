@@ -360,12 +360,6 @@ int main( int argn, char* argv[] )
 		{
 			blobToHeader( WRstr((char *)out, outLen), SimpleArgs::get(argn, argv, -1), code );
 		}
-		
-/*		else if ( command == "ca" )
-		{
-			blobToAssemblyInc( WRstr((char *)out, outLen), SimpleArgs::get(argn, argv, -1), code );
-		}
-*/
 		else
 		{
 			return usage();
