@@ -18609,6 +18609,7 @@ int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn )
 //------------------------------------------------------------------------------
 void wr_debugPrintEx( WRValue* stackTop, const int argn, WRContext* c, const char* append )
 {
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
 	if( argn >= 1 && c->debugInterface )
 	{
 		WRValue* args = stackTop - argn;
@@ -18637,6 +18638,7 @@ void wr_debugPrintEx( WRValue* stackTop, const int argn, WRContext* c, const cha
 			printf("%s", P->payload() );
 		}
 	}
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -18654,8 +18656,10 @@ void wr_debugPrintln( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_loadDebugLib( WRState* w )
 {
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
 	wr_registerLibraryFunction( w, "debug::print", wr_debugPrint );
 	wr_registerLibraryFunction( w, "debug::println", wr_debugPrintln );
+#endif
 }
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com

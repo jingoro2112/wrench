@@ -245,6 +245,7 @@ int main( int argn, char* argv[] )
 		setup();
 		printf("\n");
 	}
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
 	else if ( SimpleArgs::get(argn, argv, "d") )
 	{
 		WrenchDebugClient client;
@@ -258,6 +259,7 @@ int main( int argn, char* argv[] )
 			client.enter( SimpleArgs::get(argn, argv, -1) );
 		}
 	}
+#endif
 	else if ( SimpleArgs::get(argn, argv, "r") )
 	{
 		WRstr infile;

@@ -40,6 +40,9 @@ anyway)
 
 
 /***********************************************************************
+
+**** EXPERIMENTAL **** HAS SOME KNOWN ISSUES DO NOT USE (yet :)
+
 Cause the interpreter to compile into the smallest program size
 possible at the cost of some speed. This loss is from the removal of
 unrolled loops and inlined functionality, also making use of some goto.
@@ -53,7 +56,7 @@ it debug-enabled code runs but has no effect.
 */
 //#define WRENCH_COMPACT           // saves a lot, costs some speed
 //#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
-#define WRENCH_INCLUDE_DEBUG_CODE
+//#define WRENCH_INCLUDE_DEBUG_CODE
 
 // Default implementations are provided for these architectures, define
 // one so the sample_client will compile

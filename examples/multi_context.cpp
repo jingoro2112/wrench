@@ -15,43 +15,43 @@ void print( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, 
 //------------------------------------------------------------------------------
 class EventHandler
 {
-	public:
+public:
 
-		void callFunction()
+	void callFunction()
+	{
+		if ( m_func )
 		{
-			if ( m_func )
-			{
-				wr_callFunction( m_context, m_func );
-			}
+			wr_callFunction( m_context, m_func );
+		}
+	}
+
+	EventHandler* registerHandler( WRState* w, const char* code, const char* functionName )
+	{
+		int outLen;
+		
+		if ( wr_compile(code, strlen(code), &m_byteCode, &outLen) )
+		{
+			return 0;
 		}
 
-		EventHandler* registerHandler( WRState* w, const char* code, const char* functionName )
+		if ( !(m_context = wr_run(w, m_byteCode, outLen))
+			 || !(m_func = wr_getFunction(m_context, functionName)) )
 		{
-			int outLen;
-
-			if ( wr_compile(code, strlen(code), &m_byteCode, &outLen) )
-			{
-				return 0;
-			}
-
-			if ( !(m_context = wr_run(w, m_byteCode, outLen))
-				 || !(m_func = wr_getFunction(m_context, functionName)) )
-			{
-				delete[] m_byteCode;
-				m_byteCode = 0;
-				return 0;
-			}
-
-			return this;
+			delete[] m_byteCode;
+			m_byteCode = 0;
+			return 0;
 		}
 
-		EventHandler() { m_byteCode = 0; }
-		~EventHandler() { delete[] m_byteCode; }
+		return this;
+	}
 
-	private:
-		WRContext* m_context;
-		WRFunction* m_func;
-		unsigned char* m_byteCode;
+	EventHandler() { m_byteCode = 0; }
+	~EventHandler() { delete[] m_byteCode; }
+
+private:
+	WRContext* m_context;
+	WRFunction* m_func;
+	unsigned char* m_byteCode;
 };
 
 
