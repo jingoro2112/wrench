@@ -3,14 +3,26 @@
 #include <stdio.h>
 
 //------------------------------------------------------------------------------
-void print( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+void println( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	char buf[1024];
 	for( int i=0; i<argn; ++i )
 	{
-		printf( "%s", argv[i].asString(buf, 1024) );
+		printf( "%s\n", argv[i].asString(buf, 1024) );
 	}
 }
+
+const char* wrenchCode1 = "println(\"into 1\");"
+						  "function handler()"
+						  "{"
+						  "		println(\"I am event 1\");\n"
+						  "		for( var l = 1; l<10; ++l )"
+						  "		{"
+						  "			println( yield(l) );"
+						  "		}"
+						  "}";
+const char* wrenchCode2 = "println(\"into 2\"); function handler() { println(\"I am event 2\"); }";
+const char* wrenchCode3 = "println(\"into 3\"); function handler() { println(\"I am event 3\"); }";
 
 //------------------------------------------------------------------------------
 class EventHandler
@@ -21,7 +33,26 @@ public:
 	{
 		if ( m_func )
 		{
-			wr_callFunction( m_context, m_func );
+			for(;;)
+			{
+				wr_callFunction( m_context, m_func );
+				
+				int args;
+				WRValue* firstArg;
+				WRValue* returnValue;
+				if( wr_getYieldInfo(m_context, &args, &firstArg, &returnValue) )
+				{
+					if ( args == 1 )
+					{
+						printf( "yield passed [%d], adding 1 and passing back:\n", firstArg->asInt() );
+						returnValue->setInt( firstArg->asInt() + 1 );
+					}
+				}
+				else
+				{
+					break;
+				}
+			}
 		}
 	}
 
@@ -55,15 +86,11 @@ private:
 };
 
 
-const char* wrenchCode1 = "print(\"into 1\\n\"); function handler() { print(\"I am event 1\\n\"); }";
-const char* wrenchCode2 = "print(\"into 2\\n\"); function handler() { print(\"I am event 2\\n\"); }";
-const char* wrenchCode3 = "print(\"into 3\\n\"); function handler() { print(\"I am event 3\\n\"); }";
-
 //------------------------------------------------------------------------------
 int main( int argn, char** argv )
 {
 	WRState* w = wr_newState(); // create the state
-	wr_registerFunction( w, "print", print ); // bind a function
+	wr_registerFunction( w, "println", println ); // bind a function
 
 	EventHandler events[3];
 	events[0].registerHandler( w, wrenchCode1, "handler" );

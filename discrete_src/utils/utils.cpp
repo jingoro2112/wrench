@@ -139,6 +139,32 @@ void wr_destroyState( WRState* w )
 }
 
 //------------------------------------------------------------------------------
+bool wr_getYieldInfo( WRContext* context, int* args, WRValue** firstArg, WRValue** returnValue )
+{
+	if ( !context || !context->yield_pc )
+	{
+		return false;
+	}
+
+	if ( args )
+	{
+		*args = context->yieldArgs;
+	}
+
+	if ( firstArg )
+	{
+		*firstArg = context->yield_stackTop - context->yieldArgs;
+	}
+
+	if ( returnValue )
+	{
+		*returnValue = context->yield_stackTop;
+	}
+
+	return true;
+}
+
+//------------------------------------------------------------------------------
 WRError wr_getLastError( WRState* w )
 {
 	return (WRError)w->err;
@@ -176,6 +202,8 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 	
 	C->w = w;
 
+	C->yield_pc = 0;
+
 	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + C->globals * sizeof(WRValue));
 
 	C->registry.init( 0, SV_VOID_HASH_TABLE, false );
@@ -208,10 +236,10 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 //------------------------------------------------------------------------------
 WRValue* wr_executeContext( WRContext* context )
 {
-	WRState* w = context->w;
+	WRState* S = context->w;
 	if ( context->stopLocation )
 	{
-		w->err = WR_ERR_execute_function_zero_called_more_than_once;
+		S->err = WR_ERR_execute_function_zero_called_more_than_once;
 		return 0;
 	}
 	
@@ -221,15 +249,23 @@ WRValue* wr_executeContext( WRContext* context )
 //------------------------------------------------------------------------------
 WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 {
-	WRContext* C = wr_newContext( w, block, blockSize );
+	WRContext* context = wr_newContext( w, block, blockSize );
 
-	if ( C && !wr_executeContext(C) )
+	if ( !context )
 	{
-		wr_destroyContext( C );
 		return 0;
 	}
 
-	return C;
+	if ( !wr_callFunction(context, (int32_t)0) )
+	{
+		if ( !context->yield_pc )
+		{
+			wr_destroyContext( context );
+			context = 0;
+		}
+	}
+		
+	return context;
 }
 
 //------------------------------------------------------------------------------
@@ -1067,6 +1103,8 @@ const char* c_opcodeName[] =
 	"InitArray",
 	"InitVar",
 
+	"Yield",
+
 	"DebugInfo",
 };
 
@@ -1074,6 +1112,8 @@ const char* c_opcodeName[] =
 const char* c_errStrings[]=
 {
 	"WR_ERR_None",
+
+	"WR_YIELDED",
 
 	"WR_ERR_compiler_not_loaded",
 	"WR_ERR_function_hash_signature_not_found",

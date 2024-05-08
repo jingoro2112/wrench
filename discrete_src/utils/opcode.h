@@ -323,6 +323,8 @@ enum WROpcode
 	O_LoadLibConstant,
 	O_InitArray,
 	O_InitVar,
+
+	O_Yield,
 	
 	O_DebugInfo,
 				

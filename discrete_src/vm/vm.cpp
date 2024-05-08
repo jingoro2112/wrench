@@ -279,6 +279,12 @@ int16_t READ_16_FROM_PC_func( const unsigned char* P )
 #endif
 
 //------------------------------------------------------------------------------
+WRValue* wr_continueFunction( WRContext* context )
+{
+	return context->yield_pc ? wr_callFunction( context, (WRFunction*)0, context->yield_argv, context->yield_argn ) : 0;
+}
+
+//------------------------------------------------------------------------------
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv, const int argn )
 {
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
@@ -580,6 +586,8 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&InitArray,
 		&&InitVar,
 
+		&&Yield,
+		
 		&&DebugInfo,
 	};
 #endif
@@ -597,8 +605,8 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	WRValue* register1 = 0;
 	WRValue* frameBase = 0;
 	WRState* w = context->w;
-	const unsigned char* bottom = context->bottom;
 	WRValue* stackTop = w->stack;
+	const unsigned char* bottom = context->bottom;
 	WRValue* globalSpace = (WRValue *)(context + 1);
 
 	union
@@ -628,6 +636,20 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	w->err = WR_ERR_None;
 
+	if ( context->yield_pc )
+	{
+		pc = context->yield_pc;
+		context->yield_pc = 0;
+
+		--context->yieldArgs;
+		stackTop = context->yield_stackTop - context->yieldArgs;
+		*(stackTop - 1) = *(stackTop + context->yieldArgs);
+
+		frameBase = context->yield_frameBase;
+		
+		goto yieldContinue;
+	}
+	
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 	if ( context->debugInterface && function )
 	{
@@ -658,6 +680,9 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	pc = context->codeStart;
 
+	
+yieldContinue:
+	
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 
 	CONTINUE;
@@ -761,6 +786,22 @@ literalZero:
 				CONTINUE;
 			}
 			
+			CASE(Yield):
+			{
+				register0 = stackTop;
+				register0->p = 0;
+				register0->p2 = INIT_AS_INT;
+
+				context->yieldArgs = READ_8_FROM_PC(pc++);
+				context->yield_pc = pc;
+				context->yield_stackTop = stackTop;
+				context->yield_frameBase = frameBase;
+				context->yield_argv = argv;
+				context->yield_argn = argn;
+				
+				return 0;
+			}
+
 			CASE(DebugInfo):
 			{
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
@@ -779,7 +820,6 @@ debugReturn:
 					stackTop->p2 = INIT_AS_DEBUG_BREAK;
 					return stackTop;
 				}
-
 debugContinue:
 #endif
 				pc += 2;

@@ -532,7 +532,19 @@ int runTests( int number )
 				wr_destroyContext( context );
 				context = wr_run( w, out, outLen );
 
-				if ( !(err = wr_getLastError(w)) )
+				int args;
+				WRValue* firstArg;
+				WRValue* returnValue;
+				while( wr_getYieldInfo(context, &args, &firstArg, &returnValue) )
+				{
+					if ( args > 0 )
+					{
+						*returnValue = *firstArg;
+					}
+					wr_continueFunction( context );
+				}
+
+				if ( context && !(err = wr_getLastError(w)) )
 				{
 					integer.i = 2456;
 					someArray[1] = 'e';

@@ -27,6 +27,7 @@
 
 - changed calling function for function primitive to incluide context
 - adding mult_event example for using multi-context
+- added yield() functionality! always wanted it
 
 3.2.6 ----------------------------------------------------------------------------------
 - more code size optiomizations (thanks again Manfred)

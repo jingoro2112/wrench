@@ -67,6 +67,14 @@ struct WRContext
 
 	WRGCObject registry; // the 'next' pointer in this registry is used as the context LL next
 
+	const unsigned char* yield_pc;
+	WRValue* yield_stackTop;
+	WRValue* yield_frameBase;
+	const WRValue* yield_argv;
+	int yieldArgs;
+	int yield_argn;
+	
+
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
 	WRGCObject* getSVA( int size, WRGCObjectType type, bool init );

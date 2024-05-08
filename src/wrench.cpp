@@ -1386,6 +1386,14 @@ struct WRContext
 
 	WRGCObject registry; // the 'next' pointer in this registry is used as the context LL next
 
+	const unsigned char* yield_pc;
+	WRValue* yield_stackTop;
+	WRValue* yield_frameBase;
+	const WRValue* yield_argv;
+	int yieldArgs;
+	int yield_argn;
+	
+
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
 	WRGCObject* getSVA( int size, WRGCObjectType type, bool init );
@@ -1878,6 +1886,8 @@ enum WROpcode
 	O_LoadLibConstant,
 	O_InitArray,
 	O_InitVar,
+
+	O_Yield,
 	
 	O_DebugInfo,
 				
@@ -6762,7 +6772,11 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		pushOpcode( expression.context[depth].bytecode, O_FUNCTION_CALL_PLACEHOLDER );
 
 		pushData( expression.context[depth].bytecode, &argsPushed, 1 );
-		pushData( expression.context[depth].bytecode, "0123", 4 ); // TBD opcode plus index, OR hash if index was not found
+
+		if ( hash != wr_hashStr("yield") )
+		{
+			pushData( expression.context[depth].bytecode, "0123", 4 ); // TBD opcode plus index, OR hash if index was not found
+		}
 
 		// hash will copydown result same as lib, unless
 		// copy/pop which case does nothing
@@ -9360,16 +9374,23 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 
 				if ( u2 >= m_units.count() ) // no local function found, rely on it being found run-time
 				{
-					if ( code[index+5] == O_PopOne )
+					if ( N.hash == wr_hashStr("yield") )
 					{
-						code[index] = O_CallFunctionByHashAndPop;
+						code[index] = O_Yield;
 					}
 					else
 					{
-						code[index] = O_CallFunctionByHash;
+						if ( code[index+5] == O_PopOne )
+						{
+							code[index] = O_CallFunctionByHashAndPop;
+						}
+						else
+						{
+							code[index] = O_CallFunctionByHash;
+						}
+						
+						wr_pack32( N.hash, code.p_str(index+2) );
 					}
-
-					wr_pack32( N.hash, code.p_str(index+2) );
 				}
 			}
 		}
@@ -9679,6 +9700,12 @@ int16_t READ_16_FROM_PC_func( const unsigned char* P )
 #endif
 
 //------------------------------------------------------------------------------
+WRValue* wr_continueFunction( WRContext* context )
+{
+	return context->yield_pc ? wr_callFunction( context, (WRFunction*)0, context->yield_argv, context->yield_argn ) : 0;
+}
+
+//------------------------------------------------------------------------------
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv, const int argn )
 {
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
@@ -9980,6 +10007,8 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&InitArray,
 		&&InitVar,
 
+		&&Yield,
+		
 		&&DebugInfo,
 	};
 #endif
@@ -9997,8 +10026,8 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	WRValue* register1 = 0;
 	WRValue* frameBase = 0;
 	WRState* w = context->w;
-	const unsigned char* bottom = context->bottom;
 	WRValue* stackTop = w->stack;
+	const unsigned char* bottom = context->bottom;
 	WRValue* globalSpace = (WRValue *)(context + 1);
 
 	union
@@ -10028,6 +10057,20 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	w->err = WR_ERR_None;
 
+	if ( context->yield_pc )
+	{
+		pc = context->yield_pc;
+		context->yield_pc = 0;
+
+		--context->yieldArgs;
+		stackTop = context->yield_stackTop - context->yieldArgs;
+		*(stackTop - 1) = *(stackTop + context->yieldArgs);
+
+		frameBase = context->yield_frameBase;
+		
+		goto yieldContinue;
+	}
+	
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 	if ( context->debugInterface && function )
 	{
@@ -10058,6 +10101,9 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	pc = context->codeStart;
 
+	
+yieldContinue:
+	
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 
 	CONTINUE;
@@ -10161,6 +10207,22 @@ literalZero:
 				CONTINUE;
 			}
 			
+			CASE(Yield):
+			{
+				register0 = stackTop;
+				register0->p = 0;
+				register0->p2 = INIT_AS_INT;
+
+				context->yieldArgs = READ_8_FROM_PC(pc++);
+				context->yield_pc = pc;
+				context->yield_stackTop = stackTop;
+				context->yield_frameBase = frameBase;
+				context->yield_argv = argv;
+				context->yield_argn = argn;
+				
+				return 0;
+			}
+
 			CASE(DebugInfo):
 			{
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
@@ -10179,7 +10241,6 @@ debugReturn:
 					stackTop->p2 = INIT_AS_DEBUG_BREAK;
 					return stackTop;
 				}
-
 debugContinue:
 #endif
 				pc += 2;
@@ -12447,6 +12508,32 @@ void wr_destroyState( WRState* w )
 }
 
 //------------------------------------------------------------------------------
+bool wr_getYieldInfo( WRContext* context, int* args, WRValue** firstArg, WRValue** returnValue )
+{
+	if ( !context || !context->yield_pc )
+	{
+		return false;
+	}
+
+	if ( args )
+	{
+		*args = context->yieldArgs;
+	}
+
+	if ( firstArg )
+	{
+		*firstArg = context->yield_stackTop - context->yieldArgs;
+	}
+
+	if ( returnValue )
+	{
+		*returnValue = context->yield_stackTop;
+	}
+
+	return true;
+}
+
+//------------------------------------------------------------------------------
 WRError wr_getLastError( WRState* w )
 {
 	return (WRError)w->err;
@@ -12484,6 +12571,8 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 	
 	C->w = w;
 
+	C->yield_pc = 0;
+
 	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + C->globals * sizeof(WRValue));
 
 	C->registry.init( 0, SV_VOID_HASH_TABLE, false );
@@ -12516,10 +12605,10 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 //------------------------------------------------------------------------------
 WRValue* wr_executeContext( WRContext* context )
 {
-	WRState* w = context->w;
+	WRState* S = context->w;
 	if ( context->stopLocation )
 	{
-		w->err = WR_ERR_execute_function_zero_called_more_than_once;
+		S->err = WR_ERR_execute_function_zero_called_more_than_once;
 		return 0;
 	}
 	
@@ -12529,15 +12618,23 @@ WRValue* wr_executeContext( WRContext* context )
 //------------------------------------------------------------------------------
 WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 {
-	WRContext* C = wr_newContext( w, block, blockSize );
+	WRContext* context = wr_newContext( w, block, blockSize );
 
-	if ( C && !wr_executeContext(C) )
+	if ( !context )
 	{
-		wr_destroyContext( C );
 		return 0;
 	}
 
-	return C;
+	if ( !wr_callFunction(context, (int32_t)0) )
+	{
+		if ( !context->yield_pc )
+		{
+			wr_destroyContext( context );
+			context = 0;
+		}
+	}
+		
+	return context;
 }
 
 //------------------------------------------------------------------------------
@@ -13375,6 +13472,8 @@ const char* c_opcodeName[] =
 	"InitArray",
 	"InitVar",
 
+	"Yield",
+
 	"DebugInfo",
 };
 
@@ -13382,6 +13481,8 @@ const char* c_opcodeName[] =
 const char* c_errStrings[]=
 {
 	"WR_ERR_None",
+
+	"WR_YIELDED",
 
 	"WR_ERR_compiler_not_loaded",
 	"WR_ERR_function_hash_signature_not_found",
@@ -14101,7 +14202,6 @@ void WRDebugClientInterfacePrivate::populateSymbols()
 }
 
 #endif
-
 /*******************************************************************************
 Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
 

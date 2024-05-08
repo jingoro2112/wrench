@@ -3519,7 +3519,11 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		pushOpcode( expression.context[depth].bytecode, O_FUNCTION_CALL_PLACEHOLDER );
 
 		pushData( expression.context[depth].bytecode, &argsPushed, 1 );
-		pushData( expression.context[depth].bytecode, "0123", 4 ); // TBD opcode plus index, OR hash if index was not found
+
+		if ( hash != wr_hashStr("yield") )
+		{
+			pushData( expression.context[depth].bytecode, "0123", 4 ); // TBD opcode plus index, OR hash if index was not found
+		}
 
 		// hash will copydown result same as lib, unless
 		// copy/pop which case does nothing
@@ -6117,16 +6121,23 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 
 				if ( u2 >= m_units.count() ) // no local function found, rely on it being found run-time
 				{
-					if ( code[index+5] == O_PopOne )
+					if ( N.hash == wr_hashStr("yield") )
 					{
-						code[index] = O_CallFunctionByHashAndPop;
+						code[index] = O_Yield;
 					}
 					else
 					{
-						code[index] = O_CallFunctionByHash;
+						if ( code[index+5] == O_PopOne )
+						{
+							code[index] = O_CallFunctionByHashAndPop;
+						}
+						else
+						{
+							code[index] = O_CallFunctionByHash;
+						}
+						
+						wr_pack32( N.hash, code.p_str(index+2) );
 					}
-
-					wr_pack32( N.hash, code.p_str(index+2) );
 				}
 			}
 		}

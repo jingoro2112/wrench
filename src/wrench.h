@@ -148,6 +148,8 @@ enum WRError
 {
 	WR_ERR_None = 0,
 
+	WR_YIELDED = 1,
+
 	WR_ERR_compiler_not_loaded,
 	WR_ERR_function_hash_signature_not_found,
 	WR_ERR_library_constant_not_loaded,
@@ -289,6 +291,15 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 // The raw function pointer can be pre-loaded with wr_getFunction() and
 // and then called with an absolute minimum of overhead
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
+
+// If wr_callFunction(...) returns 0 with the error code set to
+// "WR_YIELDED" ( w->err == WR_YIELDED ) then it can be continued here.
+WRValue* wr_continueFunction( WRContext* context );
+
+// If the function is yielded, this returns true and provides the
+// argument list that was passed to yield(...), if requested
+// returns false if this context is not yielded
+bool wr_getYieldInfo( WRContext* context, int* args =0, WRValue** firstArg =0, WRValue** returnValue =0 );
 
 // after wrench executes it may have set an error code, this is how to
 // retreive it. This sytems is coarse at the moment. Re-entering the
