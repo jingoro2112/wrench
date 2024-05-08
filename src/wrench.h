@@ -285,9 +285,6 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 
 // The raw function pointer can be pre-loaded with wr_getFunction() and
 // and then called with an absolute minimum of overhead
-WRValue* wr_callFunction( WRFunction* function, const WRValue* argv =0, const int argn =0 );
-
-/* DEPRECATED */
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
 
 // after wrench executes it may have set an error code, this is how to

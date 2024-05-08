@@ -26,6 +26,7 @@
 - implemented LittleFS for arduino
 
 - changed calling function for function primitive to incluide context
+- adding mult_event example for using multi-context
 
 3.2.6 ----------------------------------------------------------------------------------
 - more code size optiomizations (thanks again Manfred)

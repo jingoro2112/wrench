@@ -33,7 +33,6 @@ struct WRFunction
 	char frameSpaceNeeded;
 	char frameBaseAdjustment;
 	uint32_t hash;
-	WRContext* context;
 	union
 	{
 		const unsigned char* offset;

@@ -687,8 +687,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 													  + localFunctions->frameSpaceNeeded
 													  + localFunctions->arguments;
 
-				localFunctions->context = context;
-
 				context->registry.getAsRawValueHashTable(localFunctions->hash)->wrf = localFunctions;
 
 				CONTINUE;

@@ -618,12 +618,6 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 }
 
 //------------------------------------------------------------------------------
-WRValue* wr_callFunction( WRFunction* function, const WRValue* argv, const int argn )
-{
-	return wr_callFunction(function->context, function, argv, argn);
-}
-
-//------------------------------------------------------------------------------
 WRValue* wr_returnValueFromLastCall( WRState* w )
 {
 	return w->stack; // this is where it ends up
