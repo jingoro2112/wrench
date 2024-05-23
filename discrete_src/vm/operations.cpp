@@ -3,7 +3,7 @@ Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
+Permission is hereby granted, g_free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -33,17 +33,17 @@ void wr_growValueArray( WRGCObject* va, int newMinIndex )
 	int size_el = va->m_size * size_of;
 	va->m_size = newMinIndex + 1;
 
-	// create new array to hold the data, and free the existing one
+	// create new array to hold the data, and g_free the existing one
 	
 #ifdef WRENCH_COMPACT
 
 	uint8_t* old = va->m_Cdata;
 
-	va->m_Cdata = (uint8_t *)malloc( (newMinIndex + 1) * size_of );
+	va->m_Cdata = (uint8_t *)g_malloc( (newMinIndex + 1) * size_of );
 
 	memcpy( va->m_Cdata, old, size_el );
 
-	free( old );
+	g_free( old );
 	
 #else 
 	// this increases the code size because this is the only place
@@ -56,25 +56,25 @@ void wr_growValueArray( WRGCObject* va, int newMinIndex )
 	memset( va->m_Cdata + size_el, 0, (va->m_size * size_of) - size_el );
 }
 
+static WRValue s_temp1;
+
 //------------------------------------------------------------------------------
 WRValue& WRValue::singleValue() const
 {
-	static WRValue temp;
-
-	if ( (temp = deref()).type > WR_FLOAT )
+	if ( (s_temp1 = deref()).type > WR_FLOAT )
 	{
-		temp.ui = temp.getHash();
-		temp.p2 = INIT_AS_INT;
+		s_temp1.ui = s_temp1.getHash();
+		s_temp1.p2 = INIT_AS_INT;
 	}
 
-	return temp;
+	return s_temp1;
 }
+
+static WRValue s_temp2;
 
 //------------------------------------------------------------------------------
 WRValue& WRValue::deref() const
 {
-	static WRValue temp;
-	
 	if ( type == WR_REF )
 	{
 		return r->deref();
@@ -85,12 +85,12 @@ WRValue& WRValue::deref() const
 		return const_cast<WRValue&>(*this);
 	}
 
-	temp.p2 = INIT_AS_INT;
+	s_temp2.p2 = INIT_AS_INT;
 	unsigned int s = DECODE_ARRAY_ELEMENT_FROM_P2(p2);
 
 	if ( IS_RAW_ARRAY(r->xtype) )
 	{
-		temp.ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[s]) : 0;
+		s_temp2.ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[s]) : 0;
 	}
 	else if ( s < r->va->m_size )
 	{
@@ -100,11 +100,11 @@ WRValue& WRValue::deref() const
 		}
 		else
 		{
-			temp.ui = (uint32_t)(unsigned char)r->va->m_Cdata[s];
+			s_temp2.ui = (uint32_t)(unsigned char)r->va->m_Cdata[s];
 		}
 	}
 
-	return temp;
+	return s_temp2;
 }
 
 //------------------------------------------------------------------------------
@@ -165,7 +165,7 @@ void wr_valueToArray( const WRValue* array, WRValue* value )
 //------------------------------------------------------------------------------
 void wr_addLibraryCleanupFunction( WRState* w, void (*function)(WRState* w, void* param), void* param )
 {
-	WRLibraryCleanup* entry = (WRLibraryCleanup *)malloc(sizeof(WRLibraryCleanup));
+	WRLibraryCleanup* entry = (WRLibraryCleanup *)g_malloc(sizeof(WRLibraryCleanup));
 
 	entry->cleanupFunction = function;
 	entry->param = param;
@@ -417,11 +417,11 @@ void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 			  && from->va->m_type == SV_CHAR )
 	{
 		char* t = to->va->m_SCdata;
-		to->va->m_SCdata = (char*)malloc( to->va->m_size + from->va->m_size + 1 );
+		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size + 1 );
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
 		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
 		to->va->m_size = to->va->m_size + from->va->m_size;
-		free( t );
+		g_free( t );
 	}
 }
 void FuncAssign_X_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
@@ -783,11 +783,11 @@ void wr_AddAssign_E_E( WRValue* to, WRValue* from )
 			  && from->va->m_type == SV_CHAR )
 	{
 		char* t = to->va->m_SCdata;
-		to->va->m_SCdata = (char*)malloc( to->va->m_size + from->va->m_size + 1 );
+		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size + 1 );
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
 		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
 		to->va->m_size = to->va->m_size + from->va->m_size;
-		free( t );
+		g_free( t );
 	}
 }
 void wr_AddAssign_I_E( WRValue* to, WRValue* from )

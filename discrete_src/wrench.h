@@ -27,7 +27,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 4
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 0
+#define WRENCH_VERSION_BUILD 1
 
 /************************************************************************
 The compiler is not particularly memory or space efficient, for
@@ -38,10 +38,7 @@ anyway)
 */
 //#define WRENCH_WITHOUT_COMPILER
 
-
 /***********************************************************************
-
-**** EXPERIMENTAL **** HAS SOME KNOWN ISSUES DO NOT USE (yet :)
 
 Cause the interpreter to compile into the smallest program size
 possible at the cost of some speed. This loss is from the removal of
@@ -50,13 +47,10 @@ unrolled loops and inlined functionality, also making use of some goto.
 WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
 interpreter in favor of a giant switch(). This savings comes at the cost
 of more speed so only use it if you need to.
-
-WRENCH_INCLUDE_DEBUG_CODE costs about ~1k to support debugging, without
-it debug-enabled code runs but has no effect.
 */
 //#define WRENCH_COMPACT           // saves a lot, costs some speed
 //#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
-//#define WRENCH_INCLUDE_DEBUG_CODE
+
 
 // Default implementations are provided for these architectures, define
 // one so the sample_client will compile
@@ -87,6 +81,12 @@ architecture, see vm.h for the current definitions
 //#define READ_32_FROM_PC( P ) 
 //#define READ_16_FROM_PC( P )
 //#define READ_8_FROM_PC( P )
+
+
+/***********************************************************************
+ **** EXPERIMENTAL **** HAS SOME KNOWN ISSUES DO NOT USE (yet :) */
+//#define WRENCH_INCLUDE_DEBUG_CODE
+/***********************************************************************/
 
 
 /************************************************************************
@@ -209,6 +209,12 @@ enum WRError
 WRState* wr_newState( int stackSize =WRENCH_DEFAULT_STACK_SIZE );
 void wr_destroyState( WRState* w );
 
+// by default wrench uses malloc/free but if you want to use your own
+// allocator it can be set up here
+// NOTE: this becomes global for all wrench code!
+typedef void* (*WR_ALLOC)(size_t size);
+typedef void (*WR_FREE)(void* ptr);
+void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
 
 // hashing function used inside wrench, it's a stripped down murmer,
 // not academically fantastic but very good and very fast
@@ -562,6 +568,9 @@ The "extended" types are:
 
 */
 
+extern WR_ALLOC g_malloc;
+extern WR_FREE g_free;
+
 //------------------------------------------------------------------------------
 #if __cplusplus <= 199711L
 enum WRValueType
@@ -914,11 +923,10 @@ public:
 #if !defined(ARDUINO) && (__arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__ || __GNUC__)
 #include <memory.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
-#include <cstring>
-#include <cstdlib>
 #endif
 
 #ifndef WRENCH_COMBINED

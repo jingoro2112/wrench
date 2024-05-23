@@ -31,7 +31,52 @@ int wr_ftoa( float f, char* string, size_t len );
 unsigned char* wr_pack16( int16_t i, unsigned char* buf );
 unsigned char* wr_pack32( int32_t l, unsigned char* buf );
 
+//------------------------------------------------------------------------------
+// "good values" for hash table progression
+const uint16_t c_primeTable[] =
+{
+	2,
+	5,
+	11,
+	17,
+	23,
+	31,
+	53,
+	97,
+	193,
+	389,
+	769,
+	1543,
+	3079,
+	6151,
+	12289,
+	24593,
+	49157
+};
+/*
+98317,
+196613, // use java
+393241,
+786433,
+1572869,
+3145739,
+6291469,
+12582917, // use c#
+25165843,
+50331653,
+100663319,
+201326611,
+402653189,
+805306457, 
+1610612741, // use HAL-9000
+};
+*/
+
+
 #ifndef WRENCH_WITHOUT_COMPILER
+
+#include <stdlib.h>
+#include <new>
 
 //-----------------------------------------------------------------------------
 template <class T> class WRarray
@@ -39,17 +84,51 @@ template <class T> class WRarray
 private:
 
 	T* m_list;
-	unsigned int m_elementsTotal;
+	unsigned int m_elementsNewed;
 	unsigned int m_elementsAllocated;
 
 public:
 
 	//------------------------------------------------------------------------------
-	void clear() { delete[] m_list; m_list = 0; m_elementsTotal = 0; m_elementsAllocated = 0; }
+	T* newArray( int size )
+	{
+		if ( !size ) return 0;
+		
+		T* t = (T*)g_malloc( sizeof(T) * size );
+		for( int i=0; i<size; ++i )
+		{
+			new (&(t[i])) T();
+		}
+		
+		return t;
+	}
+
+	//------------------------------------------------------------------------------
+	void deleteArray( T* t, int size )
+	{
+		if ( !t ) return;
+		
+		for( int i=0; i<size; ++i )
+		{
+			t[i].~T();
+		}
+
+		g_free( t );
+	}
+
+	//------------------------------------------------------------------------------
+	void clear()
+	{
+		deleteArray( m_list, m_elementsNewed );
+		m_list = 0;
+		m_elementsNewed = 0;
+		m_elementsAllocated = 0;
+	}
+	
 	unsigned int count() const { return m_elementsAllocated; }
 	void setCount( unsigned int count )
 	{
-		if ( count >= m_elementsTotal )
+		if ( count >= m_elementsNewed )
 		{
 			alloc( count + 1 ); 
 		}
@@ -82,13 +161,13 @@ public:
 			newCount = m_elementsAllocated - count;
 		}
 
-		T* newArray = new T[newCount];
+		T* na = newArray( newCount );
 
 		if ( location == 0 )
 		{
 			for( unsigned int i=0; i<(unsigned int)newCount; ++i )
 			{
-				newArray[i] = m_list[i+count];
+				na[i] = m_list[i+count];
 			}
 		}
 		else
@@ -100,19 +179,19 @@ public:
 			{
 				if ( i < location )
 				{
-					newArray[j++] = m_list[i];
+					na[j++] = m_list[i];
 				}
 				else if ( i >= skipEnd )
 				{
-					newArray[j++] = m_list[i];
+					na[j++] = m_list[i];
 				}
 			}
 		}
 
-		delete[] m_list;
-		m_list = newArray;
+		deleteArray( m_list, m_elementsNewed );
+		m_list = na;
 		m_elementsAllocated = newCount;
-		m_elementsTotal = newCount;
+		m_elementsNewed = newCount;
 
 		return m_elementsAllocated;
 	}
@@ -120,23 +199,23 @@ public:
 	//------------------------------------------------------------------------------
 	void alloc( const unsigned int size )
 	{
-		if ( size > m_elementsTotal )
+		if ( size > m_elementsNewed )
 		{
 			unsigned int newSize = size + (size/2) + 1;
-			T* newArray = new T[newSize];
+			T* na = newArray( newSize );
 
 			if ( m_list )
 			{
-				for( unsigned int i=0; i<m_elementsTotal; ++i )
+				for( unsigned int i=0; i<m_elementsAllocated; ++i )
 				{
-					newArray[i] = m_list[i];
+					na[i] = m_list[i];
 				}
 
-				delete[] m_list;
+				deleteArray( m_list, m_elementsNewed );
 			}
 
-			m_elementsTotal = newSize;
-			m_list = newArray;
+			m_elementsNewed = newSize;
+			m_list = na;
 		}
 	}
 
@@ -148,7 +227,7 @@ public:
 	T& append() { return get( m_elementsAllocated ); }
 	T& get( const unsigned int l ) 
 	{
-		if ( l >= m_elementsTotal )
+		if ( l >= m_elementsNewed )
 		{
 			alloc(l + 1);
 			m_elementsAllocated = l + 1;
@@ -165,13 +244,13 @@ public:
 	WRarray( const WRarray& A )
 	{
 		clear();
-		m_list = new T[A.m_elementsAllocated];
+		m_list = newArray( A.m_elementsAllocated );
+		m_elementsNewed = A.m_elementsNewed;
 		for( unsigned int i=0; i<A.m_elementsAllocated; ++i )
 		{
 			m_list[i] = A.m_list[i];
 		}
 		m_elementsAllocated = A.m_elementsAllocated;
-		m_elementsTotal = A.m_elementsTotal;
 	}
 
 	//------------------------------------------------------------------------------
@@ -180,13 +259,13 @@ public:
 		if ( &A != this )
 		{
 			clear();
-			m_list = new T[A.m_elementsTotal];
+			m_list = newArray( A.m_elementsNewed );
 			for( unsigned int i=0; i<A.m_elementsAllocated; ++i )
 			{
 				m_list[i] = A.m_list[i];
 			}
 			m_elementsAllocated = A.m_elementsAllocated;
-			m_elementsTotal = A.m_elementsTotal;
+			m_elementsNewed = A.m_elementsNewed;
 		}
 		return *this;
 	}
@@ -195,54 +274,9 @@ public:
 	T& operator[]( const unsigned int l ) { return get(l); }
 
 	WRarray( const unsigned int initialSize =0 ) { m_list = 0; clear(); alloc(initialSize); }
-	~WRarray() { delete[] m_list; }
+	~WRarray() { clear(); }
 };
 class WRstr;
-
-#endif // WRENCH_WITHOUT_COMPILER
-
-//------------------------------------------------------------------------------
-// "good values" for hash table progression
-const uint16_t c_primeTable[] =
-{
-	2,
-	5,
-	11,
-	17,
-	23,
-	31,
-	53,
-	97,
-	193,
-	389,
-	769,
-	1543,
-	3079,
-	6151,
-	12289,
-	24593,
-	49157
-};
-/*
-	98317,
-	196613, // use java
-	393241,
-	786433,
-	1572869,
-	3145739,
-	6291469,
-	12582917, // use c#
-	25165843,
-	50331653,
-	100663319,
-	201326611,
-	402653189,
-	805306457, 
-	1610612741, // use HAL-9000
-};
-*/
-
-#ifndef WRENCH_WITHOUT_COMPILER
 
 //------------------------------------------------------------------------------
 template <class T> class WRHashTable
@@ -255,20 +289,53 @@ public:
 			if ( sizeHint < c_primeTable[i] )
 			{
 				m_mod = (int)c_primeTable[i];
-				m_list = new Node[m_mod];
+				m_list = newArray( m_mod );
 				break;
 			}
 		}
 	}
-	~WRHashTable() { delete[] m_list; }
+	~WRHashTable() { deleteArray( m_list, m_mod ); }
+
+	struct Node
+	{
+		T value;
+		uint32_t hash;
+	};
+
+	//------------------------------------------------------------------------------
+	Node* newArray( int size )
+	{
+		if ( !size ) return 0;
+
+		Node* n = (Node*)g_malloc( sizeof(Node) * size );
+		for( int i=0; i<size; ++i )
+		{
+			new (&(n[i].value)) T();
+			n[i].hash = 0;
+		}
+
+		return n;
+	}
+
+	//------------------------------------------------------------------------------
+	void deleteArray( Node* n, int size )
+	{
+		if ( !n ) return;
+
+		for( int i=0; i<size; ++i )
+		{
+			n[i].value.~T();
+		}
+
+		g_free( n );
+	}
 
 	//------------------------------------------------------------------------------
 	void clear()
 	{
-		delete[] m_list;
+		deleteArray( m_list, m_mod );
 		m_mod = (int)c_primeTable[0];
-		m_list = new Node[m_mod];
-		for( int i=0; i<m_mod; ++i ){ m_list[i].hash = 0; }
+		m_list = newArray( m_mod );
 	}
 
 	//------------------------------------------------------------------------------
@@ -326,8 +393,7 @@ public:
 			}
 
 			// this causes a bad fragmentation on small memory systems
-			Node* newList = new Node[newMod];
-			for( int i=0; i<m_mod; ++i ){ newList[i].hash = 0; }
+			Node* newList = newArray( newMod );
 
 			int h = 0;
 			for( ; h<m_mod; ++h )
@@ -350,22 +416,15 @@ public:
 
 			if ( h >= m_mod )
 			{
+				deleteArray( m_list, m_mod );
 				m_mod = newMod;
-				delete[] m_list;
 				m_list = newList;
 				return set( hash, value );
 			}
 
-			delete[] newList; // try again
+			deleteArray( newList, newMod ); // try again
 		}
 	}
-
-	struct Node
-	{
-		T value;
-		uint32_t hash;
-		Node() { hash = 0; }
-	};
 
 	friend struct WRCompilationContext;
 

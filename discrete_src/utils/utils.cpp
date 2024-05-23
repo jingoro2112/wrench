@@ -3,7 +3,7 @@ Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
+Permission is hereby granted, g_free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -23,6 +23,15 @@ SOFTWARE.
 *******************************************************************************/
 
 #include "wrench.h"
+
+WR_ALLOC g_malloc = &malloc;
+WR_FREE g_free = &free;
+//------------------------------------------------------------------------------
+void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree )
+{
+	g_malloc = wralloc;
+	g_free = wrfree;
+}
 
 //------------------------------------------------------------------------------
 unsigned char* wr_pack16( int16_t i, unsigned char* buf )
@@ -106,7 +115,7 @@ WRValue* WrenchValue::asArrayMember( const int index )
 //------------------------------------------------------------------------------
 WRState* wr_newState( int stackSize )
 {
-	WRState* state = (WRState *)malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
+	WRState* state = (WRState *)g_malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
 	memset( (unsigned char*)state, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
 
 	state->stackSize = stackSize;
@@ -124,7 +133,7 @@ void wr_destroyState( WRState* w )
 	{
 		w->libCleanupFunctions->cleanupFunction( w, w->libCleanupFunctions->param );
 		WRLibraryCleanup *next = w->libCleanupFunctions->next;
-		free( w->libCleanupFunctions );
+		g_free( w->libCleanupFunctions );
 		w->libCleanupFunctions = next;
 	}
 
@@ -135,7 +144,7 @@ void wr_destroyState( WRState* w )
 
 	w->globalRegistry.clear();
 
-	free( w );
+	g_free( w );
 }
 
 //------------------------------------------------------------------------------
@@ -192,7 +201,7 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 				 + funcs * sizeof(WRFunction) // local functions
 				 + READ_8_FROM_PC(block+1) * sizeof(WRValue);  // globals
 				 
-	WRContext* C = (WRContext *)malloc( needed );
+	WRContext* C = (WRContext *)g_malloc( needed );
 
 	memset((char*)C, 0, needed);
 
@@ -292,14 +301,14 @@ void wr_destroyContext( WRContext* context )
 				context->w->contextList = (WRContext*)context->w->contextList->registry.m_vNext;
 			}
 
-			// free all memory allocations by forcing the gc to collect everything
+			// g_free all memory allocations by forcing the gc to collect everything
 			context->globals = 0;
 			context->allocatedMemoryHint = context->allocatedMemoryLimit;
 			context->gc( 0 );
 
 			context->registry.clear();
 
-			free( context );
+			g_free( context );
 
 			break;
 		}
@@ -317,7 +326,7 @@ bool wr_runCommand( WRState* w, const char* sourceCode, const int size )
 	if ( !wr_compile(sourceCode, len, &outBytes, &outLen) )
 	{
 		wr_runOnce( w, outBytes, outLen );
-		delete[] outBytes;
+		g_free( outBytes );
 		return true;
 	}
 
@@ -728,7 +737,7 @@ WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, cons
 void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 {
 	val->p2 = INIT_AS_HASH_TABLE;
-	val->va = (WRGCObject*)malloc( sizeof(WRGCObject) );
+	val->va = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
 	val->va->init( sizeHint, SV_VOID_HASH_TABLE, false );
 	val->va->m_skipGC = 1;
 }
@@ -760,7 +769,7 @@ void wr_destroyContainer( WRValue* val )
 	}
 
 	val->va->clear();
-	free( val->va );
+	g_free( val->va );
 	val->init();
 }
 

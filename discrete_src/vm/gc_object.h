@@ -3,7 +3,7 @@ Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
+Permission is hereby granted, g_free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -82,7 +82,7 @@ public:
 		if ( (m_type = type) == SV_VALUE )
 		{
 			m_size = size;
-			m_Vdata = (WRValue*)malloc( m_size * sizeof(WRValue) );
+			m_Vdata = (WRValue*)g_malloc( m_size * sizeof(WRValue) );
 			if ( clear )
 			{
 				memset( m_SCdata, 0, m_size * sizeof(WRValue) );
@@ -92,7 +92,7 @@ public:
 		else if ( m_type == SV_CHAR )
 		{
 			m_size = size;
-			m_Cdata = (unsigned char*)malloc( m_size + 1 );
+			m_Cdata = (unsigned char*)g_malloc( m_size + 1 );
 			if ( clear )
 			{
 				memset( m_SCdata, 0, m_size + 1 );
@@ -113,11 +113,11 @@ public:
 	{
 		if ( m_type == SV_VALUE || m_type == SV_CHAR )
 		{
-			free( m_Cdata );
+			g_free( m_Cdata );
 		}
 		else
 		{
-			free( m_hashTable );
+			g_free( m_hashTable );
 		}
 	}
 	
@@ -257,7 +257,7 @@ tryAgain:
 			}
 
 			int total = newMod*sizeof(uint32_t) + newSize*sizeof(WRValue);
-			uint32_t* proposed = (uint32_t*)malloc( total );
+			uint32_t* proposed = (uint32_t*)g_malloc( total );
 
 			memset( (unsigned char *)proposed, 0, total );
 			for( int n = 0; n<newMod; ++n )
@@ -284,7 +284,7 @@ tryAgain:
 					}
 					else
 					{
-						free( proposed );
+						g_free( proposed );
 						++t;
 
 						assert( (int)newMod != 49157 );
@@ -335,7 +335,7 @@ tryAgain:
 				}
 			}
 
-			free( oldHashTable );
+			g_free( oldHashTable );
 
 			m_Vdata = newValues;
 

@@ -3,7 +3,7 @@ Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
+Permission is hereby granted, g_free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -29,6 +29,9 @@ SOFTWARE.
 // only used in debug code, but it is used on the target machine so keep it compact!
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
+
+#include <stdlib.h>
+#include <new>
 
 //-----------------------------------------------------------------------------
 template<class L> class SimpleLL
@@ -73,12 +76,18 @@ public:
 	{
 		if ( !m_head )
 		{
-			m_head = new Node;
+			m_head = (Node*)g_malloc(sizeof(Node));
+			m_head->next = 0;
+			new (&(m_head->item)) L();
+			
 			m_tail = m_head;
 		}
 		else
 		{
-			Node* N = new Node( m_head );
+			Node* N = (Node*)g_malloc(sizeof(Node));
+			N->next = m_head;
+			new (&(N->item)) L();
+
 			m_head = N;
 		}
 		return &(m_head->item);
@@ -93,7 +102,10 @@ public:
 		}
 		else
 		{
-			Node* N = new Node;
+			Node* N = (Node*)g_malloc(sizeof(Node));
+			N->next = 0;
+			new (&(N->item)) L();
+
 			m_tail->next = N;
 			m_tail = N;
 			return &(m_tail->item);
@@ -134,7 +146,9 @@ public:
 					m_clearFunc( N->item );
 				}
 
-				delete N;
+				N->item.~L();
+				g_free( N );
+				
 				break;
 			}
 
@@ -174,7 +188,8 @@ public:
 					m_clearFunc( N->item );
 				}
 
-				delete N;
+				N->item.~L();
+				g_free( N );
 				break;
 			}
 
@@ -211,7 +226,8 @@ public:
 			{
 				m_clearFunc( N->item );
 			}
-			delete N;
+			N->item.~L();
+			g_free( N );
 		}
 	}
 
@@ -241,7 +257,10 @@ public:
 					{
 						m_clearFunc( N->next->item );
 					}
-					delete N->next;
+
+					N->next->item.~L();
+					g_free( N->next );
+
 					
 					N->next = 0;
 					m_tail = N;
@@ -257,7 +276,7 @@ public:
 private:
 	struct Node
 	{
-		Node( Node* n=0 ) : next(n) {}
+//		Node( Node* n=0 ) : next(n) {}
 		L item;
 		Node *next;
 	};

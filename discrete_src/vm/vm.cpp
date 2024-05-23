@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -129,7 +129,7 @@ void WRContext::gc( WRValue* stackTop )
 //------------------------------------------------------------------------------
 WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 {
-	WRGCObject* ret = (WRGCObject*)malloc( sizeof(WRGCObject) );
+	WRGCObject* ret = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
 	ret->init( size, type, init );
 
 	if ( type == SV_CHAR )
@@ -788,17 +788,16 @@ literalZero:
 			
 			CASE(Yield):
 			{
-				register0 = stackTop;
-				register0->p = 0;
-				register0->p2 = INIT_AS_INT;
-
+				// preserve the calling and stack context so the code
+				// can pick up where it left off on continue
 				context->yieldArgs = READ_8_FROM_PC(pc++);
 				context->yield_pc = pc;
 				context->yield_stackTop = stackTop;
+				context->yield_stackTop->p = 0;
+				context->yield_stackTop->p2 = INIT_AS_INT; // init return value
 				context->yield_frameBase = frameBase;
 				context->yield_argv = argv;
 				context->yield_argn = argn;
-				
 				return 0;
 			}
 
@@ -998,7 +997,7 @@ callFunction:
 				if ( table > bottom )
 				{
 					// if unit was called with no arguments from global
-					// level there are no "free" stack entries to
+					// level there are no "g_free" stack entries to
 					// gnab, so create it here, but preserve the
 					// first value
 

@@ -3,7 +3,7 @@ Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
+Permission is hereby granted, g_free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -291,7 +291,7 @@ int main( int argn, char* argv[] )
 
 		wr_run( gw, out, outLen );
 
-		delete[] out;
+		g_free( out );
 
 		if ( wr_getLastError(gw) )
 		{
@@ -341,7 +341,6 @@ int main( int argn, char* argv[] )
 			return usage();
 		}
 		
-		
 		int err = wr_compile( code, code.size(), &out, &outLen, 0, flags );
 		
 		if ( err )
@@ -377,7 +376,7 @@ int main( int argn, char* argv[] )
 			printf( "%s -> %s as %s\n", SimpleArgs::get(argn, argv, -3), outname.c_str(), SimpleArgs::get(argn, argv, -1) );
 		}
 
-		delete[] out;
+		g_free( out );
 	}
 	else if ( SimpleArgs::get(argn, argv, "release") )
 	{
@@ -465,7 +464,7 @@ int runTests( int number )
 	char someArray[10] = "hello";
 	wr_addArrayToContainer( &container, "name", someArray, 10 );
 
-	char* someBigArray = new char[0x1FFFFF];
+	char* someBigArray = (char *)g_malloc( 0x1FFFFF );
 	someBigArray[0] = 10;
 	someBigArray[10000] = 20;
 	someBigArray[100000] = 30;
@@ -628,7 +627,7 @@ int runTests( int number )
 					printf( "PASS\n" );
 				}
 
-				delete[] out;
+				g_free( out );
 				wr_destroyContext( context );
 			}
 			else if ( fileNumber != 0 )
@@ -646,7 +645,7 @@ int runTests( int number )
 
 	wr_destroyState( w );
 
-	delete[] someBigArray;
+	g_free( someBigArray );
 	fclose( tfile );
 	return err;
 }
@@ -735,7 +734,7 @@ void testGlobalValues( WRState* w )
 	wv4.asArrayMember(32)->setInt( 3200 );
 	assert( wr_callFunction(gc, "test10") );
 
-	delete[] out;
+	g_free( out );
 
 	g = g;
 	err = err;
@@ -793,7 +792,7 @@ void setup()
 	if ( err == 0 )
 	{
 		wr_run( w, outBytes, outLen ); // load and run the code!
-		delete[] outBytes; // clean up 
+		g_free( outBytes ); // clean up 
 	}
 
 	wr_run( w, Pbasic_bytecode, Pbasic_bytecodeSize );

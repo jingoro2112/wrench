@@ -39,8 +39,8 @@ class WRValueSerializer
 public:
 	
 	WRValueSerializer() : m_pos(0), m_size(0), m_buf(0) {}
-	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size), m_buf((char *)malloc(size)) { memcpy(m_buf, data, size); }
-	~WRValueSerializer() { free(m_buf); }
+	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size), m_buf((char *)g_malloc(size)) { memcpy(m_buf, data, size); }
+	~WRValueSerializer() { g_free(m_buf); }
 
 	void getOwnership( char** buf, int* len )
 	{
