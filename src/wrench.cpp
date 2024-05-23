@@ -32,7 +32,52 @@ int wr_ftoa( float f, char* string, size_t len );
 unsigned char* wr_pack16( int16_t i, unsigned char* buf );
 unsigned char* wr_pack32( int32_t l, unsigned char* buf );
 
+//------------------------------------------------------------------------------
+// "good values" for hash table progression
+const uint16_t c_primeTable[] =
+{
+	2,
+	5,
+	11,
+	17,
+	23,
+	31,
+	53,
+	97,
+	193,
+	389,
+	769,
+	1543,
+	3079,
+	6151,
+	12289,
+	24593,
+	49157
+};
+/*
+98317,
+196613, // use java
+393241,
+786433,
+1572869,
+3145739,
+6291469,
+12582917, // use c#
+25165843,
+50331653,
+100663319,
+201326611,
+402653189,
+805306457, 
+1610612741, // use HAL-9000
+};
+*/
+
+
 #ifndef WRENCH_WITHOUT_COMPILER
+
+#include <stdlib.h>
+#include <new>
 
 //-----------------------------------------------------------------------------
 template <class T> class WRarray
@@ -40,17 +85,51 @@ template <class T> class WRarray
 private:
 
 	T* m_list;
-	unsigned int m_elementsTotal;
+	unsigned int m_elementsNewed;
 	unsigned int m_elementsAllocated;
 
 public:
 
 	//------------------------------------------------------------------------------
-	void clear() { delete[] m_list; m_list = 0; m_elementsTotal = 0; m_elementsAllocated = 0; }
+	T* newArray( int size )
+	{
+		if ( !size ) return 0;
+		
+		T* t = (T*)g_malloc( sizeof(T) * size );
+		for( int i=0; i<size; ++i )
+		{
+			new (&(t[i])) T();
+		}
+		
+		return t;
+	}
+
+	//------------------------------------------------------------------------------
+	void deleteArray( T* t, int size )
+	{
+		if ( !t ) return;
+		
+		for( int i=0; i<size; ++i )
+		{
+			t[i].~T();
+		}
+
+		g_free( t );
+	}
+
+	//------------------------------------------------------------------------------
+	void clear()
+	{
+		deleteArray( m_list, m_elementsNewed );
+		m_list = 0;
+		m_elementsNewed = 0;
+		m_elementsAllocated = 0;
+	}
+	
 	unsigned int count() const { return m_elementsAllocated; }
 	void setCount( unsigned int count )
 	{
-		if ( count >= m_elementsTotal )
+		if ( count >= m_elementsNewed )
 		{
 			alloc( count + 1 ); 
 		}
@@ -83,13 +162,13 @@ public:
 			newCount = m_elementsAllocated - count;
 		}
 
-		T* newArray = new T[newCount];
+		T* na = newArray( newCount );
 
 		if ( location == 0 )
 		{
 			for( unsigned int i=0; i<(unsigned int)newCount; ++i )
 			{
-				newArray[i] = m_list[i+count];
+				na[i] = m_list[i+count];
 			}
 		}
 		else
@@ -101,19 +180,19 @@ public:
 			{
 				if ( i < location )
 				{
-					newArray[j++] = m_list[i];
+					na[j++] = m_list[i];
 				}
 				else if ( i >= skipEnd )
 				{
-					newArray[j++] = m_list[i];
+					na[j++] = m_list[i];
 				}
 			}
 		}
 
-		delete[] m_list;
-		m_list = newArray;
+		deleteArray( m_list, m_elementsNewed );
+		m_list = na;
 		m_elementsAllocated = newCount;
-		m_elementsTotal = newCount;
+		m_elementsNewed = newCount;
 
 		return m_elementsAllocated;
 	}
@@ -121,23 +200,23 @@ public:
 	//------------------------------------------------------------------------------
 	void alloc( const unsigned int size )
 	{
-		if ( size > m_elementsTotal )
+		if ( size > m_elementsNewed )
 		{
 			unsigned int newSize = size + (size/2) + 1;
-			T* newArray = new T[newSize];
+			T* na = newArray( newSize );
 
 			if ( m_list )
 			{
-				for( unsigned int i=0; i<m_elementsTotal; ++i )
+				for( unsigned int i=0; i<m_elementsAllocated; ++i )
 				{
-					newArray[i] = m_list[i];
+					na[i] = m_list[i];
 				}
 
-				delete[] m_list;
+				deleteArray( m_list, m_elementsNewed );
 			}
 
-			m_elementsTotal = newSize;
-			m_list = newArray;
+			m_elementsNewed = newSize;
+			m_list = na;
 		}
 	}
 
@@ -149,7 +228,7 @@ public:
 	T& append() { return get( m_elementsAllocated ); }
 	T& get( const unsigned int l ) 
 	{
-		if ( l >= m_elementsTotal )
+		if ( l >= m_elementsNewed )
 		{
 			alloc(l + 1);
 			m_elementsAllocated = l + 1;
@@ -166,13 +245,13 @@ public:
 	WRarray( const WRarray& A )
 	{
 		clear();
-		m_list = new T[A.m_elementsAllocated];
+		m_list = newArray( A.m_elementsAllocated );
+		m_elementsNewed = A.m_elementsNewed;
 		for( unsigned int i=0; i<A.m_elementsAllocated; ++i )
 		{
 			m_list[i] = A.m_list[i];
 		}
 		m_elementsAllocated = A.m_elementsAllocated;
-		m_elementsTotal = A.m_elementsTotal;
 	}
 
 	//------------------------------------------------------------------------------
@@ -181,13 +260,13 @@ public:
 		if ( &A != this )
 		{
 			clear();
-			m_list = new T[A.m_elementsTotal];
+			m_list = newArray( A.m_elementsNewed );
 			for( unsigned int i=0; i<A.m_elementsAllocated; ++i )
 			{
 				m_list[i] = A.m_list[i];
 			}
 			m_elementsAllocated = A.m_elementsAllocated;
-			m_elementsTotal = A.m_elementsTotal;
+			m_elementsNewed = A.m_elementsNewed;
 		}
 		return *this;
 	}
@@ -196,54 +275,9 @@ public:
 	T& operator[]( const unsigned int l ) { return get(l); }
 
 	WRarray( const unsigned int initialSize =0 ) { m_list = 0; clear(); alloc(initialSize); }
-	~WRarray() { delete[] m_list; }
+	~WRarray() { clear(); }
 };
 class WRstr;
-
-#endif // WRENCH_WITHOUT_COMPILER
-
-//------------------------------------------------------------------------------
-// "good values" for hash table progression
-const uint16_t c_primeTable[] =
-{
-	2,
-	5,
-	11,
-	17,
-	23,
-	31,
-	53,
-	97,
-	193,
-	389,
-	769,
-	1543,
-	3079,
-	6151,
-	12289,
-	24593,
-	49157
-};
-/*
-	98317,
-	196613, // use java
-	393241,
-	786433,
-	1572869,
-	3145739,
-	6291469,
-	12582917, // use c#
-	25165843,
-	50331653,
-	100663319,
-	201326611,
-	402653189,
-	805306457, 
-	1610612741, // use HAL-9000
-};
-*/
-
-#ifndef WRENCH_WITHOUT_COMPILER
 
 //------------------------------------------------------------------------------
 template <class T> class WRHashTable
@@ -256,20 +290,53 @@ public:
 			if ( sizeHint < c_primeTable[i] )
 			{
 				m_mod = (int)c_primeTable[i];
-				m_list = new Node[m_mod];
+				m_list = newArray( m_mod );
 				break;
 			}
 		}
 	}
-	~WRHashTable() { delete[] m_list; }
+	~WRHashTable() { deleteArray( m_list, m_mod ); }
+
+	struct Node
+	{
+		T value;
+		uint32_t hash;
+	};
+
+	//------------------------------------------------------------------------------
+	Node* newArray( int size )
+	{
+		if ( !size ) return 0;
+
+		Node* n = (Node*)g_malloc( sizeof(Node) * size );
+		for( int i=0; i<size; ++i )
+		{
+			new (&(n[i].value)) T();
+			n[i].hash = 0;
+		}
+
+		return n;
+	}
+
+	//------------------------------------------------------------------------------
+	void deleteArray( Node* n, int size )
+	{
+		if ( !n ) return;
+
+		for( int i=0; i<size; ++i )
+		{
+			n[i].value.~T();
+		}
+
+		g_free( n );
+	}
 
 	//------------------------------------------------------------------------------
 	void clear()
 	{
-		delete[] m_list;
+		deleteArray( m_list, m_mod );
 		m_mod = (int)c_primeTable[0];
-		m_list = new Node[m_mod];
-		for( int i=0; i<m_mod; ++i ){ m_list[i].hash = 0; }
+		m_list = newArray( m_mod );
 	}
 
 	//------------------------------------------------------------------------------
@@ -327,8 +394,7 @@ public:
 			}
 
 			// this causes a bad fragmentation on small memory systems
-			Node* newList = new Node[newMod];
-			for( int i=0; i<m_mod; ++i ){ newList[i].hash = 0; }
+			Node* newList = newArray( newMod );
 
 			int h = 0;
 			for( ; h<m_mod; ++h )
@@ -351,22 +417,15 @@ public:
 
 			if ( h >= m_mod )
 			{
+				deleteArray( m_list, m_mod );
 				m_mod = newMod;
-				delete[] m_list;
 				m_list = newList;
 				return set( hash, value );
 			}
 
-			delete[] newList; // try again
+			deleteArray( newList, newMod ); // try again
 		}
 	}
-
-	struct Node
-	{
-		T value;
-		uint32_t hash;
-		Node() { hash = 0; }
-	};
 
 	friend struct WRCompilationContext;
 
@@ -447,8 +506,8 @@ class WRValueSerializer
 public:
 	
 	WRValueSerializer() : m_pos(0), m_size(0), m_buf(0) {}
-	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size), m_buf((char *)malloc(size)) { memcpy(m_buf, data, size); }
-	~WRValueSerializer() { free(m_buf); }
+	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size), m_buf((char *)g_malloc(size)) { memcpy(m_buf, data, size); }
+	~WRValueSerializer() { g_free(m_buf); }
 
 	void getOwnership( char** buf, int* len )
 	{
@@ -498,7 +557,7 @@ Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
+Permission is hereby granted, g_free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -524,6 +583,9 @@ SOFTWARE.
 // only used in debug code, but it is used on the target machine so keep it compact!
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
+
+#include <stdlib.h>
+#include <new>
 
 //-----------------------------------------------------------------------------
 template<class L> class SimpleLL
@@ -568,12 +630,18 @@ public:
 	{
 		if ( !m_head )
 		{
-			m_head = new Node;
+			m_head = (Node*)g_malloc(sizeof(Node));
+			m_head->next = 0;
+			new (&(m_head->item)) L();
+			
 			m_tail = m_head;
 		}
 		else
 		{
-			Node* N = new Node( m_head );
+			Node* N = (Node*)g_malloc(sizeof(Node));
+			N->next = m_head;
+			new (&(N->item)) L();
+
 			m_head = N;
 		}
 		return &(m_head->item);
@@ -588,7 +656,10 @@ public:
 		}
 		else
 		{
-			Node* N = new Node;
+			Node* N = (Node*)g_malloc(sizeof(Node));
+			N->next = 0;
+			new (&(N->item)) L();
+
 			m_tail->next = N;
 			m_tail = N;
 			return &(m_tail->item);
@@ -629,7 +700,9 @@ public:
 					m_clearFunc( N->item );
 				}
 
-				delete N;
+				N->item.~L();
+				g_free( N );
+				
 				break;
 			}
 
@@ -669,7 +742,8 @@ public:
 					m_clearFunc( N->item );
 				}
 
-				delete N;
+				N->item.~L();
+				g_free( N );
 				break;
 			}
 
@@ -706,7 +780,8 @@ public:
 			{
 				m_clearFunc( N->item );
 			}
-			delete N;
+			N->item.~L();
+			g_free( N );
 		}
 	}
 
@@ -736,7 +811,10 @@ public:
 					{
 						m_clearFunc( N->next->item );
 					}
-					delete N->next;
+
+					N->next->item.~L();
+					g_free( N->next );
+
 					
 					N->next = 0;
 					m_tail = N;
@@ -752,7 +830,7 @@ public:
 private:
 	struct Node
 	{
-		Node( Node* n=0 ) : next(n) {}
+//		Node( Node* n=0 ) : next(n) {}
 		L item;
 		Node *next;
 	};
@@ -972,7 +1050,7 @@ Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
+Permission is hereby granted, g_free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -1051,7 +1129,7 @@ public:
 		if ( (m_type = type) == SV_VALUE )
 		{
 			m_size = size;
-			m_Vdata = (WRValue*)malloc( m_size * sizeof(WRValue) );
+			m_Vdata = (WRValue*)g_malloc( m_size * sizeof(WRValue) );
 			if ( clear )
 			{
 				memset( m_SCdata, 0, m_size * sizeof(WRValue) );
@@ -1061,7 +1139,7 @@ public:
 		else if ( m_type == SV_CHAR )
 		{
 			m_size = size;
-			m_Cdata = (unsigned char*)malloc( m_size + 1 );
+			m_Cdata = (unsigned char*)g_malloc( m_size + 1 );
 			if ( clear )
 			{
 				memset( m_SCdata, 0, m_size + 1 );
@@ -1082,11 +1160,11 @@ public:
 	{
 		if ( m_type == SV_VALUE || m_type == SV_CHAR )
 		{
-			free( m_Cdata );
+			g_free( m_Cdata );
 		}
 		else
 		{
-			free( m_hashTable );
+			g_free( m_hashTable );
 		}
 	}
 	
@@ -1226,7 +1304,7 @@ tryAgain:
 			}
 
 			int total = newMod*sizeof(uint32_t) + newSize*sizeof(WRValue);
-			uint32_t* proposed = (uint32_t*)malloc( total );
+			uint32_t* proposed = (uint32_t*)g_malloc( total );
 
 			memset( (unsigned char *)proposed, 0, total );
 			for( int n = 0; n<newMod; ++n )
@@ -1253,7 +1331,7 @@ tryAgain:
 					}
 					else
 					{
-						free( proposed );
+						g_free( proposed );
 						++t;
 
 						assert( (int)newMod != 49157 );
@@ -1304,7 +1382,7 @@ tryAgain:
 				}
 			}
 
-			free( oldHashTable );
+			g_free( oldHashTable );
 
 			m_Vdata = newValues;
 
@@ -1955,7 +2033,7 @@ public:
 	WRstr( const char* s ) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; set(s, (unsigned int)strlen(s)); }
 	WRstr( const char c) { m_len = 1; m_str = m_smallbuf; m_smallbuf[0] = c; m_smallbuf[1] = 0; m_buflen = c_sizeofBaseString; }
 	
-	~WRstr() { if ( m_str != m_smallbuf ) delete[] m_str; }
+	~WRstr() { if ( m_str != m_smallbuf ) g_free(m_str); }
 
 	WRstr& clear() { m_len = 0; m_str[0] = 0; return *this; }
 	
@@ -1976,7 +2054,7 @@ public:
 
 		if ( m_str == m_smallbuf )
 		{
-			*toBuf = new char[m_len + 1];
+			*toBuf = (char*)g_malloc( m_len + 1 );
 			memcpy( *toBuf, m_str, (m_len+1) );
 		}
 		else
@@ -2118,7 +2196,7 @@ WRstr& WRstr::alloc( const unsigned int characters, const bool preserveContents 
 {
 	if ( characters >= m_buflen ) // only need to alloc if more space is requested than we have
 	{
-		char* newStr = new char[ characters + 1 ]; // create the space
+		char* newStr = (char*)g_malloc( characters + 1 ); // create the space
 		
 		if ( preserveContents ) 
 		{
@@ -2127,7 +2205,7 @@ WRstr& WRstr::alloc( const unsigned int characters, const bool preserveContents 
 		
 		if ( m_str != m_smallbuf )
 		{
-			delete[] m_str;
+			g_free( m_str );
 		}
 		
 		m_str = newStr;
@@ -2219,7 +2297,7 @@ WRstr& WRstr::truncate( const unsigned int newLen )
 		{
 			m_buflen = c_sizeofBaseString;
 			memcpy( m_smallbuf, m_str, newLen );
-			delete[] m_str;
+			g_free( m_str );
 			m_str = m_smallbuf;
 		}
 	}
@@ -2239,34 +2317,20 @@ bool WRstr::isMatch( const char* buf ) const
 //-----------------------------------------------------------------------------
 WRstr& WRstr::insert( const char* buf, const unsigned int len, const unsigned int startPos /*=0*/ )
 {
-	if ( len == 0 ) // insert 0? done
+	if ( len != 0 ) // insert 0? done
 	{
-		return *this;
-	}
+		alloc( m_len + len + startPos, true ); // make sure there is enough room for the new string
 
-	alloc( m_len + len, true ); // make sure there is enough room for the new string
-	if ( startPos >= m_len )
-	{
-		if ( buf )
-		{
-			memcpy( m_str + m_len, buf, len );
-		}
-	}
-	else
-	{
-		if ( startPos != m_len )
+		if ( startPos < m_len ) // text after the insert, move everything up
 		{
 			memmove( m_str + len + startPos, m_str + startPos, m_len );
 		}
-		
-		if ( buf )
-		{
-			memcpy( m_str + startPos, buf, len );
-		}
-	}
 
-	m_len += len;
-	m_str[m_len] = 0;
+		memcpy( m_str + startPos, buf, len );
+
+		m_len += len;
+		m_str[m_len] = 0;
+	}
 
 	return *this;
 }
@@ -2325,7 +2389,7 @@ public:
 	WROpcodeStream& clear()
 	{
 		m_len = 0;
-		delete[] m_buf;
+		g_free( m_buf );
 		m_buf = 0;
 		m_bufLen = 0;
 		return *this;
@@ -2355,11 +2419,11 @@ public:
 		{
 			unsigned char* buf = m_buf;
 			m_bufLen = size + m_len + 16;
-			m_buf = new unsigned char[ m_bufLen ];
+			m_buf = (unsigned char *)g_malloc( m_bufLen );
 			if ( m_len )
 			{
 				memcpy( m_buf, buf, m_len );
-				delete[] buf;
+				g_free( buf );
 			}
 		}
 
@@ -8583,7 +8647,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 			defaultOffset -= currentPos;
 		}
 
-		table = new WRSwitchCase[size];
+		table = (WRSwitchCase *)g_malloc(size * sizeof(WRSwitchCase));
 		memset( table, 0, size*sizeof(WRSwitchCase) );
 
 		for( unsigned int i = 0; i<size; ++i ) // for each of the possible entries..
@@ -8624,7 +8688,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 		uint16_t mod = 1;
 		for( ; mod<0x7FFE; ++mod )
 		{
-			table = new WRSwitchCase[mod];
+			table = (WRSwitchCase *)g_malloc(mod * sizeof(WRSwitchCase));
 			memset( table, 0, sizeof(WRSwitchCase)*mod );
 
 			unsigned int c=0;
@@ -8651,7 +8715,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 			}
 			else
 			{
-				delete[] table;
+				g_free( table );
 				table = 0;
 			} 
 		}
@@ -8689,7 +8753,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 		}
 	}
 
-	delete[] table;
+	g_free( table );
 
 	setRelativeJumpTarget( m_units[m_unitTop].bytecode, *m_breakTargets.tail() );
 
@@ -9029,7 +9093,7 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	}
 	
 	*size = 2;
-	*buf = new unsigned char[ (offsets.m_mod * 5) + 4 ];
+	*buf = (unsigned char *)g_malloc( (offsets.m_mod * 5) + 4 );
 
 	wr_pack16( offsets.m_mod, *buf + *size );
 	*size += 2;
@@ -9314,7 +9378,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 
 						}
 
-						delete[] buf;
+						g_free( buf );
 					}
 
 					if ( m_units[u2].offsetOfLocalHashMap != 0 )
@@ -9420,7 +9484,7 @@ WRError wr_compile( const char* source,
 	
 #endif
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -9550,7 +9614,7 @@ void WRContext::gc( WRValue* stackTop )
 //------------------------------------------------------------------------------
 WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 {
-	WRGCObject* ret = (WRGCObject*)malloc( sizeof(WRGCObject) );
+	WRGCObject* ret = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
 	ret->init( size, type, init );
 
 	if ( type == SV_CHAR )
@@ -10209,17 +10273,16 @@ literalZero:
 			
 			CASE(Yield):
 			{
-				register0 = stackTop;
-				register0->p = 0;
-				register0->p2 = INIT_AS_INT;
-
+				// preserve the calling and stack context so the code
+				// can pick up where it left off on continue
 				context->yieldArgs = READ_8_FROM_PC(pc++);
 				context->yield_pc = pc;
 				context->yield_stackTop = stackTop;
+				context->yield_stackTop->p = 0;
+				context->yield_stackTop->p2 = INIT_AS_INT; // init return value
 				context->yield_frameBase = frameBase;
 				context->yield_argv = argv;
 				context->yield_argn = argn;
-				
 				return 0;
 			}
 
@@ -10419,7 +10482,7 @@ callFunction:
 				if ( table > bottom )
 				{
 					// if unit was called with no arguments from global
-					// level there are no "free" stack entries to
+					// level there are no "g_free" stack entries to
 					// gnab, so create it here, but preserve the
 					// first value
 
@@ -12372,7 +12435,7 @@ Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
+Permission is hereby granted, g_free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -12392,6 +12455,15 @@ SOFTWARE.
 *******************************************************************************/
 
 #include "wrench.h"
+
+WR_ALLOC g_malloc = &malloc;
+WR_FREE g_free = &free;
+//------------------------------------------------------------------------------
+void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree )
+{
+	g_malloc = wralloc;
+	g_free = wrfree;
+}
 
 //------------------------------------------------------------------------------
 unsigned char* wr_pack16( int16_t i, unsigned char* buf )
@@ -12475,7 +12547,7 @@ WRValue* WrenchValue::asArrayMember( const int index )
 //------------------------------------------------------------------------------
 WRState* wr_newState( int stackSize )
 {
-	WRState* state = (WRState *)malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
+	WRState* state = (WRState *)g_malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
 	memset( (unsigned char*)state, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
 
 	state->stackSize = stackSize;
@@ -12493,7 +12565,7 @@ void wr_destroyState( WRState* w )
 	{
 		w->libCleanupFunctions->cleanupFunction( w, w->libCleanupFunctions->param );
 		WRLibraryCleanup *next = w->libCleanupFunctions->next;
-		free( w->libCleanupFunctions );
+		g_free( w->libCleanupFunctions );
 		w->libCleanupFunctions = next;
 	}
 
@@ -12504,7 +12576,7 @@ void wr_destroyState( WRState* w )
 
 	w->globalRegistry.clear();
 
-	free( w );
+	g_free( w );
 }
 
 //------------------------------------------------------------------------------
@@ -12561,7 +12633,7 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 				 + funcs * sizeof(WRFunction) // local functions
 				 + READ_8_FROM_PC(block+1) * sizeof(WRValue);  // globals
 				 
-	WRContext* C = (WRContext *)malloc( needed );
+	WRContext* C = (WRContext *)g_malloc( needed );
 
 	memset((char*)C, 0, needed);
 
@@ -12661,14 +12733,14 @@ void wr_destroyContext( WRContext* context )
 				context->w->contextList = (WRContext*)context->w->contextList->registry.m_vNext;
 			}
 
-			// free all memory allocations by forcing the gc to collect everything
+			// g_free all memory allocations by forcing the gc to collect everything
 			context->globals = 0;
 			context->allocatedMemoryHint = context->allocatedMemoryLimit;
 			context->gc( 0 );
 
 			context->registry.clear();
 
-			free( context );
+			g_free( context );
 
 			break;
 		}
@@ -12686,7 +12758,7 @@ bool wr_runCommand( WRState* w, const char* sourceCode, const int size )
 	if ( !wr_compile(sourceCode, len, &outBytes, &outLen) )
 	{
 		wr_runOnce( w, outBytes, outLen );
-		delete[] outBytes;
+		g_free( outBytes );
 		return true;
 	}
 
@@ -13097,7 +13169,7 @@ WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, cons
 void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 {
 	val->p2 = INIT_AS_HASH_TABLE;
-	val->va = (WRGCObject*)malloc( sizeof(WRGCObject) );
+	val->va = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
 	val->va->init( sizeHint, SV_VOID_HASH_TABLE, false );
 	val->va->m_skipGC = 1;
 }
@@ -13129,7 +13201,7 @@ void wr_destroyContainer( WRValue* val )
 	}
 
 	val->va->clear();
-	free( val->va );
+	g_free( val->va );
 	val->init();
 }
 
@@ -14126,14 +14198,14 @@ WrenchPacket* WRDebugClientInterfacePrivate::transmit( WrenchPacket* packet )
 			if ( m_receiveFunction( (char*)&r, sizeof(WrenchPacket)) )
 			{
 				r.xlate();
-				reply = (WrenchPacket*)malloc( r.size );
+				reply = (WrenchPacket*)g_malloc( r.size );
 				memcpy( (char*)reply, (char*)&r, sizeof(WrenchPacket) );
 				
 				if ( r.payloadSize() )
 				{
 					if ( !m_receiveFunction((char*)reply->payload(), reply->payloadSize()) )
 					{
-						free( reply );
+						g_free( reply );
 						reply = 0;
 					}
 				}
@@ -14797,7 +14869,7 @@ Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
+Permission is hereby granted, g_free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -14827,17 +14899,17 @@ void wr_growValueArray( WRGCObject* va, int newMinIndex )
 	int size_el = va->m_size * size_of;
 	va->m_size = newMinIndex + 1;
 
-	// create new array to hold the data, and free the existing one
+	// create new array to hold the data, and g_free the existing one
 	
 #ifdef WRENCH_COMPACT
 
 	uint8_t* old = va->m_Cdata;
 
-	va->m_Cdata = (uint8_t *)malloc( (newMinIndex + 1) * size_of );
+	va->m_Cdata = (uint8_t *)g_malloc( (newMinIndex + 1) * size_of );
 
 	memcpy( va->m_Cdata, old, size_el );
 
-	free( old );
+	g_free( old );
 	
 #else 
 	// this increases the code size because this is the only place
@@ -14850,25 +14922,25 @@ void wr_growValueArray( WRGCObject* va, int newMinIndex )
 	memset( va->m_Cdata + size_el, 0, (va->m_size * size_of) - size_el );
 }
 
+static WRValue s_temp1;
+
 //------------------------------------------------------------------------------
 WRValue& WRValue::singleValue() const
 {
-	static WRValue temp;
-
-	if ( (temp = deref()).type > WR_FLOAT )
+	if ( (s_temp1 = deref()).type > WR_FLOAT )
 	{
-		temp.ui = temp.getHash();
-		temp.p2 = INIT_AS_INT;
+		s_temp1.ui = s_temp1.getHash();
+		s_temp1.p2 = INIT_AS_INT;
 	}
 
-	return temp;
+	return s_temp1;
 }
+
+static WRValue s_temp2;
 
 //------------------------------------------------------------------------------
 WRValue& WRValue::deref() const
 {
-	static WRValue temp;
-	
 	if ( type == WR_REF )
 	{
 		return r->deref();
@@ -14879,12 +14951,12 @@ WRValue& WRValue::deref() const
 		return const_cast<WRValue&>(*this);
 	}
 
-	temp.p2 = INIT_AS_INT;
+	s_temp2.p2 = INIT_AS_INT;
 	unsigned int s = DECODE_ARRAY_ELEMENT_FROM_P2(p2);
 
 	if ( IS_RAW_ARRAY(r->xtype) )
 	{
-		temp.ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[s]) : 0;
+		s_temp2.ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[s]) : 0;
 	}
 	else if ( s < r->va->m_size )
 	{
@@ -14894,11 +14966,11 @@ WRValue& WRValue::deref() const
 		}
 		else
 		{
-			temp.ui = (uint32_t)(unsigned char)r->va->m_Cdata[s];
+			s_temp2.ui = (uint32_t)(unsigned char)r->va->m_Cdata[s];
 		}
 	}
 
-	return temp;
+	return s_temp2;
 }
 
 //------------------------------------------------------------------------------
@@ -14959,7 +15031,7 @@ void wr_valueToArray( const WRValue* array, WRValue* value )
 //------------------------------------------------------------------------------
 void wr_addLibraryCleanupFunction( WRState* w, void (*function)(WRState* w, void* param), void* param )
 {
-	WRLibraryCleanup* entry = (WRLibraryCleanup *)malloc(sizeof(WRLibraryCleanup));
+	WRLibraryCleanup* entry = (WRLibraryCleanup *)g_malloc(sizeof(WRLibraryCleanup));
 
 	entry->cleanupFunction = function;
 	entry->param = param;
@@ -15211,11 +15283,11 @@ void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 			  && from->va->m_type == SV_CHAR )
 	{
 		char* t = to->va->m_SCdata;
-		to->va->m_SCdata = (char*)malloc( to->va->m_size + from->va->m_size + 1 );
+		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size + 1 );
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
 		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
 		to->va->m_size = to->va->m_size + from->va->m_size;
-		free( t );
+		g_free( t );
 	}
 }
 void FuncAssign_X_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
@@ -15577,11 +15649,11 @@ void wr_AddAssign_E_E( WRValue* to, WRValue* from )
 			  && from->va->m_type == SV_CHAR )
 	{
 		char* t = to->va->m_SCdata;
-		to->va->m_SCdata = (char*)malloc( to->va->m_size + from->va->m_size + 1 );
+		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size + 1 );
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
 		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
 		to->va->m_size = to->va->m_size + from->va->m_size;
-		free( t );
+		g_free( t );
 	}
 }
 void wr_AddAssign_I_E( WRValue* to, WRValue* from )
@@ -17127,7 +17199,7 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 	const char* fileName = (const char*)args->array();
 	if ( fileName )
 	{
-		WRFSFile* entry = (WRFSFile *)malloc( sizeof(WRFSFile) );
+		WRFSFile* entry = (WRFSFile *)g_malloc( sizeof(WRFSFile) );
 
 		if ( mode & LFS_READ )
 		{
@@ -17143,13 +17215,13 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 		}
 		else
 		{
-			free( entry );
+			g_free( entry );
 			return;
 		}
 
 		if ( !entry->file )
 		{
-			free( entry );
+			g_free( entry );
 			return;
 		}
 
@@ -17187,7 +17259,7 @@ void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 				prev->next = cur->next;
 			}
 			
-			free( cur );
+			g_free( cur );
 			break;
 		}
 
@@ -17327,7 +17399,7 @@ void wr_ioCleanupFunction( WRState* w, void* param )
 	{
 		WRFSFile* next = g_OpenFiles->next;
 		g_OpenFiles->file.close();
-		free( g_OpenFiles );
+		g_free( g_OpenFiles );
 		g_OpenFiles = next;
 	}
 }
