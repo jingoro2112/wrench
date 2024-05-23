@@ -68,7 +68,7 @@ public:
 		if ( !(m_context = wr_run(w, m_byteCode, outLen))
 			 || !(m_func = wr_getFunction(m_context, functionName)) )
 		{
-			delete[] m_byteCode;
+			free( m_byteCode );
 			m_byteCode = 0;
 			return 0;
 		}
@@ -77,7 +77,7 @@ public:
 	}
 
 	EventHandler() { m_byteCode = 0; }
-	~EventHandler() { delete[] m_byteCode; }
+	~EventHandler() { free( m_byteCode ); }
 
 private:
 	WRContext* m_context;

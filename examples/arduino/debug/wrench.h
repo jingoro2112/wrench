@@ -28,7 +28,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 4
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 0
+#define WRENCH_VERSION_BUILD 1
 
 /************************************************************************
 The compiler is not particularly memory or space efficient, for
@@ -39,8 +39,8 @@ anyway)
 */
 //#define WRENCH_WITHOUT_COMPILER
 
-
 /***********************************************************************
+
 Cause the interpreter to compile into the smallest program size
 possible at the cost of some speed. This loss is from the removal of
 unrolled loops and inlined functionality, also making use of some goto.
@@ -48,13 +48,10 @@ unrolled loops and inlined functionality, also making use of some goto.
 WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
 interpreter in favor of a giant switch(). This savings comes at the cost
 of more speed so only use it if you need to.
-
-WRENCH_INCLUDE_DEBUG_CODE costs about ~1k to support debugging, without
-it debug-enabled code runs but has no effect.
 */
 //#define WRENCH_COMPACT           // saves a lot, costs some speed
 //#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
-#define WRENCH_INCLUDE_DEBUG_CODE
+
 
 // Default implementations are provided for these architectures, define
 // one so the sample_client will compile
@@ -85,6 +82,12 @@ architecture, see vm.h for the current definitions
 //#define READ_32_FROM_PC( P ) 
 //#define READ_16_FROM_PC( P )
 //#define READ_8_FROM_PC( P )
+
+
+/***********************************************************************
+ **** EXPERIMENTAL **** HAS SOME KNOWN ISSUES DO NOT USE (yet :) */
+//#define WRENCH_INCLUDE_DEBUG_CODE
+/***********************************************************************/
 
 
 /************************************************************************
@@ -122,8 +125,8 @@ examples are in
 */
 //#define WRENCH_WIN32_FILE_IO
 //#define WRENCH_LINUX_FILE_IO
-//#define WRENCH_SPIFFS_FILE_IO    // !!!!!!!!!!!! PRE-RELEASE DO NOT USE
-//#define WRENCH_LITTLEFS_FILE_IO  // !!!!!!!!!!!! PRE-RELEASE DO NOT USE
+//#define WRENCH_SPIFFS_FILE_IO
+//#define WRENCH_LITTLEFS_FILE_IO
 //#define WRENCH_CUSTOM_FILE_IO    
 /***********************************************************************/
 
@@ -144,6 +147,8 @@ extern const char* c_errStrings[];
 enum WRError
 {
 	WR_ERR_None = 0,
+
+	WR_YIELDED = 1,
 
 	WR_ERR_compiler_not_loaded,
 	WR_ERR_function_hash_signature_not_found,
@@ -205,6 +210,12 @@ enum WRError
 WRState* wr_newState( int stackSize =WRENCH_DEFAULT_STACK_SIZE );
 void wr_destroyState( WRState* w );
 
+// by default wrench uses malloc/free but if you want to use your own
+// allocator it can be set up here
+// NOTE: this becomes global for all wrench code!
+typedef void* (*WR_ALLOC)(size_t size);
+typedef void (*WR_FREE)(void* ptr);
+void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
 
 // hashing function used inside wrench, it's a stripped down murmer,
 // not academically fantastic but very good and very fast
@@ -254,6 +265,9 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 // macro for automatically freeing the WRContext
 #define wr_runOnce( w, block, blockSize ) wr_destroyContext( wr_run((w),(block),(blockSize)) )
 
+// Run the source code as an atomic operation
+bool wr_runCommand( WRState* w, const char* sourceCode, const int size =-1 );
+
 // After wr_run(...) or wr_callFunction(...) has run, there is always a
 // return value (default 0) this function fetches it
 WRValue* wr_returnValueFromLastCall( WRState* w );
@@ -281,10 +295,17 @@ WRValue* wr_callFunction( WRContext* context, const char* functionName, const WR
 WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue* argv =0, const int argn =0 );
 
 // The raw function pointer can be pre-loaded with wr_getFunction() and
-// passed directly
-// This method is exposed so functions can be called with an absolute
-// minimum of overhead
+// and then called with an absolute minimum of overhead
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
+
+// If wr_callFunction(...) returns 0 with the error code set to
+// "WR_YIELDED" ( w->err == WR_YIELDED ) then it can be continued here.
+WRValue* wr_continueFunction( WRContext* context );
+
+// If the function is yielded, this returns true and provides the
+// argument list that was passed to yield(...), if requested
+// returns false if this context is not yielded
+bool wr_getYieldInfo( WRContext* context, int* args =0, WRValue** firstArg =0, WRValue** returnValue =0 );
 
 // after wrench executes it may have set an error code, this is how to
 // retreive it. This sytems is coarse at the moment. Re-entering the
@@ -398,6 +419,7 @@ void wr_loadIOLib( WRState* w ); // IO funcs (time/file/io)
 void wr_loadStringLib( WRState* w ); // string functions
 void wr_loadMessageLib( WRState* w ); // messaging between contexts
 void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
+void wr_loadDebugLib( WRState* w ); // debuger-interact functions
 
 // arduino-specific functions, be sure to add arduino_lib.cpp to your
 // sketch. much thanks to Koepel for contributing
@@ -546,6 +568,9 @@ The "extended" types are:
                    va-> refers to the hash table object
 
 */
+
+extern WR_ALLOC g_malloc;
+extern WR_FREE g_free;
 
 //------------------------------------------------------------------------------
 #if __cplusplus <= 199711L
@@ -770,8 +795,6 @@ private:
 #endif
 
 struct WrenchPacket;
-struct WrenchSymbol;
-struct WrenchFunction;
 class WRDebugServerInterface;
 class WRDebugServerInterfacePrivate;
 class WRDebugClientInterfacePrivate;
@@ -788,7 +811,6 @@ struct WrenchSymbol
 struct WrenchFunction
 {
 	char name[64];
-	int index;
 	int arguments;
 	SimpleLL<WrenchSymbol>* vars;
 };
@@ -798,8 +820,8 @@ struct WrenchCallStackEntry
 {
 	int32_t onLine;
 
-	uint8_t fromUnit;
-	uint8_t thisUnit;
+	uint8_t fromUnitIndex;
+	uint8_t thisUnitIndex;
 	uint16_t locals;
 
 	uint8_t arguments;
@@ -839,18 +861,12 @@ public:
 
 	SimpleLL<WrenchFunction>& getFunctions(); // global is function[0] 
 
+	// 0 is global, 1,2,3... etc are frames
 	SimpleLL<WrenchCallStackEntry>* getCallstack();
-
+	
 	const char* getFunctionLabel( const int index );
-
-	// in all cases for "depth" 0 is current function, -1 is "global"
-	int getVariableCount( const int depth );
 	const char* getValueLabel( const int index, const int depth );
 	WRValue* getValue( WRValue& value, const int index, const int depth );
-
-	int getFunctionArgCount( const int depth );
-	int getFunctionIndex( const int depth );
-	int getFunctionLocalCount( const int depth );
 
 	void run( const int toLine =0 );
 
@@ -865,6 +881,7 @@ public:
 	// "hidden" internals to keep header clean
 	WRDebugClientInterfacePrivate* I;
 	~WRDebugClientInterface();
+
 	void init();
 };
 
@@ -907,11 +924,10 @@ public:
 #if !defined(ARDUINO) && (__arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__ || __GNUC__)
 #include <memory.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
-#include <cstring>
-#include <cstdlib>
 #endif
 
 #ifndef WRENCH_COMBINED
@@ -924,7 +940,7 @@ public:
 #include "cc/str.h"
 #include "cc/opcode_stream.h"
 #include "debug/wrench_debug.h"
-#include "debug/sample_client.h"
+#include "utils/debug_client.h"
 #include "cc/cc.h"
 #include "lib/std_io_defs.h"
 #endif

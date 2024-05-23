@@ -34,7 +34,7 @@ int main( int argn, char** argv )
 	if ( err == 0 )
 	{
 		wr_run( w, outBytes, outLen ); // load and run the code!
-		delete[] outBytes; // clean up 
+		free( outBytes ); // clean up 
 	}
 
 	wr_destroyState( w );
