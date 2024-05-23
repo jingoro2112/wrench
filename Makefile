@@ -6,7 +6,7 @@ PERF ?=
 #C_VER ?= -std=c++11
 C_VER ?= -std=c++98
 
-#FLAGS ?= $(OPT) $(PERF) -std=c++11
+#FLAGS ?= $(OPT) $(PERF) $(C_VER)
 FLAGS ?= $(OPT) $(PERF) -Idiscrete_src -I. $(COMPACT) $(C_VER) -MD -DWRENCH_LINUX_FILE_IO -DWRENCH_LINUX_SERIAL
 
 #FLAGS = $(OPT) -pg

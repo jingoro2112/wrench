@@ -1,3 +1,21 @@
+4.0.1 ----------------------------------------------------------------------------------
+thx to: ohordiichuk <notifications@github.com> for the following:
+- removed ALL new/delete from code except for in-place new used in the compiler. Since
+  I used templates and classes I had no choice.
+- purusant to the above, th VM uses NO new/delete at all and should be free from needing
+  stdlibc++ at all
+- added support for custom allocator at ohordiichuk's suggestion. It's set once
+  and used everywhere as a global but should get the job done:
+
+        // by default wrench uses malloc/free but if you want to use your own
+        // allocator it can be set up here
+        // NOTE: this becomes global for all wrench code!
+        typedef void* (*WR_ALLOC)(size_t size);
+        typedef void (*WR_FREE)(void* ptr);
+        void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
+
+
+
 4.0.0 ----------------------------------------------------------------------------------
 
 - !!! 'var' NOW REQUIRED to declare variables. This is to cut down on possible typos.
