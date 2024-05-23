@@ -230,7 +230,7 @@ int main( int argn, char** argv )
 	if ( err == 0 )
 	{
 		wr_run( w, outBytes, outLen ); // load and run the code!
-		delete[] outBytes; // clean up 
+		free( outBytes ); // clean up 
 	}
 
 	wr_destroyState( w );
@@ -553,6 +553,23 @@ a && b
      as well as block-comment style
 */
 </code></pre>
+
+<p><b>yielding</b>
+<p>wrench can yield and then be continued, in code the "yield()" call
+causes the VM to return in a yielded state. the argument passed to
+yield is available to the caller using
+<code>bool wr_getYieldInfo( WRContext* context, int* args =0, WRValue** firstArg =0, WRValue** returnValue =0 );</code>
+which will return true if the context is yielded, and optionally the
+argument passed. this also provides the stack location where a return
+value is expected to the code (default 0)
+<p>Later <code>WRValue* wr_continue( WRContext* context );</code> can
+be called to resume where the code left off. Additionally
+if any callFunction(...) is called on the context it will detect that
+it is yielded, and ignore parameters in favor of continuing where it
+left off.
+<p>An example of this functionality is provided in full under
+<code>/examples/multi_context.cpp</code>
+
 
 
 <p><b>arrays</b>
