@@ -5330,7 +5330,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 			defaultOffset -= currentPos;
 		}
 
-		table = new WRSwitchCase[size];
+		table = (WRSwitchCase *)g_malloc(size * sizeof(WRSwitchCase));
 		memset( table, 0, size*sizeof(WRSwitchCase) );
 
 		for( unsigned int i = 0; i<size; ++i ) // for each of the possible entries..
@@ -5371,7 +5371,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 		uint16_t mod = 1;
 		for( ; mod<0x7FFE; ++mod )
 		{
-			table = new WRSwitchCase[mod];
+			table = (WRSwitchCase *)g_malloc(mod * sizeof(WRSwitchCase));
 			memset( table, 0, sizeof(WRSwitchCase)*mod );
 
 			unsigned int c=0;
@@ -5398,7 +5398,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 			}
 			else
 			{
-				delete[] table;
+				g_free( table );
 				table = 0;
 			} 
 		}
@@ -5436,7 +5436,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 		}
 	}
 
-	delete[] table;
+	g_free( table );
 
 	setRelativeJumpTarget( m_units[m_unitTop].bytecode, *m_breakTargets.tail() );
 
@@ -5776,7 +5776,7 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	}
 	
 	*size = 2;
-	*buf = new unsigned char[ (offsets.m_mod * 5) + 4 ];
+	*buf = (unsigned char *)g_malloc( (offsets.m_mod * 5) + 4 );
 
 	wr_pack16( offsets.m_mod, *buf + *size );
 	*size += 2;
@@ -6061,7 +6061,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 
 						}
 
-						delete[] buf;
+						g_free( buf );
 					}
 
 					if ( m_units[u2].offsetOfLocalHashMap != 0 )

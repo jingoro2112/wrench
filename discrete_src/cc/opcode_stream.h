@@ -35,7 +35,7 @@ public:
 	WROpcodeStream& clear()
 	{
 		m_len = 0;
-		delete[] m_buf;
+		g_free( m_buf );
 		m_buf = 0;
 		m_bufLen = 0;
 		return *this;
@@ -65,11 +65,11 @@ public:
 		{
 			unsigned char* buf = m_buf;
 			m_bufLen = size + m_len + 16;
-			m_buf = new unsigned char[ m_bufLen ];
+			m_buf = (unsigned char *)g_malloc( m_bufLen );
 			if ( m_len )
 			{
 				memcpy( m_buf, buf, m_len );
-				delete[] buf;
+				g_free( buf );
 			}
 		}
 

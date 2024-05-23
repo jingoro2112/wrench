@@ -177,7 +177,7 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 	const char* fileName = (const char*)args->array();
 	if ( fileName )
 	{
-		WRFSFile* entry = (WRFSFile *)malloc( sizeof(WRFSFile) );
+		WRFSFile* entry = (WRFSFile *)g_malloc( sizeof(WRFSFile) );
 
 		if ( mode & LFS_READ )
 		{
@@ -193,13 +193,13 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 		}
 		else
 		{
-			free( entry );
+			g_free( entry );
 			return;
 		}
 
 		if ( !entry->file )
 		{
-			free( entry );
+			g_free( entry );
 			return;
 		}
 
@@ -237,7 +237,7 @@ void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 				prev->next = cur->next;
 			}
 			
-			free( cur );
+			g_free( cur );
 			break;
 		}
 
@@ -377,7 +377,7 @@ void wr_ioCleanupFunction( WRState* w, void* param )
 	{
 		WRFSFile* next = g_OpenFiles->next;
 		g_OpenFiles->file.close();
-		free( g_OpenFiles );
+		g_free( g_OpenFiles );
 		g_OpenFiles = next;
 	}
 }

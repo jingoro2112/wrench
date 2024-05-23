@@ -52,7 +52,7 @@ public:
 	WRstr( const char* s ) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; set(s, (unsigned int)strlen(s)); }
 	WRstr( const char c) { m_len = 1; m_str = m_smallbuf; m_smallbuf[0] = c; m_smallbuf[1] = 0; m_buflen = c_sizeofBaseString; }
 	
-	~WRstr() { if ( m_str != m_smallbuf ) delete[] m_str; }
+	~WRstr() { if ( m_str != m_smallbuf ) g_free(m_str); }
 
 	WRstr& clear() { m_len = 0; m_str[0] = 0; return *this; }
 	
@@ -73,7 +73,7 @@ public:
 
 		if ( m_str == m_smallbuf )
 		{
-			*toBuf = new char[m_len + 1];
+			*toBuf = (char*)g_malloc( m_len + 1 );
 			memcpy( *toBuf, m_str, (m_len+1) );
 		}
 		else
@@ -215,7 +215,7 @@ WRstr& WRstr::alloc( const unsigned int characters, const bool preserveContents 
 {
 	if ( characters >= m_buflen ) // only need to alloc if more space is requested than we have
 	{
-		char* newStr = new char[ characters + 1 ]; // create the space
+		char* newStr = (char*)g_malloc( characters + 1 ); // create the space
 		
 		if ( preserveContents ) 
 		{
@@ -224,7 +224,7 @@ WRstr& WRstr::alloc( const unsigned int characters, const bool preserveContents 
 		
 		if ( m_str != m_smallbuf )
 		{
-			delete[] m_str;
+			g_free( m_str );
 		}
 		
 		m_str = newStr;
@@ -316,7 +316,7 @@ WRstr& WRstr::truncate( const unsigned int newLen )
 		{
 			m_buflen = c_sizeofBaseString;
 			memcpy( m_smallbuf, m_str, newLen );
-			delete[] m_str;
+			g_free( m_str );
 			m_str = m_smallbuf;
 		}
 	}
@@ -336,34 +336,20 @@ bool WRstr::isMatch( const char* buf ) const
 //-----------------------------------------------------------------------------
 WRstr& WRstr::insert( const char* buf, const unsigned int len, const unsigned int startPos /*=0*/ )
 {
-	if ( len == 0 ) // insert 0? done
+	if ( len != 0 ) // insert 0? done
 	{
-		return *this;
-	}
+		alloc( m_len + len + startPos, true ); // make sure there is enough room for the new string
 
-	alloc( m_len + len, true ); // make sure there is enough room for the new string
-	if ( startPos >= m_len )
-	{
-		if ( buf )
-		{
-			memcpy( m_str + m_len, buf, len );
-		}
-	}
-	else
-	{
-		if ( startPos != m_len )
+		if ( startPos < m_len ) // text after the insert, move everything up
 		{
 			memmove( m_str + len + startPos, m_str + startPos, m_len );
 		}
-		
-		if ( buf )
-		{
-			memcpy( m_str + startPos, buf, len );
-		}
-	}
 
-	m_len += len;
-	m_str[m_len] = 0;
+		memcpy( m_str + startPos, buf, len );
+
+		m_len += len;
+		m_str[m_len] = 0;
+	}
 
 	return *this;
 }

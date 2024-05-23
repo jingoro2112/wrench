@@ -338,14 +338,14 @@ WrenchPacket* WRDebugClientInterfacePrivate::transmit( WrenchPacket* packet )
 			if ( m_receiveFunction( (char*)&r, sizeof(WrenchPacket)) )
 			{
 				r.xlate();
-				reply = (WrenchPacket*)malloc( r.size );
+				reply = (WrenchPacket*)g_malloc( r.size );
 				memcpy( (char*)reply, (char*)&r, sizeof(WrenchPacket) );
 				
 				if ( r.payloadSize() )
 				{
 					if ( !m_receiveFunction((char*)reply->payload(), reply->payloadSize()) )
 					{
-						free( reply );
+						g_free( reply );
 						reply = 0;
 					}
 				}
