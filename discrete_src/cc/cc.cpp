@@ -4736,7 +4736,7 @@ A:
 
 					WRstr T;
 					T.format( "foreach:%d", m_foreachHash++ );
-					g = (unsigned char)(addGlobalSpaceLoad( m_units[0].bytecode, T, true, nex.context[0].varSeen ));
+					g = (unsigned char)(addGlobalSpaceLoad(m_units[0].bytecode, T, true, true)); // #25 force "var seen" true since we are runtime adding the temporary ourselves
 
 					if ( nex.bytecode.opcodes[0] == O_LoadFromLocal )
 					{
