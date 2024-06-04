@@ -225,7 +225,7 @@ public:
 	void pop() { if ( m_elementsAllocated > 0 ) { --m_elementsAllocated; }  }
 
 	T& append() { return get( m_elementsAllocated ); }
-	T& get( const unsigned int l ) 
+	T& get( const unsigned int l )
 	{
 		if ( l >= m_elementsNewed )
 		{

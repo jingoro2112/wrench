@@ -26,6 +26,10 @@ SOFTWARE.
 #ifndef WRENCH_WITHOUT_COMPILER
 #include <assert.h>
 
+#define WR_DUMP_LINK_OUTPUT(D) //D
+#define WR_DUMP_BYTECODE(D) //D
+
+
 #define WR_COMPILER_LITERAL_STRING 0x10 
 #define KEYHOLE_OPTIMIZER
 
@@ -53,6 +57,8 @@ const char* c_reserved[] =
 	"null",
 	"struct",
 	"goto",
+	"export",
+	"unit",
 	""
 };
 
@@ -77,6 +83,7 @@ WRError WRCompilationContext::compile( const char* source,
 	m_err = WR_ERR_None;
 	m_EOF = false;
 	m_parsingFor = false;
+	m_parsingNew = false;
 	m_unitTop = 0;
 	m_foreachHash = 0;
 
@@ -119,7 +126,7 @@ WRError WRCompilationContext::compile( const char* source,
 		getSourcePosition( onLine, onChar, &line );
 
 		msg.format( "line:%d\n", onLine );
-		msg.appendFormat( "err:%d\n", m_err );
+		msg.appendFormat( "err: %s[%d]\n", c_errStrings[m_err], m_err );
 		msg.appendFormat( "%-5d %s\n", onLine, line.c_str() );
 
 		for( int i=0; i<onChar; i++ )
@@ -2076,7 +2083,7 @@ void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int p
 		return;
 	}
 
-	if ( code == m_lastCode && param == m_lastParam )
+	if ( code == m_lastCode && (uint16_t)param == m_lastParam )
 	{
 		return;
 	}
@@ -3488,7 +3495,6 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		prefix += "::";
 		prefix += functionName;
 
-
 		unsigned char buf[4];
 		wr_pack32( wr_hashStr(prefix), buf );
 
@@ -3516,15 +3522,18 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		expression.context[depth].bytecode.functionSpace[i].references.append() = getBytecodePosition( expression.context[depth].bytecode );
 		expression.context[depth].bytecode.functionSpace[i].hash = hash;
 
-		pushOpcode( expression.context[depth].bytecode, O_FUNCTION_CALL_PLACEHOLDER );
-
-		pushData( expression.context[depth].bytecode, &argsPushed, 1 );
-
-		if ( hash != wr_hashStr("yield") )
+		if ( hash == wr_hashStr("yield") )
 		{
-			pushData( expression.context[depth].bytecode, "0123", 4 ); // TBD opcode plus index, OR hash if index was not found
+			pushOpcode( expression.context[depth].bytecode, O_Yield );
+			pushData( expression.context[depth].bytecode, &argsPushed, 1 );
 		}
-
+		else
+		{
+			pushOpcode( expression.context[depth].bytecode, O_FUNCTION_CALL_PLACEHOLDER );
+			pushData( expression.context[depth].bytecode, &argsPushed, 1 );
+			pushData( expression.context[depth].bytecode, "XXXX", 4 ); // TBD opcode plus index, OR hash if index was not found
+		}
+		
 		// hash will copydown result same as lib, unless
 		// copy/pop which case does nothing
 
@@ -3544,6 +3553,9 @@ bool WRCompilationContext::pushObjectTable( WRExpressionContext& context,
 	WRstr& token2 = context.token;
 	WRValue& value2 = context.value;
 
+	bool byHash = false;
+	bool byOrder = false;
+	
 	unsigned int i=0;
 	for( ; i<context.bytecode.unitObjectSpace.count(); ++i )
 	{
@@ -3570,13 +3582,45 @@ bool WRCompilationContext::pushObjectTable( WRExpressionContext& context,
 			WRExpression nex( localSpace, context.bytecode.isStructSpace );
 			nex.context[0].token = token2;
 			nex.context[0].value = value2;
+
+			m_parsingNew = true;
+
+			bool v = m_needVar;
+			m_needVar = false;
 			char end = parseExpression( nex );
+			m_needVar = v;
+
+			m_parsingNew = false;
 
 			if ( nex.bytecode.all.size() )
 			{
 				appendBytecode( context.bytecode, nex.bytecode );
-				pushOpcode( context.bytecode, O_AssignToObjectTableByOffset );
-				pushData( context.bytecode, &offset, 1 );
+
+				if ( m_newHashValue )
+				{
+					if ( byOrder )
+					{
+						m_err = WR_ERR_new_assign_by_label_or_offset_not_both;
+						return false;
+					}
+					byHash = true;
+					
+					pushOpcode( context.bytecode, O_AssignToObjectTableByHash );
+					uint8_t dat[4];
+					pushData( context.bytecode, wr_pack32(m_newHashValue, dat), 4 );
+				}
+				else
+				{
+					if ( byHash )
+					{
+						m_err = WR_ERR_new_assign_by_label_or_offset_not_both;
+						return false;
+					}
+					byOrder = true;
+
+					pushOpcode( context.bytecode, O_AssignToObjectTableByOffset );
+					pushData( context.bytecode, &offset, 1 );
+				}
 			}
 
 			++offset;
@@ -3601,6 +3645,8 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 {
 	int depth = 0;
 	char end = 0;
+
+	m_newHashValue = 0;
 
 	for(;;)
 	{
@@ -4264,12 +4310,26 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			}
 
 			WRstr label = token;
+
 			if ( depth == 0 && !m_parsingFor )
 			{
 				if ( !getToken(expression.context[depth]) )
 				{
 					m_err = WR_ERR_unexpected_EOF;
 					return 0;
+				}
+
+				if ( m_parsingNew )
+				{
+					if ( token == "=" )
+					{
+						m_newHashValue = wr_hashStr( label );
+
+						continue;
+//						getToken(expression.context[depth]) );
+//						--depth;
+						
+					}
 				}
 				
 				if ( !m_quoted && token == ":" )
@@ -4395,6 +4455,8 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 		return false;
 	}
 
+	m_units[m_unitTop].exportNamespace = m_exportNextUnit;
+	m_exportNextUnit = false;
 	m_units[m_unitTop].name = token;
 	m_units[m_unitTop].hash = wr_hash( token, token.size() );
 	m_units[m_unitTop].bytecode.isStructSpace = isStruct;
@@ -5528,6 +5590,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 	WRExpressionContext ex;
 	returnCalled = false;
 	bool varSeen = false;
+	m_exportNextUnit = false;
 
 	for(;;)
 	{
@@ -5550,6 +5613,15 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 			break;
 		}
 
+		if ( m_exportNextUnit
+			 && token != "function"
+			 && token != "struct"
+			 && token != "unit" )
+		{
+			m_err = WR_ERR_unexpected_export_keyword;
+			break;
+		}
+		
 		if ( !m_quoted && token == "{" )
 		{
 			return parseStatement( unitIndex, '}', returnCalled, opcodeToReturn );
@@ -5602,7 +5674,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 		}
-		else if ( !m_quoted && token == "function" )
+		else if ( !m_quoted && (token == "function" || token == "unit") )
 		{
 			if ( unitIndex != 0 )
 			{
@@ -5642,6 +5714,11 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 			{
 				return false;
 			}
+		}
+		else if ( !m_quoted && token == "export" )
+		{
+			m_exportNextUnit = true;
+			continue;
 		}
 		else if ( !m_quoted && token == "switch" )
 		{
@@ -5778,6 +5855,9 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	*size = 2;
 	*buf = (unsigned char *)g_malloc( (offsets.m_mod * 5) + 4 );
 
+	(*buf)[0] = (unsigned char)(unit.bytecode.localSpace.count() - unit.arguments);
+	(*buf)[1] = unit.arguments;
+
 	wr_pack16( offsets.m_mod, *buf + *size );
 	*size += 2;
 
@@ -5890,11 +5970,20 @@ bool WRCompilationContext::readCurlyBlock( WRstr& block )
 	return true;
 }
 
+struct NamespacePush
+{
+	int unit;
+	int location;
+	NamespacePush* next;
+};
+
 //------------------------------------------------------------------------------
 void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t compilerOptionFlags )
 {
 	WROpcodeStream code;
 
+	NamespacePush *namespaceLookups = 0;
+	
 	code += (unsigned char)(m_units.count() - 1); // function count (for VM allocation)
 	code += (unsigned char)(m_units[0].bytecode.localSpace.count()); // globals count (for VM allocation)
 	code += (unsigned char)compilerOptionFlags;
@@ -5950,6 +6039,27 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 		code.append( wr_pack32(m_sourceLen, data), 4 );
 		code.append( (uint8_t*)m_source, m_sourceLen );
 	}
+
+	// export any explicitly marked for export or are referred to by a 'new'
+	for( unsigned int ux=0; ux<m_units.count(); ++ux )
+	{
+		for( unsigned int f=0; f<m_units[ux].bytecode.unitObjectSpace.count(); ++f )
+		{
+			WRNamespaceLookup& N = m_units[ux].bytecode.unitObjectSpace[f];
+
+			for( unsigned int r=0; r<N.references.count(); ++r )
+			{
+				for( unsigned int u2 = 1; u2<m_units.count(); ++u2 )
+				{
+					if ( m_units[u2].hash == N.hash )
+					{
+						m_units[u2].exportNamespace = true;
+						break;
+					}
+				}
+			}
+		}
+	}
 	
 	// register the function signatures
 	for( unsigned int u=1; u<m_units.count(); ++u )
@@ -5970,20 +6080,54 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 		code.append( data, 2 ); // placeholder, it doesn't matter
 
 		code += O_RegisterFunction;
+
+		if ( m_units[u].exportNamespace )
+		{
+			int size = 0;
+			unsigned char* map = 0;
+			createLocalHashMap( m_units[u], &map, &size );
+			m_units[u].localNamespaceMap.giveOwnership( (char*)map, size );
+		}
 	}
 
-	WRstr str;
-//	wr_asciiDump( code.p_str(), code.size(), str );
-//	printf( "header:\n%d:\n%s\n", code.size(), str.c_str() );
-
+	WR_DUMP_LINK_OUTPUT(WRstr str);
+	WR_DUMP_LINK_OUTPUT(printf("header funcs[%d] locals[%d] flags[0x%02X]:\n%s\n",
+							   (unsigned char)(m_units.count() - 1),
+							   (unsigned char)(m_units[0].bytecode.localSpace.count()),
+							   (unsigned char)compilerOptionFlags, wr_asciiDump( code.p_str(), code.size(), str )));
+	
 	// append all the unit code
 	for( unsigned int u=0; u<m_units.count(); ++u )
 	{
+		uint16_t base = code.size();
+
 		if ( u > 0 ) // for the non-zero unit fill location into the jump table
 		{
-			int16_t offset = code.size();
-			wr_pack16( offset, code.p_str(m_units[u].offsetInBytecode) );
+			wr_pack16( base, code.p_str(m_units[u].offsetInBytecode) );
+			base = m_units[u].localNamespaceMap.size();
+
+
+			if ( base == 0 )
+			{
+				data[0] = 0xFF;
+				code.append( data, 1 );
+			}
+			else
+			{
+				wr_pack16( base, data );
+				code.append( data, 2 );
+			}
+
+			if ( m_units[u].localNamespaceMap.size() )
+			{
+				m_units[u].offsetOfLocalHashMap = code.size();
+				code.append( (uint8_t*)m_units[u].localNamespaceMap.c_str(), m_units[u].localNamespaceMap.size() );
+				
+				WR_DUMP_LINK_OUTPUT(printf("<new> namespace\n%s\n", wr_asciiDump(m_units[u].localNamespaceMap.c_str(), m_units[u].localNamespaceMap.size(), str)));
+			}
 		}
+
+		base = code.size();
 
 		// fill in relative jumps for the gotos
 		for( unsigned int g=0; g<m_units[u].bytecode.gotoSource.count(); ++g )
@@ -6017,18 +6161,13 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 			}
 		}
 
-		int base = code.size();
-
-//		wr_asciiDump( m_units[u].bytecode.all, m_units[u].bytecode.all.size(), str );
-//		printf( "Adding Unit %d\n%s\n", u, str.c_str() );
+		WR_DUMP_LINK_OUTPUT(printf("Adding Unit %d [%d]\n%s", u, m_units[u].bytecode.all.size(), wr_asciiDump(m_units[u].bytecode.all, m_units[u].bytecode.all.size(), str)));
 
 		code.append( m_units[u].bytecode.all, m_units[u].bytecode.all.size() );
 
-//		wr_asciiDump( code.p_str(), code.size(), str );
-//		printf( "now\n%s\n", str.c_str() );
+		WR_DUMP_LINK_OUTPUT(printf("->\n%s\n", wr_asciiDump( code.p_str(), code.size(), str )));
 
-
-		// load new's
+		// populate 'new' vectors
 		for( unsigned int f=0; f<m_units[u].bytecode.unitObjectSpace.count(); ++f )
 		{
 			WRNamespaceLookup& N = m_units[u].bytecode.unitObjectSpace[f];
@@ -6037,41 +6176,16 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 			{
 				for( unsigned int u2 = 1; u2<m_units.count(); ++u2 )
 				{
-					if ( m_units[u2].hash != N.hash )
+					if ( m_units[u2].hash == N.hash )
 					{
-						continue;
+						NamespacePush *n = (NamespacePush *)g_malloc(sizeof(NamespacePush));
+						n->next = namespaceLookups;
+						namespaceLookups = n;
+						n->unit = u2;
+						n->location = base + N.references[r];
+						
+						break;
 					}
-
-					if ( m_units[u2].offsetOfLocalHashMap == 0 )
-					{
-						int size;
-						unsigned char* buf = 0;
-
-						createLocalHashMap( m_units[u2], &buf, &size );
-
-						if ( size )
-						{
-							buf[0] = (unsigned char)(m_units[u2].bytecode.localSpace.count() - m_units[u2].arguments); // number of entries
-							buf[1] = m_units[u2].arguments;
-							m_units[u2].offsetOfLocalHashMap = code.size();
-							code.append( buf, size );
-
-//							wr_asciiDump( buf, size, str );
-//							printf( "Adding\n%s\n", str.c_str() );
-
-						}
-
-						g_free( buf );
-					}
-
-					if ( m_units[u2].offsetOfLocalHashMap != 0 )
-					{
-						int index = base + N.references[r];
-
-						wr_pack16( m_units[u2].offsetOfLocalHashMap, code.p_str(index) );
-					}
-
-					break;
 				}
 			}
 		}
@@ -6080,6 +6194,8 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 		for( unsigned int x=0; x<m_units[u].bytecode.functionSpace.count(); ++x )
 		{
 			WRNamespaceLookup& N = m_units[u].bytecode.functionSpace[x];
+
+			WR_DUMP_LINK_OUTPUT(printf("function[%d] fixup before:\n%s\n", x, wr_asciiDump(code, code.size(), str)));
 
 			for( unsigned int r=0; r<N.references.count(); ++r )
 			{
@@ -6140,11 +6256,24 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 					}
 				}
 			}
+
+			WR_DUMP_LINK_OUTPUT(printf("function[%d] fixup after:\n%s\n", x, wr_asciiDump(code, code.size(), str)));
 		}
+	}
+
+	// plug in namespace lookups
+	while( namespaceLookups )
+	{
+		wr_pack16( m_units[namespaceLookups->unit].offsetOfLocalHashMap, code.p_str(namespaceLookups->location) );
+		NamespacePush* next = namespaceLookups->next;
+		g_free( namespaceLookups );
+		namespaceLookups = next;
 	}
 
 	// append a CRC
 	code.append( wr_pack32(wr_hash(code, code.size()), data), 4 );
+
+	WR_DUMP_BYTECODE(printf("bytecode [%d]:\n%s\n", code.size(), wr_asciiDump(code, code.size(), str)));
 
 	if ( !m_err )
 	{

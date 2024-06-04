@@ -279,7 +279,7 @@ int16_t READ_16_FROM_PC_func( const unsigned char* P )
 #endif
 
 //------------------------------------------------------------------------------
-WRValue* wr_continueFunction( WRContext* context )
+WRValue* wr_continue( WRContext* context )
 {
 	return context->yield_pc ? wr_callFunction( context, (WRFunction*)0, context->yield_argv, context->yield_argn ) : 0;
 }
@@ -307,6 +307,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 		&&NewObjectTable,
 		&&AssignToObjectTableByOffset,
+		&&AssignToObjectTableByHash,
 
 		&&AssignToHashTableAndPop,
 		&&Remove,
@@ -601,19 +602,24 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		const unsigned char *hashLoc;
 		uint32_t hashLocInt;
 	};
+
+	union
+	{
+		WRValue* register1;
+		WRContext* import;
+	};
+	register1 = 0;
 	
-	WRValue* register1 = 0;
 	WRValue* frameBase = 0;
 	WRState* w = context->w;
-	WRValue* stackTop = w->stack;
-	const unsigned char* bottom = context->bottom;
+	const unsigned char* table = 0;
+	
 	WRValue* globalSpace = (WRValue *)(context + 1);
 
 	union
 	{
 		// never used at the same time..save RAM!
 		WRValue* register2;
-		uint32_t sizeCheck;
 		int args;
 		uint32_t hash;
 		WRVoidFunc* voidFunc;
@@ -636,20 +642,34 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	w->err = WR_ERR_None;
 
+	WRValue* stackBase;
+	WRValue* stackTop;
 	if ( context->yield_pc )
 	{
 		pc = context->yield_pc;
 		context->yield_pc = 0;
 
-		--context->yieldArgs;
-		stackTop = context->yield_stackTop - context->yieldArgs;
-		*(stackTop - 1) = *(stackTop + context->yieldArgs);
-
+		w->stackOffset -= context->yieldStackOffset;
+		stackBase = w->stack + w->stackOffset;
+		stackTop = context->yield_stackTop;
+		
+		if ( context->yieldArgs )
+		{
+			register0 = stackTop;
+			*(stackTop -= context->yieldArgs) = *register0;
+		}
+		++stackTop;
+	
 		frameBase = context->yield_frameBase;
 		
 		goto yieldContinue;
 	}
-	
+	else
+	{
+		stackBase = w->stack + w->stackOffset;
+		stackTop = stackBase;
+	}
+
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 	if ( context->debugInterface && function )
 	{
@@ -706,8 +726,20 @@ yieldContinue:
 
 				localFunctions->hash = (stackTop + 1)->i;
 
-				localFunctions->offset = bottom + (stackTop + 2)->i;
+				localFunctions->namespaceHashOffset = context->bottom + (stackTop + 2)->i; // location of the size vector
 
+				if ( *(uint8_t*)localFunctions->namespaceHashOffset == 0xFF )
+				{
+					localFunctions->offset = localFunctions->namespaceHashOffset + 1; // code starts pas the map + size
+					localFunctions->namespaceHashOffset = 0;
+				}
+				else
+				{
+					uint16_t size = READ_16_FROM_PC( localFunctions->namespaceHashOffset ); // how large is the namespace map?
+					localFunctions->offset = localFunctions->namespaceHashOffset + size + 2; // code starts pas the map + size
+					localFunctions->namespaceHashOffset += 2;
+				}
+				
 				localFunctions->frameBaseAdjustment = 1
 													  + localFunctions->frameSpaceNeeded
 													  + localFunctions->arguments;
@@ -792,9 +824,12 @@ literalZero:
 				// can pick up where it left off on continue
 				context->yieldArgs = READ_8_FROM_PC(pc++);
 				context->yield_pc = pc;
+
+				context->yieldStackOffset = (stackTop - stackBase) + 1; // mark off the stack that we're using
+				w->stackOffset += context->yieldStackOffset;
+				
 				context->yield_stackTop = stackTop;
-				context->yield_stackTop->p = 0;
-				context->yield_stackTop->p2 = INIT_AS_INT; // init return value
+				context->yield_stackTop->init();
 				context->yield_frameBase = frameBase;
 				context->yield_argv = argv;
 				context->yield_argn = argn;
@@ -834,17 +869,71 @@ debugContinue:
 				register0->p = 0;
 				register0->p2 = INIT_AS_INT;
 
-				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb) )
+				uint32_t fhash = READ_32_FROM_PC(pc);
+				pc += 4;
+				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(fhash))->ccb) )
 				{
-					w->err = WR_ERR_function_hash_signature_not_found;
+					if ( (import = context->imported) ) // check imported code
+					{
+						while( import != context )
+						{
+							WRValue* I;
+							if ( (I = import->registry.exists(fhash, false)) )
+							{
+								// fool the caller into thinking it has the base of the stack, and then recurse into it,
+								// this is because the alternate context has all the alternate globals/locals
+								uint8_t offset = (stackTop - stackBase);
+								w->stackOffset += offset;
+								wr_callFunction( import, I->wrf, stackTop - args, args );
+								w->stackOffset -= offset;
+								register0 = stackTop;
+
+								if ( *pc == O_NewObjectTable )
+								{
+									if ( ! (table = I->wrf->namespaceHashOffset) )
+									{
+										w->err = WR_ERR_struct_not_exported;
+										return 0;
+									}
+									
+									// so this was in service of a new
+									// ObjectTable. no problemo, find
+									// the actual table location and
+									// use it
+
+									if ( args ) // fix up the return value
+									{
+										stackTop -= (args - 1);
+										*(stackTop - 1) = *register0;
+									}
+									else
+									{
+										++stackTop;
+									}
+									
+									pc += 3;
+									goto NewObjectTablePastLoad;
+								}
+								
+								goto CallFunctionByHash_continue;
+							}
+
+							import = import->imported;
+						}
+					}
+
+					w->err = WR_ERR_function_not_found;
 					return 0;
 				}
-
-				register1->ccb( context, stackTop - args, args, *stackTop, register1->usr );
+				else
+				{
+					register1->ccb( context, stackTop - args, args, *stackTop, register1->usr );
+				}
 
 				// DO care about return value, which will be at the top
 				// of the stack
-
+CallFunctionByHash_continue:
+				
 				if ( args )
 				{
 					stackTop -= (args - 1);
@@ -854,7 +943,6 @@ debugContinue:
 				{
 					++stackTop;
 				}
-				pc += 4;
 				CONTINUE;
 			}
 
@@ -862,16 +950,38 @@ debugContinue:
 			{
 				args = READ_8_FROM_PC(pc++);
 
-				if ( !((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb) )
+				uint32_t fhash = READ_32_FROM_PC(pc);
+				pc += 4;
+				if ( !((register1 = w->globalRegistry.getAsRawValueHashTable(fhash))->ccb) )
 				{
-					w->err = WR_ERR_function_hash_signature_not_found;
+					// is in an imported context
+					if ( (import = context->imported) )
+					{
+						while( import != context )
+						{
+							if ( (register0 = import->registry.exists(fhash, false)) )
+							{
+								uint8_t offset = (stackTop - stackBase);
+								w->stackOffset += offset;
+								wr_callFunction( import, register0->wrf, stackTop - args, args );
+								w->stackOffset -= offset;
+								goto CallFunctionByHashAndPop_continue;
+							}
+
+							import = import->imported;
+						}
+					}
+
+					w->err = WR_ERR_function_not_found;
 					return 0;
 				}
+				else
+				{
+					register1->ccb( context, stackTop - args, args, *stackTop, register1->usr );
+				}
 
-				register1->ccb( context, stackTop - args, args, *stackTop, register1->usr );
-
+CallFunctionByHashAndPop_continue:
 				stackTop -= args;
-				pc += 4;
 				CONTINUE;
 			}
 
@@ -917,14 +1027,14 @@ callFunction:
 				// temp value contains return vector/frame base
 				register0 = stackTop++; // return vector
 				register0->frame = frameBase;
-				register0->returnOffset = pc - bottom; // can't use "pc" because it might set the "gc me" bit, this is guaranteed to be small enough
+				register0->returnOffset = pc - context->bottom; // can't use "pc" because it might set the "gc me" bit, this is guaranteed to be small enough
 
 				pc = function->offset;
 
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - function->frameBaseAdjustment;
 
-				assert( stackTop < (w->stack + w->stackSize) );
+				assert( stackTop < (stackBase + w->stackSize) );
 
 				CONTINUE;
 			}
@@ -944,11 +1054,12 @@ callFunction:
 
 				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb) )
 				{
-					w->err = WR_ERR_function_hash_signature_not_found;
+					w->err = WR_ERR_lib_function_not_found;
 					return 0;
 				}
 
 				register1->lcb( stackTop, args, context );
+				
 				pc += 4;
 
 #ifdef WRENCH_COMPACT
@@ -967,6 +1078,10 @@ callFunction:
 					++stackTop;
 				}
 #endif
+				if ( w->err )
+				{
+					return 0;
+				}
 
 				CONTINUE;
 			}
@@ -977,7 +1092,7 @@ callFunction:
 
 				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb) )
 				{
-					w->err = WR_ERR_function_hash_signature_not_found;
+					w->err = WR_ERR_lib_function_not_found;
 					return 0;
 				}
 
@@ -985,25 +1100,30 @@ callFunction:
 				pc += 4;
 
 				stackTop -= args;
-				
+
+				if ( w->err )
+				{
+					return 0;
+				}
+
 				CONTINUE;
 			}
 
 			CASE(NewObjectTable):
 			{
-				const unsigned char* table = bottom + READ_16_FROM_PC(pc);
+				table = context->bottom + READ_16_FROM_PC(pc);
 				pc += 2;
 
-				if ( table > bottom )
+				if ( table > context->bottom )
 				{
+NewObjectTablePastLoad:
 					// if unit was called with no arguments from global
-					// level there are no "g_free" stack entries to
+					// level there are no "free" stack entries to
 					// gnab, so create it here, but preserve the
 					// first value
 
 					// NOTE: we are guaranteed to have at least one
 					// value if table > bottom
-
 					unsigned char count = READ_8_FROM_PC(table++);
 
 					register1 = (stackTop + READ_8_FROM_PC(table))->r;
@@ -1040,14 +1160,38 @@ callFunction:
 				CONTINUE;
 			}
 
+			CASE(AssignToObjectTableByHash):
+			{
+				hash = READ_32_FROM_PC(pc);
+				pc += 4;
+
+				register1 = --stackTop;
+				register0 = stackTop - 1;
+
+				const unsigned char* table = register0->va->m_ROMHashTable + ((hash % register0->va->m_mod) * 5);
+				
+				if ( (uint32_t)READ_32_FROM_PC(table) == hash )
+				{
+					register2 = (((WRValue*)(register0->va->m_data)) + READ_8_FROM_PC(table + 4));
+					wr_assign[register2->type<<2|register1->type]( register2, register1 );
+				}
+				else
+				{
+					w->err = WR_ERR_hash_not_found;
+					return 0;
+				}
+				
+				CONTINUE;
+			}
+			
 			CASE(AssignToObjectTableByOffset):
 			{
 				register1 = --stackTop;
 				register0 = (stackTop - 1);
-				sizeCheck = READ_8_FROM_PC(pc++);
-				if ( IS_EXARRAY_TYPE(register0->xtype) && (sizeCheck < register0->va->m_size) )
+				hash = READ_8_FROM_PC(pc++);
+				if ( IS_EXARRAY_TYPE(register0->xtype) && (hash < register0->va->m_size) )
 				{
-					register0 = register0->va->m_Vdata + sizeCheck;
+					register0 = register0->va->m_Vdata + hash;
 #ifdef WRENCH_COMPACT
 					goto doAssignToLocalAndPop;
 #else
@@ -1102,10 +1246,9 @@ callFunction:
 			{
 				register0 = stackTop - 2;
 
-				pc = bottom + register0->returnOffset; // grab return PC
+				pc = context->bottom + register0->returnOffset; // grab return PC
 
 				stackTop = frameBase;
-				
 				frameBase = register0->frame;
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
@@ -1137,12 +1280,12 @@ callFunction:
 			
 			CASE(GlobalStop):
 			{
-				register0 = w->stack - 1;
+				register0 = stackBase - 1;
 				++pc;
 			}			
 			CASE(Stop):
 			{
-				*w->stack = *(register0 + 1);
+				*stackBase = *(register0 + 1);
 				context->stopLocation = pc - 1;
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 				if ( context->debugInterface )
@@ -1150,7 +1293,7 @@ callFunction:
 					context->debugInterface->I->codewordEncountered( pc, WRD_FunctionCall | WRD_GlobalStopFunction, stackTop );
 				}
 #endif
-				return &(w->stack)->deref();
+				return &(stackBase)->deref();
 			}
 
 			CASE(Dereference):

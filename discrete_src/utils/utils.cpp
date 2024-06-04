@@ -3,7 +3,7 @@ Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, g_free of charge, to any person obtaining a copy
+Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -31,6 +31,18 @@ void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree )
 {
 	g_malloc = wralloc;
 	g_free = wrfree;
+}
+
+//------------------------------------------------------------------------------
+void* wr_malloc( size_t size )
+{
+	return g_malloc( size );
+}
+
+//------------------------------------------------------------------------------
+void wr_free( void* ptr )
+{
+	g_free( ptr );
 }
 
 //------------------------------------------------------------------------------
@@ -115,15 +127,15 @@ WRValue* WrenchValue::asArrayMember( const int index )
 //------------------------------------------------------------------------------
 WRState* wr_newState( int stackSize )
 {
-	WRState* state = (WRState *)g_malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
-	memset( (unsigned char*)state, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
+	WRState* w = (WRState *)g_malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
+	memset( (unsigned char*)w, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
 
-	state->stackSize = stackSize;
-	state->stack = (WRValue *)((unsigned char *)state + sizeof(WRState));
+	w->stackSize = stackSize;
+	w->stack = (WRValue *)((unsigned char *)w + sizeof(WRState));
 
-	state->globalRegistry.init( 0, SV_VOID_HASH_TABLE, false );
+	w->globalRegistry.init( 0, SV_VOID_HASH_TABLE, false );
 
-	return state;
+	return w;
 }
 
 //------------------------------------------------------------------------------
@@ -186,7 +198,7 @@ bool wr_executeFunctionZero( WRContext* context )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_newContext( WRState* w, const unsigned char* block, const int blockSize )
+WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership )
 {
 	// CRC the code block, at least is it what the compiler intended?
 	uint32_t hash = READ_32_FROM_PC( block + (blockSize - 4) );
@@ -200,34 +212,33 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 	int needed = sizeof(WRContext) // class
 				 + funcs * sizeof(WRFunction) // local functions
 				 + READ_8_FROM_PC(block+1) * sizeof(WRValue);  // globals
-				 
-	WRContext* C = (WRContext *)g_malloc( needed );
 
+	WRContext* C = (WRContext *)g_malloc( needed );
 	memset((char*)C, 0, needed);
 
+	C->numLocalFunctions = funcs;
+	
 	C->globals = READ_8_FROM_PC(block + 1);
 
 	C->allocatedMemoryLimit = WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT;
+
+	C->flags |= takeOwnership ? WRC_OwnsMemory : 0;
 	
 	C->w = w;
 
-	C->yield_pc = 0;
-
 	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + C->globals * sizeof(WRValue));
 
-	C->registry.init( 0, SV_VOID_HASH_TABLE, false );
-	C->registry.m_vNext = w->contextList;
 	C->bottom = block;
 	C->codeStart = block + 3;
 	C->bottomSize = blockSize;
 
 	uint8_t compilerFlags = READ_8_FROM_PC( block + 2 );
-	
+
 	if ( compilerFlags & WR_INCLUDE_GLOBALS )
 	{
 		C->codeStart += C->globals * sizeof(uint32_t); // these are lazily loaded, just skip over them for now
 	}
-	
+
 	if ( (compilerFlags & WR_EMBED_DEBUG_CODE) || (compilerFlags & WR_EMBED_SOURCE_CODE) )
 	{
 		uint16_t symbolsSize = READ_16_FROM_PC( C->codeStart + 4 );
@@ -239,7 +250,49 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 		C->codeStart += 4 + READ_32_FROM_PC( C->codeStart );		
 	}
 
-	return (w->contextList = C);
+	C->registry.init( 0, SV_VOID_HASH_TABLE, false );
+
+	return C;
+}
+
+//------------------------------------------------------------------------------
+WRContext* wr_import( WRContext* context, const unsigned char* block, const int blockSize, bool takeOwnership )
+{
+	WRContext* import = wr_createContext( context->w, block, blockSize, takeOwnership );
+	if ( !import )
+	{
+		return 0;
+	}
+
+	if ( !wr_callFunction(import, (int32_t)0) )
+	{ 
+		// imported context may not yield
+		wr_destroyContext( context );
+		return 0;
+	}
+
+	import->imported = context->imported;
+	context->imported = import;
+
+	// make this a circular linked list
+	if ( import->imported == 0 )
+	{
+		import->imported = context;
+	}
+
+	return import;
+}
+
+//------------------------------------------------------------------------------
+WRContext* wr_newContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership )
+{
+	WRContext* C = wr_createContext( w, block, blockSize, takeOwnership );
+	if ( C )
+	{
+		C->registry.m_vNext = w->contextList;
+		w->contextList = C;
+	}
+	return C;
 }
 
 //------------------------------------------------------------------------------
@@ -256,9 +309,9 @@ WRValue* wr_executeContext( WRContext* context )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
+WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership )
 {
-	WRContext* context = wr_newContext( w, block, blockSize );
+	WRContext* context = wr_newContext( w, block, blockSize, takeOwnership );
 
 	if ( !context )
 	{
@@ -275,6 +328,24 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 	}
 		
 	return context;
+}
+
+//------------------------------------------------------------------------------
+void wr_destroyContextEx( WRContext* context )
+{
+	// g_free all memory allocations by forcing the gc to collect everything
+	context->globals = 0;
+	context->allocatedMemoryHint = context->allocatedMemoryLimit;
+	context->gc( 0 );
+
+	context->registry.clear();
+
+	if ( context->flags & WRC_OwnsMemory )
+	{
+		g_free( (void*)(context->bottom) );
+	}
+
+	g_free( context );
 }
 
 //------------------------------------------------------------------------------
@@ -301,17 +372,19 @@ void wr_destroyContext( WRContext* context )
 				context->w->contextList = (WRContext*)context->w->contextList->registry.m_vNext;
 			}
 
-			// g_free all memory allocations by forcing the gc to collect everything
-			context->globals = 0;
-			context->allocatedMemoryHint = context->allocatedMemoryLimit;
-			context->gc( 0 );
+			while( context->imported )
+			{
+				WRContext* next = context->imported->imported;
+				wr_destroyContextEx( context->imported );
 
-			context->registry.clear();
+				context->imported = next == context ? 0 : next; // the list is circular, stop here!
+			}
 
-			g_free( context );
+			wr_destroyContextEx( context );
 
 			break;
 		}
+
 		prev = c;
 	}
 }
@@ -671,7 +744,8 @@ WRValue* wr_returnValueFromLastCall( WRState* w )
 //------------------------------------------------------------------------------
 WRFunction* wr_getFunction( WRContext* context, const char* functionName )
 {
-	return context->registry.getAsRawValueHashTable(wr_hashStr(functionName))->wrf;
+	WRValue* f = context->registry.exists(wr_hashStr(functionName), false);
+	return f ? f->wrf : 0;
 }
 
 //------------------------------------------------------------------------------
@@ -776,44 +850,6 @@ void wr_destroyContainer( WRValue* val )
 #ifndef WRENCH_WITHOUT_COMPILER
 
 //------------------------------------------------------------------------------
-const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte )
-{
-	const unsigned char* data = (char unsigned *)d;
-	str.clear();
-	for( unsigned int i=0; i<len; i++ )
-	{
-		str.appendFormat( "0x%08X: ", i );
-		char dump[24];
-		unsigned int j;
-		for( j=0; j<16 && i<len; j++, i++ )
-		{
-			dump[j] = isgraph((unsigned char)data[i]) ? data[i] : '.';
-			dump[j+1] = 0;
-			if ( i == (unsigned int)markByte )
-			{
-				str.shave(1);
-				str.appendFormat( "[%02X]", (unsigned char)data[i] );
-			}
-			else
-			{
-				str.appendFormat( "%02X ", (unsigned char)data[i] );
-			}
-		}
-
-		for( ; j<16; j++ )
-		{
-			str.appendFormat( "   " );
-		}
-		i--;
-		str += ": ";
-		str += dump;
-		str += "\n";
-	}
-
-	return str;
-}
-
-//------------------------------------------------------------------------------
 const char* c_opcodeName[] = 
 {
 	"RegisterFunction",
@@ -833,6 +869,7 @@ const char* c_opcodeName[] =
 
 	"NewObjectTable",
 	"AssignToObjectTableByOffset",
+	"AssignToObjectTableByHash",
 
 	"AssignToHashTableAndPop",
 	"Remove",
@@ -1123,9 +1160,11 @@ const char* c_errStrings[]=
 	"WR_ERR_None",
 
 	"WR_YIELDED",
-
+	
 	"WR_ERR_compiler_not_loaded",
-	"WR_ERR_function_hash_signature_not_found",
+	"WR_ERR_function_not_found",
+	"WR_ERR_lib_function_not_found",
+	"WR_ERR_hash_not_found",
 	"WR_ERR_library_constant_not_loaded",
 	"WR_ERR_unknown_opcode",
 	"WR_ERR_unexpected_EOF",
@@ -1144,17 +1183,15 @@ const char* c_errStrings[]=
 	"WR_ERR_constant_redefined",
 	"WR_ERR_struct_in_struct",
 	"WR_ERR_var_not_seen_before_label",
+	"WR_ERR_unexpected_export_keyword",
+	"WR_ERR_new_assign_by_label_or_offset_not_both",
+	"WR_ERR_struct_not_exported",
 
 	"WR_ERR_run_must_be_called_by_itself_first",
 	"WR_ERR_hash_table_size_exceeded",
 	"WR_ERR_wrench_function_not_found",
 	"WR_ERR_array_must_be_indexed",
 	"WR_ERR_context_not_found",
-
-	"WR_ERR_usr_data_template_already_exists",
-	"WR_ERR_usr_data_already_exists",
-	"WR_ERR_usr_data_template_not_found",
-	"WR_ERR_usr_data_refernce_not_found",
 
 	"WR_ERR_bad_goto_label",
 	"WR_ERR_bad_goto_location",
@@ -1169,6 +1206,8 @@ const char* c_errStrings[]=
 	"WR_ERR_bad_bytecode_CRC",
 
 	"WR_ERR_execute_function_zero_called_more_than_once",
+
+	"WR_ERR_USER_err_out_of_range",
 
 	"WR_warning_enums_follow",
 

@@ -28,7 +28,7 @@ SOFTWARE.
 // returns : 0 - function  does not exist
 //         : 1 - function is native (callback)
 //         : 2 - function is in wrench (was in source code)
-void wr_function( WRValue* stackTop, const int argn, WRContext* c )
+void wr_isFunction( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
 
@@ -52,7 +52,66 @@ void wr_function( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
+void wr_importByteCode( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	if ( argn > 0 )
+	{
+		unsigned int len;
+		char* data = (char *)((stackTop - argn)->array( &len, SV_CHAR ));
+		if ( data )
+		{
+			uint8_t* import = (uint8_t*)g_malloc( len );
+			memcpy( (char*)import, data, len );
+			wr_import( c, import, len, true );
+		}
+		else
+		{
+			stackTop->i = -1;
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_importCompile( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	if ( argn > 0 )
+	{
+		unsigned int len;
+		char* data = (char *)((stackTop - argn)->array( &len, SV_CHAR ));
+		if ( data )
+		{
+			unsigned char* out;
+			int outlen;
+			if ( (stackTop->i = wr_compile(data, len, &out, &outlen)) == WR_ERR_None )
+			{
+				wr_import( c, out, outlen, true );
+			}
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_halt( WRValue* stackTop, const int argn, WRContext* c )
+{
+	if ( argn > 0 )
+	{
+		unsigned int e = (stackTop - argn)->asInt();
+		c->w->err = (e <= (unsigned int)WR_USER || e > (unsigned int)WR_ERR_LAST)
+					? WR_ERR_USER_err_out_of_range : e;
+	}
+}
+
+//------------------------------------------------------------------------------
 void wr_loadSysLib( WRState* w )
 {
-	wr_registerLibraryFunction( w, "sys::function", wr_function );
+	wr_registerLibraryFunction( w, "sys::isFunction", wr_isFunction );
+	wr_registerLibraryFunction( w, "sys::importByteCode", wr_importByteCode );
+	wr_registerLibraryFunction( w, "sys::importCompile", wr_importCompile );
+	wr_registerLibraryFunction( w, "sys::halt", wr_halt ); // halts execution and sets w->err to whatever was passed                 
+														   // NOTE: value must be between WR_USER and WR_ERR_LAST
+
 }

@@ -226,7 +226,7 @@ public:
 	void pop() { if ( m_elementsAllocated > 0 ) { --m_elementsAllocated; }  }
 
 	T& append() { return get( m_elementsAllocated ); }
-	T& get( const unsigned int l ) 
+	T& get( const unsigned int l )
 	{
 		if ( l >= m_elementsNewed )
 		{
@@ -557,7 +557,7 @@ Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, g_free of charge, to any person obtaining a copy
+Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -1050,7 +1050,7 @@ Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, g_free of charge, to any person obtaining a copy
+Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -1334,7 +1334,7 @@ tryAgain:
 						g_free( proposed );
 						++t;
 
-						assert( (int)newMod != 49157 );
+						assert( (unsigned int)newMod != 49157 );
 
 						goto tryAgain;
 					}
@@ -1432,9 +1432,16 @@ struct WRFunction
 	uint32_t hash;
 	union
 	{
-		const unsigned char* offset;
+		const uint8_t* offset;
 		int offsetI;
 	};
+	const uint8_t* namespaceHashOffset;
+};
+
+//------------------------------------------------------------------------------
+enum WRContextFlags
+{
+	WRC_OwnsMemory = 1<<0, // if this is true, 'bottom' must be freed upon destruction
 };
 
 //------------------------------------------------------------------------------
@@ -1446,11 +1453,10 @@ struct WRContext
 	uint16_t allocatedMemoryLimit;
 	
 	uint32_t allocatedMemoryHint;
-	WRFunction* localFunctions;
 	
 	const unsigned char* bottom;
 	const unsigned char* codeStart;
-	int bottomSize;
+	int32_t bottomSize;
 	
 	const unsigned char* stopLocation;
 	
@@ -1468,9 +1474,16 @@ struct WRContext
 	WRValue* yield_stackTop;
 	WRValue* yield_frameBase;
 	const WRValue* yield_argv;
-	int yieldArgs;
-	int yield_argn;
+	uint8_t yield_argn;
+	uint8_t yieldArgs;
+	uint8_t flags;
+
+	WRFunction* localFunctions;
+	uint8_t numLocalFunctions;
+	uint8_t yieldStackOffset;
 	
+	WRContext* imported; // linked list of contexts this one imported
+
 
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
@@ -1490,7 +1503,7 @@ struct WRState
 {
 	uint16_t stackSize;
 	int8_t err;
-
+	uint8_t stackOffset;
 	WRValue* stack;
 
 	WRContext* contextList;
@@ -1686,6 +1699,7 @@ enum WROpcode
 
 	O_NewObjectTable,
 	O_AssignToObjectTableByOffset,
+	O_AssignToObjectTableByHash,
 
 	O_AssignToHashTableAndPop,
 	O_Remove,
@@ -1979,34 +1993,11 @@ enum WROpcode
 extern const char* c_opcodeName[];
 
 #endif
-/*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
-
-MIT Licence
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*******************************************************************************/
 #ifndef _STR_H
 #define _STR_H
 /* ------------------------------------------------------------------------- */
 
-#ifndef WRENCH_WITHOUT_COMPILER
+//#ifndef WRENCH_WITHOUT_COMPILER
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -2019,8 +2010,11 @@ SOFTWARE.
 #include <sys/stat.h>
 #endif
 
+// same as str.h but for char only so no template overhead, also no
+// new/delete just malloc/free
+
 const unsigned int c_sizeofBaseString = 15; // this lib tries not to use dynamic RAM unless it has to
-const int c_cstrFormatBufferSize = 1024; // when formatting, this much stack space is reserved during the call
+const int c_formatBaseTrySize = 80;
 
 //-----------------------------------------------------------------------------
 class WRstr
@@ -2031,56 +2025,7 @@ public:
 	WRstr( const WRstr* str ) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; if ( str ) { set(*str, str->size()); } } 
 	WRstr( const char* s, const unsigned int len ) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; set(s, len); }
 	WRstr( const char* s ) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; set(s, (unsigned int)strlen(s)); }
-	WRstr( const char c) { m_len = 1; m_str = m_smallbuf; m_smallbuf[0] = c; m_smallbuf[1] = 0; m_buflen = c_sizeofBaseString; }
-	
-	~WRstr() { if ( m_str != m_smallbuf ) g_free(m_str); }
-
-	WRstr& clear() { m_len = 0; m_str[0] = 0; return *this; }
-	
-	WRstr& format( const char* format, ... ) { va_list arg; va_start( arg, format ); clear(); appendFormatVA( format, arg ); va_end( arg ); return *this; }
-	WRstr& formatVA( const char* format, va_list arg ) { clear(); return appendFormatVA(format, arg); }
-	WRstr& appendFormat( const char* format, ... ) { va_list arg; va_start( arg, format ); appendFormatVA( format, arg ); va_end( arg ); return *this; }
-	WRstr& appendFormatVA( const char* format, va_list arg )
-	{
-		char buf[ c_cstrFormatBufferSize + 1 ];
-		int len = vsnprintf( buf, c_cstrFormatBufferSize, format, arg );
-		if ( len > 0 ) insert( buf, (unsigned int)len, m_len );
-		return *this;
-	}
-
-	unsigned int release( char** toBuf )
-	{
-		unsigned int retLen = m_len;
-
-		if ( m_str == m_smallbuf )
-		{
-			*toBuf = (char*)g_malloc( m_len + 1 );
-			memcpy( *toBuf, m_str, (m_len+1) );
-		}
-		else
-		{
-			*toBuf = m_str;
-			m_str = m_smallbuf;
-			m_buflen = c_sizeofBaseString;
-		}
-		
-		clear();
-		return retLen;
-	}
-
-	inline WRstr& trim();
-
-	inline WRstr& alloc( const unsigned int characters, const bool preserveContents =true ); 
-
-	unsigned int size() const { return m_len; } // see length
-	unsigned int bufferSize() const { return m_buflen; } // see length
-	unsigned int c_size() { for( m_len=0; m_len<m_buflen && m_str[m_len]; ++m_len); return m_len; }
-
-	const char* c_str( const unsigned int offset =0 ) const { return m_str + offset; }
-	char* p_str( const unsigned int offset =0 ) const { return m_str + offset; }
-
-	operator const void*() const { return m_str; }
-	operator const char*() const { return m_str; }
+	WRstr( const char c) { m_len = 1; m_str = m_smallbuf; m_smallbuf[0] = c; m_smallbuf[1] = 0; m_buflen = c_sizeofBaseString; } 
 
 #ifdef STR_FILE_OPERATIONS
 	inline bool fileToBuffer( const char* fileName, const bool appendToBuffer =false );
@@ -2090,41 +2035,73 @@ public:
 	bool bufferToFile( const char* fileName, const bool append =false ) const { return false; }
 #endif
 
+	WRstr& clear() { m_len = 0; m_str[0] = 0; return *this; }
+
+	inline WRstr& format( const char* format, ... );
+	inline WRstr& appendFormat( const char* format, ... );
+
+	inline void release( char** toBuf, unsigned int* len =0 ); // always suceeds and returns dynamic memory
+	inline WRstr& giveOwnership( char* str, const unsigned int len );
+
+	static const unsigned int npos = (unsigned int)-1;
+	unsigned int find( const char c, const unsigned int from =0 ) const { char buf[2] = { c, 0 }; return find(buf, from); }
+	unsigned int rfind( const char c, const unsigned int from =npos ) const { char buf[2] = { c, 0 }; return rfind(buf, from); }
+	unsigned int findCase( const char c, const unsigned int from =0 ) const { char buf[2] = { c, 0 }; return findCase(buf, from); }
+	inline unsigned int find( const char* str, const unsigned int from =0 ) const;
+	inline unsigned int rfind( const char* str, const unsigned int from =npos ) const;
+	inline unsigned int findCase( const char* str, const unsigned int from =0 ) const;
+
+	WRstr& setSize( const unsigned int size, const bool preserveContents =true ) { alloc(size, preserveContents); m_len = size; m_str[size] = 0; return *this; }
+
+	inline WRstr& alloc( const unsigned int characters, const bool preserveContents =true );
+
+	inline WRstr& trim();
+	inline WRstr& truncate( const unsigned int newLen ); // reduce size to 'newlen'
+	WRstr& shave( const unsigned int e ) { return (e > m_len) ? clear() : truncate(m_len - e); } // remove 'x' trailing characters
+	inline WRstr& shift( const unsigned int from );
+	inline WRstr substr( const unsigned int begin, const unsigned int len ) const;
+
+	unsigned int size() const { return m_len; } // see length
+
+	const char* c_str( const unsigned int offset =0 ) const { return m_str + offset; }
+	char* p_str( const unsigned int offset =0 ) const { return m_str + offset; }
+
+	operator const void*() const { return m_str; }
+	operator const char*() const { return m_str; }
+
 	WRstr& set( const char* buf, const unsigned int len ) { m_len = 0; m_str[0] = 0; return insert( buf, len ); }
 	WRstr& set( const WRstr& str ) { return set( str.m_str, str.m_len ); }
 	WRstr& set( const char c ) { clear(); m_str[0]=c; m_str[1]=0; m_len = 1; return *this; }
 
-	inline WRstr& truncate( const unsigned int newLen ); // reduce size to 'newlen'
-	WRstr& shave( const unsigned int e ) { return (e > m_len) ? clear() : truncate(m_len - e); } // remove 'x' trailing characters
-	
-	inline bool isMatch( const char* buf ) const;
+	bool isMatch( const char* buf ) const { return strcmp(buf, m_str) == 0; }
+#ifdef WIN32
+	bool isMatchCase( const char* buf ) const { return _strnicmp(buf, m_str, m_len) == 0; }
+#else
+	bool isMatchCase( const char* buf ) const { return strncasecmp(buf, m_str, m_len) == 0; }
+#endif
+	static inline bool isWildMatch( const char* pattern, const char* haystack );
+	inline bool isWildMatch( const char* pattern ) const { return isWildMatch( pattern, m_str ); }
+				  
+	static inline bool isWildMatchCase( const char* pattern, const char* haystack );
+	inline bool isWildMatchCase( const char* pattern ) const { return isWildMatchCase( pattern, m_str ); }
 
 	inline WRstr& insert( const char* buf, const unsigned int len, const unsigned int startPos =0 );
 	inline WRstr& insert( const WRstr& s, const unsigned int startPos =0 ) { return insert(s.m_str, s.m_len, startPos); }
-	
+
 	inline WRstr& append( const char* buf, const unsigned int len ) { return insert(buf, len, m_len); } 
 	inline WRstr& append( const char c );
 	inline WRstr& append( const WRstr& s ) { return insert(s.m_str, s.m_len, m_len); }
 
 	// define the usual suspects:
-	
+
 	const char& operator[]( const int l ) const { return get((unsigned int)l); }
 	const char& operator[]( const unsigned int l ) const  { return get(l); }
 	char& operator[]( const int l )  { return get((unsigned int)l); }
 	char& operator[]( const unsigned int l ) { return get(l); }
 
-	char& get( const unsigned int l )
-	{
-		assert( l < m_buflen );
-		return m_str[l];
-	}
+	char& get( const unsigned int l ) { return m_str[l]; }
+	const char& get( const unsigned int l ) const { return m_str[l]; }
 
-	const char& get( const unsigned int l ) const
-	{
-		assert( l < m_buflen );
-		return m_str[l];
-	}
-	
 	WRstr& operator += ( const WRstr& str ) { return append(str.m_str, str.m_len); }
 	WRstr& operator += ( const char* s ) { return append(s, (unsigned int)strlen(s)); }
 	WRstr& operator += ( const char c ) { return append(c); }
@@ -2140,6 +2117,8 @@ public:
 	friend bool operator != ( const WRstr& s1, const WRstr& s2 ) { return s1.m_len != s2.m_len || (strncmp(s1.m_str, s2.m_str, s1.m_len) != 0); }
 	friend bool operator != ( const WRstr& s, const char* z ) { return !s.isMatch( z ); }
 	friend bool operator != ( const char* z, const WRstr& s ) { return !s.isMatch( z ); }
+	friend bool operator != ( const WRstr& s, char* z ) { return !s.isMatch( z ); }
+	friend bool operator != ( char* z, const WRstr& s ) { return !s.isMatch( z ); }
 
 	friend WRstr operator + ( const WRstr& str, const char* s) { WRstr T(str); T += s; return T; }
 	friend WRstr operator + ( const WRstr& str, const char c) { WRstr T(str); T += c; return T; }
@@ -2147,72 +2126,147 @@ public:
 	friend WRstr operator + ( const char c, const WRstr& str ) { WRstr T(c); T += str; return T; }
 	friend WRstr operator + ( const WRstr& str1, const WRstr& str2 ) { WRstr T(str1); T += str2; return T; }
 
+	~WRstr() { if ( m_str != m_smallbuf ) g_free(m_str); }
+
 protected:
 
 	operator char*() const { return m_str; } // prevent accidental use
 
 	char *m_str; // first element so if the class is cast as a C and de-referenced it always works
-	
+
 	unsigned int m_buflen; // how long the buffer itself is
 	unsigned int m_len; // how long the string is in the buffer
-	char m_smallbuf[ c_sizeofBaseString + 1 ]; // small temporary buffer so a new/delete is not imposed for small strings
+	char m_smallbuf[ c_sizeofBaseString + 1 ]; // small temporary buffer so a malloc/free is not imposed for small strings
 };
 
-//-----------------------------------------------------------------------------
-WRstr& WRstr::trim()
+//------------------------------------------------------------------------------
+inline const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte =-1 )
 {
-	unsigned int start = 0;
-
-	// find start
-	for( ; start<m_len && isspace( (unsigned char)*(m_str + start) ) ; start++ );
-
-	// is the whole thing whitespace?
-	if ( start == m_len )
+	const unsigned char* data = (char unsigned *)d;
+	str.clear();
+	for( unsigned int i=0; i<len; i++ )
 	{
-		clear();
-		return *this;
-	}
-
-	// copy down the characters one at a time, noting the last
-	// non-whitespace character position, which will become the length
-	unsigned int pos = 0;
-	unsigned int marker = start;
-	for( ; start<m_len; start++,pos++ )
-	{
-		if ( !isspace((unsigned char)(m_str[pos] = m_str[start])) )
+		str.appendFormat( "0x%08X: ", i );
+		char dump[24];
+		unsigned int j;
+		for( j=0; j<16 && i<len; j++, i++ )
 		{
-			marker = pos;
+			dump[j] = isgraph((unsigned char)data[i]) ? data[i] : '.';
+			dump[j+1] = 0;
+			if ( i == (unsigned int)markByte )
+			{
+				str.shave(1);
+				str.appendFormat( "[%02X]", (unsigned char)data[i] );
+			}
+			else
+			{
+				str.appendFormat( "%02X ", (unsigned char)data[i] );
+			}
 		}
+
+		for( ; j<16; j++ )
+		{
+			str.appendFormat( "   " );
+		}
+		i--;
+		str += ": ";
+		str += dump;
+		str += "\n";
 	}
 
-	m_len = marker + 1;
-	m_str[m_len] = 0;
-
-	return *this;
+	return str;
 }
 
-//-----------------------------------------------------------------------------
-WRstr& WRstr::alloc( const unsigned int characters, const bool preserveContents )
+//------------------------------------------------------------------------------
+unsigned int WRstr::rfind( const char* str, const unsigned int from ) const
 {
-	if ( characters >= m_buflen ) // only need to alloc if more space is requested than we have
+	int f = (int)(from > m_len ? m_len : from);
+	if ( !str || !str[0] )
 	{
-		char* newStr = (char*)g_malloc( characters + 1 ); // create the space
-		
-		if ( preserveContents ) 
-		{
-			memcpy( newStr, m_str, m_buflen ); // preserve whatever we had
-		}
-		
-		if ( m_str != m_smallbuf )
-		{
-			g_free( m_str );
-		}
-		
-		m_str = newStr;
-		m_buflen = characters;		
+		return 0;
 	}
 
-	return *this;
+	for( ; f >= 0; --f )
+	{
+		for( int i=0;;++i )
+		{
+			if ( !str[i] )
+			{
+				return f;
+			}
+			if ( str[i] != m_str[f + i] )
+			{
+				break;
+			}
+		}
+	}
+	return npos;
+}
+
+//------------------------------------------------------------------------------
+unsigned int WRstr::find( const char* str, const unsigned int from ) const
+{
+	unsigned int f = from > m_len ? 0 : from;
+	if ( !str || !str[0] )
+	{
+		return 0;
+	}
+
+	for( ; f < m_len; ++f )
+	{
+		for( int i=0;;++i )
+		{
+			if ( !str[i] )
+			{
+				return f;
+			}
+
+			char c = m_str[f + i];
+			if ( !c )
+			{
+				return npos;
+			}
+
+			if ( str[i] != c )
+			{
+				break;
+			}
+		}
+	}
+	return npos;
+}
+
+//------------------------------------------------------------------------------
+unsigned int WRstr::findCase( const char* str, const unsigned int from ) const
+{
+	unsigned int f = from > m_len ? 0 : from;
+	if ( !str || !str[0] )
+	{
+		return 0;
+	}
+
+	for( ; f < m_len; ++f )
+	{
+		for( int i=0;;++i )
+		{
+			if ( !str[i] )
+			{
+				return f;
+			}
+
+			char c = m_str[f + i];
+			if ( !c )
+			{
+				return npos;
+			}
+
+			if ( tolower(str[i]) != tolower(c) )
+			{
+				break;
+			}
+		}
+	}
+	return npos;
 }
 
 #ifdef STR_FILE_OPERATIONS
@@ -2224,7 +2278,7 @@ bool WRstr::fileToBuffer( const char* fileName, const bool appendToBuffer )
 		return false;
 	}
 
-#ifdef _WIN32
+#ifdef WIN32
 	struct _stat sbuf;
 	int ret = _stat( fileName, &sbuf );
 #else
@@ -2242,7 +2296,7 @@ bool WRstr::fileToBuffer( const char* fileName, const bool appendToBuffer )
 	{
 		return false;
 	}
-	
+
 	if ( appendToBuffer )
 	{
 		alloc( sbuf.st_size + m_len, true );
@@ -2284,6 +2338,129 @@ bool WRstr::bufferToFile( const char* fileName, const bool append) const
 #endif
 
 //-----------------------------------------------------------------------------
+void WRstr::release( char** toBuf, unsigned int* len )
+{
+	if ( len )
+	{
+		*len = m_len;
+	}
+	
+	if ( !m_len )
+	{
+		*toBuf = 0;
+	}
+	else if ( m_str == m_smallbuf )
+	{
+		*toBuf = (char*)g_malloc( m_len + 1 );
+		memcpy( *toBuf, m_str, m_len + 1 );
+	}
+	else
+	{
+		*toBuf = m_str;
+		m_str = m_smallbuf;
+		m_buflen = c_sizeofBaseString;
+	}
+
+	m_len = 0;
+	m_str[0] = 0;
+}
+
+//-----------------------------------------------------------------------------
+WRstr& WRstr::giveOwnership( char* buf, const unsigned int len )
+{
+	if ( !buf || !len )
+	{
+		clear();
+		return *this;
+	}
+	
+	if ( m_str != m_smallbuf )
+	{
+		g_free( m_str );
+	}
+
+	if ( len < c_sizeofBaseString )
+	{
+		m_str = m_smallbuf;
+		memcpy( m_str, buf, len );
+		g_free( buf );
+		m_len = len;
+	}
+	else
+	{
+		m_str = buf;
+	}
+
+	m_len = len;
+	m_buflen = len;
+	
+	return *this;
+}
+
+//-----------------------------------------------------------------------------
+WRstr& WRstr::trim()
+{
+	unsigned int start = 0;
+
+	// find start
+	for( ; start<m_len && isspace( (char)*(m_str + start) ) ; start++ );
+
+	// is the whole thing whitespace?
+	if ( start == m_len )
+	{
+		clear();
+		return *this;
+	}
+
+	// copy down the characters one at a time, noting the last
+	// non-whitespace character position, which will become the length
+	unsigned int pos = 0;
+	unsigned int marker = start;
+	for( ; start<m_len; start++,pos++ )
+	{
+		if ( !isspace((char)(m_str[pos] = m_str[start])) )
+		{
+			marker = pos;
+		}
+	}
+
+	m_len = marker + 1;
+
+	if ( m_len >= m_buflen )
+	{
+		alloc( m_len + 1, true );
+		return trim();
+	}
+
+	m_str[m_len] = 0;
+	return *this;
+}
+
+//-----------------------------------------------------------------------------
+WRstr& WRstr::alloc( const unsigned int characters, const bool preserveContents )
+{
+	if ( characters >= m_buflen ) // only need to alloc if more space is requested than we have
+	{
+		char* newStr = (char*)g_malloc( characters + 1 ); // create the space
+
+		if ( preserveContents ) 
+		{
+			memcpy( newStr, m_str, m_buflen ); // preserve whatever we had
+		}
+
+		if ( m_str != m_smallbuf )
+		{
+			g_free( m_str );
+		}
+
+		m_str = newStr;
+		m_buflen = characters;		
+	}
+
+	return *this;
+}
+
+//-----------------------------------------------------------------------------
 WRstr& WRstr::truncate( const unsigned int newLen )
 {
 	if ( newLen >= m_len )
@@ -2309,9 +2486,170 @@ WRstr& WRstr::truncate( const unsigned int newLen )
 }
 
 //-----------------------------------------------------------------------------
-bool WRstr::isMatch( const char* buf ) const
+WRstr& WRstr::shift( const unsigned int from )
 {
-	return strcmp( buf, m_str ) == 0;
+	if ( from >= m_len )
+	{
+		return clear();
+	}
+
+	if ( from )
+	{
+		m_len -= from;
+		memmove( m_str, m_str + from, m_len + 1 );
+	}
+
+	return *this;
+}
+
+//------------------------------------------------------------------------------
+WRstr WRstr::substr( const unsigned int begin, const unsigned int len ) const
+{
+	WRstr ret;
+	if ( begin < m_len )
+	{
+		unsigned int amount = (begin + len) > m_len ? m_len - begin : len;
+		ret.set( m_str + begin, amount );
+	}
+	return ret;
+}
+
+//-----------------------------------------------------------------------------
+bool WRstr::isWildMatch( const char* pattern, const char* haystack )
+{
+	if ( !pattern )
+	{
+		return false;
+	}
+
+	if ( pattern[0] == 0 )
+	{
+		return haystack[0] == 0;
+	}
+
+	const char* after = 0;
+	const char* str = haystack;
+	char t;
+	char w;
+
+	for(;;)
+	{
+		t = *str;
+		w = *pattern;
+		if ( !t )
+		{
+			if ( !w )
+			{
+				return true; // "x" matches "x"
+			}
+			else if (w == '*')
+			{
+				++pattern;
+				continue; // "x*" matches "x" or "xy"
+			}
+
+			return false; // "x" doesn't match "xy"
+		}
+		else if ( t != w )
+		{
+			if (w == '*')
+			{
+				after = ++pattern;
+				continue; // "*y" matches "xy"
+			}
+			else if (after)
+			{
+				pattern = after;
+				w = *pattern;
+				if ( !w )
+				{
+					return true; // "*" matches "x"
+				}
+				else if (t == w)
+				{
+					++pattern;
+				}
+				++str;
+				continue; // "*sip*" matches "mississippi"
+			}
+			else
+			{
+				return false; // "x" doesn't match "y"
+			}
+		}
+
+		++str;
+		++pattern;
+	}
+}
+
+//-----------------------------------------------------------------------------
+bool WRstr::isWildMatchCase( const char* pattern, const char* haystack )
+{
+	if ( !pattern )
+	{
+		return false;
+	}
+
+	if ( pattern[0] == 0 )
+	{
+		return haystack[0] == 0;
+	}
+
+	const char* after = 0;
+	const char* str = haystack;
+	char t;
+	char w;
+
+	for(;;)
+	{
+		t = *str;
+		w = *pattern;
+		if ( !t )
+		{
+			if ( !w )
+			{
+				return true; // "x" matches "x"
+			}
+			else if (w == '*')
+			{
+				++pattern;
+				continue; // "x*" matches "x" or "xy"
+			}
+
+			return false; // "x" doesn't match "xy"
+		}
+		else if ( tolower(t) != tolower(w) )
+		{
+			if (w == '*')
+			{
+				after = ++pattern;
+				continue; // "*y" matches "xy"
+			}
+			else if (after)
+			{
+				pattern = after;
+				w = *pattern;
+				if ( !w )
+				{
+					return true; // "*" matches "x"
+				}
+				else if (t == w)
+				{
+					++pattern;
+				}
+				++str;
+				continue; // "*sip*" matches "mississippi"
+			}
+			else
+			{
+				return false; // "x" doesn't match "y"
+			}
+		}
+
+		++str;
+		++pattern;
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -2348,10 +2686,70 @@ WRstr& WRstr::append( const char c )
 	return *this;
 }
 
-const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte =-1 );
+//------------------------------------------------------------------------------
+WRstr& WRstr::format( const char* format, ... )
+{
+	va_list arg;
+
+	char buf[ c_formatBaseTrySize + 1 ]; // SOME space, malloc if we need a ton more
+
+	va_start( arg, format );
+	int len = vsnprintf( buf, c_formatBaseTrySize, format, arg );
+	va_end( arg );
+
+	if ( len < c_formatBaseTrySize )
+	{
+		return set( buf, len );
+	}
+	else
+	{
+		++len;
+		char* alloc = (char*)g_malloc( len + 1 );
+
+		va_start( arg, format );
+		len = vsnprintf( alloc, len, format, arg );
+		va_end( arg );
+
+		set( alloc, len );
+		g_free(alloc);
+	}
+
+	return *this;
+}
+
+//-----------------------------------------------------------------------------
+WRstr& WRstr::appendFormat( const char* format, ... )
+{
+	va_list arg;
+
+	char buf[ c_formatBaseTrySize ]; // SOME space, malloc if we need a ton more
+
+	va_start( arg, format );
+	int len = vsnprintf( buf, c_formatBaseTrySize, format, arg );
+	va_end( arg );
+
+	if ( len < c_formatBaseTrySize )
+	{
+		insert( buf, len, m_len );
+	}
+	else
+	{
+		++len;
+		char* alloc = (char*)g_malloc( len + 1 );
+
+		va_start( arg, format );
+		len = vsnprintf( alloc, len, format, arg );
+		va_end( arg );
+
+		insert( alloc, len, m_len );
+		g_free(alloc);
+	}
+
+	return *this;
+}
 
 #endif
-#endif
+//#endif
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
@@ -2814,7 +3212,11 @@ struct WRUnitContext
 	uint32_t arguments; // how many arguments it expects
 	int offsetInBytecode; // where in the bytecode it resides
 
+	bool exportNamespace;
+
 	WRarray<ConstantValue> constantValues;
+
+	WRstr localNamespaceMap;
 
 	int16_t offsetOfLocalHashMap;
 	
@@ -2828,6 +3230,7 @@ struct WRUnitContext
 	void reset()
 	{
 		name = "";
+		exportNamespace = false;
 		hash = 0;
 		arguments = 0;
 		arguments = 0;
@@ -2875,6 +3278,7 @@ private:
 	bool m_embedGlobalSymbols;
 	bool m_embedSourceCode;
 	bool m_needVar;
+	bool m_exportNextUnit;
 	
 	uint16_t m_lastCode;
 	uint16_t m_lastParam;
@@ -2902,7 +3306,7 @@ private:
 	bool operatorFound( WRstr& token, WRarray<WRExpressionContext>& context, int depth );
 	bool parseCallFunction( WRExpression& expression, WRstr functionName, int depth, bool parseArguments );
 	bool pushObjectTable( WRExpressionContext& context, WRarray<WRNamespaceLookup>& localSpace, uint32_t hash );
-	char parseExpression( WRExpression& expression);
+	char parseExpression( WRExpression& expression );
 	bool parseUnit( bool isStruct, int parentUnitIndex );
 	bool parseWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseDoWhile( bool& returnCalled, WROpcode opcodeToReturn );
@@ -2938,8 +3342,11 @@ private:
 	bool m_EOF;
 	bool m_LastParsedLabel;
 	bool m_parsingFor;
+	bool m_parsingNew;
 	bool m_quoted;
 
+	uint32_t m_newHashValue;
+	
 	int m_unitTop;
 	WRarray<WRUnitContext> m_units;
 
@@ -3343,6 +3750,10 @@ SOFTWARE.
 #ifndef WRENCH_WITHOUT_COMPILER
 #include <assert.h>
 
+#define WR_DUMP_LINK_OUTPUT(D) //D
+#define WR_DUMP_BYTECODE(D) //D
+
+
 #define WR_COMPILER_LITERAL_STRING 0x10 
 #define KEYHOLE_OPTIMIZER
 
@@ -3370,6 +3781,8 @@ const char* c_reserved[] =
 	"null",
 	"struct",
 	"goto",
+	"export",
+	"unit",
 	""
 };
 
@@ -3394,6 +3807,7 @@ WRError WRCompilationContext::compile( const char* source,
 	m_err = WR_ERR_None;
 	m_EOF = false;
 	m_parsingFor = false;
+	m_parsingNew = false;
 	m_unitTop = 0;
 	m_foreachHash = 0;
 
@@ -3436,7 +3850,7 @@ WRError WRCompilationContext::compile( const char* source,
 		getSourcePosition( onLine, onChar, &line );
 
 		msg.format( "line:%d\n", onLine );
-		msg.appendFormat( "err:%d\n", m_err );
+		msg.appendFormat( "err: %s[%d]\n", c_errStrings[m_err], m_err );
 		msg.appendFormat( "%-5d %s\n", onLine, line.c_str() );
 
 		for( int i=0; i<onChar; i++ )
@@ -5393,7 +5807,7 @@ void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int p
 		return;
 	}
 
-	if ( code == m_lastCode && param == m_lastParam )
+	if ( code == m_lastCode && (uint16_t)param == m_lastParam )
 	{
 		return;
 	}
@@ -6805,7 +7219,6 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		prefix += "::";
 		prefix += functionName;
 
-
 		unsigned char buf[4];
 		wr_pack32( wr_hashStr(prefix), buf );
 
@@ -6833,15 +7246,18 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		expression.context[depth].bytecode.functionSpace[i].references.append() = getBytecodePosition( expression.context[depth].bytecode );
 		expression.context[depth].bytecode.functionSpace[i].hash = hash;
 
-		pushOpcode( expression.context[depth].bytecode, O_FUNCTION_CALL_PLACEHOLDER );
-
-		pushData( expression.context[depth].bytecode, &argsPushed, 1 );
-
-		if ( hash != wr_hashStr("yield") )
+		if ( hash == wr_hashStr("yield") )
 		{
-			pushData( expression.context[depth].bytecode, "0123", 4 ); // TBD opcode plus index, OR hash if index was not found
+			pushOpcode( expression.context[depth].bytecode, O_Yield );
+			pushData( expression.context[depth].bytecode, &argsPushed, 1 );
 		}
-
+		else
+		{
+			pushOpcode( expression.context[depth].bytecode, O_FUNCTION_CALL_PLACEHOLDER );
+			pushData( expression.context[depth].bytecode, &argsPushed, 1 );
+			pushData( expression.context[depth].bytecode, "XXXX", 4 ); // TBD opcode plus index, OR hash if index was not found
+		}
+		
 		// hash will copydown result same as lib, unless
 		// copy/pop which case does nothing
 
@@ -6861,6 +7277,9 @@ bool WRCompilationContext::pushObjectTable( WRExpressionContext& context,
 	WRstr& token2 = context.token;
 	WRValue& value2 = context.value;
 
+	bool byHash = false;
+	bool byOrder = false;
+	
 	unsigned int i=0;
 	for( ; i<context.bytecode.unitObjectSpace.count(); ++i )
 	{
@@ -6887,13 +7306,45 @@ bool WRCompilationContext::pushObjectTable( WRExpressionContext& context,
 			WRExpression nex( localSpace, context.bytecode.isStructSpace );
 			nex.context[0].token = token2;
 			nex.context[0].value = value2;
+
+			m_parsingNew = true;
+
+			bool v = m_needVar;
+			m_needVar = false;
 			char end = parseExpression( nex );
+			m_needVar = v;
+
+			m_parsingNew = false;
 
 			if ( nex.bytecode.all.size() )
 			{
 				appendBytecode( context.bytecode, nex.bytecode );
-				pushOpcode( context.bytecode, O_AssignToObjectTableByOffset );
-				pushData( context.bytecode, &offset, 1 );
+
+				if ( m_newHashValue )
+				{
+					if ( byOrder )
+					{
+						m_err = WR_ERR_new_assign_by_label_or_offset_not_both;
+						return false;
+					}
+					byHash = true;
+					
+					pushOpcode( context.bytecode, O_AssignToObjectTableByHash );
+					uint8_t dat[4];
+					pushData( context.bytecode, wr_pack32(m_newHashValue, dat), 4 );
+				}
+				else
+				{
+					if ( byHash )
+					{
+						m_err = WR_ERR_new_assign_by_label_or_offset_not_both;
+						return false;
+					}
+					byOrder = true;
+
+					pushOpcode( context.bytecode, O_AssignToObjectTableByOffset );
+					pushData( context.bytecode, &offset, 1 );
+				}
 			}
 
 			++offset;
@@ -6918,6 +7369,8 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 {
 	int depth = 0;
 	char end = 0;
+
+	m_newHashValue = 0;
 
 	for(;;)
 	{
@@ -7581,12 +8034,26 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			}
 
 			WRstr label = token;
+
 			if ( depth == 0 && !m_parsingFor )
 			{
 				if ( !getToken(expression.context[depth]) )
 				{
 					m_err = WR_ERR_unexpected_EOF;
 					return 0;
+				}
+
+				if ( m_parsingNew )
+				{
+					if ( token == "=" )
+					{
+						m_newHashValue = wr_hashStr( label );
+
+						continue;
+//						getToken(expression.context[depth]) );
+//						--depth;
+						
+					}
 				}
 				
 				if ( !m_quoted && token == ":" )
@@ -7712,6 +8179,8 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 		return false;
 	}
 
+	m_units[m_unitTop].exportNamespace = m_exportNextUnit;
+	m_exportNextUnit = false;
 	m_units[m_unitTop].name = token;
 	m_units[m_unitTop].hash = wr_hash( token, token.size() );
 	m_units[m_unitTop].bytecode.isStructSpace = isStruct;
@@ -8845,6 +9314,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 	WRExpressionContext ex;
 	returnCalled = false;
 	bool varSeen = false;
+	m_exportNextUnit = false;
 
 	for(;;)
 	{
@@ -8867,6 +9337,15 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 			break;
 		}
 
+		if ( m_exportNextUnit
+			 && token != "function"
+			 && token != "struct"
+			 && token != "unit" )
+		{
+			m_err = WR_ERR_unexpected_export_keyword;
+			break;
+		}
+		
 		if ( !m_quoted && token == "{" )
 		{
 			return parseStatement( unitIndex, '}', returnCalled, opcodeToReturn );
@@ -8919,7 +9398,7 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 				return false;
 			}
 		}
-		else if ( !m_quoted && token == "function" )
+		else if ( !m_quoted && (token == "function" || token == "unit") )
 		{
 			if ( unitIndex != 0 )
 			{
@@ -8959,6 +9438,11 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 			{
 				return false;
 			}
+		}
+		else if ( !m_quoted && token == "export" )
+		{
+			m_exportNextUnit = true;
+			continue;
 		}
 		else if ( !m_quoted && token == "switch" )
 		{
@@ -9095,6 +9579,9 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	*size = 2;
 	*buf = (unsigned char *)g_malloc( (offsets.m_mod * 5) + 4 );
 
+	(*buf)[0] = (unsigned char)(unit.bytecode.localSpace.count() - unit.arguments);
+	(*buf)[1] = unit.arguments;
+
 	wr_pack16( offsets.m_mod, *buf + *size );
 	*size += 2;
 
@@ -9207,11 +9694,20 @@ bool WRCompilationContext::readCurlyBlock( WRstr& block )
 	return true;
 }
 
+struct NamespacePush
+{
+	int unit;
+	int location;
+	NamespacePush* next;
+};
+
 //------------------------------------------------------------------------------
 void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t compilerOptionFlags )
 {
 	WROpcodeStream code;
 
+	NamespacePush *namespaceLookups = 0;
+	
 	code += (unsigned char)(m_units.count() - 1); // function count (for VM allocation)
 	code += (unsigned char)(m_units[0].bytecode.localSpace.count()); // globals count (for VM allocation)
 	code += (unsigned char)compilerOptionFlags;
@@ -9267,6 +9763,27 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 		code.append( wr_pack32(m_sourceLen, data), 4 );
 		code.append( (uint8_t*)m_source, m_sourceLen );
 	}
+
+	// export any explicitly marked for export or are referred to by a 'new'
+	for( unsigned int ux=0; ux<m_units.count(); ++ux )
+	{
+		for( unsigned int f=0; f<m_units[ux].bytecode.unitObjectSpace.count(); ++f )
+		{
+			WRNamespaceLookup& N = m_units[ux].bytecode.unitObjectSpace[f];
+
+			for( unsigned int r=0; r<N.references.count(); ++r )
+			{
+				for( unsigned int u2 = 1; u2<m_units.count(); ++u2 )
+				{
+					if ( m_units[u2].hash == N.hash )
+					{
+						m_units[u2].exportNamespace = true;
+						break;
+					}
+				}
+			}
+		}
+	}
 	
 	// register the function signatures
 	for( unsigned int u=1; u<m_units.count(); ++u )
@@ -9287,20 +9804,54 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 		code.append( data, 2 ); // placeholder, it doesn't matter
 
 		code += O_RegisterFunction;
+
+		if ( m_units[u].exportNamespace )
+		{
+			int size = 0;
+			unsigned char* map = 0;
+			createLocalHashMap( m_units[u], &map, &size );
+			m_units[u].localNamespaceMap.giveOwnership( (char*)map, size );
+		}
 	}
 
-	WRstr str;
-//	wr_asciiDump( code.p_str(), code.size(), str );
-//	printf( "header:\n%d:\n%s\n", code.size(), str.c_str() );
-
+	WR_DUMP_LINK_OUTPUT(WRstr str);
+	WR_DUMP_LINK_OUTPUT(printf("header funcs[%d] locals[%d] flags[0x%02X]:\n%s\n",
+							   (unsigned char)(m_units.count() - 1),
+							   (unsigned char)(m_units[0].bytecode.localSpace.count()),
+							   (unsigned char)compilerOptionFlags, wr_asciiDump( code.p_str(), code.size(), str )));
+	
 	// append all the unit code
 	for( unsigned int u=0; u<m_units.count(); ++u )
 	{
+		uint16_t base = code.size();
+
 		if ( u > 0 ) // for the non-zero unit fill location into the jump table
 		{
-			int16_t offset = code.size();
-			wr_pack16( offset, code.p_str(m_units[u].offsetInBytecode) );
+			wr_pack16( base, code.p_str(m_units[u].offsetInBytecode) );
+			base = m_units[u].localNamespaceMap.size();
+
+
+			if ( base == 0 )
+			{
+				data[0] = 0xFF;
+				code.append( data, 1 );
+			}
+			else
+			{
+				wr_pack16( base, data );
+				code.append( data, 2 );
+			}
+
+			if ( m_units[u].localNamespaceMap.size() )
+			{
+				m_units[u].offsetOfLocalHashMap = code.size();
+				code.append( (uint8_t*)m_units[u].localNamespaceMap.c_str(), m_units[u].localNamespaceMap.size() );
+				
+				WR_DUMP_LINK_OUTPUT(printf("<new> namespace\n%s\n", wr_asciiDump(m_units[u].localNamespaceMap.c_str(), m_units[u].localNamespaceMap.size(), str)));
+			}
 		}
+
+		base = code.size();
 
 		// fill in relative jumps for the gotos
 		for( unsigned int g=0; g<m_units[u].bytecode.gotoSource.count(); ++g )
@@ -9334,18 +9885,13 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 			}
 		}
 
-		int base = code.size();
-
-//		wr_asciiDump( m_units[u].bytecode.all, m_units[u].bytecode.all.size(), str );
-//		printf( "Adding Unit %d\n%s\n", u, str.c_str() );
+		WR_DUMP_LINK_OUTPUT(printf("Adding Unit %d [%d]\n%s", u, m_units[u].bytecode.all.size(), wr_asciiDump(m_units[u].bytecode.all, m_units[u].bytecode.all.size(), str)));
 
 		code.append( m_units[u].bytecode.all, m_units[u].bytecode.all.size() );
 
-//		wr_asciiDump( code.p_str(), code.size(), str );
-//		printf( "now\n%s\n", str.c_str() );
+		WR_DUMP_LINK_OUTPUT(printf("->\n%s\n", wr_asciiDump( code.p_str(), code.size(), str )));
 
-
-		// load new's
+		// populate 'new' vectors
 		for( unsigned int f=0; f<m_units[u].bytecode.unitObjectSpace.count(); ++f )
 		{
 			WRNamespaceLookup& N = m_units[u].bytecode.unitObjectSpace[f];
@@ -9354,41 +9900,16 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 			{
 				for( unsigned int u2 = 1; u2<m_units.count(); ++u2 )
 				{
-					if ( m_units[u2].hash != N.hash )
+					if ( m_units[u2].hash == N.hash )
 					{
-						continue;
+						NamespacePush *n = (NamespacePush *)g_malloc(sizeof(NamespacePush));
+						n->next = namespaceLookups;
+						namespaceLookups = n;
+						n->unit = u2;
+						n->location = base + N.references[r];
+						
+						break;
 					}
-
-					if ( m_units[u2].offsetOfLocalHashMap == 0 )
-					{
-						int size;
-						unsigned char* buf = 0;
-
-						createLocalHashMap( m_units[u2], &buf, &size );
-
-						if ( size )
-						{
-							buf[0] = (unsigned char)(m_units[u2].bytecode.localSpace.count() - m_units[u2].arguments); // number of entries
-							buf[1] = m_units[u2].arguments;
-							m_units[u2].offsetOfLocalHashMap = code.size();
-							code.append( buf, size );
-
-//							wr_asciiDump( buf, size, str );
-//							printf( "Adding\n%s\n", str.c_str() );
-
-						}
-
-						g_free( buf );
-					}
-
-					if ( m_units[u2].offsetOfLocalHashMap != 0 )
-					{
-						int index = base + N.references[r];
-
-						wr_pack16( m_units[u2].offsetOfLocalHashMap, code.p_str(index) );
-					}
-
-					break;
 				}
 			}
 		}
@@ -9397,6 +9918,8 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 		for( unsigned int x=0; x<m_units[u].bytecode.functionSpace.count(); ++x )
 		{
 			WRNamespaceLookup& N = m_units[u].bytecode.functionSpace[x];
+
+			WR_DUMP_LINK_OUTPUT(printf("function[%d] fixup before:\n%s\n", x, wr_asciiDump(code, code.size(), str)));
 
 			for( unsigned int r=0; r<N.references.count(); ++r )
 			{
@@ -9457,11 +9980,24 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 					}
 				}
 			}
+
+			WR_DUMP_LINK_OUTPUT(printf("function[%d] fixup after:\n%s\n", x, wr_asciiDump(code, code.size(), str)));
 		}
+	}
+
+	// plug in namespace lookups
+	while( namespaceLookups )
+	{
+		wr_pack16( m_units[namespaceLookups->unit].offsetOfLocalHashMap, code.p_str(namespaceLookups->location) );
+		NamespacePush* next = namespaceLookups->next;
+		g_free( namespaceLookups );
+		namespaceLookups = next;
 	}
 
 	// append a CRC
 	code.append( wr_pack32(wr_hash(code, code.size()), data), 4 );
+
+	WR_DUMP_BYTECODE(printf("bytecode [%d]:\n%s\n", code.size(), wr_asciiDump(code, code.size(), str)));
 
 	if ( !m_err )
 	{
@@ -9764,7 +10300,7 @@ int16_t READ_16_FROM_PC_func( const unsigned char* P )
 #endif
 
 //------------------------------------------------------------------------------
-WRValue* wr_continueFunction( WRContext* context )
+WRValue* wr_continue( WRContext* context )
 {
 	return context->yield_pc ? wr_callFunction( context, (WRFunction*)0, context->yield_argv, context->yield_argn ) : 0;
 }
@@ -9792,6 +10328,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 		&&NewObjectTable,
 		&&AssignToObjectTableByOffset,
+		&&AssignToObjectTableByHash,
 
 		&&AssignToHashTableAndPop,
 		&&Remove,
@@ -10086,19 +10623,24 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		const unsigned char *hashLoc;
 		uint32_t hashLocInt;
 	};
+
+	union
+	{
+		WRValue* register1;
+		WRContext* import;
+	};
+	register1 = 0;
 	
-	WRValue* register1 = 0;
 	WRValue* frameBase = 0;
 	WRState* w = context->w;
-	WRValue* stackTop = w->stack;
-	const unsigned char* bottom = context->bottom;
+	const unsigned char* table = 0;
+	
 	WRValue* globalSpace = (WRValue *)(context + 1);
 
 	union
 	{
 		// never used at the same time..save RAM!
 		WRValue* register2;
-		uint32_t sizeCheck;
 		int args;
 		uint32_t hash;
 		WRVoidFunc* voidFunc;
@@ -10121,20 +10663,34 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	w->err = WR_ERR_None;
 
+	WRValue* stackBase;
+	WRValue* stackTop;
 	if ( context->yield_pc )
 	{
 		pc = context->yield_pc;
 		context->yield_pc = 0;
 
-		--context->yieldArgs;
-		stackTop = context->yield_stackTop - context->yieldArgs;
-		*(stackTop - 1) = *(stackTop + context->yieldArgs);
-
+		w->stackOffset -= context->yieldStackOffset;
+		stackBase = w->stack + w->stackOffset;
+		stackTop = context->yield_stackTop;
+		
+		if ( context->yieldArgs )
+		{
+			register0 = stackTop;
+			*(stackTop -= context->yieldArgs) = *register0;
+		}
+		++stackTop;
+	
 		frameBase = context->yield_frameBase;
 		
 		goto yieldContinue;
 	}
-	
+	else
+	{
+		stackBase = w->stack + w->stackOffset;
+		stackTop = stackBase;
+	}
+
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 	if ( context->debugInterface && function )
 	{
@@ -10191,8 +10747,20 @@ yieldContinue:
 
 				localFunctions->hash = (stackTop + 1)->i;
 
-				localFunctions->offset = bottom + (stackTop + 2)->i;
+				localFunctions->namespaceHashOffset = context->bottom + (stackTop + 2)->i; // location of the size vector
 
+				if ( *(uint8_t*)localFunctions->namespaceHashOffset == 0xFF )
+				{
+					localFunctions->offset = localFunctions->namespaceHashOffset + 1; // code starts pas the map + size
+					localFunctions->namespaceHashOffset = 0;
+				}
+				else
+				{
+					uint16_t size = READ_16_FROM_PC( localFunctions->namespaceHashOffset ); // how large is the namespace map?
+					localFunctions->offset = localFunctions->namespaceHashOffset + size + 2; // code starts pas the map + size
+					localFunctions->namespaceHashOffset += 2;
+				}
+				
 				localFunctions->frameBaseAdjustment = 1
 													  + localFunctions->frameSpaceNeeded
 													  + localFunctions->arguments;
@@ -10277,9 +10845,12 @@ literalZero:
 				// can pick up where it left off on continue
 				context->yieldArgs = READ_8_FROM_PC(pc++);
 				context->yield_pc = pc;
+
+				context->yieldStackOffset = (stackTop - stackBase) + 1; // mark off the stack that we're using
+				w->stackOffset += context->yieldStackOffset;
+				
 				context->yield_stackTop = stackTop;
-				context->yield_stackTop->p = 0;
-				context->yield_stackTop->p2 = INIT_AS_INT; // init return value
+				context->yield_stackTop->init();
 				context->yield_frameBase = frameBase;
 				context->yield_argv = argv;
 				context->yield_argn = argn;
@@ -10319,17 +10890,71 @@ debugContinue:
 				register0->p = 0;
 				register0->p2 = INIT_AS_INT;
 
-				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb) )
+				uint32_t fhash = READ_32_FROM_PC(pc);
+				pc += 4;
+				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(fhash))->ccb) )
 				{
-					w->err = WR_ERR_function_hash_signature_not_found;
+					if ( (import = context->imported) ) // check imported code
+					{
+						while( import != context )
+						{
+							WRValue* I;
+							if ( (I = import->registry.exists(fhash, false)) )
+							{
+								// fool the caller into thinking it has the base of the stack, and then recurse into it,
+								// this is because the alternate context has all the alternate globals/locals
+								uint8_t offset = (stackTop - stackBase);
+								w->stackOffset += offset;
+								wr_callFunction( import, I->wrf, stackTop - args, args );
+								w->stackOffset -= offset;
+								register0 = stackTop;
+
+								if ( *pc == O_NewObjectTable )
+								{
+									if ( ! (table = I->wrf->namespaceHashOffset) )
+									{
+										w->err = WR_ERR_struct_not_exported;
+										return 0;
+									}
+									
+									// so this was in service of a new
+									// ObjectTable. no problemo, find
+									// the actual table location and
+									// use it
+
+									if ( args ) // fix up the return value
+									{
+										stackTop -= (args - 1);
+										*(stackTop - 1) = *register0;
+									}
+									else
+									{
+										++stackTop;
+									}
+									
+									pc += 3;
+									goto NewObjectTablePastLoad;
+								}
+								
+								goto CallFunctionByHash_continue;
+							}
+
+							import = import->imported;
+						}
+					}
+
+					w->err = WR_ERR_function_not_found;
 					return 0;
 				}
-
-				register1->ccb( context, stackTop - args, args, *stackTop, register1->usr );
+				else
+				{
+					register1->ccb( context, stackTop - args, args, *stackTop, register1->usr );
+				}
 
 				// DO care about return value, which will be at the top
 				// of the stack
-
+CallFunctionByHash_continue:
+				
 				if ( args )
 				{
 					stackTop -= (args - 1);
@@ -10339,7 +10964,6 @@ debugContinue:
 				{
 					++stackTop;
 				}
-				pc += 4;
 				CONTINUE;
 			}
 
@@ -10347,16 +10971,38 @@ debugContinue:
 			{
 				args = READ_8_FROM_PC(pc++);
 
-				if ( !((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->ccb) )
+				uint32_t fhash = READ_32_FROM_PC(pc);
+				pc += 4;
+				if ( !((register1 = w->globalRegistry.getAsRawValueHashTable(fhash))->ccb) )
 				{
-					w->err = WR_ERR_function_hash_signature_not_found;
+					// is in an imported context
+					if ( (import = context->imported) )
+					{
+						while( import != context )
+						{
+							if ( (register0 = import->registry.exists(fhash, false)) )
+							{
+								uint8_t offset = (stackTop - stackBase);
+								w->stackOffset += offset;
+								wr_callFunction( import, register0->wrf, stackTop - args, args );
+								w->stackOffset -= offset;
+								goto CallFunctionByHashAndPop_continue;
+							}
+
+							import = import->imported;
+						}
+					}
+
+					w->err = WR_ERR_function_not_found;
 					return 0;
 				}
+				else
+				{
+					register1->ccb( context, stackTop - args, args, *stackTop, register1->usr );
+				}
 
-				register1->ccb( context, stackTop - args, args, *stackTop, register1->usr );
-
+CallFunctionByHashAndPop_continue:
 				stackTop -= args;
-				pc += 4;
 				CONTINUE;
 			}
 
@@ -10402,14 +11048,14 @@ callFunction:
 				// temp value contains return vector/frame base
 				register0 = stackTop++; // return vector
 				register0->frame = frameBase;
-				register0->returnOffset = pc - bottom; // can't use "pc" because it might set the "gc me" bit, this is guaranteed to be small enough
+				register0->returnOffset = pc - context->bottom; // can't use "pc" because it might set the "gc me" bit, this is guaranteed to be small enough
 
 				pc = function->offset;
 
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - function->frameBaseAdjustment;
 
-				assert( stackTop < (w->stack + w->stackSize) );
+				assert( stackTop < (stackBase + w->stackSize) );
 
 				CONTINUE;
 			}
@@ -10429,11 +11075,12 @@ callFunction:
 
 				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb) )
 				{
-					w->err = WR_ERR_function_hash_signature_not_found;
+					w->err = WR_ERR_lib_function_not_found;
 					return 0;
 				}
 
 				register1->lcb( stackTop, args, context );
+				
 				pc += 4;
 
 #ifdef WRENCH_COMPACT
@@ -10452,6 +11099,10 @@ callFunction:
 					++stackTop;
 				}
 #endif
+				if ( w->err )
+				{
+					return 0;
+				}
 
 				CONTINUE;
 			}
@@ -10462,7 +11113,7 @@ callFunction:
 
 				if ( ! ((register1 = w->globalRegistry.getAsRawValueHashTable(READ_32_FROM_PC(pc)))->lcb) )
 				{
-					w->err = WR_ERR_function_hash_signature_not_found;
+					w->err = WR_ERR_lib_function_not_found;
 					return 0;
 				}
 
@@ -10470,25 +11121,30 @@ callFunction:
 				pc += 4;
 
 				stackTop -= args;
-				
+
+				if ( w->err )
+				{
+					return 0;
+				}
+
 				CONTINUE;
 			}
 
 			CASE(NewObjectTable):
 			{
-				const unsigned char* table = bottom + READ_16_FROM_PC(pc);
+				table = context->bottom + READ_16_FROM_PC(pc);
 				pc += 2;
 
-				if ( table > bottom )
+				if ( table > context->bottom )
 				{
+NewObjectTablePastLoad:
 					// if unit was called with no arguments from global
-					// level there are no "g_free" stack entries to
+					// level there are no "free" stack entries to
 					// gnab, so create it here, but preserve the
 					// first value
 
 					// NOTE: we are guaranteed to have at least one
 					// value if table > bottom
-
 					unsigned char count = READ_8_FROM_PC(table++);
 
 					register1 = (stackTop + READ_8_FROM_PC(table))->r;
@@ -10525,14 +11181,38 @@ callFunction:
 				CONTINUE;
 			}
 
+			CASE(AssignToObjectTableByHash):
+			{
+				hash = READ_32_FROM_PC(pc);
+				pc += 4;
+
+				register1 = --stackTop;
+				register0 = stackTop - 1;
+
+				const unsigned char* table = register0->va->m_ROMHashTable + ((hash % register0->va->m_mod) * 5);
+				
+				if ( (uint32_t)READ_32_FROM_PC(table) == hash )
+				{
+					register2 = (((WRValue*)(register0->va->m_data)) + READ_8_FROM_PC(table + 4));
+					wr_assign[register2->type<<2|register1->type]( register2, register1 );
+				}
+				else
+				{
+					w->err = WR_ERR_hash_not_found;
+					return 0;
+				}
+				
+				CONTINUE;
+			}
+			
 			CASE(AssignToObjectTableByOffset):
 			{
 				register1 = --stackTop;
 				register0 = (stackTop - 1);
-				sizeCheck = READ_8_FROM_PC(pc++);
-				if ( IS_EXARRAY_TYPE(register0->xtype) && (sizeCheck < register0->va->m_size) )
+				hash = READ_8_FROM_PC(pc++);
+				if ( IS_EXARRAY_TYPE(register0->xtype) && (hash < register0->va->m_size) )
 				{
-					register0 = register0->va->m_Vdata + sizeCheck;
+					register0 = register0->va->m_Vdata + hash;
 #ifdef WRENCH_COMPACT
 					goto doAssignToLocalAndPop;
 #else
@@ -10587,10 +11267,9 @@ callFunction:
 			{
 				register0 = stackTop - 2;
 
-				pc = bottom + register0->returnOffset; // grab return PC
+				pc = context->bottom + register0->returnOffset; // grab return PC
 
 				stackTop = frameBase;
-				
 				frameBase = register0->frame;
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
@@ -10622,12 +11301,12 @@ callFunction:
 			
 			CASE(GlobalStop):
 			{
-				register0 = w->stack - 1;
+				register0 = stackBase - 1;
 				++pc;
 			}			
 			CASE(Stop):
 			{
-				*w->stack = *(register0 + 1);
+				*stackBase = *(register0 + 1);
 				context->stopLocation = pc - 1;
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 				if ( context->debugInterface )
@@ -10635,7 +11314,7 @@ callFunction:
 					context->debugInterface->I->codewordEncountered( pc, WRD_FunctionCall | WRD_GlobalStopFunction, stackTop );
 				}
 #endif
-				return &(w->stack)->deref();
+				return &(stackBase)->deref();
 			}
 
 			CASE(Dereference):
@@ -12435,7 +13114,7 @@ Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, g_free of charge, to any person obtaining a copy
+Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -12463,6 +13142,18 @@ void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree )
 {
 	g_malloc = wralloc;
 	g_free = wrfree;
+}
+
+//------------------------------------------------------------------------------
+void* wr_malloc( size_t size )
+{
+	return g_malloc( size );
+}
+
+//------------------------------------------------------------------------------
+void wr_free( void* ptr )
+{
+	g_free( ptr );
 }
 
 //------------------------------------------------------------------------------
@@ -12547,15 +13238,15 @@ WRValue* WrenchValue::asArrayMember( const int index )
 //------------------------------------------------------------------------------
 WRState* wr_newState( int stackSize )
 {
-	WRState* state = (WRState *)g_malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
-	memset( (unsigned char*)state, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
+	WRState* w = (WRState *)g_malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
+	memset( (unsigned char*)w, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
 
-	state->stackSize = stackSize;
-	state->stack = (WRValue *)((unsigned char *)state + sizeof(WRState));
+	w->stackSize = stackSize;
+	w->stack = (WRValue *)((unsigned char *)w + sizeof(WRState));
 
-	state->globalRegistry.init( 0, SV_VOID_HASH_TABLE, false );
+	w->globalRegistry.init( 0, SV_VOID_HASH_TABLE, false );
 
-	return state;
+	return w;
 }
 
 //------------------------------------------------------------------------------
@@ -12618,7 +13309,7 @@ bool wr_executeFunctionZero( WRContext* context )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_newContext( WRState* w, const unsigned char* block, const int blockSize )
+WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership )
 {
 	// CRC the code block, at least is it what the compiler intended?
 	uint32_t hash = READ_32_FROM_PC( block + (blockSize - 4) );
@@ -12632,34 +13323,33 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 	int needed = sizeof(WRContext) // class
 				 + funcs * sizeof(WRFunction) // local functions
 				 + READ_8_FROM_PC(block+1) * sizeof(WRValue);  // globals
-				 
-	WRContext* C = (WRContext *)g_malloc( needed );
 
+	WRContext* C = (WRContext *)g_malloc( needed );
 	memset((char*)C, 0, needed);
 
+	C->numLocalFunctions = funcs;
+	
 	C->globals = READ_8_FROM_PC(block + 1);
 
 	C->allocatedMemoryLimit = WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT;
+
+	C->flags |= takeOwnership ? WRC_OwnsMemory : 0;
 	
 	C->w = w;
 
-	C->yield_pc = 0;
-
 	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + C->globals * sizeof(WRValue));
 
-	C->registry.init( 0, SV_VOID_HASH_TABLE, false );
-	C->registry.m_vNext = w->contextList;
 	C->bottom = block;
 	C->codeStart = block + 3;
 	C->bottomSize = blockSize;
 
 	uint8_t compilerFlags = READ_8_FROM_PC( block + 2 );
-	
+
 	if ( compilerFlags & WR_INCLUDE_GLOBALS )
 	{
 		C->codeStart += C->globals * sizeof(uint32_t); // these are lazily loaded, just skip over them for now
 	}
-	
+
 	if ( (compilerFlags & WR_EMBED_DEBUG_CODE) || (compilerFlags & WR_EMBED_SOURCE_CODE) )
 	{
 		uint16_t symbolsSize = READ_16_FROM_PC( C->codeStart + 4 );
@@ -12671,7 +13361,49 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 		C->codeStart += 4 + READ_32_FROM_PC( C->codeStart );		
 	}
 
-	return (w->contextList = C);
+	C->registry.init( 0, SV_VOID_HASH_TABLE, false );
+
+	return C;
+}
+
+//------------------------------------------------------------------------------
+WRContext* wr_import( WRContext* context, const unsigned char* block, const int blockSize, bool takeOwnership )
+{
+	WRContext* import = wr_createContext( context->w, block, blockSize, takeOwnership );
+	if ( !import )
+	{
+		return 0;
+	}
+
+	if ( !wr_callFunction(import, (int32_t)0) )
+	{ 
+		// imported context may not yield
+		wr_destroyContext( context );
+		return 0;
+	}
+
+	import->imported = context->imported;
+	context->imported = import;
+
+	// make this a circular linked list
+	if ( import->imported == 0 )
+	{
+		import->imported = context;
+	}
+
+	return import;
+}
+
+//------------------------------------------------------------------------------
+WRContext* wr_newContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership )
+{
+	WRContext* C = wr_createContext( w, block, blockSize, takeOwnership );
+	if ( C )
+	{
+		C->registry.m_vNext = w->contextList;
+		w->contextList = C;
+	}
+	return C;
 }
 
 //------------------------------------------------------------------------------
@@ -12688,9 +13420,9 @@ WRValue* wr_executeContext( WRContext* context )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
+WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership )
 {
-	WRContext* context = wr_newContext( w, block, blockSize );
+	WRContext* context = wr_newContext( w, block, blockSize, takeOwnership );
 
 	if ( !context )
 	{
@@ -12707,6 +13439,24 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 	}
 		
 	return context;
+}
+
+//------------------------------------------------------------------------------
+void wr_destroyContextEx( WRContext* context )
+{
+	// g_free all memory allocations by forcing the gc to collect everything
+	context->globals = 0;
+	context->allocatedMemoryHint = context->allocatedMemoryLimit;
+	context->gc( 0 );
+
+	context->registry.clear();
+
+	if ( context->flags & WRC_OwnsMemory )
+	{
+		g_free( (void*)(context->bottom) );
+	}
+
+	g_free( context );
 }
 
 //------------------------------------------------------------------------------
@@ -12733,17 +13483,19 @@ void wr_destroyContext( WRContext* context )
 				context->w->contextList = (WRContext*)context->w->contextList->registry.m_vNext;
 			}
 
-			// g_free all memory allocations by forcing the gc to collect everything
-			context->globals = 0;
-			context->allocatedMemoryHint = context->allocatedMemoryLimit;
-			context->gc( 0 );
+			while( context->imported )
+			{
+				WRContext* next = context->imported->imported;
+				wr_destroyContextEx( context->imported );
 
-			context->registry.clear();
+				context->imported = next == context ? 0 : next; // the list is circular, stop here!
+			}
 
-			g_free( context );
+			wr_destroyContextEx( context );
 
 			break;
 		}
+
 		prev = c;
 	}
 }
@@ -13103,7 +13855,8 @@ WRValue* wr_returnValueFromLastCall( WRState* w )
 //------------------------------------------------------------------------------
 WRFunction* wr_getFunction( WRContext* context, const char* functionName )
 {
-	return context->registry.getAsRawValueHashTable(wr_hashStr(functionName))->wrf;
+	WRValue* f = context->registry.exists(wr_hashStr(functionName), false);
+	return f ? f->wrf : 0;
 }
 
 //------------------------------------------------------------------------------
@@ -13208,44 +13961,6 @@ void wr_destroyContainer( WRValue* val )
 #ifndef WRENCH_WITHOUT_COMPILER
 
 //------------------------------------------------------------------------------
-const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte )
-{
-	const unsigned char* data = (char unsigned *)d;
-	str.clear();
-	for( unsigned int i=0; i<len; i++ )
-	{
-		str.appendFormat( "0x%08X: ", i );
-		char dump[24];
-		unsigned int j;
-		for( j=0; j<16 && i<len; j++, i++ )
-		{
-			dump[j] = isgraph((unsigned char)data[i]) ? data[i] : '.';
-			dump[j+1] = 0;
-			if ( i == (unsigned int)markByte )
-			{
-				str.shave(1);
-				str.appendFormat( "[%02X]", (unsigned char)data[i] );
-			}
-			else
-			{
-				str.appendFormat( "%02X ", (unsigned char)data[i] );
-			}
-		}
-
-		for( ; j<16; j++ )
-		{
-			str.appendFormat( "   " );
-		}
-		i--;
-		str += ": ";
-		str += dump;
-		str += "\n";
-	}
-
-	return str;
-}
-
-//------------------------------------------------------------------------------
 const char* c_opcodeName[] = 
 {
 	"RegisterFunction",
@@ -13265,6 +13980,7 @@ const char* c_opcodeName[] =
 
 	"NewObjectTable",
 	"AssignToObjectTableByOffset",
+	"AssignToObjectTableByHash",
 
 	"AssignToHashTableAndPop",
 	"Remove",
@@ -13555,9 +14271,11 @@ const char* c_errStrings[]=
 	"WR_ERR_None",
 
 	"WR_YIELDED",
-
+	
 	"WR_ERR_compiler_not_loaded",
-	"WR_ERR_function_hash_signature_not_found",
+	"WR_ERR_function_not_found",
+	"WR_ERR_lib_function_not_found",
+	"WR_ERR_hash_not_found",
 	"WR_ERR_library_constant_not_loaded",
 	"WR_ERR_unknown_opcode",
 	"WR_ERR_unexpected_EOF",
@@ -13576,17 +14294,15 @@ const char* c_errStrings[]=
 	"WR_ERR_constant_redefined",
 	"WR_ERR_struct_in_struct",
 	"WR_ERR_var_not_seen_before_label",
+	"WR_ERR_unexpected_export_keyword",
+	"WR_ERR_new_assign_by_label_or_offset_not_both",
+	"WR_ERR_struct_not_exported",
 
 	"WR_ERR_run_must_be_called_by_itself_first",
 	"WR_ERR_hash_table_size_exceeded",
 	"WR_ERR_wrench_function_not_found",
 	"WR_ERR_array_must_be_indexed",
 	"WR_ERR_context_not_found",
-
-	"WR_ERR_usr_data_template_already_exists",
-	"WR_ERR_usr_data_already_exists",
-	"WR_ERR_usr_data_template_not_found",
-	"WR_ERR_usr_data_refernce_not_found",
 
 	"WR_ERR_bad_goto_label",
 	"WR_ERR_bad_goto_location",
@@ -13601,6 +14317,8 @@ const char* c_errStrings[]=
 	"WR_ERR_bad_bytecode_CRC",
 
 	"WR_ERR_execute_function_zero_called_more_than_once",
+
+	"WR_ERR_USER_err_out_of_range",
 
 	"WR_warning_enums_follow",
 
@@ -14869,7 +15587,7 @@ Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, g_free of charge, to any person obtaining a copy
+Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -16779,7 +17497,7 @@ SOFTWARE.
 
 #ifdef WRENCH_WIN32_FILE_IO
 
-#include <Windows.h>
+#include <windows.h>
 
 #include <time.h>
 #include <io.h>
@@ -18654,7 +19372,7 @@ SOFTWARE.
 // returns : 0 - function  does not exist
 //         : 1 - function is native (callback)
 //         : 2 - function is in wrench (was in source code)
-void wr_function( WRValue* stackTop, const int argn, WRContext* c )
+void wr_isFunction( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
 
@@ -18678,10 +19396,70 @@ void wr_function( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
+void wr_importByteCode( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	if ( argn > 0 )
+	{
+		unsigned int len;
+		char* data = (char *)((stackTop - argn)->array( &len, SV_CHAR ));
+		if ( data )
+		{
+			uint8_t* import = (uint8_t*)g_malloc( len );
+			memcpy( (char*)import, data, len );
+			wr_import( c, import, len, true );
+		}
+		else
+		{
+			stackTop->i = -1;
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_importCompile( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->init();
+
+	if ( argn > 0 )
+	{
+		unsigned int len;
+		char* data = (char *)((stackTop - argn)->array( &len, SV_CHAR ));
+		if ( data )
+		{
+			unsigned char* out;
+			int outlen;
+			if ( (stackTop->i = wr_compile(data, len, &out, &outlen)) == WR_ERR_None )
+			{
+				wr_import( c, out, outlen, true );
+			}
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_halt( WRValue* stackTop, const int argn, WRContext* c )
+{
+	if ( argn > 0 )
+	{
+		unsigned int e = (stackTop - argn)->asInt();
+		c->w->err = (e <= (unsigned int)WR_USER || e > (unsigned int)WR_ERR_LAST)
+					? WR_ERR_USER_err_out_of_range : e;
+	}
+}
+
+//------------------------------------------------------------------------------
 void wr_loadSysLib( WRState* w )
 {
-	wr_registerLibraryFunction( w, "sys::function", wr_function );
-}/*******************************************************************************
+	wr_registerLibraryFunction( w, "sys::isFunction", wr_isFunction );
+	wr_registerLibraryFunction( w, "sys::importByteCode", wr_importByteCode );
+	wr_registerLibraryFunction( w, "sys::importCompile", wr_importCompile );
+	wr_registerLibraryFunction( w, "sys::halt", wr_halt ); // halts execution and sets w->err to whatever was passed                 
+														   // NOTE: value must be between WR_USER and WR_ERR_LAST
+
+}
+/*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence

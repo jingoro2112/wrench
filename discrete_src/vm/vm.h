@@ -35,9 +35,16 @@ struct WRFunction
 	uint32_t hash;
 	union
 	{
-		const unsigned char* offset;
+		const uint8_t* offset;
 		int offsetI;
 	};
+	const uint8_t* namespaceHashOffset;
+};
+
+//------------------------------------------------------------------------------
+enum WRContextFlags
+{
+	WRC_OwnsMemory = 1<<0, // if this is true, 'bottom' must be freed upon destruction
 };
 
 //------------------------------------------------------------------------------
@@ -49,11 +56,10 @@ struct WRContext
 	uint16_t allocatedMemoryLimit;
 	
 	uint32_t allocatedMemoryHint;
-	WRFunction* localFunctions;
 	
 	const unsigned char* bottom;
 	const unsigned char* codeStart;
-	int bottomSize;
+	int32_t bottomSize;
 	
 	const unsigned char* stopLocation;
 	
@@ -71,9 +77,16 @@ struct WRContext
 	WRValue* yield_stackTop;
 	WRValue* yield_frameBase;
 	const WRValue* yield_argv;
-	int yieldArgs;
-	int yield_argn;
+	uint8_t yield_argn;
+	uint8_t yieldArgs;
+	uint8_t flags;
+
+	WRFunction* localFunctions;
+	uint8_t numLocalFunctions;
+	uint8_t yieldStackOffset;
 	
+	WRContext* imported; // linked list of contexts this one imported
+
 
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
@@ -93,7 +106,7 @@ struct WRState
 {
 	uint16_t stackSize;
 	int8_t err;
-
+	uint8_t stackOffset;
 	WRValue* stack;
 
 	WRContext* contextList;

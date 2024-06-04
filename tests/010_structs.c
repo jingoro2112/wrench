@@ -4,6 +4,14 @@
 
 z = 1;
 
+struct EMPTY
+{
+};
+var e = new EMPTY;
+e = new EMPTY[]{};
+e = new EMPTY[]{{}};
+
+
 struct KWT
 {
 	s;
@@ -149,10 +157,10 @@ struct Bob
 
 function/**/a()//{
 {
-	p = 23;
-	h = 2;
+	var p = 23;
+	var h = 2;
 	b = "hello";
-	a;
+	var a;
 	b;
 }
 
@@ -249,3 +257,40 @@ update_several_times( particles, 50 );
 
 //if ( particles[10].x != 122.299881 ) { println(particles[10].x); println("err 29"); }
 //if ( particles[499].y != 713.397705 ) { println(particles[499].y); println("err 30"); }
+
+
+
+var t1 = new T1()
+{
+	55,66
+};
+if ( t1.a != 55 ) println("t1 1");
+if ( t1.b != 66 ) println("t1 2");
+if ( t1.c != 0 ) println("t1 3");
+
+var t2 = new T1()
+{
+	0,555,666
+};
+if ( t2.a != 0 ) println("t2 1");
+if ( t2.b != 555 ) println("t2 2");
+if ( t2.c != 666) println("t2 3");
+
+a = 10;
+var t3 = new T1(a);
+if ( t3.a != 11 ) println("t3 1");
+if ( t3.b != 15 ) println("t3 2");
+if ( t3.c != 10 ) println("t3 3");
+
+a = 16;
+var t4 = new T1(a) { b = 201, a = 101 };
+if ( t4.a != 101 ) println("t4 1");
+if ( t4.b != 201 ) println("t4 2");
+if ( t4.c != 16 ) println("t4 3");
+
+var t4 = new T1(a) { c = 601, b = 501, a = 401  };
+if ( t4.a != 401 ) println("t4 1b");
+if ( t4.b != 501 ) println("t4 2b");
+if ( t4.c != 601 ) println("t4 3b");
+
+struct T1( n ) { var a = 11; var b = 15; var c = n; };

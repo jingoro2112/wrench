@@ -201,10 +201,10 @@ to your project and compile. That's it, here is a complete
 
 void print( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
-	char buf[1024];
+	char buf[128];
 	for( int i=0; i&ltargn; ++i )
 	{
-		printf( "%s", argv[i].asString(buf, 1024) );
+		printf( "%s", argv[i].asString(buf, 128) );
 	}
 }
 
@@ -229,8 +229,7 @@ int main( int argn, char** argv )
 	int err = wr_compile( wrenchCode, strlen(wrenchCode), &outBytes, &outLen ); // compile it
 	if ( err == 0 )
 	{
-		wr_run( w, outBytes, outLen ); // load and run the code!
-		free( outBytes ); // clean up 
+		wr_run( w, outBytes, outLen, true ); // load and run the code! (pass ownership)
 	}
 
 	wr_destroyState( w );
@@ -738,16 +737,60 @@ instance = new S(40); // s.member1 will be 40, s.member2 will be 0
 <p>Structs can also be initialized when created:
 <code><pre>struct S
 {
-   a;
-   b;
+    var a;
+    var b;
+    var c;
 }
 
 var bill = new S()
 {
    a = 20,
-   b = "some string",
+   c = "some string",
+
+// b will be initted to zero
+
 };
+
+// init by order (not recommended!)
+var bill2 = new S()
+{
+    20,  // a will be 20
+    30,  // b will be 30
+
+    // c will be zero
+};
+
+struct arg( A, B )
+{
+    var first = A;
+    var second = B;
+}
+var argNew = new arg( 10, 20 ); // first will be 10, second will be 20
 </code></pre>
+
+
+
+<p><b>export</b>
+<p>Structs can be exported so other scripts can import them, for example
+<P>script 1:
+<code><pre>export struct Color
+{
+    var red;
+    var green;
+    var blue;
+}
+</code></pre>
+<P>script 2:
+<code><pre>var colorByteCode = io::readFile("precompiled_color_script.bin");
+sys::importByteCode( colorByteCode );
+
+var myRed = new Color() { red = 0xFF, blue = 0, green = 0 };
+
+// ... etc
+</code></pre>
+
+
+
 
 <p><b>constants</b>
 some constants that are compiler-defined:
@@ -1111,8 +1154,14 @@ void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
 
 
 <code><pre>// SysLib:
-sys::function( "funcName" ); // return true IFF funcName is a callable
-                             // function, ie loaded: wr_registerFunction(...)
+sys::isFunction( "funcName" ); // return true IFF funcName is a callable
+                               // function, ie loaded: wr_registerFunction(...)
+
+sys::halt( err ); // halts execution and sets w->err to whatever was passed                 
+                  // NOTE: value must be between WR_USER and WR_ERR_LAST
+sys::importByteCode( byteCode ); // byteCode as compiled code
+sys::importCompile( sourceCode ); // compiles and imports source code
+                                  // IF the compiler was included
 
 </code></pre><pre><code>// MathLib:
 math::sin( f );

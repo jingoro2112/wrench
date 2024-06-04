@@ -85,7 +85,6 @@ private:
 	unsigned char* m_byteCode;
 };
 
-
 //------------------------------------------------------------------------------
 int main( int argn, char** argv )
 {
@@ -107,4 +106,3 @@ int main( int argn, char** argv )
 	wr_destroyState( w );
 	return 0;
 }
-

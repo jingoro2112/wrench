@@ -352,7 +352,11 @@ struct WRUnitContext
 	uint32_t arguments; // how many arguments it expects
 	int offsetInBytecode; // where in the bytecode it resides
 
+	bool exportNamespace;
+
 	WRarray<ConstantValue> constantValues;
+
+	WRstr localNamespaceMap;
 
 	int16_t offsetOfLocalHashMap;
 	
@@ -366,6 +370,7 @@ struct WRUnitContext
 	void reset()
 	{
 		name = "";
+		exportNamespace = false;
 		hash = 0;
 		arguments = 0;
 		arguments = 0;
@@ -413,6 +418,7 @@ private:
 	bool m_embedGlobalSymbols;
 	bool m_embedSourceCode;
 	bool m_needVar;
+	bool m_exportNextUnit;
 	
 	uint16_t m_lastCode;
 	uint16_t m_lastParam;
@@ -440,7 +446,7 @@ private:
 	bool operatorFound( WRstr& token, WRarray<WRExpressionContext>& context, int depth );
 	bool parseCallFunction( WRExpression& expression, WRstr functionName, int depth, bool parseArguments );
 	bool pushObjectTable( WRExpressionContext& context, WRarray<WRNamespaceLookup>& localSpace, uint32_t hash );
-	char parseExpression( WRExpression& expression);
+	char parseExpression( WRExpression& expression );
 	bool parseUnit( bool isStruct, int parentUnitIndex );
 	bool parseWhile( bool& returnCalled, WROpcode opcodeToReturn );
 	bool parseDoWhile( bool& returnCalled, WROpcode opcodeToReturn );
@@ -476,8 +482,11 @@ private:
 	bool m_EOF;
 	bool m_LastParsedLabel;
 	bool m_parsingFor;
+	bool m_parsingNew;
 	bool m_quoted;
 
+	uint32_t m_newHashValue;
+	
 	int m_unitTop;
 	WRarray<WRUnitContext> m_units;
 

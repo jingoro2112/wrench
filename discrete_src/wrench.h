@@ -25,9 +25,9 @@ SOFTWARE.
 #define _WRENCH_H
 /*------------------------------------------------------------------------------*/
 
-#define WRENCH_VERSION_MAJOR 4
+#define WRENCH_VERSION_MAJOR 5
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 1
+#define WRENCH_VERSION_BUILD 0
 
 /************************************************************************
 The compiler is not particularly memory or space efficient, for
@@ -37,6 +37,7 @@ only bytecode be executed. This flag explicitly removes the compiler
 anyway)
 */
 //#define WRENCH_WITHOUT_COMPILER
+
 
 /***********************************************************************
 
@@ -70,6 +71,7 @@ Some architectures (mostly embedded) really don't like reading more than
 allows it (x86/64, Mac, most *nix etc..) this is a decent optimization
 */
 //#define WRENCH_UNALIGNED_READS
+
 
 /***********************************************************************
 wrench automatically detects endian-ness and defines these three
@@ -150,7 +152,9 @@ enum WRError
 	WR_YIELDED = 1,
 
 	WR_ERR_compiler_not_loaded,
-	WR_ERR_function_hash_signature_not_found,
+	WR_ERR_function_not_found,
+	WR_ERR_lib_function_not_found,
+	WR_ERR_hash_not_found,
 	WR_ERR_library_constant_not_loaded,
 	WR_ERR_unknown_opcode,
 	WR_ERR_unexpected_EOF,
@@ -169,17 +173,15 @@ enum WRError
 	WR_ERR_constant_redefined,
 	WR_ERR_struct_in_struct,
 	WR_ERR_var_not_seen_before_label,
+	WR_ERR_unexpected_export_keyword,
+	WR_ERR_new_assign_by_label_or_offset_not_both,
+	WR_ERR_struct_not_exported,
 
 	WR_ERR_run_must_be_called_by_itself_first,
 	WR_ERR_hash_table_size_exceeded,
 	WR_ERR_wrench_function_not_found,
 	WR_ERR_array_must_be_indexed,
 	WR_ERR_context_not_found,
-
-	WR_ERR_usr_data_template_already_exists,
-	WR_ERR_usr_data_already_exists,
-	WR_ERR_usr_data_template_not_found,
-	WR_ERR_usr_data_refernce_not_found,
 
 	WR_ERR_bad_goto_label,
 	WR_ERR_bad_goto_location,
@@ -195,10 +197,14 @@ enum WRError
 
 	WR_ERR_execute_function_zero_called_more_than_once,
 
+	WR_ERR_USER_err_out_of_range,
+	
 	WR_warning_enums_follow,
 
-	WR_WARN_c_function_not_found,
-	WR_WARN_lib_function_not_found,
+	WR_USER = 100, // user-defined below here
+
+	
+	WR_ERR_LAST = 255,
 };
 
 /***************************************************************/
@@ -216,8 +222,13 @@ typedef void* (*WR_ALLOC)(size_t size);
 typedef void (*WR_FREE)(void* ptr);
 void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
 
+// allocate/free memory with the same allocator wrench is using, this
+// is particularly important for the "takeOwnership" flag below
+void* wr_malloc( size_t size );
+void wr_free( void* ptr );
+
 // hashing function used inside wrench, it's a stripped down murmer,
-// not academically fantastic but very good and very fast
+// not techcnically the "best" but very good, very fast and very compact
 uint32_t wr_hash( const void* dat, const int len );
 uint32_t wr_hashStr( const char* dat );
 
@@ -241,7 +252,7 @@ enum WrenchCompilerFlags
 	
 	WR_EMBED_SOURCE_CODE = 1<<2, // include a copy of the source code
 	
-	WR_NON_STRICT_VAR    = 1<<3, // require 'var' to declare a variable (default true)
+	WR_NON_STRICT_VAR    = 1<<3, // require 'var' to declare a variable (disabled by default)
 };
 
 WRError wr_compile( const char* source,
@@ -254,12 +265,14 @@ WRError wr_compile( const char* source,
 // w:          state (see wr_newState)
 // block:      location of bytecode
 // blockSize:  number of bytes in the block
+// takeOwnership: assume 'block' was allocated with wr_malloc(), it
+//                will be freed with  wr_free()
 
 // RETURNS:    an allocated WRContext
 //             NOTE: This Context is automatically destroyed when
 //             wr_destroyState() is called, but can be manually deleted
 //             with wr_destroyContext(...) (see below)
-WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize );
+WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership =false );
 
 // macro for automatically freeing the WRContext
 #define wr_runOnce( w, block, blockSize ) wr_destroyContext( wr_run((w),(block),(blockSize)) )
@@ -267,13 +280,22 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize )
 // Run the source code as an atomic operation
 bool wr_runCommand( WRState* w, const char* sourceCode, const int size =-1 );
 
+// Add more code to the context, the new code cannot access the
+// existing block, but all of its functions will become available to
+// the parent.
+// takeOwnership: assume 'block' was allocated with wr_malloc(), it
+//                will be freed with  wr_free()
+WRContext* wr_import( WRContext* context, const unsigned char* block, const int blockSize, bool takeOwnership =false );
+
 // After wr_run(...) or wr_callFunction(...) has run, there is always a
 // return value (default 0) this function fetches it
 WRValue* wr_returnValueFromLastCall( WRState* w );
 
 // wr_run actually calls these two functions back-to back. If you want
 // to separate the process you can call them on your own.
-WRContext* wr_newContext( WRState* w, const unsigned char* block, const int blockSize );
+// takeOwnership: assume 'block' was allocated with wr_malloc(), it
+//                will be freed with  wr_free()
+WRContext* wr_newContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership =false );
 WRValue* wr_executeContext( WRContext* context );
 
 // after wr_run() this allows any function in the script to be
@@ -286,6 +308,10 @@ WRValue* wr_executeContext( WRContext* context );
 //               zero then argv will be ignored)
 // RETURNS:      WRValue returned by the function/program, or NULL for
 //               error (see w->err for the code)
+
+// If the context is yielded, callFunction(...) will always continue
+// where the yielded function left off and ignore any parameters
+
 WRValue* wr_callFunction( WRContext* context, const char* functionName, const WRValue* argv =0, const int argn =0 );
 
 // exactly the same as the above but the hash is supplied directly to
@@ -297,9 +323,11 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 // and then called with an absolute minimum of overhead
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
 
-// If wr_callFunction(...) returns 0 with the error code set to
-// "WR_YIELDED" ( w->err == WR_YIELDED ) then it can be continued here.
-WRValue* wr_continueFunction( WRContext* context );
+// can continue a yielded context, for example wr_callFunction(...)
+// returns 0 with the error code set to "WR_YIELDED"
+// ( w->err == WR_YIELDED )
+// if the context is not yielded this call immediately fails
+WRValue* wr_continue( WRContext* context );
 
 // If the function is yielded, this returns true and provides the
 // argument list that was passed to yield(...), if requested

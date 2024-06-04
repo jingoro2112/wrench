@@ -1,9 +1,9 @@
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, g_free of charge, to any person obtaining a copy
+Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -35,6 +35,8 @@ int runTests( int number =0 );
 void testGlobalValues( WRState* w );
 void setup();
 void eventMain();
+void testImport();
+void testHalt();
 
 //------------------------------------------------------------------------------
 void blobToHeader( WRstr const& blob, WRstr const& variableName, WRstr& header )
@@ -262,6 +264,7 @@ int main( int argn, char* argv[] )
 #endif
 	else if ( SimpleArgs::get(argn, argv, "r") )
 	{
+#ifndef WRENCH_WITHOUT_COMPILER
 		WRstr infile;
 		if ( !infile.fileToBuffer(SimpleArgs::get(argn, argv, -1)) )
 		{
@@ -299,6 +302,10 @@ int main( int argn, char* argv[] )
 		}
 
 		wr_destroyState( gw );
+#else
+		printf( "compiler not included in this build\n" );
+		return usage();
+#endif
 	}
 	else if ( SimpleArgs::get(argn, argv, "rb") )
 	{
@@ -325,6 +332,7 @@ int main( int argn, char* argv[] )
 	else if ( SimpleArgs::get(argn, argv, "c")
 			  ||  SimpleArgs::get(argn, argv, "ch") )
 	{
+#ifndef WRENCH_WITHOUT_COMPILER
 		if ( argn < 4 )
 		{
 			printf( "[%d]\n", argn );
@@ -377,6 +385,10 @@ int main( int argn, char* argv[] )
 		}
 
 		g_free( out );
+#else
+		printf( "compiler not included in this build\n" );
+		return usage();
+#endif
 	}
 	else if ( SimpleArgs::get(argn, argv, "release") )
 	{
@@ -424,6 +436,7 @@ int main( int argn, char* argv[] )
 	return 0;
 }
 
+#ifndef WRENCH_WITHOUT_COMPILER
 //------------------------------------------------------------------------------
 static void emit( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
@@ -447,10 +460,14 @@ static void emitln( WRContext* c, const WRValue* argv, const int argn, WRValue& 
 
 	retVal.i = 20; // for argument-return testing
 }
+#endif
 
 //------------------------------------------------------------------------------
 int runTests( int number )
 {
+	int err = 0;
+
+#ifndef WRENCH_WITHOUT_COMPILER
 	WRstr code;
 	WRstr codeName;
 
@@ -480,7 +497,6 @@ int runTests( int number )
 	FILE* tfile = fopen( "test_files.txt", "r" );
 	char buf[256];
 	int fileNumber = 0;
-	int err = 0;
 	char errMsg[256];
 
 	unsigned char* out;
@@ -489,7 +505,11 @@ int runTests( int number )
 	WRState* w = wr_newState( 128 );
 
 	wr_loadAllLibs( w );
+
+	testImport();
 	
+	testHalt();
+		
 	while( fgets(buf, 255, tfile) && (err==0) )
 	{
 		if ( !number || (number == fileNumber) )
@@ -540,7 +560,7 @@ int runTests( int number )
 					{
 						*returnValue = *firstArg;
 					}
-					wr_continueFunction( context );
+					wr_continue( context );
 				}
 
 				if ( context && !(err = wr_getLastError(w)) )
@@ -647,6 +667,7 @@ int runTests( int number )
 
 	g_free( someBigArray );
 	fclose( tfile );
+#endif
 	return err;
 }
 
@@ -674,12 +695,20 @@ void testGlobalValues( WRState* w )
 	int outLen;
 	char errMsg[256];
 	int err = wr_compile( globalTestCode, (int)strlen(globalTestCode), &out, &outLen, errMsg, WR_INCLUDE_GLOBALS|WR_NON_STRICT_VAR );
-	assert( !err );
+	if ( err )
+	{
+		assert(0);
+		printf("used");
+	}
 
 	WRContext* gc = wr_run( w, out, outLen );
 
 	WRValue* g = wr_getGlobalRef( gc, "does_not_exist" );
-	assert( !g );
+	if ( g )
+	{
+		assert(0);
+		printf("used");
+	}
 
 	g = wr_getGlobalRef( gc, "global_one" );
 	assert( g && g->i == 10 );
@@ -735,9 +764,125 @@ void testGlobalValues( WRState* w )
 	assert( wr_callFunction(gc, "test10") );
 
 	g_free( out );
+}
 
-	g = g;
-	err = err;
+const char* haltMe = "sys::halt( 101 );";
+const char* haltMe2 = "sys::halt( 1 );";
+
+//------------------------------------------------------------------------------
+void testHalt()
+{
+	WRState* w = wr_newState( 16 );
+	wr_loadAllLibs(w);
+
+	//	wr_compile( baseMe, strlen(baseMe), &out1, &out1len );
+	unsigned char* out;
+	int outlen;
+	wr_compile( haltMe, strlen(haltMe), &out, &outlen );
+	wr_run( w, out, outlen, true );
+	assert( w->err == 101 );
+
+	wr_compile( haltMe2, strlen(haltMe2), &out, &outlen );
+	wr_run( w, out, outlen, true );
+	assert( w->err == WR_ERR_USER_err_out_of_range );
+
+	wr_destroyState( w );
+}
+
+//------------------------------------------------------------------------------
+WRstr g_importBuf;
+static void importln( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	for( int i=0; i<argn; ++i )
+	{
+		char outbuf[64000];
+		argv[i].asString( outbuf, 64000 );
+		g_importBuf += outbuf;
+	}
+	g_importBuf += "\n";
+}
+
+
+const char* importMe = "export function imported(a) \n"
+					   "{                    \n"
+					   "    return a + 0xAE;    \n"
+					   "}                    \n"
+					   "export struct S1(n) { var a = 10; var b = 15; var c=n; };\n"
+					   "\n"
+					   "struct S0 { var c = 5; };\n";
+
+
+const char* baseMe = "yield();\n"
+					 "sys::importCompile( \"export struct S2 { var b = 20; };\" );\n"
+					 "println( imported(1) );\n"
+					 "imported(1);\n"
+					 "var s1 = new S1;\n"
+					 "println( s1.a );\n"
+					 "var s2 = new S2;\n"
+					 "println( s2.b );\n"
+					 "var s0 = new S1;\n"
+					 "s0 = new S1[]{};\n"
+					 "s0 = new S1[]{{}};\n"
+					 "s0 = new S1(99);\n"
+					 "println(s0.d);\n"
+					 "s0 = new S1{c = 201};\n"
+					 "println(s0.a);\n"
+					 "println(s0.b);\n"
+					 "println(s0.c);\n"
+					 "s0 = new S1{55,66};\n"
+					 "println(s0.a);\n"
+					 "println(s0.b);\n"
+					 "println(s0.c);\n"
+					 "var s0 = new S0;\n"
+					 ;
+
+//------------------------------------------------------------------------------
+void testImport()
+{
+	WRState* w = wr_newState( 128 );
+	wr_loadAllLibs(w);
+
+	g_importBuf.clear();
+	wr_registerFunction( w, "println", importln );
+
+	unsigned char* out1;
+	int out1len;
+	unsigned char* out2;
+	int out2len;
+
+//	WRstr base;
+//	base.fileToBuffer( "test.c" );
+//	wr_compile( base, base.size(), &out1, &out1len );
+
+//	wr_compile( "export struct S2 { var b = 20; };", strlen("export struct S2 { var b = 20; };"), &out1, &out1len );
+//	g_free( out1 );
+	
+
+
+	wr_compile( baseMe, strlen(baseMe), &out1, &out1len );
+	wr_compile( importMe, strlen(importMe), &out2, &out2len );
+
+	WRContext* context = wr_run( w, out1, out1len, true );
+
+	wr_import( context, out2, out2len, true );
+
+	wr_continue( context );
+
+	assert( w->err == WR_ERR_struct_not_exported );
+
+	assert( g_importBuf ==
+			"175\n"
+			"10\n"
+			"20\n"
+			"0\n"
+			"10\n"
+			"15\n"
+			"201\n"
+			"55\n"
+			"66\n"
+			"0\n" );
+	
+	wr_destroyState( w );
 }
 
 
@@ -749,16 +894,13 @@ const int Pbasic_bytecodeSize=54;
 const unsigned char Pbasic_bytecode[]=
 {
 	0x00, 0x01, 0x00, 0x04, 0x0D, 0x00, 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x57, 0x6F, 0x72, 0x6C, // 16
-	0x64, 0x21, 0x0A, 0x06, 0x01, 0x88, 0x8A, 0x37, 0x16, 0xCE, 0x00, 0x00, 0xAE, 0x0A, 0x6F, 0x00, // 32
-	0x0F, 0x09, 0x1F, 0x00, 0x06, 0x01, 0x88, 0x8A, 0x37, 0x16, 0x8F, 0x00, 0x36, 0xEF, 0x09, 0x02, // 48
-	0xEE, 0x13, 0xF4, 0x02, 0x11, 0x5E, // 54
+	0x64, 0x21, 0x0A, 0x06, 0x01, 0x88, 0x8A, 0x37, 0x16, 0xCF, 0x00, 0x00, 0xAF, 0x0A, 0x70, 0x00, // 32
+	0x0F, 0x09, 0x20, 0x00, 0x06, 0x01, 0x88, 0x8A, 0x37, 0x16, 0x90, 0x00, 0x37, 0xEF, 0x09, 0x02, // 48
+	0xEF, 0x14, 0x08, 0x94, 0x61, 0xFD, // 54
 };
 
 
-void logBlank( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
-{
-	
-}
+void logBlank( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr ) { }
 
 
 void log2( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )

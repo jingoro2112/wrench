@@ -3,7 +3,7 @@ Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
-Permission is hereby granted, g_free of charge, to any person obtaining a copy
+Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -287,7 +287,7 @@ tryAgain:
 						g_free( proposed );
 						++t;
 
-						assert( (int)newMod != 49157 );
+						assert( (unsigned int)newMod != 49157 );
 
 						goto tryAgain;
 					}

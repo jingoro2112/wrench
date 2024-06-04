@@ -26,7 +26,7 @@ SOFTWARE.
 
 #ifdef WRENCH_WIN32_FILE_IO
 
-#include <Windows.h>
+#include <windows.h>
 
 #include <time.h>
 #include <io.h>

@@ -1,4 +1,8 @@
-/*~ ~*/
+/*~
+zero
+one
+two
+~*/
 
 somethingH = { 1:10, 2:20 };
 if ( somethingH._exists(1) != 1 ) println("x1");
@@ -70,3 +74,8 @@ for( value2 : something )
 }
 
 
+var somArray[] = {"zero", "one", "two" };
+
+for( var v : somArray ) {
+	println(v);
+}

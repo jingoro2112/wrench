@@ -285,10 +285,10 @@ if ( str::toupper( "hNh" ) != "HNH" ) println("tou0");
 
 function f1() { }
 
-if ( sys::function("println") != 1 ) println("sys0");
-if ( sys::function("foo") != 0 ) println("sys1");
-if ( sys::function("f1") != 2 ) println("sys2");
-if ( sys::function("f2") != 2 ) println("sys3");
-if ( sys::function() != 0 ) println("sys4");
+if ( sys::isFunction("println") != 1 ) println("sys0");
+if ( sys::isFunction("foo") != 0 ) println("sys1");
+if ( sys::isFunction("f1") != 2 ) println("sys2");
+if ( sys::isFunction("f2") != 2 ) println("sys3");
+if ( sys::isFunction() != 0 ) println("sys4");
 
 function f2() { }

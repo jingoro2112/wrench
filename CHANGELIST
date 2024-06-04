@@ -1,3 +1,51 @@
+5.0.0 ----------------------------------------------------------------------------------
+- import! 
+  code can now be imported and made available to the running code ie:
+
+    sys::importCompile( "function f1() { return 10; }" );
+    print( f1() ); // output will be '10'
+ 
+  sys::importCompile(), sys::importByteCode() and from c wr_import( ... ) are
+  all supported with one caveat, structs must be explicitly exported so their namespace
+  maps (which are only generated when needed) are generated is:
+
+  --- file1.c:
+
+      struct S { var a = 10; var b = 20 };
+
+  --- file2.c:
+
+      export struct E { var a = 10; var b = 20 };
+
+  --- file3.c:
+
+      var f = io::readFile( "file1.c" );
+      sys::importCompile( f );
+      var s = new S;  // this will NOT WORK
+
+      f = io::reasdFile( "file2.c" );
+      sys::importCompile( f );
+      var e = new E;  // this WILL work
+
+  functions do NOT have this restriction. 
+  also: imported global space is NOT accessible
+
+    sys::importCompile( "var g = 100;" );
+    print( ::g ); // error, 'g' has not been declared
+
+  this required a few byte-code changing changes:
+  - units can be "exported" which requires the namespace map to always be
+    appended rather than conditionally if a 'new' of them has been performed
+  - namespace map always occurs at the start of a unit offset so it can be found
+    when imported
+  - fixed some minor string based stuffs
+- issue #25 fixed, requiring 'var' was not compatible with "foreach" because it was
+  creating a temporary incorrectly, fixed.
+- added library call sys::halt(...) which allows a program to break the current execution
+  with a supplied err code, as long as its higher than 
+  WR_USER = 10000, // user-defined below here
+  other
+
 4.0.1 ----------------------------------------------------------------------------------
 thx to: ohordiichuk <notifications@github.com> for the following:
 - removed ALL new/delete from code except for in-place new used in the compiler. Since
@@ -14,6 +62,9 @@ thx to: ohordiichuk <notifications@github.com> for the following:
         typedef void (*WR_FREE)(void* ptr);
         void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
 
+- reworked str.h to add a dynamic formatting option for format/appendFormat
+  to both handle small strings more effeciently and handle formats of unlimited
+  size
 
 
 4.0.0 ----------------------------------------------------------------------------------

@@ -1,31 +1,8 @@
-/*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
-
-MIT Licence
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*******************************************************************************/
 #ifndef _STR_H
 #define _STR_H
 /* ------------------------------------------------------------------------- */
 
-#ifndef WRENCH_WITHOUT_COMPILER
+//#ifndef WRENCH_WITHOUT_COMPILER
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -38,8 +15,11 @@ SOFTWARE.
 #include <sys/stat.h>
 #endif
 
+// same as str.h but for char only so no template overhead, also no
+// new/delete just malloc/free
+
 const unsigned int c_sizeofBaseString = 15; // this lib tries not to use dynamic RAM unless it has to
-const int c_cstrFormatBufferSize = 1024; // when formatting, this much stack space is reserved during the call
+const int c_formatBaseTrySize = 80;
 
 //-----------------------------------------------------------------------------
 class WRstr
@@ -50,56 +30,7 @@ public:
 	WRstr( const WRstr* str ) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; if ( str ) { set(*str, str->size()); } } 
 	WRstr( const char* s, const unsigned int len ) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; set(s, len); }
 	WRstr( const char* s ) { m_len = 0; m_str = m_smallbuf; m_buflen = c_sizeofBaseString; set(s, (unsigned int)strlen(s)); }
-	WRstr( const char c) { m_len = 1; m_str = m_smallbuf; m_smallbuf[0] = c; m_smallbuf[1] = 0; m_buflen = c_sizeofBaseString; }
-	
-	~WRstr() { if ( m_str != m_smallbuf ) g_free(m_str); }
-
-	WRstr& clear() { m_len = 0; m_str[0] = 0; return *this; }
-	
-	WRstr& format( const char* format, ... ) { va_list arg; va_start( arg, format ); clear(); appendFormatVA( format, arg ); va_end( arg ); return *this; }
-	WRstr& formatVA( const char* format, va_list arg ) { clear(); return appendFormatVA(format, arg); }
-	WRstr& appendFormat( const char* format, ... ) { va_list arg; va_start( arg, format ); appendFormatVA( format, arg ); va_end( arg ); return *this; }
-	WRstr& appendFormatVA( const char* format, va_list arg )
-	{
-		char buf[ c_cstrFormatBufferSize + 1 ];
-		int len = vsnprintf( buf, c_cstrFormatBufferSize, format, arg );
-		if ( len > 0 ) insert( buf, (unsigned int)len, m_len );
-		return *this;
-	}
-
-	unsigned int release( char** toBuf )
-	{
-		unsigned int retLen = m_len;
-
-		if ( m_str == m_smallbuf )
-		{
-			*toBuf = (char*)g_malloc( m_len + 1 );
-			memcpy( *toBuf, m_str, (m_len+1) );
-		}
-		else
-		{
-			*toBuf = m_str;
-			m_str = m_smallbuf;
-			m_buflen = c_sizeofBaseString;
-		}
-		
-		clear();
-		return retLen;
-	}
-
-	inline WRstr& trim();
-
-	inline WRstr& alloc( const unsigned int characters, const bool preserveContents =true ); 
-
-	unsigned int size() const { return m_len; } // see length
-	unsigned int bufferSize() const { return m_buflen; } // see length
-	unsigned int c_size() { for( m_len=0; m_len<m_buflen && m_str[m_len]; ++m_len); return m_len; }
-
-	const char* c_str( const unsigned int offset =0 ) const { return m_str + offset; }
-	char* p_str( const unsigned int offset =0 ) const { return m_str + offset; }
-
-	operator const void*() const { return m_str; }
-	operator const char*() const { return m_str; }
+	WRstr( const char c) { m_len = 1; m_str = m_smallbuf; m_smallbuf[0] = c; m_smallbuf[1] = 0; m_buflen = c_sizeofBaseString; } 
 
 #ifdef STR_FILE_OPERATIONS
 	inline bool fileToBuffer( const char* fileName, const bool appendToBuffer =false );
@@ -109,41 +40,73 @@ public:
 	bool bufferToFile( const char* fileName, const bool append =false ) const { return false; }
 #endif
 
+	WRstr& clear() { m_len = 0; m_str[0] = 0; return *this; }
+
+	inline WRstr& format( const char* format, ... );
+	inline WRstr& appendFormat( const char* format, ... );
+
+	inline void release( char** toBuf, unsigned int* len =0 ); // always suceeds and returns dynamic memory
+	inline WRstr& giveOwnership( char* str, const unsigned int len );
+
+	static const unsigned int npos = (unsigned int)-1;
+	unsigned int find( const char c, const unsigned int from =0 ) const { char buf[2] = { c, 0 }; return find(buf, from); }
+	unsigned int rfind( const char c, const unsigned int from =npos ) const { char buf[2] = { c, 0 }; return rfind(buf, from); }
+	unsigned int findCase( const char c, const unsigned int from =0 ) const { char buf[2] = { c, 0 }; return findCase(buf, from); }
+	inline unsigned int find( const char* str, const unsigned int from =0 ) const;
+	inline unsigned int rfind( const char* str, const unsigned int from =npos ) const;
+	inline unsigned int findCase( const char* str, const unsigned int from =0 ) const;
+
+	WRstr& setSize( const unsigned int size, const bool preserveContents =true ) { alloc(size, preserveContents); m_len = size; m_str[size] = 0; return *this; }
+
+	inline WRstr& alloc( const unsigned int characters, const bool preserveContents =true );
+
+	inline WRstr& trim();
+	inline WRstr& truncate( const unsigned int newLen ); // reduce size to 'newlen'
+	WRstr& shave( const unsigned int e ) { return (e > m_len) ? clear() : truncate(m_len - e); } // remove 'x' trailing characters
+	inline WRstr& shift( const unsigned int from );
+	inline WRstr substr( const unsigned int begin, const unsigned int len ) const;
+
+	unsigned int size() const { return m_len; } // see length
+
+	const char* c_str( const unsigned int offset =0 ) const { return m_str + offset; }
+	char* p_str( const unsigned int offset =0 ) const { return m_str + offset; }
+
+	operator const void*() const { return m_str; }
+	operator const char*() const { return m_str; }
+
 	WRstr& set( const char* buf, const unsigned int len ) { m_len = 0; m_str[0] = 0; return insert( buf, len ); }
 	WRstr& set( const WRstr& str ) { return set( str.m_str, str.m_len ); }
 	WRstr& set( const char c ) { clear(); m_str[0]=c; m_str[1]=0; m_len = 1; return *this; }
 
-	inline WRstr& truncate( const unsigned int newLen ); // reduce size to 'newlen'
-	WRstr& shave( const unsigned int e ) { return (e > m_len) ? clear() : truncate(m_len - e); } // remove 'x' trailing characters
-	
-	inline bool isMatch( const char* buf ) const;
+	bool isMatch( const char* buf ) const { return strcmp(buf, m_str) == 0; }
+#ifdef WIN32
+	bool isMatchCase( const char* buf ) const { return _strnicmp(buf, m_str, m_len) == 0; }
+#else
+	bool isMatchCase( const char* buf ) const { return strncasecmp(buf, m_str, m_len) == 0; }
+#endif
+	static inline bool isWildMatch( const char* pattern, const char* haystack );
+	inline bool isWildMatch( const char* pattern ) const { return isWildMatch( pattern, m_str ); }
+				  
+	static inline bool isWildMatchCase( const char* pattern, const char* haystack );
+	inline bool isWildMatchCase( const char* pattern ) const { return isWildMatchCase( pattern, m_str ); }
 
 	inline WRstr& insert( const char* buf, const unsigned int len, const unsigned int startPos =0 );
 	inline WRstr& insert( const WRstr& s, const unsigned int startPos =0 ) { return insert(s.m_str, s.m_len, startPos); }
-	
+
 	inline WRstr& append( const char* buf, const unsigned int len ) { return insert(buf, len, m_len); } 
 	inline WRstr& append( const char c );
 	inline WRstr& append( const WRstr& s ) { return insert(s.m_str, s.m_len, m_len); }
 
 	// define the usual suspects:
-	
+
 	const char& operator[]( const int l ) const { return get((unsigned int)l); }
 	const char& operator[]( const unsigned int l ) const  { return get(l); }
 	char& operator[]( const int l )  { return get((unsigned int)l); }
 	char& operator[]( const unsigned int l ) { return get(l); }
 
-	char& get( const unsigned int l )
-	{
-		assert( l < m_buflen );
-		return m_str[l];
-	}
+	char& get( const unsigned int l ) { return m_str[l]; }
+	const char& get( const unsigned int l ) const { return m_str[l]; }
 
-	const char& get( const unsigned int l ) const
-	{
-		assert( l < m_buflen );
-		return m_str[l];
-	}
-	
 	WRstr& operator += ( const WRstr& str ) { return append(str.m_str, str.m_len); }
 	WRstr& operator += ( const char* s ) { return append(s, (unsigned int)strlen(s)); }
 	WRstr& operator += ( const char c ) { return append(c); }
@@ -159,6 +122,8 @@ public:
 	friend bool operator != ( const WRstr& s1, const WRstr& s2 ) { return s1.m_len != s2.m_len || (strncmp(s1.m_str, s2.m_str, s1.m_len) != 0); }
 	friend bool operator != ( const WRstr& s, const char* z ) { return !s.isMatch( z ); }
 	friend bool operator != ( const char* z, const WRstr& s ) { return !s.isMatch( z ); }
+	friend bool operator != ( const WRstr& s, char* z ) { return !s.isMatch( z ); }
+	friend bool operator != ( char* z, const WRstr& s ) { return !s.isMatch( z ); }
 
 	friend WRstr operator + ( const WRstr& str, const char* s) { WRstr T(str); T += s; return T; }
 	friend WRstr operator + ( const WRstr& str, const char c) { WRstr T(str); T += c; return T; }
@@ -166,72 +131,147 @@ public:
 	friend WRstr operator + ( const char c, const WRstr& str ) { WRstr T(c); T += str; return T; }
 	friend WRstr operator + ( const WRstr& str1, const WRstr& str2 ) { WRstr T(str1); T += str2; return T; }
 
+	~WRstr() { if ( m_str != m_smallbuf ) g_free(m_str); }
+
 protected:
 
 	operator char*() const { return m_str; } // prevent accidental use
 
 	char *m_str; // first element so if the class is cast as a C and de-referenced it always works
-	
+
 	unsigned int m_buflen; // how long the buffer itself is
 	unsigned int m_len; // how long the string is in the buffer
-	char m_smallbuf[ c_sizeofBaseString + 1 ]; // small temporary buffer so a new/delete is not imposed for small strings
+	char m_smallbuf[ c_sizeofBaseString + 1 ]; // small temporary buffer so a malloc/free is not imposed for small strings
 };
 
-//-----------------------------------------------------------------------------
-WRstr& WRstr::trim()
+//------------------------------------------------------------------------------
+inline const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte =-1 )
 {
-	unsigned int start = 0;
-
-	// find start
-	for( ; start<m_len && isspace( (unsigned char)*(m_str + start) ) ; start++ );
-
-	// is the whole thing whitespace?
-	if ( start == m_len )
+	const unsigned char* data = (char unsigned *)d;
+	str.clear();
+	for( unsigned int i=0; i<len; i++ )
 	{
-		clear();
-		return *this;
-	}
-
-	// copy down the characters one at a time, noting the last
-	// non-whitespace character position, which will become the length
-	unsigned int pos = 0;
-	unsigned int marker = start;
-	for( ; start<m_len; start++,pos++ )
-	{
-		if ( !isspace((unsigned char)(m_str[pos] = m_str[start])) )
+		str.appendFormat( "0x%08X: ", i );
+		char dump[24];
+		unsigned int j;
+		for( j=0; j<16 && i<len; j++, i++ )
 		{
-			marker = pos;
+			dump[j] = isgraph((unsigned char)data[i]) ? data[i] : '.';
+			dump[j+1] = 0;
+			if ( i == (unsigned int)markByte )
+			{
+				str.shave(1);
+				str.appendFormat( "[%02X]", (unsigned char)data[i] );
+			}
+			else
+			{
+				str.appendFormat( "%02X ", (unsigned char)data[i] );
+			}
 		}
+
+		for( ; j<16; j++ )
+		{
+			str.appendFormat( "   " );
+		}
+		i--;
+		str += ": ";
+		str += dump;
+		str += "\n";
 	}
 
-	m_len = marker + 1;
-	m_str[m_len] = 0;
-
-	return *this;
+	return str;
 }
 
-//-----------------------------------------------------------------------------
-WRstr& WRstr::alloc( const unsigned int characters, const bool preserveContents )
+//------------------------------------------------------------------------------
+unsigned int WRstr::rfind( const char* str, const unsigned int from ) const
 {
-	if ( characters >= m_buflen ) // only need to alloc if more space is requested than we have
+	int f = (int)(from > m_len ? m_len : from);
+	if ( !str || !str[0] )
 	{
-		char* newStr = (char*)g_malloc( characters + 1 ); // create the space
-		
-		if ( preserveContents ) 
-		{
-			memcpy( newStr, m_str, m_buflen ); // preserve whatever we had
-		}
-		
-		if ( m_str != m_smallbuf )
-		{
-			g_free( m_str );
-		}
-		
-		m_str = newStr;
-		m_buflen = characters;		
+		return 0;
 	}
 
-	return *this;
+	for( ; f >= 0; --f )
+	{
+		for( int i=0;;++i )
+		{
+			if ( !str[i] )
+			{
+				return f;
+			}
+			if ( str[i] != m_str[f + i] )
+			{
+				break;
+			}
+		}
+	}
+	return npos;
+}
+
+//------------------------------------------------------------------------------
+unsigned int WRstr::find( const char* str, const unsigned int from ) const
+{
+	unsigned int f = from > m_len ? 0 : from;
+	if ( !str || !str[0] )
+	{
+		return 0;
+	}
+
+	for( ; f < m_len; ++f )
+	{
+		for( int i=0;;++i )
+		{
+			if ( !str[i] )
+			{
+				return f;
+			}
+
+			char c = m_str[f + i];
+			if ( !c )
+			{
+				return npos;
+			}
+
+			if ( str[i] != c )
+			{
+				break;
+			}
+		}
+	}
+	return npos;
+}
+
+//------------------------------------------------------------------------------
+unsigned int WRstr::findCase( const char* str, const unsigned int from ) const
+{
+	unsigned int f = from > m_len ? 0 : from;
+	if ( !str || !str[0] )
+	{
+		return 0;
+	}
+
+	for( ; f < m_len; ++f )
+	{
+		for( int i=0;;++i )
+		{
+			if ( !str[i] )
+			{
+				return f;
+			}
+
+			char c = m_str[f + i];
+			if ( !c )
+			{
+				return npos;
+			}
+
+			if ( tolower(str[i]) != tolower(c) )
+			{
+				break;
+			}
+		}
+	}
+	return npos;
 }
 
 #ifdef STR_FILE_OPERATIONS
@@ -243,7 +283,7 @@ bool WRstr::fileToBuffer( const char* fileName, const bool appendToBuffer )
 		return false;
 	}
 
-#ifdef _WIN32
+#ifdef WIN32
 	struct _stat sbuf;
 	int ret = _stat( fileName, &sbuf );
 #else
@@ -261,7 +301,7 @@ bool WRstr::fileToBuffer( const char* fileName, const bool appendToBuffer )
 	{
 		return false;
 	}
-	
+
 	if ( appendToBuffer )
 	{
 		alloc( sbuf.st_size + m_len, true );
@@ -303,6 +343,129 @@ bool WRstr::bufferToFile( const char* fileName, const bool append) const
 #endif
 
 //-----------------------------------------------------------------------------
+void WRstr::release( char** toBuf, unsigned int* len )
+{
+	if ( len )
+	{
+		*len = m_len;
+	}
+	
+	if ( !m_len )
+	{
+		*toBuf = 0;
+	}
+	else if ( m_str == m_smallbuf )
+	{
+		*toBuf = (char*)g_malloc( m_len + 1 );
+		memcpy( *toBuf, m_str, m_len + 1 );
+	}
+	else
+	{
+		*toBuf = m_str;
+		m_str = m_smallbuf;
+		m_buflen = c_sizeofBaseString;
+	}
+
+	m_len = 0;
+	m_str[0] = 0;
+}
+
+//-----------------------------------------------------------------------------
+WRstr& WRstr::giveOwnership( char* buf, const unsigned int len )
+{
+	if ( !buf || !len )
+	{
+		clear();
+		return *this;
+	}
+	
+	if ( m_str != m_smallbuf )
+	{
+		g_free( m_str );
+	}
+
+	if ( len < c_sizeofBaseString )
+	{
+		m_str = m_smallbuf;
+		memcpy( m_str, buf, len );
+		g_free( buf );
+		m_len = len;
+	}
+	else
+	{
+		m_str = buf;
+	}
+
+	m_len = len;
+	m_buflen = len;
+	
+	return *this;
+}
+
+//-----------------------------------------------------------------------------
+WRstr& WRstr::trim()
+{
+	unsigned int start = 0;
+
+	// find start
+	for( ; start<m_len && isspace( (char)*(m_str + start) ) ; start++ );
+
+	// is the whole thing whitespace?
+	if ( start == m_len )
+	{
+		clear();
+		return *this;
+	}
+
+	// copy down the characters one at a time, noting the last
+	// non-whitespace character position, which will become the length
+	unsigned int pos = 0;
+	unsigned int marker = start;
+	for( ; start<m_len; start++,pos++ )
+	{
+		if ( !isspace((char)(m_str[pos] = m_str[start])) )
+		{
+			marker = pos;
+		}
+	}
+
+	m_len = marker + 1;
+
+	if ( m_len >= m_buflen )
+	{
+		alloc( m_len + 1, true );
+		return trim();
+	}
+
+	m_str[m_len] = 0;
+	return *this;
+}
+
+//-----------------------------------------------------------------------------
+WRstr& WRstr::alloc( const unsigned int characters, const bool preserveContents )
+{
+	if ( characters >= m_buflen ) // only need to alloc if more space is requested than we have
+	{
+		char* newStr = (char*)g_malloc( characters + 1 ); // create the space
+
+		if ( preserveContents ) 
+		{
+			memcpy( newStr, m_str, m_buflen ); // preserve whatever we had
+		}
+
+		if ( m_str != m_smallbuf )
+		{
+			g_free( m_str );
+		}
+
+		m_str = newStr;
+		m_buflen = characters;		
+	}
+
+	return *this;
+}
+
+//-----------------------------------------------------------------------------
 WRstr& WRstr::truncate( const unsigned int newLen )
 {
 	if ( newLen >= m_len )
@@ -328,9 +491,170 @@ WRstr& WRstr::truncate( const unsigned int newLen )
 }
 
 //-----------------------------------------------------------------------------
-bool WRstr::isMatch( const char* buf ) const
+WRstr& WRstr::shift( const unsigned int from )
 {
-	return strcmp( buf, m_str ) == 0;
+	if ( from >= m_len )
+	{
+		return clear();
+	}
+
+	if ( from )
+	{
+		m_len -= from;
+		memmove( m_str, m_str + from, m_len + 1 );
+	}
+
+	return *this;
+}
+
+//------------------------------------------------------------------------------
+WRstr WRstr::substr( const unsigned int begin, const unsigned int len ) const
+{
+	WRstr ret;
+	if ( begin < m_len )
+	{
+		unsigned int amount = (begin + len) > m_len ? m_len - begin : len;
+		ret.set( m_str + begin, amount );
+	}
+	return ret;
+}
+
+//-----------------------------------------------------------------------------
+bool WRstr::isWildMatch( const char* pattern, const char* haystack )
+{
+	if ( !pattern )
+	{
+		return false;
+	}
+
+	if ( pattern[0] == 0 )
+	{
+		return haystack[0] == 0;
+	}
+
+	const char* after = 0;
+	const char* str = haystack;
+	char t;
+	char w;
+
+	for(;;)
+	{
+		t = *str;
+		w = *pattern;
+		if ( !t )
+		{
+			if ( !w )
+			{
+				return true; // "x" matches "x"
+			}
+			else if (w == '*')
+			{
+				++pattern;
+				continue; // "x*" matches "x" or "xy"
+			}
+
+			return false; // "x" doesn't match "xy"
+		}
+		else if ( t != w )
+		{
+			if (w == '*')
+			{
+				after = ++pattern;
+				continue; // "*y" matches "xy"
+			}
+			else if (after)
+			{
+				pattern = after;
+				w = *pattern;
+				if ( !w )
+				{
+					return true; // "*" matches "x"
+				}
+				else if (t == w)
+				{
+					++pattern;
+				}
+				++str;
+				continue; // "*sip*" matches "mississippi"
+			}
+			else
+			{
+				return false; // "x" doesn't match "y"
+			}
+		}
+
+		++str;
+		++pattern;
+	}
+}
+
+//-----------------------------------------------------------------------------
+bool WRstr::isWildMatchCase( const char* pattern, const char* haystack )
+{
+	if ( !pattern )
+	{
+		return false;
+	}
+
+	if ( pattern[0] == 0 )
+	{
+		return haystack[0] == 0;
+	}
+
+	const char* after = 0;
+	const char* str = haystack;
+	char t;
+	char w;
+
+	for(;;)
+	{
+		t = *str;
+		w = *pattern;
+		if ( !t )
+		{
+			if ( !w )
+			{
+				return true; // "x" matches "x"
+			}
+			else if (w == '*')
+			{
+				++pattern;
+				continue; // "x*" matches "x" or "xy"
+			}
+
+			return false; // "x" doesn't match "xy"
+		}
+		else if ( tolower(t) != tolower(w) )
+		{
+			if (w == '*')
+			{
+				after = ++pattern;
+				continue; // "*y" matches "xy"
+			}
+			else if (after)
+			{
+				pattern = after;
+				w = *pattern;
+				if ( !w )
+				{
+					return true; // "*" matches "x"
+				}
+				else if (t == w)
+				{
+					++pattern;
+				}
+				++str;
+				continue; // "*sip*" matches "mississippi"
+			}
+			else
+			{
+				return false; // "x" doesn't match "y"
+			}
+		}
+
+		++str;
+		++pattern;
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -367,7 +691,67 @@ WRstr& WRstr::append( const char c )
 	return *this;
 }
 
-const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte =-1 );
+//------------------------------------------------------------------------------
+WRstr& WRstr::format( const char* format, ... )
+{
+	va_list arg;
+
+	char buf[ c_formatBaseTrySize + 1 ]; // SOME space, malloc if we need a ton more
+
+	va_start( arg, format );
+	int len = vsnprintf( buf, c_formatBaseTrySize, format, arg );
+	va_end( arg );
+
+	if ( len < c_formatBaseTrySize )
+	{
+		return set( buf, len );
+	}
+	else
+	{
+		++len;
+		char* alloc = (char*)g_malloc( len + 1 );
+
+		va_start( arg, format );
+		len = vsnprintf( alloc, len, format, arg );
+		va_end( arg );
+
+		set( alloc, len );
+		g_free(alloc);
+	}
+
+	return *this;
+}
+
+//-----------------------------------------------------------------------------
+WRstr& WRstr::appendFormat( const char* format, ... )
+{
+	va_list arg;
+
+	char buf[ c_formatBaseTrySize ]; // SOME space, malloc if we need a ton more
+
+	va_start( arg, format );
+	int len = vsnprintf( buf, c_formatBaseTrySize, format, arg );
+	va_end( arg );
+
+	if ( len < c_formatBaseTrySize )
+	{
+		insert( buf, len, m_len );
+	}
+	else
+	{
+		++len;
+		char* alloc = (char*)g_malloc( len + 1 );
+
+		va_start( arg, format );
+		len = vsnprintf( alloc, len, format, arg );
+		va_end( arg );
+
+		insert( alloc, len, m_len );
+		g_free(alloc);
+	}
+
+	return *this;
+}
 
 #endif
-#endif
+//#endif

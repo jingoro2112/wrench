@@ -45,6 +45,7 @@ enum WROpcode
 
 	O_NewObjectTable,
 	O_AssignToObjectTableByOffset,
+	O_AssignToObjectTableByHash,
 
 	O_AssignToHashTableAndPop,
 	O_Remove,
