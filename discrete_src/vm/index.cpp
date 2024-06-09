@@ -56,17 +56,24 @@ void elementToTarget( const uint32_t index, WRValue* target, WRValue* value )
 }
 
 //------------------------------------------------------------------------------
-void doIndexHash( WRValue* value, WRValue* target, uint32_t hash )
+void doIndexHash( WRValue* value, WRValue* target, WRValue* index )
 {
+	uint32_t hash = index->getHash();
+	
 	if ( value->xtype == WR_EX_HASH_TABLE ) 
 	{
-		if ( IS_EX_SINGLE_CHAR_RAW_P2( (target->r = (WRValue*)value->va->get(hash))->p2) )
+		WRValue* entry = (WRValue*)(value->va->get(hash));
+		if ( IS_EX_SINGLE_CHAR_RAW_P2( (target->r = entry)->p2 ) )
 		{
 			target->p2 = INIT_AS_ARRAY_MEMBER;
 		}
 		else
 		{
-			target->p2 = INIT_AS_REF;
+			if (value->va->m_type == SV_HASH_TABLE)
+			{
+				*(entry + 1) = *index; // store key
+			}
+			target->p2 = INIT_AS_REF; // store value
 		}
 	}
 	else // naming an element of a struct "S.element"
@@ -102,7 +109,7 @@ void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 	
 	if (EXPECTS_HASH_INDEX(value->xtype))
 	{
-		doIndexHash( value, target, index->ui );
+		doIndexHash( value, target, index );
 		return;
 	}
 	else if ( IS_RAW_ARRAY(value->xtype) )
@@ -126,7 +133,7 @@ void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 		{
 			value->p2 = INIT_AS_HASH_TABLE;
 			value->va = c->getSVA( 0, SV_HASH_TABLE, false );
-			doIndexHash( value, target, I->getHash() );
+			doIndexHash( value, target, I );
 			return;
 		}
 	}
@@ -150,7 +157,6 @@ void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 {
 	WRValue* V = &value->deref();
 
-	// nope, make it one of this size and return a ref
 	WRValue* I = &index->deref();
 	if ( I->type == WR_INT )
 	{
@@ -163,7 +169,7 @@ void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 			V->p2 = INIT_AS_HASH_TABLE;
 			V->va = c->getSVA( 0, SV_HASH_TABLE, false );
 		}
-		doIndexHash( V, target, I->getHash() );
+		doIndexHash( V, target, I );
 	}
 }
 

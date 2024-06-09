@@ -15,6 +15,8 @@ print(")");
 print(";");
 print("}");
 
+a = {};
+
 a = 0xFFFFFFFF;
 b = 4294967295;
 if ( a != b ) println("r1");

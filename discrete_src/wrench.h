@@ -27,7 +27,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 5
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 0
+#define WRENCH_VERSION_BUILD 1
 
 /************************************************************************
 The compiler is not particularly memory or space efficient, for
@@ -179,9 +179,13 @@ enum WRError
 
 	WR_ERR_run_must_be_called_by_itself_first,
 	WR_ERR_hash_table_size_exceeded,
+	WR_ERR_hash_table_invalid_key,
 	WR_ERR_wrench_function_not_found,
 	WR_ERR_array_must_be_indexed,
 	WR_ERR_context_not_found,
+
+	WR_ERR_hash_declaration_in_array,
+	WR_ERR_array_declaration_in_hash,
 
 	WR_ERR_bad_goto_label,
 	WR_ERR_bad_goto_location,

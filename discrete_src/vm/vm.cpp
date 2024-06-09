@@ -599,6 +599,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	{
 		unsigned char findex;
 		WRValue* register0;
+		WRGCObject* va;
 		const unsigned char *hashLoc;
 		uint32_t hashLocInt;
 	};
@@ -1217,6 +1218,26 @@ NewObjectTablePastLoad:
 				if ( register0->xtype == WR_EX_HASH_TABLE )
 				{
 					register0->va->exists( hash, true );
+				}
+				else if ( register0->xtype == WR_EX_ARRAY )
+				{
+					va = register0->va;
+					if (va->m_type == SV_VALUE )
+					{
+						for( uint32_t move = hash; move < va->m_size; ++move )
+						{
+							va->m_Vdata[move] = va->m_Vdata[move+1];
+						}
+					}
+					else if ( register0->va->m_type == SV_CHAR )
+					{
+						for( uint32_t move = hash; move < va->m_size; ++move )
+						{
+							va->m_Cdata[move] = va->m_Cdata[move+1];
+						}
+					}
+
+					--va->m_size;
 				}
 				CONTINUE;	
 			}

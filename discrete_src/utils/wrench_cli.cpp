@@ -298,7 +298,7 @@ int main( int argn, char* argv[] )
 
 		if ( wr_getLastError(gw) )
 		{
-			printf( "err: %d\n", (int)wr_getLastError(gw) );
+			printf( "err: %s\n", c_errStrings[(int)wr_getLastError(gw)] );
 		}
 
 		wr_destroyState( gw );
@@ -324,13 +324,59 @@ int main( int argn, char* argv[] )
 		wr_run( gw, (const unsigned char *)bytes.c_str(), bytes.size() );
 		if ( wr_getLastError( gw ) )
 		{
-			printf( "err: %d\n", (int)wr_getLastError(gw) );
+			printf( "err: %s\n", c_errStrings[(int)wr_getLastError(gw)] );
 		}
 
 		wr_destroyState( gw );
 	}
-	else if ( SimpleArgs::get(argn, argv, "c")
-			  ||  SimpleArgs::get(argn, argv, "ch") )
+	else if ( SimpleArgs::get(argn, argv, "c") )
+	{
+#ifndef WRENCH_WITHOUT_COMPILER
+		if ( argn < 4 )
+		{
+			printf( "[%d]\n", argn );
+			return usage();
+		}
+
+		unsigned char* out;
+		int outLen;
+
+		WRstr code;
+		if ( !code.fileToBuffer(SimpleArgs::get(argn, argv, -2)) )
+		{
+			printf( "Could not open [%s]\n", SimpleArgs::get(argn, argv, -2) );
+			return usage();
+		}
+
+		int err = wr_compile( code, code.size(), &out, &outLen, 0, flags );
+
+		if ( err )
+		{
+			printf( "compile error [%s]\n", c_errStrings[err] );
+			return 0;
+		}
+
+		WRstr str;
+		str.set( (const char*)out, outLen );
+		
+//		printf( "%d:\n%s\n", outLen, str.c_str() );
+
+		WRstr outname( SimpleArgs::get(argn, argv, -1) );
+		
+		if ( !str.bufferToFile(outname) )
+		{
+			printf( "could not write to [%s]\n", outname.c_str() );
+		}
+
+		printf( "%s -> %s\n", SimpleArgs::get(argn, argv, -2), outname.c_str() );
+
+		g_free( out );
+#else
+		printf( "compiler not included in this build\n" );
+		return usage();
+#endif
+	}
+	else if ( SimpleArgs::get(argn, argv, "ch") )
 	{
 #ifndef WRENCH_WITHOUT_COMPILER
 		if ( argn < 4 )
@@ -362,18 +408,8 @@ int main( int argn, char* argv[] )
 		printf( "%d:\n%s\n", outLen, str.c_str() );
 		
 		WRstr outname( SimpleArgs::get(argn, argv, -2) );
-		if ( SimpleArgs::get(argn, argv, "c") )
-		{
-			code.set( (char *)out, outLen );
-		}
-		else if ( SimpleArgs::get(argn, argv, "ch") )
-		{
-			blobToHeader( WRstr((char *)out, outLen), SimpleArgs::get(argn, argv, -1), code );
-		}
-		else
-		{
-			return usage();
-		}
+		
+		blobToHeader( WRstr((char *)out, outLen), SimpleArgs::get(argn, argv, -1), code );
 		
 		if ( !code.bufferToFile(outname) )
 		{

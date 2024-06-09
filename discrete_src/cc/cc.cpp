@@ -3391,7 +3391,7 @@ unsigned int WRCompilationContext::resolveExpressionEx( WRExpression& expression
 }
 
 //------------------------------------------------------------------------------
-bool WRCompilationContext::operatorFound( WRstr& token, WRarray<WRExpressionContext>& context, int depth )
+bool WRCompilationContext::operatorFound( WRstr const& token, WRarray<WRExpressionContext>& context, int depth )
 {
 	for( int i=0; c_operations[i].token; i++ )
 	{
@@ -3641,6 +3641,197 @@ bool WRCompilationContext::pushObjectTable( WRExpressionContext& context,
 }
 
 //------------------------------------------------------------------------------
+int WRCompilationContext::parseInitializer( WRExpression& expression, int depth )
+{
+	bool inHashTable = false;
+	bool inArray = false;
+	
+	// start a value ... was something declared in front of us?
+	if ( depth == 3
+		 && expression.context[0].type == EXTYPE_LABEL
+		 && expression.context[1].type == EXTYPE_OPERATION
+		 && expression.context[1].operation->opcode
+		 && expression.context[1].operation->opcode == O_Index )
+	{
+		expression.context.remove( depth - 2, 1 );
+		depth -= 1;
+	}
+
+	WRValue& value = expression.context[depth].value;
+	WRstr& token = expression.context[depth].token;
+
+	expression.context[depth].type = EXTYPE_BYTECODE_RESULT;
+
+	pushOpcode( expression.context[depth].bytecode, O_LiteralZero ); // push the value we're going to create
+
+	// knock off the initial create
+	uint16_t initializer = 0;
+	unsigned char idat[2];
+	for(;;)
+	{
+		if ( !getToken(expression.context[depth]) )
+		{
+			m_err = WR_ERR_unexpected_EOF;
+			return -1;
+		}
+
+		bool subTableValue = false;
+
+		if ( token == '{' )
+		{
+			subTableValue = true;
+			if ( parseInitializer(expression, depth) == -1 )
+			{
+				return -1;
+			}
+
+			pushOpcode( expression.context[depth].bytecode, O_AssignToArrayAndPop );
+			wr_pack16( initializer++, idat );
+			pushData( expression.context[depth].bytecode, idat, 2 );
+
+			continue;
+		}
+	
+		if ( token == ',' )
+		{
+			if ( initializer == 0 )
+			{
+				m_err = WR_ERR_bad_expression;
+				return -1;
+			}
+		}
+		else
+		{
+			m_loadedToken = token;
+			m_loadedValue = value;
+			m_loadedQuoted = m_quoted;
+		}
+
+		WRExpression val( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
+		val.context[0].token = token;
+		val.context[0].value = value;
+
+		char end = parseExpression( val );
+		if ( end == ':' )
+		{
+			bool nullKey = false;
+			
+			// we are in a hash table!
+			inHashTable = true;
+			if ( inArray )
+			{
+				m_err = WR_ERR_hash_declaration_in_array;
+				return -1;
+			}
+
+			if ( !val.bytecode.all.size() )
+			{
+				nullKey = true;
+				pushOpcode( val.bytecode, O_LiteralZero );
+			}
+			
+			if ( subTableValue ) // sub-table keys don't make sense
+			{
+				m_err = WR_ERR_hash_table_invalid_key;
+				return -1;
+			}
+
+			appendBytecode( expression.context[depth].bytecode, val.bytecode );
+			
+			if ( !getToken(expression.context[depth]) )
+			{
+				m_err = WR_ERR_unexpected_EOF;
+				return -1;
+			}
+
+			if ( token == '{' )
+			{
+				if ( parseInitializer(expression, depth) == -1 )
+				{
+					return -1;
+				}
+
+				pushOpcode( expression.context[depth].bytecode, O_AssignToHashTableAndPop );
+				continue;
+			}
+			else
+			{
+				m_loadedToken = token;
+				m_loadedValue = value;
+				m_loadedQuoted = m_quoted;
+				
+				WRExpression key( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
+				key.context[0].token = token;
+				key.context[0].value = value;
+				end = parseExpression( key );
+				
+				if ( key.bytecode.all.size() ) // nor do null keys
+				{
+					if ( nullKey )
+					{
+						m_err = WR_ERR_hash_table_invalid_key;
+						return -1;
+					}
+					
+					appendBytecode( expression.context[depth].bytecode, key.bytecode );
+					pushOpcode( expression.context[depth].bytecode, O_AssignToHashTableAndPop );
+				}
+				else
+				{
+					if ( nullKey )
+					{
+						// null key AND value means null table, just create a zero-size table, by indexing as
+						// hash, which creates the table, then removing the entry we just added, nulling it
+						pushOpcode( expression.context[depth].bytecode, O_LiteralZero );
+						pushOpcode( expression.context[depth].bytecode, O_AssignToHashTableAndPop );
+						pushOpcode( expression.context[depth].bytecode, O_LiteralZero );
+						pushOpcode( expression.context[depth].bytecode, O_Remove );
+					}
+					else
+					{
+						pushOpcode( expression.context[depth].bytecode, O_LiteralZero );
+						pushOpcode( expression.context[depth].bytecode, O_AssignToHashTableAndPop );
+					}
+				}
+			}
+		}
+		else
+		{
+			if ( val.bytecode.all.size() )
+			{
+				inArray = true;
+				if ( inHashTable )
+				{
+					m_err = WR_ERR_array_declaration_in_hash;
+					return -1;
+				}
+
+				appendBytecode( expression.context[depth].bytecode, val.bytecode );
+				pushOpcode( expression.context[depth].bytecode, O_AssignToArrayAndPop );
+				wr_pack16( initializer++, idat );
+				pushData( expression.context[depth].bytecode, idat, 2 );
+			}
+		}
+		
+		if ( end == '}' )
+		{
+			break;
+		}
+		else if ( end == ',' )
+		{
+			continue;
+		}
+		else
+		{
+			m_err = WR_ERR_bad_expression;
+			return -1;
+		}
+	}
+
+	return depth;
+}
+
+//------------------------------------------------------------------------------
 char WRCompilationContext::parseExpression( WRExpression& expression )
 {
 	int depth = 0;
@@ -3697,254 +3888,13 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 		}
 		else if ( token == "{" )
 		{
+			depth = parseInitializer( expression, depth ) + 1;
 			if ( depth == 0 )
 			{
-				if ( parseExpression(expression) != '}' )
-				{
-					m_err = WR_ERR_bad_expression;
-					return 0;
-				}
-
-				return ';';
+				return false;
 			}
-			else
-			{
-				// it's an initializer
 
-				if ( depth < 2 )
-				{
-					m_err = WR_ERR_unexpected_token;
-					return 0;
-				}
-				if ( (expression.context[depth - 1].operation
-					  && expression.context[ depth - 1 ].operation->opcode != O_Assign) )
-				{
-					m_err = WR_ERR_unexpected_token;
-					return 0;
-				}
-
-				if ( expression.context[depth - 2].operation
-					 && !((expression.context[ depth - 2 ].operation->opcode == O_InitArray)
-						  || (expression.context[ depth - 2 ].operation->opcode == O_Index))
-				   )
-				{
-					m_err = WR_ERR_unexpected_token;
-					return 0;
-				}
-
-				if ( depth == 3
-					 && expression.context[0].type == EXTYPE_LABEL
-					 && expression.context[1].type == EXTYPE_OPERATION
-					 && expression.context[1].operation->opcode
-					 && expression.context[1].operation->opcode == O_Index
-					 && expression.context[1].bytecode.opcodes.size() > 0 )
-				{
-					unsigned int i = expression.context[1].bytecode.opcodes.size() - 1;
-					unsigned int a = expression.context[1].bytecode.all.size() - 1;
-					WROpcode o = (WROpcode)(expression.context[1].bytecode.opcodes[ i ]);
-
-					switch( o )
-					{
-						case O_Index:
-						{
-							expression.context[1].bytecode.all[a] = O_InitArray;
-							break;
-						}
-
-						case O_IndexLiteral16:
-						{
-							if (a > 1)
-							{
-								expression.context[1].bytecode.all[a - 2] = O_LiteralInt16;
-								pushOpcode(expression.context[1].bytecode, O_InitArray);
-							}
-							break;
-						}
-
-						case O_IndexLiteral8:
-						{
-							if (a > 0)
-							{
-								expression.context[1].bytecode.all[a - 1] = O_LiteralInt8;
-								pushOpcode(expression.context[1].bytecode, O_InitArray);
-							}
-							break;
-						}
-
-						default: break;
-					}
-				}
-				else if ( expression.context[0].type != EXTYPE_LABEL )
-				{
-					m_err = WR_ERR_unexpected_token;
-					return 0;
-				}
-				else
-				{
-					expression.context[0].type = EXTYPE_LABEL_AND_NULL; // whatever it was, RE-init it to clear old sizes
-				}
-			
-				expression.context.remove( depth - 1, 1 ); // knock off the equate
-				depth--;
-
-				WRstr t("@init");
-				for( int o=0; c_operations[o].token; o++ )
-				{
-					if ( t == c_operations[o].token )
-					{
-						expression.context[depth].operation = c_operations + o;
-						expression.context[depth].type = EXTYPE_OPERATION;
-						break;
-					}
-				}
-
-
-				WRstr& token2 = expression.context[depth].token;
-				WRValue& value2 = expression.context[depth].value;
-
-				uint16_t initializer = -1;
-				
-				for(;;)
-				{
-					if ( !getToken(expression.context[depth]) )
-					{
-						m_err = WR_ERR_unexpected_EOF;
-						return 0;
-					}
-
-					if ( !m_quoted && token2 == "}" )
-					{
-						break;
-					}
-
-					++initializer;
-
-					WRExpression nex( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
-					nex.context[0].token = token2;
-					nex.context[0].value = value2;
-					m_loadedToken = token2;
-					m_loadedValue = value2;
-					m_loadedQuoted = m_quoted;
-					
-					char end = parseExpression( nex );
-
-					unsigned char data[2];
-					wr_pack16( initializer, data );
-
-					if ( end == '}' )
-					{
-						appendBytecode( expression.context[depth].bytecode, nex.bytecode );
-						pushOpcode( expression.context[depth].bytecode, O_AssignToArrayAndPop );
-						pushData( expression.context[depth].bytecode, data, 2 );
-						break;
-					}
-					else if ( end == ',' )
-					{
-						appendBytecode( expression.context[depth].bytecode, nex.bytecode );
-						pushOpcode( expression.context[depth].bytecode, O_AssignToArrayAndPop );
-						pushData( expression.context[depth].bytecode, data, 2 );
-					}
-					else if ( end == ':' )
-					{
-						if ( nex.bytecode.all.size() == 0 )
-						{
-							pushOpcode( expression.context[depth].bytecode, O_LiteralZero );
-						}
-						else
-						{
-							appendBytecode( expression.context[depth].bytecode, nex.bytecode );
-						}
-
-						WRExpression nex2( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
-						nex2.context[0].token = token2;
-						nex2.context[0].value = value2;
-						char end = parseExpression( nex2 );
-
-						if ( nex2.bytecode.all.size() == 0 )
-						{
-							pushOpcode( expression.context[depth].bytecode, O_LiteralZero );
-						}
-						else
-						{
-							appendBytecode( expression.context[depth].bytecode, nex2.bytecode );
-						}
-
-						pushOpcode( expression.context[depth].bytecode, O_AssignToHashTableAndPop );
-
-						if ( end == '}' )
-						{
-							break;
-						}
-						else if ( end != ',' )
-						{
-							m_err = WR_ERR_unexpected_token;
-							return 0;
-						}
-					}
-					else
-					{
-						m_err = WR_ERR_unexpected_token;
-						return 0;
-					}
-				}
-
-				++initializer;
-
-				if ( !getToken(expression.context[depth]) || token2 != ";" )
-				{
-					m_err = WR_ERR_unexpected_EOF;
-					return 0;
-				}
-
-				if ( depth == 2 )
-				{
-					if ( expression.context[1].bytecode.all.size() == 3
-						 && expression.context[1].bytecode.all[0] == O_LiteralInt8
-						 && expression.context[1].bytecode.all[1] == 0
-						 && expression.context[1].bytecode.all[2] == O_InitArray )
-					{
-						if (initializer < 255)
-						{
-							*expression.context[1].bytecode.all.p_str(1) = (unsigned char)initializer;
-						}
-						else
-						{
-							expression.context[1].bytecode.all.clear();
-							expression.context[1].bytecode.opcodes.clear();
-							pushOpcode( expression.context[1].bytecode, O_LiteralInt16 );
-							unsigned char data[2];
-							expression.context[1].bytecode.all.append(wr_pack16((uint16_t)initializer, data), 2);
-							pushOpcode( expression.context[1].bytecode, O_InitArray );
-						}
-					}
-
-					// pop the element off and reload the actual table that was created
-					pushOpcode(expression.context[1].bytecode, O_PopOne);
-					if (expression.context[0].global)
-					{
-						addGlobalSpaceLoad( expression.context[1].bytecode,
-											expression.context[0].token,
-											false,
-											expression.context[0].varSeen);
-					}
-					else
-					{
-						addLocalSpaceLoad( expression.context[1].bytecode,
-										   expression.context[0].token,
-										   false,
-										   expression.context[0].varSeen );
-					}
-				}
-					 
-
-				m_loadedToken = token2;
-				m_loadedValue = value2;
-				m_loadedQuoted = m_quoted;
-				
-				++depth;
-
-				continue;
-			}
+			continue;
 		}
 		
 		if ( operatorFound(token, expression.context, depth) )
@@ -4198,8 +4148,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					return 0;
 				}
 
-				WRstr t( "@i" );
-				operatorFound( t, expression.context, depth );
+				operatorFound( WRstr("@i"), expression.context, depth );
 			}
 			else if ( token == "float" )
 			{
@@ -4209,8 +4158,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					return 0;
 				}
 
-				WRstr t( "@f" );
-				operatorFound( t, expression.context, depth );
+				operatorFound( WRstr("@f"), expression.context, depth );
 			}
 			else if (depth < 0)
 			{
@@ -4236,17 +4184,15 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 					 && expression.context[depth - 1].operation->opcode == O_Remove )
 				{
 					--depth;
-					WRstr t( "._remove" );
 					expression.context[depth].bytecode = nex.bytecode;
-					operatorFound( t, expression.context, depth );
+					operatorFound( WRstr("._remove"), expression.context, depth );
 				}
 				else if ( depth > 0 && expression.context[depth - 1].operation
 						  && expression.context[depth - 1].operation->opcode == O_HashEntryExists )
 				{
 					--depth;
-					WRstr t( "._exists" );
 					expression.context[depth].bytecode = nex.bytecode;
-					operatorFound( t, expression.context, depth );
+					operatorFound( WRstr("._exists"), expression.context, depth );
 				}
 				else
 				{
@@ -4271,22 +4217,18 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				return 0;
 			}
 
-			WRstr t( "@[]" );
-
 			if ( nex.bytecode.all.size() == 0 )
 			{
-				operatorFound( t, expression.context, depth );
-				expression.context[depth].bytecode.all.shave(1);
-				expression.context[depth].bytecode.opcodes.shave(1);
-				pushOpcode( expression.context[depth].bytecode, O_LiteralInt8 );
-				unsigned char c = 0;
-				pushData( expression.context[depth].bytecode, &c, 1 );
+				operatorFound( WRstr("@[]"), expression.context, depth );
+				expression.context[depth].bytecode.all.clear();
+				expression.context[depth].bytecode.opcodes.clear();
+				pushOpcode( expression.context[depth].bytecode, O_LiteralZero );
 				pushOpcode( expression.context[depth].bytecode, O_InitArray );
 			}
 			else 
 			{
 				expression.context[depth].bytecode = nex.bytecode;
-				operatorFound( t, expression.context, depth );
+				operatorFound( WRstr("@[]"), expression.context, depth );
 			}
 
 			++depth;
@@ -5819,7 +5761,10 @@ parseAsVar:
 			m_loadedQuoted = m_quoted;
 			if ( parseExpression(nex) != ';' )
 			{
-				m_err = WR_ERR_unexpected_token;
+				if ( !m_err )
+				{
+					m_err = WR_ERR_unexpected_token;
+				}
 				return false;
 			}
 

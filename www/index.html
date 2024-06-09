@@ -80,6 +80,7 @@ pre code {
                 <span class="menu-title"><a href="#debugger">Debugger</a></span>
                 <span class="menu-title"><a href="#extending">Extending Wrench</a></span>
                 <span class="menu-title"><a href="#library">Lib Reference</a></span>
+                <span class="menu-title"><a href="#limits">Limits</a></span>
                 <span class="menu-title"><a href="#benchmarks">Benchmarks</a></span>
                 <span class="menu-title"><a href="#faq">FAQ</a></span>
                 <span class="menu-title"><a href="https://github.com/jingoro2112/wrench">Download</a></span>
@@ -185,14 +186,16 @@ here.</a>
 <p>
 Now the easy part, wrench packages itself into two source files:
 
-I have to credit <a href="https://wren.io/">Wren</a> for this idea (at
-least that's where I saw it), it's brilliant.
+I have to credit <a href="https://wren.io/">Wren</a> for this
+brilliant idea (at least that's where I saw it).
 <p>
 add:
 <pre><code>/src/wrench.h
 /src/wrench.cpp
 </pre></code>
-to your project and compile. That's it, here is a complete
+to your project and compile. Of course if you want a more approachable
+version, the traditional layout is included in
+<code>discrete_src/</code>
 
 <h2>example</h2>
 <pre><code>#include "wrench.h"
@@ -1260,7 +1263,48 @@ std::deserialize( string ); // given the string output from
                             // std::serialize(), return the original value, full restored
 </code></pre>
 
-<hr><h1><a name="benchmarks"></a>6.0 Benchmarks</h1></hr>
+
+
+<pre><code>// MessageLib:
+// messages are global to all contexts currently running, this allows
+// inter-context communication.
+msg::read( key, [clear default:false] )  // read a message, optionally clear
+msg::write( key, message )
+msg::clear( key )
+msg::peek( key ) // return true if the key has a message
+</code></pre>
+
+
+<hr><h1><a name="limits"></a>6.0 Library</h1></hr>
+
+<p>wrench is made to run on extremely limited hardware with an
+absolute minimum of bytecode size, and this comes at the cost of some
+value compression.
+
+<h2></h2>
+<pre><code>int : +/-2,147,483,647 (32 bit)
+
+float : 32 bit (compiler/lib dependant)
+
+char : 8 bit, no wide char support
+
+</code></pre><pre><code>functions : 256 functions per bytecode file
+
+source code size: no limit
+
+byte code size: no fixed limit but all jumps are 16-bit relative so as low as 32k but more practically 40 or 50k
+                If this is a limitation (it shouldn't be), a workaround would be to import modules
+
+imported code: no limit, each can be max byte code size
+
+native array/string elements: ~2 million (0x1FFFFF) elements
+</code></pre>
+
+
+
+
+
+<hr><h1><a name="benchmarks"></a>7.0 Benchmarks</h1></hr>
 
 <h2>Memory Benchmarks</h2>
 <p>The whole point of this interpreter is to run on small embedded

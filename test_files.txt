@@ -19,3 +19,4 @@ tests/017_bug12.c
 tests/018_this.c
 tests/019_serialize.c
 tests/020_yield.c
+tests/021_hashes.c

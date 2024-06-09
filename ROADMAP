@@ -9,20 +9,6 @@ Top Priority: things I'm actively (when I have time) am working on:
 -------------------------------------------------------------------
 completion  description
 -------------------------------------------------------------------
-5%			Spiffs lib implementation
-5%			LittleFS lib implementation
-40%			Debug builds that allow stepping/inspecting/remote debugging
 
 
 
-Second Priority: stuff that would be nice
--------------------------------------------------------------------
-complete Arduino lib
-complete esp32 lib
-figure out std::hash().. there is a problem becuase of the scrambler*, the hash it returns is NOT the hash used internally
-  *the what? in order fo hash '0' to be both the number (integers are their own hashes) AND "no hash" I intgroduce a scrambler
-   constant that is XORed with all hashes. That way "0" is the scrambler itself, and actual 0 is the null hash. The only
-   danger with this is if your string happens to collide with the scrambler value, a 1:4bil chance but that same possibility
-   exists with using null as the null hash, thats what bitcoin is :)
-   I guess it would be annoying if you wanted to use the numeric value of the scrambler as an integer hash key, so I chose
-   a very large+negative value: 0xA656ABAB to minimize that risk

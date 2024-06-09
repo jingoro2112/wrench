@@ -1,3 +1,16 @@
+5.0.1 ----------------------------------------------------------------------------------
+- nested container declarations now work:
+
+      var table = { 1, 2, 3, {"key":"value", "key2": 2} };
+
+  now works correctly, creating a 4 element array where the fourth is
+  a hash table
+
+- fixed '._remove' to work for arrays as should be expected
+- fixed key/value iteration
+
+  
+
 5.0.0 ----------------------------------------------------------------------------------
 - import! 
   code can now be imported and made available to the running code ie:

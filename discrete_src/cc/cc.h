@@ -443,9 +443,10 @@ private:
 	void resolveExpression( WRExpression& expression );
 	unsigned int resolveExpressionEx( WRExpression& expression, int o, int p );
 
-	bool operatorFound( WRstr& token, WRarray<WRExpressionContext>& context, int depth );
+	bool operatorFound( WRstr const& token, WRarray<WRExpressionContext>& context, int depth );
 	bool parseCallFunction( WRExpression& expression, WRstr functionName, int depth, bool parseArguments );
 	bool pushObjectTable( WRExpressionContext& context, WRarray<WRNamespaceLookup>& localSpace, uint32_t hash );
+	int parseInitializer( WRExpression& expression, int depth );
 	char parseExpression( WRExpression& expression );
 	bool parseUnit( bool isStruct, int parentUnitIndex );
 	bool parseWhile( bool& returnCalled, WROpcode opcodeToReturn );

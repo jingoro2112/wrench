@@ -35,9 +35,6 @@ void wr_loadContainerLib( WRState* w )
 
 	wr_registerLibraryFunction( w, "hash::exists", wr_hashExists ); // exists( hash, key )
 	wr_registerLibraryFunction( w, "hash::remove", wr_hashRemove ); // remove( hash, key )
-		
 
-	//	wr_registerLibraryFunction( w, "sys::serializeValue", wr_serializeValue );
-	//	wr_registerLibraryFunction( w, "sys::deserializeValue", wr_deserializeValue );
 
 }

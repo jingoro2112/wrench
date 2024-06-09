@@ -1,17 +1,9 @@
-/*~
-one
-two
-3
-6
-6
-7
-seven
-~*/
+/*~ ~*/
 
 
 sb[5] = { 3 };
-sa[sb[0]] = {1};
-if(sa._count != 3 ) println("size 10");
+sa[sb[0]] = { 1 };
+if(sa[0] != 1 ) println("rese size 3");
 
 
 var s1000[1000];
@@ -19,7 +11,7 @@ if ( s1000._count != 1000 ) println("size 0");
 var s10[10];
 if ( s10._count != 10 ) println("size 1");
 s2000[2000];
-if ( s2000._count != 2000 ) println("size 10");
+if ( s2000._count != 2000 ) println("size 2000");
 
 s3[10];
 if ( s3._count != 10 ) println("size 2");
@@ -42,26 +34,6 @@ if ( b[1] != 2 ) println( "rc 4");
 if ( retCheck()[0] != 1 ) println("rc 0");
 if ( retCheck()[1] != 2 ) println("rc 1");
 if ( retCheck()[2] != 3 ) println("rc 2");
-
-
- 
-hashTable = { 1:"one", 2:"two", 3:3, "str":6 };
-
-if ( hashTable[1] != "one" ) println("h0");
-println( hashTable[1] ); // "one"
-if ( hashTable[2] != "two" ) println("h1");
-println( hashTable[2] ); // "two"
-if ( hashTable[3] != 3 ) println("h2");
-println( hashTable[3] ); // 3
-
-println( hashTable["str"] ); // 6
-
-println( hashTable.str ); // 6
-
-hashTable.str = 7;
-println( hashTable.str ); // 6
-hashTable.str = "seven";
-println( hashTable.str ); // 6
 
 
 array = { 20 };
@@ -89,9 +61,10 @@ if ( ff[1] != 7.8 ) { println("ff6"); }
 
 
 aa[10];
+if ( aa._count!= 10 ) println("bad size aa 10");
 a[500] = { aa };
 if ( a[0]._count != 10 ) println("bad size 10");
-if ( a._count!= 500 ) println("bad size 500");
+if ( a._count!= 1 ) println("bad size 500");
 
 
 
@@ -291,4 +264,60 @@ function leakCheck( value )
 	if ( 20 != value ) println("B2");
 }
 
+
+var a = {10};
+if ( a[0] != 10 ) println("err 0");
+
+var b[] = {11};
+if ( b[0] != 11 ) println("err 1");
+
+var c[100] = {12};
+if ( c[0] != 12 ) println("err 2");
+
+var d = {13,14};
+if ( d[0] != 13 ) println("err 3");
+if ( d[1] != 14 ) println("err 4");
+
+var e[] = {13,14};
+if ( e[0] != 13 ) println("err 5");
+if ( e[1] != 14 ) println("err 6");
+
+var f[100] = {13,14};
+if ( f[0] != 13 ) println("err 7");
+if ( f[1] != 14 ) println("err 8");
+
+var g = { { 15 } };
+if ( g[0][0] != 15 ) println("err 9");
+
+var h = { { 16, 17 } };
+if ( h[0][0] != 16 ) println("err 10");
+if ( h[0][1] != 17 ) println("err 11");
+
+var i = { { 18, 19 }, { 20 } };
+if ( i[0][0] != 18 ) println("err 12");
+if ( i[0][1] != 19 ) println("err 13");
+if ( i[1][0] != 20 ) println("err 14");
+
+var j = { { 21 }, { 22, 23 } };
+if ( j[0][0] != 21 ) println("err 15");
+if ( j[1][0] != 22 ) println("err 16");
+if ( j[1][1] != 23 ) println("err 17");
+
+var k = { { { 24 } } };
+if ( k[0][0][0] != 24 ) println("err 18");
+
+var l = { { 25 }, {} };
+if ( l[0][0] != 25 ) println("err 19");
+if ( l[1][0] != 0 ) println("err 20");
+
+var m = { { 15, 16 }, {}, 19 };
+if ( m[0][0] != 15 ) println("err 21");
+if ( m[2] != 19 ) println("err 22");
+
+var n = { {}, { 15, 16 }, {} };
+if ( n[1][1] != 16 ) println("err 23");
+
+var o = { n, m, l, "hello" };
+if ( o[0][1][1] != 16 ) println("err 24");
+if ( o[3] != "hello" ) println("err 25");
 
