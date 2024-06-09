@@ -969,8 +969,7 @@ void setup()
 	int err = wr_compile( wrenchCode, (int)strlen(wrenchCode), &outBytes, &outLen );
 	if ( err == 0 )
 	{
-		wr_run( w, outBytes, outLen ); // load and run the code!
-		g_free( outBytes ); // clean up 
+		wr_run( w, outBytes, outLen, true ); // load and run the code!
 	}
 
 	wr_run( w, Pbasic_bytecode, Pbasic_bytecodeSize );

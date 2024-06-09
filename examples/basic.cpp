@@ -13,7 +13,7 @@ void print( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, 
 
 const char* wrenchCode = 
 "print( \"Hello World!\\n\" );"
-"for( var i=0; i<10; i++ )        "
+"for( var i=0; i<10; i++ )    "
 "{                            "
 "    print( i );              "
 "}                            "
@@ -33,8 +33,7 @@ int main( int argn, char** argv )
 	int err = wr_compile( wrenchCode, strlen(wrenchCode), &outBytes, &outLen ); // compile it
 	if ( err == 0 )
 	{
-		wr_run( w, outBytes, outLen ); // load and run the code!
-		free( outBytes ); // clean up 
+		wr_run( w, outBytes, outLen, true ); // load and run the code!
 	}
 
 	wr_destroyState( w );
