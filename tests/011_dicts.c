@@ -136,3 +136,5 @@ if ( hash2.two != 10 ) println("hsh 9" );
 
 //if ( hash2.member["three"] != 30 ) println("hsh 9" );  // TODO (yuck)
 
+
+//a.f( 1 ) == TypeOf<a>::f( a, 1 );

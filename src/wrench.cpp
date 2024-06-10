@@ -1347,7 +1347,7 @@ tryAgain:
 			m_hashTable = proposed;
 			int oldMod = m_mod;
 			m_mod = newMod;
-			m_size = newSize;
+//			m_size = newSize;
 
 			for( int v=0; v<oldMod; ++v )
 			{
@@ -1426,15 +1426,25 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 struct WRFunction
 {
-	char arguments;
-	char frameSpaceNeeded;
-	char frameBaseAdjustment;
+	union
+	{
+		uint32_t signature;
+		struct
+		{
+			uint8_t arguments;
+			uint8_t frameSpaceNeeded;
+			uint8_t frameBaseAdjustment;
+		};
+	};
+	
 	uint32_t hash;
+	
 	union
 	{
 		const uint8_t* offset;
 		int offsetI;
 	};
+	
 	const uint8_t* namespaceHashOffset;
 };
 
@@ -1682,8 +1692,8 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 enum WROpcode
 {
-	O_RegisterFunction = 0,
-
+	O_RegisterFunction =0,
+	
 	O_LiteralInt32,
 	O_LiteralZero,
 	O_LiteralFloat,
@@ -7576,6 +7586,18 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			return 0;
 		}
 
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		
 		if ( value.type != WR_REF )
 		{
 			if ( (depth > 0) 
@@ -9730,6 +9752,16 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 			}
 		}
 	}
+
+
+
+
+
+
+	
+
+
+
 	
 	// register the function signatures
 	for( unsigned int u=1; u<m_units.count(); ++u )
@@ -9759,6 +9791,16 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 			m_units[u].localNamespaceMap.giveOwnership( (char*)map, size );
 		}
 	}
+
+
+
+
+
+
+
+
+
+	
 
 	WR_DUMP_LINK_OUTPUT(WRstr str);
 	WR_DUMP_LINK_OUTPUT(printf("header funcs[%d] locals[%d] flags[0x%02X]:\n%s\n",
@@ -10258,7 +10300,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	const void* opcodeJumptable[] =
 	{
 		&&RegisterFunction,
-
+		
 		&&LiteralInt32,
 		&&LiteralZero,
 		&&LiteralFloat,
@@ -10961,8 +11003,9 @@ CallFunctionByHashAndPop_continue:
 				// be in the "call by hash" above
 				function = context->localFunctions + READ_8_FROM_PC(pc++);
 				pc += READ_8_FROM_PC(pc);
-callFunction:				
-				// rectify arg count? hopefully not lets get calling!
+callFunction:
+				
+				// rectify arg count?
 				if ( args != function->arguments )
 				{
 					if ( args > function->arguments )
@@ -10980,16 +11023,11 @@ callFunction:
 					}
 				}
 
-				// for speed locals are not guaranteed to be initialized.. but we have to make
-				// sure they are not randomly selected to a
-				// "collectable" type or the gc will iterate them in some corner cases (ask me how I know)
-				// A simple offset add would be so fast.. 
-				//           TODO figure out how to use it!
-		
-//				stackTop += function->frameSpaceNeeded;
+				// initialize locals to int zero
 				for( int l=0; l<function->frameSpaceNeeded; ++l )
 				{
 					(stackTop++)->p2 = INIT_AS_INT;
+					stackTop->p = 0;
 				}
 			
 				// temp value contains return vector/frame base
@@ -13931,7 +13969,7 @@ void wr_destroyContainer( WRValue* val )
 const char* c_opcodeName[] = 
 {
 	"RegisterFunction",
-
+	
 	"LiteralInt32",
 	"LiteralZero",
 	"LiteralFloat",
@@ -15671,9 +15709,29 @@ uint32_t WRValue::getHashEx() const
 	{
 		return deref().getHash();
 	}
-	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
+	else if ( xtype == WR_EX_ARRAY )
 	{
-		return wr_hash( va->m_Cdata, va->m_size );
+		if (va->m_type == SV_CHAR)
+		{
+			return wr_hash( va->m_Cdata, va->m_size );
+		}
+		else if (va->m_type == SV_VALUE)
+		{
+			return wr_hash(va->m_Vdata, va->m_size * sizeof(WRValue));
+		}
+	}
+	else if ( xtype == WR_EX_HASH_TABLE )
+	{
+		// start with a hash of the key hashes
+		uint32_t hash = wr_hash(va->m_hashTable, va->m_mod * sizeof(uint32_t));
+
+		// hash each element, positionally dependant
+		for( uint32_t i=0; i<va->m_mod; ++i)
+		{
+			uint32_t h = i<<16 | va->m_Vdata[i<<1].getHash();
+			hash = wr_hash( &h, 4, hash );
+		}
+		return hash;
 	}
 
 	return 0;
@@ -16570,7 +16628,7 @@ bool NAME##_R_F( WRValue* to, WRValue* from ) { return NAME[(to->r->type<<2)|WR_
 bool NAME##_I_R( WRValue* to, WRValue* from ) { return NAME[(WR_INT<<2)+from->r->type](to, from->r); }\
 bool NAME##_F_R( WRValue* to, WRValue* from ) { return NAME[(WR_FLOAT<<2)+from->r->type](to, from->r); }\
 bool NAME##_I_I( WRValue* to, WRValue* from ) { return to->i OPERATION from->i; }\
-bool NAME##_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; return to->f OPERATION from->f; }\
+bool NAME##_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; return to->i OPERATION from->f; }\
 bool NAME##_F_I( WRValue* to, WRValue* from ) { return to->f OPERATION (float)from->i; }\
 bool NAME##_F_F( WRValue* to, WRValue* from ) { return to->f OPERATION from->f; }\
 WRReturnFunc NAME[16] = \
@@ -16890,10 +16948,10 @@ uint32_t wr_hash_read8( const void *dat, const int len )
 }
 
 //------------------------------------------------------------------------------
-uint32_t wr_hash( const void *dat, const int len )
+uint32_t wr_hash( const void *dat, const int len, uint32_t serial )
 {
 	// fnv-1
-	uint32_t hash = 0x811C9DC5;
+	uint32_t hash = serial ? serial : 0x811C9DC5;
 	const unsigned char* data = (const unsigned char *)dat;
 
 	for( int i=0; i<len; ++i )
@@ -16920,9 +16978,9 @@ uint32_t wr_hashStr_read8( const char* dat )
 }
 
 //------------------------------------------------------------------------------
-uint32_t wr_hashStr( const char* dat )
+uint32_t wr_hashStr( const char* dat, uint32_t serial )
 {
-	uint32_t hash = 0x811C9DC5;
+	uint32_t hash = serial ? serial : 0x811C9DC5;
 	const char* data = dat;
 	while ( *data )
 	{

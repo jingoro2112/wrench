@@ -81,7 +81,6 @@ pre code {
                 <span class="menu-title"><a href="#extending">Extending Wrench</a></span>
                 <span class="menu-title"><a href="#library">Lib Reference</a></span>
                 <span class="menu-title"><a href="#limits">Limits</a></span>
-                <span class="menu-title"><a href="#benchmarks">Benchmarks</a></span>
                 <span class="menu-title"><a href="#faq">FAQ</a></span>
                 <span class="menu-title"><a href="https://github.com/jingoro2112/wrench">Download</a></span>
                 <span class="menu-title"><a href="mailto: curt.hartung@gmail.com">Email Me</a></span>
@@ -1275,7 +1274,7 @@ msg::peek( key ) // return true if the key has a message
 </code></pre>
 
 
-<hr><h1><a name="limits"></a>6.0 Library</h1></hr>
+<hr><h1><a name="limits"></a>6.0 Limits</h1></hr>
 
 <p>wrench is made to run on extremely limited hardware with an
 absolute minimum of bytecode size, and this comes at the cost of some
@@ -1288,7 +1287,8 @@ float : 32 bit (compiler/lib dependant)
 
 char : 8 bit, no wide char support
 
-</code></pre><pre><code>functions : 256 functions per bytecode file
+</code></pre><pre><code>functions : 256 functions per bytecode file, note this does NOT apply to library, external c calls, or imported
+            calls all of which are unlimited.
 
 source code size: no limit
 
@@ -1304,191 +1304,8 @@ native array/string elements: ~2 million (0x1FFFFF) elements
 
 
 
-<hr><h1><a name="benchmarks"></a>7.0 Benchmarks</h1></hr>
 
-<h2>Memory Benchmarks</h2>
-<p>The whole point of this interpreter is to run on small embedded
-systems. Here is a list of compiled image sizes on various processors.
-<p>NOTE 1: optimizations are always in progress to shrink the compiled
-image, I do not keep these numbers up to date but I can assure you
-they are cielings, the actual value of the latest version will be the
-same or <b>less.</b>
-<p>NOTE 2: compiled with <code>WRENCH_REALLY_COMPACT</code> 
-
-<table>
-  <tr>
-    <th><center>Architecture</center></th>
-    <th><center>Compiler</center></th>
-    <th><center>Footprint</center></th>
-  </tr>
-
-  <tr>
-    <td><center>Arduino UNO, UNO Mini</center></tc>
-    <td><center>Arduino 1.8.19</w></center></tc>
-    <td><center>27028 bytes</center></tc>
-  </tr>
-
-  <tr>
-    <td><center>Arduino Mega</center></tc>
-    <td><center>Arduino 1.8.19</w></center></tc>
-    <td><center>28674 bytes</center></tc>
-  </tr>
-
-  <tr>
-    <td><center>Arduino Feather/Trinket M0</center></tc>
-    <td><center>Arduino 1.8.19</w></center></tc>
-    <td><center>31600 bytes</center></tc>
-  </tr>
-
-  <tr>
-    <td><center>PC</center></tc>
-    <td><center>clang, gcc, msvc</w></center></tc>
-    <td><center>who cares :)</center></tc>
-  </tr>
-</table>
-
-<h2>CPU Benchmarks run on Xeon E5-2640</h2>
-
-<p><b>particles:</b> testing foreach() speed as well as struct member access
-speed
-<table>
-  <tr>
-    <th><center>Language</center></th>
-    <th><center>Source</center></th>
-    <th><center>Bytecode Size/% wrench</center></th>
-    <th><center>Time/ % wrench</center></th>
-  </tr>
-  <tr>
-    <td><center>wrench</center></tc>
-    <td><center><a href="perf/particles.w">particles.w</w></center></tc>
-    <td><center>518</center></tc>
-    <td><center>15.2s</center></tc>
-  </tr>
-  <tr>
-    <td><center>wrench [compact]</center></tc>
-    <td><center><a href="perf/particles.w">particles.w</w></center></tc>
-    <td><center>518</center></tc>
-    <td><center style="color:red">18.6s 22% slower</center></tc>
-  </tr>
-  <tr>
-    <td><center>lua</center></tc>
-    <td><center><a href="perf/particles.lua">particles.lua</w></center></tc>
-    <td><center style="color:red">970 87% larger</center></tc>
-    <td><center style="color:red">46s 155% slower</center></tc>
-  </tr>
-  <tr>
-    <td><center>squirrel</center></tc>
-    <td><center><a href="perf/particles.nut">particles.nut</w></center></tc>
-    <td><center style="color:red">3822 637% larger</center></tc>
-    <td><center style="color:red">41s 127% slower</center></tc>
-  </tr>
-</table>
-
-<p><b>primes:</b> testing function calls/recursion computation
-<table>
-  <tr>
-    <th><center>Language</center></th>
-    <th><center>Source</center></th>
-    <th><center>Bytecode Size/% wrench</center></th>
-    <th><center>Time/ % wrench</center></th>
-  </tr>
-  <tr>
-    <td><center>wrench</center></tc>
-    <td><center><a href="perf/primes.w">primes.w</w></center></tc>
-    <td><center>113</center></tc>
-    <td><center>10s</center></tc>
-  </tr>
-  <tr>
-    <td><center>wrench [compact]</center></tc>
-    <td><center><a href="perf/primes.w">primes.w</w></center></tc>
-    <td><center>113</center></tc>
-    <td><center style="color:red">14s 40% slower</center></tc>
-  </tr>
-  <tr>
-    <td><center>lua</center></tc>
-    <td><center><a href="perf/primes.lua">primes.lua</w></center></tc>
-    <td><center style="color:red">422 237% larger</center></tc>
-    <td><center style="color:red">18.2s 82% slower</center></tc>
-  </tr>
-  <tr>
-    <td><center>squirrel</center></tc>
-    <td><center><a href="perf/primes.nut">primes.nut</w></center></tc>
-    <td><center style="color:red">1782 1476% larger</center></tc>
-    <td><center style="color:red">27s 170% slower</center></tc>
-  </tr>
-</table>
-
-<p><b>recursive fibonacci geerator:</b> testing function call overhead and recursion
-<table>
-  <tr>
-    <th><center>Language</center></th>
-    <th><center>Source</center></th>
-    <th><center>Bytecode Size/% wrench</center></th>
-    <th><center>Time/ % wrench</center></th>
-  </tr>
-  <tr>
-    <td><center>wrench</center></tc>
-    <td><center><a href="perf/fibo.w">fibo.w</w></center></tc>
-    <td><center>74</center></tc>
-    <td><center>22s</center></tc>
-  </tr>
-  <tr>
-    <td><center>wrench [compact]</center></tc>
-    <td><center><a href="perf/fibo.w">fibo.w</w></center></tc>
-    <td><center>74</center></tc>
-    <td><center style="color:red">25s 12% slower</center></tc>
-  </tr>
-  <tr>
-    <td><center>lua</center></tc>
-    <td><center><a href="perf/fibo.lua">fibo.lua</w></center></tc>
-    <td><center style="color:red">288 289% larger</center></tc>
-    <td><center style="color:red">51.5s 131% slower</center></tc>
-  </tr>
-  <tr>
-    <td><center>squirrel</center></tc>
-    <td><center><a href="perf/fibo.nut">fibo.nut</w></center></tc>
-    <td><center style="color:red">1001 1252% larger</center></tc>
-    <td><center style="color:red">84s 281% slower</center></tc>
-  </tr>
-</table>
-
-
-<p><b>exponent call:</b> testing library call overhead
-<table>
-  <tr>
-    <th><center>Language</center></th>
-    <th><center>Source</center></th>
-    <th><center>Bytecode Size/% wrench</center></th>
-    <th><center>Time/ % wrench</center></th>
-  </tr>
-  <tr>
-    <td><center>wrench</center></tc>
-    <td><center><a href="perf/exp.w">exp.w</w></center></tc>
-    <td><center>87</center></tc>
-    <td><center>19s</center></tc>
-  </tr>
-  <tr>
-    <td><center>wrench [compact]</center></tc>
-    <td><center><a href="perf/exp.w">exp.w</w></center></tc>
-    <td><center>87</center></tc>
-    <td><center style="color:red">24.8s 30.5% slower</center></tc>
-  </tr>
-  <tr>
-    <td><center>lua</center></tc>
-    <td><center><a href="perf/exp.lua">exp.lua</w></center></tc>
-    <td><center style="color:red">288 231% larger</center></tc>
-    <td><center style="color:red">40.8s 131% slower</center></tc>
-  </tr>
-  <tr>
-    <td><center>squirrel</center></tc>
-    <td><center><a href="perf/exp.nut">exp.nut</w></center></tc>
-    <td><center style="color:red">1144 1214% larger</center></tc>
-    <td><center style="color:red">71s 273% slower</center></tc>
-  </tr>
-</table>
- 
-
-<hr><h1><a name="faq"></a>7.0 FAQ</h1></hr>
+<hr><h1><a name="faq"></a>6.0 FAQ</h1></hr>
 
 <p><b>... why? Aren't there enough interpreters out there? Surely one of
 them would have worked?</b><cr>

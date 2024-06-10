@@ -291,7 +291,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	const void* opcodeJumptable[] =
 	{
 		&&RegisterFunction,
-
+		
 		&&LiteralInt32,
 		&&LiteralZero,
 		&&LiteralFloat,
@@ -994,8 +994,9 @@ CallFunctionByHashAndPop_continue:
 				// be in the "call by hash" above
 				function = context->localFunctions + READ_8_FROM_PC(pc++);
 				pc += READ_8_FROM_PC(pc);
-callFunction:				
-				// rectify arg count? hopefully not lets get calling!
+callFunction:
+				
+				// rectify arg count?
 				if ( args != function->arguments )
 				{
 					if ( args > function->arguments )
@@ -1013,16 +1014,11 @@ callFunction:
 					}
 				}
 
-				// for speed locals are not guaranteed to be initialized.. but we have to make
-				// sure they are not randomly selected to a
-				// "collectable" type or the gc will iterate them in some corner cases (ask me how I know)
-				// A simple offset add would be so fast.. 
-				//           TODO figure out how to use it!
-		
-//				stackTop += function->frameSpaceNeeded;
+				// initialize locals to int zero
 				for( int l=0; l<function->frameSpaceNeeded; ++l )
 				{
 					(stackTop++)->p2 = INIT_AS_INT;
+					stackTop->p = 0;
 				}
 			
 				// temp value contains return vector/frame base

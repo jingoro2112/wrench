@@ -121,9 +121,29 @@ uint32_t WRValue::getHashEx() const
 	{
 		return deref().getHash();
 	}
-	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
+	else if ( xtype == WR_EX_ARRAY )
 	{
-		return wr_hash( va->m_Cdata, va->m_size );
+		if (va->m_type == SV_CHAR)
+		{
+			return wr_hash( va->m_Cdata, va->m_size );
+		}
+		else if (va->m_type == SV_VALUE)
+		{
+			return wr_hash(va->m_Vdata, va->m_size * sizeof(WRValue));
+		}
+	}
+	else if ( xtype == WR_EX_HASH_TABLE )
+	{
+		// start with a hash of the key hashes
+		uint32_t hash = wr_hash(va->m_hashTable, va->m_mod * sizeof(uint32_t));
+
+		// hash each element, positionally dependant
+		for( uint32_t i=0; i<va->m_mod; ++i)
+		{
+			uint32_t h = i<<16 | va->m_Vdata[i<<1].getHash();
+			hash = wr_hash( &h, 4, hash );
+		}
+		return hash;
 	}
 
 	return 0;
@@ -1020,7 +1040,7 @@ bool NAME##_R_F( WRValue* to, WRValue* from ) { return NAME[(to->r->type<<2)|WR_
 bool NAME##_I_R( WRValue* to, WRValue* from ) { return NAME[(WR_INT<<2)+from->r->type](to, from->r); }\
 bool NAME##_F_R( WRValue* to, WRValue* from ) { return NAME[(WR_FLOAT<<2)+from->r->type](to, from->r); }\
 bool NAME##_I_I( WRValue* to, WRValue* from ) { return to->i OPERATION from->i; }\
-bool NAME##_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; return to->f OPERATION from->f; }\
+bool NAME##_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; return to->i OPERATION from->f; }\
 bool NAME##_F_I( WRValue* to, WRValue* from ) { return to->f OPERATION (float)from->i; }\
 bool NAME##_F_F( WRValue* to, WRValue* from ) { return to->f OPERATION from->f; }\
 WRReturnFunc NAME[16] = \

@@ -45,10 +45,10 @@ uint32_t wr_hash_read8( const void *dat, const int len )
 }
 
 //------------------------------------------------------------------------------
-uint32_t wr_hash( const void *dat, const int len )
+uint32_t wr_hash( const void *dat, const int len, uint32_t serial )
 {
 	// fnv-1
-	uint32_t hash = 0x811C9DC5;
+	uint32_t hash = serial ? serial : 0x811C9DC5;
 	const unsigned char* data = (const unsigned char *)dat;
 
 	for( int i=0; i<len; ++i )
@@ -75,9 +75,9 @@ uint32_t wr_hashStr_read8( const char* dat )
 }
 
 //------------------------------------------------------------------------------
-uint32_t wr_hashStr( const char* dat )
+uint32_t wr_hashStr( const char* dat, uint32_t serial )
 {
-	uint32_t hash = 0x811C9DC5;
+	uint32_t hash = serial ? serial : 0x811C9DC5;
 	const char* data = dat;
 	while ( *data )
 	{

@@ -853,7 +853,7 @@ void wr_destroyContainer( WRValue* val )
 const char* c_opcodeName[] = 
 {
 	"RegisterFunction",
-
+	
 	"LiteralInt32",
 	"LiteralZero",
 	"LiteralFloat",

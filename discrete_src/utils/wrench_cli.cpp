@@ -277,9 +277,9 @@ int main( int argn, char* argv[] )
 		
 		int err = wr_compile( infile, infile.size(), &out, &outLen, 0, flags );
 		
-		WRstr str;
-		wr_asciiDump( out, outLen, str );
-		printf( "Code Image: %d:\n%s\n", outLen, str.c_str() );
+//		WRstr str;
+//		wr_asciiDump( out, outLen, str );
+//		printf( "Code Image: %d:\n%s\n", outLen, str.c_str() );
 		
 		if ( err )
 		{

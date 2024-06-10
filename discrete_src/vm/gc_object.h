@@ -300,7 +300,7 @@ tryAgain:
 			m_hashTable = proposed;
 			int oldMod = m_mod;
 			m_mod = newMod;
-			m_size = newSize;
+//			m_size = newSize;
 
 			for( int v=0; v<oldMod; ++v )
 			{

@@ -28,7 +28,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 5
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 1
+#define WRENCH_VERSION_BUILD 2
 
 /************************************************************************
 The compiler is not particularly memory or space efficient, for
@@ -50,8 +50,8 @@ WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
 interpreter in favor of a giant switch(). This savings comes at the cost
 of more speed so only use it if you need to.
 */
-#define WRENCH_COMPACT           // saves a lot, costs some speed
-#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
+//#define WRENCH_COMPACT           // saves a lot, costs some speed
+//#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 
 
 // Default implementations are provided for these architectures, define
@@ -234,8 +234,8 @@ void wr_free( void* ptr );
 
 // hashing function used inside wrench, it's a stripped down murmer,
 // not techcnically the "best" but very good, very fast and very compact
-uint32_t wr_hash( const void* dat, const int len );
-uint32_t wr_hashStr( const char* dat );
+uint32_t wr_hash( const void* dat, const int len, uint32_t serial=0 );
+uint32_t wr_hashStr( const char* dat, uint32_t serial=0 );
 
 /***************************************************************/
 /**************************************************************/
