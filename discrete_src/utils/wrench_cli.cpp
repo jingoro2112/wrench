@@ -474,7 +474,7 @@ int main( int argn, char* argv[] )
 
 #ifndef WRENCH_WITHOUT_COMPILER
 //------------------------------------------------------------------------------
-static void emit( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+void emit( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
@@ -486,7 +486,7 @@ static void emit( WRContext* c, const WRValue* argv, const int argn, WRValue& re
 }
 
 //------------------------------------------------------------------------------
-static void emitln( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+void emitln( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
@@ -496,6 +496,50 @@ static void emitln( WRContext* c, const WRValue* argv, const int argn, WRValue& 
 
 	retVal.i = 20; // for argument-return testing
 }
+
+//------------------------------------------------------------------------------
+void checkIsRawArray( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	int len = -1;
+	assert( argv[0].isRawArray(&len) );
+	assert( !argv[0].isWrenchArray() );
+	assert( !argv[0].isHashTable() );
+	assert( !argv[0].isString() );
+	if (len != argv[1].asInt()) { assert(0); }
+}
+
+//------------------------------------------------------------------------------
+void checkIsWrenchArray( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	int len = -1;
+	assert( !argv[0].isRawArray() );
+	assert( argv[0].isWrenchArray(&len) );
+	assert( !argv[0].isHashTable() );
+	assert( !argv[0].isString() );
+	if (len != argv[1].asInt())	{ assert(0); }
+}
+
+//------------------------------------------------------------------------------
+void checkIsString( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	int len = -1;
+	assert( !argv[0].isRawArray() );
+	assert( !argv[0].isWrenchArray() );
+	assert( !argv[0].isHashTable() );
+	assert( argv[0].isString(&len) );
+	if (len != argv[1].asInt()) { assert(0); }
+}
+
+//------------------------------------------------------------------------------
+void checkIsHashTable( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	assert( !argv->isRawArray() );
+	assert( !argv->isWrenchArray() );
+	assert( argv->isHashTable() );
+	assert( !argv->isString() );
+}
+
+
 #endif
 
 //------------------------------------------------------------------------------
@@ -542,10 +586,7 @@ int runTests( int number )
 
 	wr_loadAllLibs( w );
 
-	testImport();
 	
-	testHalt();
-		
 	while( fgets(buf, 255, tfile) && (err==0) )
 	{
 		if ( !number || (number == fileNumber) )
@@ -580,12 +621,19 @@ int runTests( int number )
 				WRstr logger;
 				wr_registerFunction( w, "print", emit, &logger );
 				wr_registerFunction( w, "println", emitln, &logger );
+				
+				wr_registerFunction( w, "checkIsWrenchArray", checkIsWrenchArray );
+				wr_registerFunction( w, "checkIsRawArray", checkIsRawArray );
+				wr_registerFunction( w, "checkIsString", checkIsString );
+				wr_registerFunction( w, "checkIsHashTable", checkIsHashTable );
 
 				wr_destroyContext( 0 ); // test that this works
 
 				WRContext* context = 0;
 				wr_destroyContext( context );
 				context = wr_run( w, out, outLen );
+
+				err = wr_getLastError( w );
 
 				int args;
 				WRValue* firstArg;
@@ -614,6 +662,9 @@ int runTests( int number )
 					char testString[12] = "test string";
 					WRValue val;
 					wr_makeString( context, &val, testString, 11 );
+
+					assert( val.isString() );
+					
 					wr_callFunction( context, "stringCheck", &val, 1 );
 					wr_callFunction( context, "stringCheck", &val, 1 );
 					wr_callFunction( context, "stringCheck", &val, 1 );
@@ -639,7 +690,7 @@ int runTests( int number )
 
 				if ( err )
 				{
-					printf( "execute error [%d]\n", err );
+					printf( "execute error [%s]\n", c_errStrings[err] );
 				}
 				else if ( logger != expect )
 				{
@@ -694,6 +745,10 @@ int runTests( int number )
 		
 		fileNumber++;
 	}
+
+	testImport();
+
+	testHalt();
 
 	wr_destroyContainer( &container );
 

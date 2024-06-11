@@ -1,10 +1,20 @@
 /*~ ~*/
 
-res[] = { newState, newStateDuration, resetCollision };
+var res[] = { newState, newStateDuration, resetCollision };
+checkIsWrenchArray( res, 3 );
+
+var h = {:};
+checkIsHashTable( h );
+
+var s = "a string";
+checkIsString( s, s._count );
+
 
 //------------------------------------------------------------------------------
 function userCheck( data )
 {
+	checkIsRawArray( data.big, data.big._count );
+	
 	if ( data.b != data.c ) println("b001");
 	
 	if ( data.b != 0x99 ) println("b99");

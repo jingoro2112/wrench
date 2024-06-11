@@ -390,8 +390,9 @@ typedef void (*WR_C_CALLBACK)(WRContext* c, const WRValue* argv, const int argn,
 // string: .c_str( unsigned int* len );
 
 // tests:
-// .isFloat() fast check if this is a float value
-// .isInt() fast check if this is a float value
+// .isFloat() fast check if this is a float
+// .isInt() fast check if this is an int
+// .isString() fast check if this is a string
 
 
 // this will do its pest to represent the value as a string to the
@@ -684,11 +685,12 @@ struct WRValue
 	float asFloat() const;
 	void setFloat( const float val );
 
-	bool isFloat() const { return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
+	bool isFloat() const {return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
 	bool isInt() const { return type == WR_INT || (type == WR_REF && r->type == WR_INT); }
-	bool isWrenchArray() const { return IS_ARRAY(xtype); }
-	bool isRawArray() const { return IS_RAW_ARRAY(xtype); }
-	bool isHashTable() const { return IS_HASH_TABLE(xtype); }
+	bool isString( int* len =0 ) const;
+	bool isWrenchArray( int* len =0 ) const;
+	bool isRawArray( int* len =0 ) const;
+	bool isHashTable() const;
 
 	// if this value is an array, return [or create] the 'index'-th element
 	// if create is true and this value is NOT an array, it will be converted into one
@@ -708,6 +710,7 @@ struct WRValue
 
 	// return a raw pointer to the data array if this is one, otherwise null
 	void* array( unsigned int* len =0, char arrayType =SV_CHAR ) const;
+	int arrayLen() const; // returns length of the array or -1 if this value is not an array
 
 //private: // is what this SHOULD be.. but that's impractical since the
 	// VM is not an object that can be friended.

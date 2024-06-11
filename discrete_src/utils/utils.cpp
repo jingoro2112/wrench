@@ -499,70 +499,130 @@ void WRValue::setFloat( const float val )
 }
 
 //------------------------------------------------------------------------------
+bool WRValue::isString( int* len ) const
+{
+	WRValue& V = deref();
+	if ( IS_ARRAY(V.xtype) && V.va->m_type == SV_CHAR )
+	{
+		if ( len )
+		{
+			*len = V.va->m_size;
+		}
+		return true;
+	}
+	return false;
+}
+//------------------------------------------------------------------------------
+bool WRValue::isWrenchArray( int* len ) const
+{
+	WRValue& V = deref();
+	if ( IS_ARRAY(V.xtype) && V.va->m_type == SV_VALUE )
+	{
+		if ( len )
+		{
+			*len = V.va->m_size;
+		}
+		return true;
+	}
+	return false;
+}
+
+//------------------------------------------------------------------------------
+bool WRValue::isRawArray( int* len ) const
+{
+	WRValue& V = deref();
+	if ( IS_RAW_ARRAY(V.xtype) )
+	{
+		if ( len )
+		{
+			*len = EX_RAW_ARRAY_SIZE_FROM_P2(V.p2);
+		}
+		return true;
+	}
+	return false;
+}
+
+//------------------------------------------------------------------------------
+bool WRValue::isHashTable() const
+{
+	WRValue& V = deref();
+	return IS_HASH_TABLE( V.xtype );
+}
+
+//------------------------------------------------------------------------------
 WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bool create )
 {
-	if ( !IS_ARRAY(xtype) || va->m_type != SV_VALUE )
+	WRValue& V = deref();
+	
+	if ( !IS_ARRAY(V.xtype) || V.va->m_type != SV_VALUE )
 	{
 		if ( !create )
 		{
 			return 0;
 		}
 
-		p2 = INIT_AS_ARRAY;
-		va = context->getSVA( index + 1, SV_VALUE, true );
+		V.p2 = INIT_AS_ARRAY;
+		V.va = context->getSVA( index + 1, SV_VALUE, true );
 	}
 
-	if ( index >= va->m_size )
+	if ( index >= V.va->m_size )
 	{
 		if ( !create )
 		{
 			return 0;
 		}
 		
-		wr_growValueArray( va, index );
-		context->allocatedMemoryHint += index * ((va->m_type == SV_CHAR) ? 1 : sizeof(WRValue));
+		wr_growValueArray( V.va, index );
+		context->allocatedMemoryHint += index * ((V.va->m_type == SV_CHAR) ? 1 : sizeof(WRValue));
 	}
 
-	return va->m_Vdata + index;
+	return V.va->m_Vdata + index;
 }
 
 //------------------------------------------------------------------------------
 WRValue* WRValue::indexHash( WRContext* context, const uint32_t hash, const bool create )
 {
-	if ( !IS_HASH_TABLE(xtype) )
+	WRValue& V = deref();
+	
+	if ( !IS_HASH_TABLE(V.xtype) )
 	{
 		if ( !create )
 		{
 			return 0;
 		}
 
-		p2 = INIT_AS_HASH_TABLE;
-		va = context->getSVA( 0, SV_HASH_TABLE, false );
+		V.p2 = INIT_AS_HASH_TABLE;
+		V.va = context->getSVA( 0, SV_HASH_TABLE, false );
 	}
 
-	return create ? (WRValue*)va->get(hash) : va->exists(hash, false);
+	return create ? (WRValue*)V.va->get(hash) : V.va->exists(hash, false);
 }
 
 //------------------------------------------------------------------------------
 void* WRValue::array( unsigned int* len, char arrayType ) const
 {
-	if ( type == WR_REF )
-	{
-		return r->array( len, arrayType );
-	}
-
-	if ( (xtype != WR_EX_ARRAY) || (va->m_type != arrayType) )
+	WRValue& V = deref();
+	
+	if ( (V.xtype != WR_EX_ARRAY) || (V.va->m_type != arrayType) )
 	{
 		return 0;
 	}
 
 	if ( len )
 	{
-		*len = va->m_size;
+		*len = V.va->m_size;
 	}
 
-	return va->m_data;
+	return V.va->m_data;
 }
+
+//------------------------------------------------------------------------------
+int WRValue::arrayLen() const
+{
+	WRValue& V = deref();
+	return (V.xtype == WR_EX_ARRAY && (V.va->m_type == SV_VALUE || V.va->m_type == SV_CHAR)) ? V.va->m_size : -1;
+}
+
 
 //------------------------------------------------------------------------------
 int wr_technicalAsStringEx( char* string, const WRValue* value, size_t pos, size_t maxLen, bool valuesInHex )

@@ -202,6 +202,10 @@ void wr_countOfArrayElement( WRValue* array, WRValue* target )
 	{
 		target->i = array->va->m_size;
 	}
+	else if ( IS_EX_RAW_ARRAY_TYPE(array->xtype) )
+	{
+		target->i = EX_RAW_ARRAY_SIZE_FROM_P2(array->p2);
+	}
 	else
 	{
 		target->i = 0;
@@ -925,8 +929,8 @@ void wr_AdditionBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
 	{
 		target->p2 = INIT_AS_ARRAY;
 		target->va = from->va->m_creatorContext->getSVA( from->va->m_size + to->va->m_size, SV_CHAR, false );
-		memcpy( target->va->m_SCdata, from->va->m_SCdata, from->va->m_size );
-		memcpy( target->va->m_SCdata + from->va->m_size, to->va->m_SCdata, to->va->m_size );
+		memcpy( target->va->m_SCdata, to->va->m_SCdata, to->va->m_size );
+		memcpy( target->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
 	}
 }
 void wr_AdditionBinary_I_E( WRValue* to, WRValue* from, WRValue* target )

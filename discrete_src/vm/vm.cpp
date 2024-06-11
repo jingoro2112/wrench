@@ -2542,7 +2542,7 @@ compactCompareGG8:
 			{
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
-				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				wr_AdditionBinary[(register1->type<<2)|register0->type]( register1, register0, stackTop++ );
 				CONTINUE;
 			}
 
@@ -2550,7 +2550,7 @@ compactCompareGG8:
 			{
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++); 
-				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				wr_AdditionBinary[(register1->type<<2)|register0->type]( register1, register0, stackTop++ );
 				CONTINUE;
 			}
 
@@ -2558,7 +2558,7 @@ compactCompareGG8:
 			{
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
-				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				wr_AdditionBinary[(register1->type<<2)|register0->type]( register1, register0, stackTop++ );
 				CONTINUE;
 			}
 

@@ -1,5 +1,13 @@
 5.0.2 ----------------------------------------------------------------------------------
-- bug fixes to value comparison
+- added isString() to WRValue
+- fixed: bool isString() const;
+         bool isWrenchArray() const;
+         bool isRawArray() const;
+         bool isHashTable() const;
+  they were not properly dereferening their arguments
+- added array length returns to isString() etc.
+- fixed other cases where the value was not being properly dereferenced
+
 
 5.0.1 ----------------------------------------------------------------------------------
 - nested container declarations now work:

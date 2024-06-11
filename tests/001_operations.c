@@ -53,9 +53,50 @@ hello world
 10
 1.3
 ~*/
+/*
+var T = 10;
+var I = 0;
+
+function localIntA( F )
+{
+	F = T + F;
+}
+
+localIntA( 20 );
 
 
+var head = "head";
+localStringA( "tail" );
+if ( head != "headtail") println( "s4" );
 
+head = "head";
+var tail = "tail";
+head += tail;
+if ( head != "headtail" ) println("s1");
+head = "head";
+head = head + tail;
+if ( head != "headtail" ) println("s2");
+
+head = "head";
+localStringC( "tail" );
+if ( head != "headtail") println( "s3" );
+head = "head";
+
+function localStringC( tail )
+{
+	head += tail;
+}
+
+function localIntA( F )
+{
+	F = T + F;
+}
+
+function localStringA( tail )
+{
+	head = head + tail;
+}
+*/
 var y = "hello";
 y += "hi";
 if ( y != "hellohi" ) print("failconcat");
