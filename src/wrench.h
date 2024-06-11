@@ -817,7 +817,7 @@ public:
 	// this will convert it to an array if it isn't one
 	WRValue& operator[] ( const int index ) { return *asArrayMember( index ); }
 	WRValue* asArrayMember( const int index );
-	int arraySize(); // returns -1 if this is not an array
+	const int arraySize() const { return m_value ? m_value->arrayLen() : -1; } // returns -1 if this is not an array
 
 private:
 	WRContext* m_context;

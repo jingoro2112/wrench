@@ -7,7 +7,7 @@
   they were not properly dereferening their arguments
 - added array length returns to isString() etc.
 - fixed other cases where the value was not being properly dereferenced
-
+- fixed arraySize() in WRValue
 
 5.0.1 ----------------------------------------------------------------------------------
 - nested container declarations now work:
