@@ -110,8 +110,7 @@ WRValue& WRValue::deref() const
 //------------------------------------------------------------------------------
 uint32_t WRValue::getHashEx() const
 {
-	// QUICKLY return the easy answers, thats why this code looks a bit
-	// convoluted
+	// QUICKLY return the easy answers, thats why this code looks a bit convoluted
 	if ( type == WR_REF )
 	{
 		return r->getHash();
@@ -140,15 +139,32 @@ uint32_t WRValue::getHashEx() const
 		// hash each element, positionally dependant
 		for( uint32_t i=0; i<va->m_mod; ++i)
 		{
-			uint32_t h = i<<16 | va->m_Vdata[i<<1].getHash();
-			hash = wr_hash( &h, 4, hash );
+			if ( va->m_hashTable[i] != WRENCH_NULL_HASH )
+			{
+				uint32_t h = i<<16 | va->m_Vdata[i<<1].getHash();
+				hash = wr_hash( &h, 4, hash );
+			}
 		}
+		return hash;
+	}
+	else if ( xtype == WR_EX_STRUCT )
+	{
+		uint32_t hash = wr_hash( (char *)&va->m_hashTable, sizeof(void*) ); // this is in ROM and must be identical for the struct to be the same (same namespace)
+
+		for( uint32_t i=0; i<va->m_mod; ++i )
+		{
+			if ((uint32_t)READ_32_FROM_PC(va->m_ROMHashTable + i * 5) != WRENCH_NULL_HASH)
+			{
+				uint32_t h = va->m_Vdata[i].getHash();
+				hash = wr_hash( &h, 4, hash );
+			}
+		}
+
 		return hash;
 	}
 
 	return 0;
 }
-
 
 //------------------------------------------------------------------------------
 void wr_valueToArray( const WRValue* array, WRValue* value )

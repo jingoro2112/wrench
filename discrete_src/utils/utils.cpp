@@ -201,24 +201,27 @@ bool wr_executeFunctionZero( WRContext* context )
 WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership )
 {
 	// CRC the code block, at least is it what the compiler intended?
-	uint32_t hash = READ_32_FROM_PC( block + (blockSize - 4) );
-	if ( hash != wr_hash_read8(block, (blockSize - 4)) )
+	uint32_t hash = READ_32_FROM_PC(block + (blockSize - 4));
+	if ( hash != wr_hash_read8(block, (blockSize - 4)) + WRENCH_VERSION_MAJOR )
 	{
 		w->err = WR_ERR_bad_bytecode_CRC;
 		return 0;
 	}
 
-	int funcs = READ_8_FROM_PC(block);
+	int globals = READ_8_FROM_PC( block );
+	int localFuncs = READ_8_FROM_PC(block  + 1); // how many?
+	
 	int needed = sizeof(WRContext) // class
-				 + funcs * sizeof(WRFunction) // local functions
-				 + READ_8_FROM_PC(block+1) * sizeof(WRValue);  // globals
+				 + (globals * sizeof(WRValue))  // globals
+				 + (localFuncs * sizeof(WRFunction)); // functions;
 
 	WRContext* C = (WRContext *)g_malloc( needed );
 	memset((char*)C, 0, needed);
 
-	C->numLocalFunctions = funcs;
-	
-	C->globals = READ_8_FROM_PC(block + 1);
+	C->numLocalFunctions = localFuncs;
+	C->localFunctions = (WRFunction *)((uint8_t *)(C + 1) + (globals * sizeof(WRValue)));
+
+	C->globals = globals;
 
 	C->allocatedMemoryLimit = WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT;
 
@@ -226,11 +229,10 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 	
 	C->w = w;
 
-	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + C->globals * sizeof(WRValue));
-
 	C->bottom = block;
-	C->codeStart = block + 3;
 	C->bottomSize = blockSize;
+
+	C->codeStart = block + 3 + (C->numLocalFunctions * 11);
 
 	uint8_t compilerFlags = READ_8_FROM_PC( block + 2 );
 
@@ -251,6 +253,24 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 	}
 
 	C->registry.init( 0, SV_VOID_HASH_TABLE, false );
+
+	int pos = 3;
+	for( int i=0; i<C->numLocalFunctions; ++i )
+	{
+		C->localFunctions[i].namespaceOffset = READ_16_FROM_PC( block + pos );
+		pos += 2;
+		C->localFunctions[i].functionOffset = READ_16_FROM_PC( block + pos );
+		pos += 2;
+		C->localFunctions[i].hash = READ_32_FROM_PC( block + pos );
+		pos += 3;
+		C->localFunctions[i].arguments = READ_8_FROM_PC( block + ++pos );
+		C->localFunctions[i].frameSpaceNeeded = READ_8_FROM_PC( block + ++pos );
+		C->localFunctions[i].frameBaseAdjustment = READ_8_FROM_PC( block + ++pos );
+		
+		++pos;
+
+		C->registry.getAsRawValueHashTable(C->localFunctions[i].hash)->wrf = C->localFunctions + i;
+	}
 
 	return C;
 }
@@ -512,6 +532,7 @@ bool WRValue::isString( int* len ) const
 	}
 	return false;
 }
+
 //------------------------------------------------------------------------------
 bool WRValue::isWrenchArray( int* len ) const
 {
@@ -543,10 +564,18 @@ bool WRValue::isRawArray( int* len ) const
 }
 
 //------------------------------------------------------------------------------
-bool WRValue::isHashTable() const
+bool WRValue::isHashTable( int* len ) const
 {
 	WRValue& V = deref();
-	return IS_HASH_TABLE( V.xtype );
+	if ( IS_HASH_TABLE(V.xtype) )
+	{
+		if ( len )
+		{
+			*len = V.va->m_size;
+		}
+		return true;
+	}
+	return false;
 }
 
 //------------------------------------------------------------------------------
@@ -765,6 +794,70 @@ char* WRValue::asString( char* string, size_t maxLen ) const
 }
 
 //------------------------------------------------------------------------------
+WRValue::Iterator::Iterator( WRValue const& V ) : m_va(V.va), m_element(0)
+{
+	memset((char*)&m_current, 0, sizeof(WRIteratorEntry) );
+
+	if ( (V.xtype != WR_EX_ARRAY && V.xtype != WR_EX_HASH_TABLE)
+		 || (m_va->m_type == SV_VOID_HASH_TABLE) )
+	{
+		m_va = 0;
+		m_current.type = 0;
+	}
+	else
+	{
+		m_current.type = m_va->m_type;
+		++*this;
+	}
+}
+
+//------------------------------------------------------------------------------
+const WRValue::Iterator WRValue::Iterator::operator++()
+{
+	if ( m_va )
+	{
+		if ( m_current.type == SV_HASH_TABLE )
+		{
+			int temp = m_element;
+			for( ; temp < m_va->m_mod; ++temp )
+			{
+				if ( m_va->m_hashTable[temp] != WRENCH_NULL_HASH )
+				{
+					temp <<= 1;
+
+					m_current.value = m_va->m_Vdata + temp++;
+					m_current.key = m_va->m_Vdata + temp;
+
+					m_element = ++temp;
+
+					return *this;
+				}
+			}
+		}
+		else if ( m_element < m_va->m_size )
+		{
+			m_current.index = m_element;
+			if ( m_current.type == SV_VALUE )
+			{
+				m_current.value = m_va->m_Vdata + m_element;
+			}
+			else
+			{
+				m_current.character = m_va->m_Cdata[m_element];
+			}
+
+			++m_element;
+
+			return *this;
+		}
+	}
+
+	memset( (char*)&m_current, 0, sizeof(WRIteratorEntry) );
+	m_va = 0;
+	return *this;
+}
+
+//------------------------------------------------------------------------------
 WRValue* wr_callFunction( WRContext* context, const char* functionName, const WRValue* argv, const int argn )
 {
 	return wr_callFunction( context, wr_hashStr(functionName), argv, argn );
@@ -828,7 +921,7 @@ WRValue* wr_getGlobalRef( WRContext* context, const char* label )
 		match = wr_hashStr( globalLabel );
 	}
 
-	const unsigned char* symbolsBlock = context->bottom + 3;
+	const unsigned char* symbolsBlock = context->bottom + 3 + (context->numLocalFunctions * 11);
 	for( unsigned int i=0; i<context->globals; ++i, symbolsBlock += 4 )
 	{
 		uint32_t symbolHash = READ_32_FROM_PC( symbolsBlock );
@@ -912,8 +1005,8 @@ void wr_destroyContainer( WRValue* val )
 //------------------------------------------------------------------------------
 const char* c_opcodeName[] = 
 {
-	"RegisterFunction",
-	
+	"Yield",
+
 	"LiteralInt32",
 	"LiteralZero",
 	"LiteralFloat",
@@ -1208,8 +1301,6 @@ const char* c_opcodeName[] =
 	"LoadLibConstant",
 	"InitArray",
 	"InitVar",
-
-	"Yield",
 
 	"DebugInfo",
 };

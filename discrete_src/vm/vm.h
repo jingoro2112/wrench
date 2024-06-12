@@ -29,26 +29,15 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 struct WRFunction
 {
-	union
-	{
-		uint32_t signature;
-		struct
-		{
-			uint8_t arguments;
-			uint8_t frameSpaceNeeded;
-			uint8_t frameBaseAdjustment;
-		};
-	};
+	uint16_t namespaceOffset;
+	uint16_t functionOffset;
 	
 	uint32_t hash;
-	
-	union
-	{
-		const uint8_t* offset;
-		int offsetI;
-	};
-	
-	const uint8_t* namespaceHashOffset;
+
+	uint8_t arguments;
+	uint8_t frameSpaceNeeded;
+	uint8_t frameBaseAdjustment;
+	uint8_t reserved;
 };
 
 //------------------------------------------------------------------------------

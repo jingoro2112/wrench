@@ -311,7 +311,7 @@ public:
 		for( int i=0; i<size; ++i )
 		{
 			new (&(n[i].value)) T();
-			n[i].hash = 0;
+			n[i].hash = WRENCH_NULL_HASH;
 		}
 
 		return n;
@@ -358,7 +358,7 @@ public:
 		uint32_t key = hash % m_mod;
 		if ( m_list[key].hash == hash ) // at least CHECK.. 
 		{
-			m_list[key].hash = 0;
+			m_list[key].hash = WRENCH_NULL_HASH;
 		}
 	}
 
@@ -367,7 +367,7 @@ public:
 	{
 		uint32_t key = hash % m_mod;
 		// clobber on collide, assume the user knows what they are doing
-		if ( (m_list[key].hash == 0) || (m_list[key].hash == hash) )
+		if ( (m_list[key].hash == WRENCH_NULL_HASH) || (m_list[key].hash == hash) )
 		{
 			m_list[key].hash = hash;
 			m_list[key].value = value;
@@ -398,20 +398,17 @@ public:
 			int h = 0;
 			for( ; h<m_mod; ++h )
 			{
-				if ( !m_list[h].hash )
+				if ( m_list[h].hash == WRENCH_NULL_HASH )
 				{
 					continue;
 				}
 
-				if ( newList[m_list[h].hash % newMod].hash )
+				if ( newList[m_list[h].hash % newMod].hash != WRENCH_NULL_HASH )
 				{
 					break;
 				}
-
-				else
-				{
-					newList[m_list[h].hash % newMod] = m_list[h];
-				}
+				
+				newList[m_list[h].hash % newMod] = m_list[h];
 			}
 
 			if ( h >= m_mod )

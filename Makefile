@@ -23,6 +23,8 @@ CC = g++ -MD -Wall -Werror $(FLAGS) -c -o
 
 OBJS = \
 	$(OBJDIR)/cc.o \
+	$(OBJDIR)/expression.o \
+	$(OBJDIR)/link.o \
 	$(OBJDIR)/operations.o \
 	$(OBJDIR)/index.o \
 	$(OBJDIR)/vm.o \
@@ -69,6 +71,12 @@ wrench: $(OBJS) discrete_src/utils/wrench_cli.cpp
 	g++ -o wrench -Wall -Werror $(FLAGS) -Isrc src/wrench.cpp discrete_src/utils/wrench_cli.cpp discrete_src/utils/debug_client.cpp
 
 $(OBJDIR)/cc.o: discrete_src/cc/cc.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/expression.o: discrete_src/cc/expression.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/link.o: discrete_src/cc/link.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/operations.o: discrete_src/vm/operations.cpp

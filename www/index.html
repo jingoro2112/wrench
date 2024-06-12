@@ -353,20 +353,22 @@ global values</i>
 <pre><code>class WrenchValue
 {
 public:
-	WrenchValue( WRContext* context, const char* label )
-	WrenchValue( WRContext* context, WRValue* value )
+    WrenchValue( WRContext* context, const char* label )
+    WrenchValue( WRContext* context, WRValue* value )
 
-	bool isValid();
+    bool isValid();
 
-	// if the value is not the correct type it will be converted to
-	// that type, preserving the value as best it can
-	int* Int();
-	float* Float();
-	WRValue& operator[] ( const int index ) { return *asArrayMember( index ); }
-	WRValue* asArrayMember( const int index );
-	int arraySize();
+    // if the value is not the correct type it will be converted to
+    // that type, preserving the value as best it can
+    int* Int();
+    float* Float();
+    WRValue& operator[] ( const int index ) { return *asArrayMember( index ); }
+    WRValue* asArrayMember( const int index );
+    int arraySize();
 };
 </pre></code>
+
+<p><b>outside data</b><br>
 
 
 <p>Data can be created outside of wrench, this includes containers, strings and values and such
@@ -387,9 +389,10 @@ void setFloat( const float val );
 
 bool isFloat() const
 bool isInt() const
-bool isWrenchArray() const
-bool isRawArray() const
-bool isHashTable() const
+bool isString( int* len =0 ) const;
+bool isWrenchArray( int* len =0 ) const;
+bool isRawArray( int* len =0 ) const;
+bool isHashTable( int* members=0 ) const;
 
 // if this value is an array, return [or create] the 'index'-th element
 // if create is true and this value is NOT an array, it will be converted into one
@@ -409,7 +412,43 @@ char* technicalAsString( char* string, size_t maxLen, bool valuesInHex =false ) 
 // return a raw pointer to the raw data array if this is one, otherwise
 // return null
 void* array( unsigned int* len =0, char arrayType =SV_CHAR ) const;
+int arrayLen() const; // returns length of the array or -1 if this value is not an array
+
+uint32_t getHash() const // returns a hash of this value
 </code></pre>
+
+<p><b>iterating arrays and hashes</b><br>
+
+<p>WRValue also has standard iterators defined, so for the case of an
+array or hash, this will iterate the members: 
+<code><pre>struct WRIteratorEntry
+{
+    int type; // SV_VALUE, SV_CHAR or SV_HASH_TABLE
+
+    const WRValue* key; // if this is a hash table, the key value
+    const WRValue* value; // for SV_HASH_TABLE and SV_VALUE (character will be null)
+
+    int index; // array entry for non-hash tables
+    char character; // for SV_CHAR
+};
+
+
+// requires c++11 and above, which supports foreach() syntax:
+for( WRIteratorEntry const& member : *argv )
+{
+    // member provided here, as defined above
+}
+
+// for c++98:
+for ( WRValue::Iterator it = argv->begin(); it != argv->end(); ++it )
+{
+    WRIteratorEntry const& member = *it;
+
+    // member is always valid here
+}
+</code></pre>
+
+<p><b>strings and memory</b><br>
 
 <br> a string has to exist in a context so it can be worked with
 <code><pre>WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, const int len =0 );
@@ -1263,15 +1302,6 @@ std::deserialize( string ); // given the string output from
 </code></pre>
 
 
-
-<pre><code>// MessageLib:
-// messages are global to all contexts currently running, this allows
-// inter-context communication.
-msg::read( key, [clear default:false] )  // read a message, optionally clear
-msg::write( key, message )
-msg::clear( key )
-msg::peek( key ) // return true if the key has a message
-</code></pre>
 
 
 <hr><h1><a name="limits"></a>6.0 Limits</h1></hr>

@@ -113,6 +113,8 @@ const char* sourceOrder[]=
 	"/utils/debug_client.h",
 	"/lib/std_io_defs.h",
 	"/cc/cc.cpp",
+	"/cc/link.cpp",
+	"/cc/expression.cpp",
 	"/vm/vm.cpp",
 	"/utils/utils.cpp",
 	"/utils/serializer.cpp",
@@ -221,11 +223,6 @@ uint32_t flags = 0;
 //------------------------------------------------------------------------------
 int main( int argn, char* argv[] )
 {
-/*	printf( "%s %s %s\n",
-			SimpleArgs::get(argn, argv, -3),
-			SimpleArgs::get(argn, argv, -2),
-			SimpleArgs::get(argn, argv, -1) );
-*/
 	assert( sizeof(WRValue) == 2*sizeof(void*) );
 	assert( sizeof(float) == 4 );
 	assert( sizeof(unsigned char) == 1 );
@@ -533,12 +530,28 @@ void checkIsString( WRContext* c, const WRValue* argv, const int argn, WRValue& 
 //------------------------------------------------------------------------------
 void checkIsHashTable( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
+	int len = -1;
 	assert( !argv->isRawArray() );
 	assert( !argv->isWrenchArray() );
-	assert( argv->isHashTable() );
+	assert( argv->isHashTable(&len) );
 	assert( !argv->isString() );
+	if (len != argv[1].asInt()) { assert(0); }
 }
 
+//------------------------------------------------------------------------------
+void checkIter( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+#if (__cplusplus <= 199711L)
+	for ( WRValue::Iterator it = argv->begin(); it != argv->end(); ++it )
+	{
+		WRIteratorEntry const& E = *it;
+#else
+	for( WRIteratorEntry const& E : *argv )
+	{
+#endif
+		assert( E.value->getHash() == argv[E.index+1].getHash() );
+	}
+}
 
 #endif
 
@@ -626,6 +639,7 @@ int runTests( int number )
 				wr_registerFunction( w, "checkIsRawArray", checkIsRawArray );
 				wr_registerFunction( w, "checkIsString", checkIsString );
 				wr_registerFunction( w, "checkIsHashTable", checkIsHashTable );
+				wr_registerFunction( w, "checkIter", checkIter );
 
 				wr_destroyContext( 0 ); // test that this works
 
@@ -703,31 +717,6 @@ int runTests( int number )
 							"-----------------------------\n",
 							expect.c_str(),
 							logger.c_str() );
-
-					/*
-					for( unsigned i=0; !(i>=expect.size() && i>=logger.size()); ++i )
-					{
-						if ( (i < expect.size()) && (i < logger.size()) )
-						{
-							if ( expect[i] == logger[i] )
-							{
-								printf( "%c", expect[i] );
-							}
-							else
-							{
-								printf( "bad [%c != %c]\n", isspace(expect[i]) ? ' ' : expect[i], isspace(logger[i]) ? ' ' : logger[i] );
-							}
-						}
-						else if ( i >= expect.size() )
-						{
-							printf( "got more [%c]\n", isspace(logger[i]) ? ' ' : logger[i] );
-						}
-						else
-						{
-							printf( "expected less [%c]\n", isspace(expect[i]) ? ' ' : expect[i] );
-						}
-					}
-					*/
 				}
 				else
 				{
@@ -948,8 +937,6 @@ void testImport()
 //	wr_compile( "export struct S2 { var b = 20; };", strlen("export struct S2 { var b = 20; };"), &out1, &out1len );
 //	g_free( out1 );
 	
-
-
 	wr_compile( baseMe, strlen(baseMe), &out1, &out1len );
 	wr_compile( importMe, strlen(importMe), &out2, &out2len );
 
@@ -984,12 +971,11 @@ void testImport()
 const int Pbasic_bytecodeSize=54;
 const unsigned char Pbasic_bytecode[]=
 {
-	0x00, 0x01, 0x00, 0x04, 0x0D, 0x00, 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x57, 0x6F, 0x72, 0x6C, // 16
+	0x01, 0x00, 0x00, 0x04, 0x0D, 0x00, 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x57, 0x6F, 0x72, 0x6C, // 16
 	0x64, 0x21, 0x0A, 0x06, 0x01, 0x88, 0x8A, 0x37, 0x16, 0xCF, 0x00, 0x00, 0xAF, 0x0A, 0x70, 0x00, // 32
 	0x0F, 0x09, 0x20, 0x00, 0x06, 0x01, 0x88, 0x8A, 0x37, 0x16, 0x90, 0x00, 0x37, 0xEF, 0x09, 0x02, // 48
-	0xEF, 0x14, 0x08, 0x94, 0x61, 0xFD, // 54
+	0xEF, 0x14, 0x94, 0xF8, 0x8F, 0x5A, // 54
 };
-
 
 void logBlank( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr ) { }
 
@@ -1022,12 +1008,15 @@ void setup()
 	int outLen;
 
 	int err = wr_compile( wrenchCode, (int)strlen(wrenchCode), &outBytes, &outLen );
+	
+				assert( err == 0 );
+	
 	if ( err == 0 )
 	{
 		wr_run( w, outBytes, outLen, true ); // load and run the code!
 	}
 
-	wr_run( w, Pbasic_bytecode, Pbasic_bytecodeSize );
+				assert( wr_run(w, Pbasic_bytecode, Pbasic_bytecodeSize) );
 
 	wr_destroyState( w );
 }

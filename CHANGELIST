@@ -1,3 +1,17 @@
+6.0.0 ----------------------------------------------------------------------------------
+- removed function declaratiuon being an in-line process (which was to facilitate exectuing
+  serial streams, a feature dropped long ago) to place the table statically into ROM. this
+  reduces code and VM size a bit
+- salted CRC to ensure valid-but-wrong-version images cannot be executed
+- added struct-compare structs equal each other iff they are the same type and have the
+  same value members.
+- used WRENCH_NULL_HASH in code streams as well for consistency
+- fixed size of hash tables so they properly report ._count now
+- added iterator working on strings
+- added stl-style iteration:
+
+
+
 5.0.2 ----------------------------------------------------------------------------------
 - added isString() to WRValue
 - fixed: bool isString() const;

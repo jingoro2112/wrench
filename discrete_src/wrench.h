@@ -25,9 +25,9 @@ SOFTWARE.
 #define _WRENCH_H
 /*------------------------------------------------------------------------------*/
 
-#define WRENCH_VERSION_MAJOR 5
+#define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 2
+#define WRENCH_VERSION_BUILD 0
 
 /************************************************************************
 The compiler is not particularly memory or space efficient, for
@@ -93,7 +93,7 @@ architecture, see vm.h for the current definitions
 
 /************************************************************************
 The stack is statically allocated but only used for function
-calls/locals NOT structs/arrays/hashes which are malloc'ed. Unless your
+calls and locals, NOT structs/arrays/hashes which are malloc'ed. Unless your
 applications uses lots of recursion+local variables, a modest size should
 be more than enough.
 To really reduce RAM footprint this can be lowered considerably
@@ -488,7 +488,6 @@ void wr_addFloatToContainer( WRValue* container, const char* name, const float v
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size );
 
 
-
 /******************************************************************/
 //                    "standard" functions
 
@@ -673,6 +672,18 @@ enum WRGCObjectType
 class WRGCObject;
 
 //------------------------------------------------------------------------------
+struct WRIteratorEntry
+{
+	int type; // SV_VALUE, SV_CHAR or SV_HASH_TABLE
+
+	const WRValue* key; // if this is a hash table the key value
+	const WRValue* value; // for SV_HASH_TABLE and SV_VALUE (character will be null)
+
+	int index; // array entry for non-hash tables
+	char character; // for SV_CHAR (value will be null)
+};
+
+//------------------------------------------------------------------------------
 struct WRValue
 {
 	// never reference the data members directly, they are unions and
@@ -689,7 +700,7 @@ struct WRValue
 	bool isString( int* len =0 ) const;
 	bool isWrenchArray( int* len =0 ) const;
 	bool isRawArray( int* len =0 ) const;
-	bool isHashTable() const;
+	bool isHashTable( int* members=0 ) const;
 
 	// if this value is an array, return [or create] the 'index'-th element
 	// if create is true and this value is NOT an array, it will be converted into one
@@ -791,6 +802,35 @@ struct WRValue
 	WRValue() {}
 	inline WRValue& operator= (const WRValue& V) { r1 = V.r1; r2 = V.r2; return *this; }
 	inline WRValue(const WRValue& V) { r1 = V.r1; r2 = V.r2; }
+
+
+public:
+
+	//------------------------------------------------------------------------------
+	class Iterator
+	{
+	public:
+		Iterator( WRValue const& V );
+		
+		Iterator() : m_va(0) {}
+
+		bool operator!=( const Iterator& other )
+		{
+			return m_va != other.m_va;
+		}
+
+		WRIteratorEntry const& operator* () const { return m_current; }
+
+		const Iterator operator++();
+			
+	private:
+
+		WRIteratorEntry m_current;
+		WRGCObject const* m_va;
+		unsigned int m_element;
+	};
+	const Iterator begin() const { return Iterator(deref()); }
+	const Iterator end() const { return Iterator(); }
 };
 
 //------------------------------------------------------------------------------
@@ -822,6 +862,8 @@ private:
 	WRContext* m_context;
 	WRValue* m_value;
 };
+
+#define WRENCH_NULL_HASH 0xABABABAB  // -1414812757 / -1.2197928214371934e-12, can't be zero since we use int/floats as their own hash
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 #ifndef WRENCH_COMBINED

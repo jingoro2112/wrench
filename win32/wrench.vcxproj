@@ -12,6 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\discrete_src\cc\cc.cpp" />
+    <ClCompile Include="..\discrete_src\cc\expression.cpp" />
+    <ClCompile Include="..\discrete_src\cc\link.cpp" />
     <ClCompile Include="..\discrete_src\debug\create_listing.cpp" />
     <ClCompile Include="..\discrete_src\debug\wrench_client_debug.cpp" />
     <ClCompile Include="..\discrete_src\debug\wrench_server_debug.cpp" />

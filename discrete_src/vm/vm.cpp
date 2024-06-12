@@ -187,7 +187,7 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 		
 		return false;
 	}
-	else
+	else 
 	{
 		if ( element >= iterator->va->m_size )
 		{
@@ -200,8 +200,20 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 			key->i = element;
 		}
 
-		value->p2 = INIT_AS_REF;
-		value->r = iterator->va->m_Vdata + element;
+		if ( iterator->va->m_type == SV_VALUE )
+		{
+			value->p2 = INIT_AS_REF;
+			value->r = iterator->va->m_Vdata + element;
+		}
+		else if ( iterator->va->m_type == SV_CHAR )
+		{
+			value->p2 = INIT_AS_INT;
+			value->i = iterator->va->m_Cdata[element];
+		}
+		else
+		{
+			return false;
+		}
 
 		iterator->p2 = INIT_AS_ITERATOR | ENCODE_ARRAY_ELEMENT_TO_P2(++element);
 	}
@@ -290,8 +302,8 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 	const void* opcodeJumptable[] =
 	{
-		&&RegisterFunction,
-		
+		&&Yield,
+
 		&&LiteralInt32,
 		&&LiteralZero,
 		&&LiteralFloat,
@@ -587,8 +599,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&InitArray,
 		&&InitVar,
 
-		&&Yield,
-		
 		&&DebugInfo,
 	};
 #endif
@@ -715,41 +725,6 @@ yieldContinue:
 		switch( READ_8_FROM_PC(pc++) )
 		{
 #endif
-			CASE(RegisterFunction):
-			{
-				hash = (stackTop -= 3)->i;
-
-				findex = hash;
-				WRFunction* localFunctions = context->localFunctions + findex;
-
-				localFunctions->arguments = (unsigned char)(hash >> 8);
-				localFunctions->frameSpaceNeeded = (unsigned char)(hash >> 16);
-
-				localFunctions->hash = (stackTop + 1)->i;
-
-				localFunctions->namespaceHashOffset = context->bottom + (stackTop + 2)->i; // location of the size vector
-
-				if ( *(uint8_t*)localFunctions->namespaceHashOffset == 0xFF )
-				{
-					localFunctions->offset = localFunctions->namespaceHashOffset + 1; // code starts pas the map + size
-					localFunctions->namespaceHashOffset = 0;
-				}
-				else
-				{
-					uint16_t size = READ_16_FROM_PC( localFunctions->namespaceHashOffset ); // how large is the namespace map?
-					localFunctions->offset = localFunctions->namespaceHashOffset + size + 2; // code starts pas the map + size
-					localFunctions->namespaceHashOffset += 2;
-				}
-				
-				localFunctions->frameBaseAdjustment = 1
-													  + localFunctions->frameSpaceNeeded
-													  + localFunctions->arguments;
-
-				context->registry.getAsRawValueHashTable(localFunctions->hash)->wrf = localFunctions;
-
-				CONTINUE;
-			}
-
 			CASE(LiteralInt32):
 			{
 				register0 = stackTop++;
@@ -891,12 +866,13 @@ debugContinue:
 
 								if ( *pc == O_NewObjectTable )
 								{
-									if ( ! (table = I->wrf->namespaceHashOffset) )
+									if ( !I->wrf->namespaceOffset )
 									{
 										w->err = WR_ERR_struct_not_exported;
 										return 0;
 									}
 									
+									table = import->bottom + I->wrf->namespaceOffset;
 									// so this was in service of a new
 									// ObjectTable. no problemo, find
 									// the actual table location and
@@ -1026,7 +1002,7 @@ callFunction:
 				register0->frame = frameBase;
 				register0->returnOffset = pc - context->bottom; // can't use "pc" because it might set the "gc me" bit, this is guaranteed to be small enough
 
-				pc = function->offset;
+				pc = function->functionOffset + context->bottom;
 
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - function->frameBaseAdjustment;
@@ -1134,8 +1110,9 @@ NewObjectTablePastLoad:
 					// table + 4: [static hash table ]
 
 					stackTop->va = context->getSVA( count, SV_VALUE, false );
-
+					
 					stackTop->va->m_ROMHashTable = table + 3;
+					
 					stackTop->va->m_mod = READ_16_FROM_PC(table+1);
 
 					register0 = stackTop->va->m_Vdata;

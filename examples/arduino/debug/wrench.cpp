@@ -312,7 +312,7 @@ public:
 		for( int i=0; i<size; ++i )
 		{
 			new (&(n[i].value)) T();
-			n[i].hash = 0;
+			n[i].hash = WRENCH_NULL_HASH;
 		}
 
 		return n;
@@ -359,7 +359,7 @@ public:
 		uint32_t key = hash % m_mod;
 		if ( m_list[key].hash == hash ) // at least CHECK.. 
 		{
-			m_list[key].hash = 0;
+			m_list[key].hash = WRENCH_NULL_HASH;
 		}
 	}
 
@@ -368,7 +368,7 @@ public:
 	{
 		uint32_t key = hash % m_mod;
 		// clobber on collide, assume the user knows what they are doing
-		if ( (m_list[key].hash == 0) || (m_list[key].hash == hash) )
+		if ( (m_list[key].hash == WRENCH_NULL_HASH) || (m_list[key].hash == hash) )
 		{
 			m_list[key].hash = hash;
 			m_list[key].value = value;
@@ -399,20 +399,17 @@ public:
 			int h = 0;
 			for( ; h<m_mod; ++h )
 			{
-				if ( !m_list[h].hash )
+				if ( m_list[h].hash == WRENCH_NULL_HASH )
 				{
 					continue;
 				}
 
-				if ( newList[m_list[h].hash % newMod].hash )
+				if ( newList[m_list[h].hash % newMod].hash != WRENCH_NULL_HASH )
 				{
 					break;
 				}
-
-				else
-				{
-					newList[m_list[h].hash % newMod] = m_list[h];
-				}
+				
+				newList[m_list[h].hash % newMod] = m_list[h];
 			}
 
 			if ( h >= m_mod )
@@ -1077,13 +1074,6 @@ SOFTWARE.
 
 #include <assert.h>
 
-// ever solve a rubik's cube? You have if you define your current
-// arrangement as "solved" since it is exactly as unique as the
-// traditional solid-color "solve". That's what this is, so int/floats
-// can be their own hash (0x0 needing to be valid)
-#define WRENCH_NULL_HASH 0xABABABAB  // -1414812757 / -1.2197928214371934e-12
-
-
 //------------------------------------------------------------------------------
 class WRGCObject
 {
@@ -1104,7 +1094,7 @@ public:
 	union
 	{
 		uint32_t* m_hashTable;
-		const unsigned char* m_ROMHashTable;
+		const uint8_t* m_ROMHashTable;
 		WRContext* m_creatorContext;
 	};
 
@@ -1219,6 +1209,7 @@ foundExists:
 
 		if ( removeIfPresent )
 		{
+			--m_size;
 			m_hashTable[index] = WRENCH_NULL_HASH;
 		}
 		
@@ -1250,7 +1241,7 @@ foundExists:
 private:
 
 	//------------------------------------------------------------------------------
-	uint32_t getIndexOfHit( const uint32_t hash, const bool insert )
+	uint32_t getIndexOfHit( const uint32_t hash, const bool inserting )
 	{
 		uint32_t index = hash % m_mod;
 		if ( m_hashTable[index] == hash )
@@ -1261,8 +1252,9 @@ private:
 		int tries = 3;
 		do
 		{
-			if ( insert && m_hashTable[index] == WRENCH_NULL_HASH )
+			if ( inserting && m_hashTable[index] == WRENCH_NULL_HASH )
 			{
+				++m_size;
 				m_hashTable[index] = hash;
 				return index;
 			}
@@ -1276,7 +1268,7 @@ private:
 
 		} while( tries-- );
 
-		return insert ? growHash(hash) : getIndexOfHit( hash, true );
+		return inserting ? growHash(hash) : getIndexOfHit( hash, true );
 	}
 
 	//------------------------------------------------------------------------------
@@ -1348,7 +1340,6 @@ tryAgain:
 			m_hashTable = proposed;
 			int oldMod = m_mod;
 			m_mod = newMod;
-//			m_size = newSize;
 
 			for( int v=0; v<oldMod; ++v )
 			{
@@ -1427,26 +1418,15 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 struct WRFunction
 {
-	union
-	{
-		uint32_t signature;
-		struct
-		{
-			uint8_t arguments;
-			uint8_t frameSpaceNeeded;
-			uint8_t frameBaseAdjustment;
-		};
-	};
+	uint16_t namespaceOffset;
+	uint16_t functionOffset;
 	
 	uint32_t hash;
-	
-	union
-	{
-		const uint8_t* offset;
-		int offsetI;
-	};
-	
-	const uint8_t* namespaceHashOffset;
+
+	uint8_t arguments;
+	uint8_t frameSpaceNeeded;
+	uint8_t frameBaseAdjustment;
+	uint8_t reserved;
 };
 
 //------------------------------------------------------------------------------
@@ -1693,8 +1673,8 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 enum WROpcode
 {
-	O_RegisterFunction =0,
-	
+	O_Yield =0,
+
 	O_LiteralInt32,
 	O_LiteralZero,
 	O_LiteralFloat,
@@ -1990,8 +1970,6 @@ enum WROpcode
 	O_InitArray,
 	O_InitVar,
 
-	O_Yield,
-	
 	O_DebugInfo,
 				
 	// non-interpreted opcodes
@@ -2899,6 +2877,8 @@ SOFTWARE.
 
 #ifndef WRENCH_WITHOUT_COMPILER
 
+#define WR_COMPILER_LITERAL_STRING 0x10 
+
 //------------------------------------------------------------------------------
 enum WROperationType
 {
@@ -2917,6 +2897,14 @@ struct WROperation
 	bool leftToRight;
 	WROperationType type;
 	WROpcode alt;
+};
+
+//------------------------------------------------------------------------------
+struct NamespacePush
+{
+	int unit;
+	int location;
+	NamespacePush* next;
 };
 
 //------------------------------------------------------------------------------
@@ -3227,8 +3215,6 @@ struct WRUnitContext
 
 	WRarray<ConstantValue> constantValues;
 
-	WRstr localNamespaceMap;
-
 	int16_t offsetOfLocalHashMap;
 	
 	// the code that runs when it loads
@@ -3366,24 +3352,6 @@ private:
 	WRarray<int> m_breakTargets;
 
 	int m_foreachHash;
-
-/*
-
-jumpOffsetTarget-> code
-                   code
-                   code
-fill 1             jump to jumpOffset
-                   code
-                   code
-fill 2             jump to jumpOffset
-
-  jumpOffset is a list of fills
-
- bytecode has a list of jump offsets it added so it can increment them
-  when appended
-
-*/
-
 };
 
 //------------------------------------------------------------------------------
@@ -3762,11 +3730,6 @@ SOFTWARE.
 #ifndef WRENCH_WITHOUT_COMPILER
 #include <assert.h>
 
-#define WR_DUMP_LINK_OUTPUT(D) //D
-#define WR_DUMP_BYTECODE(D) //D
-
-
-#define WR_COMPILER_LITERAL_STRING 0x10 
 #define KEYHOLE_OPTIMIZER
 
 //------------------------------------------------------------------------------
@@ -7567,554 +7530,6 @@ int WRCompilationContext::parseInitializer( WRExpression& expression, int depth 
 	return depth;
 }
 
-//------------------------------------------------------------------------------
-char WRCompilationContext::parseExpression( WRExpression& expression )
-{
-	int depth = 0;
-	char end = 0;
-
-	m_newHashValue = 0;
-
-	for(;;)
-	{
-		WRValue& value = expression.context[depth].value;
-		WRstr& token = expression.context[depth].token;
-
-		expression.context[depth].bytecode.clear();
-		expression.context[depth].setLocalSpace( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
-		if ( !getToken(expression.context[depth]) )
-		{
-			return 0;
-		}
-
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		
-		if ( value.type != WR_REF )
-		{
-			if ( (depth > 0) 
-				 && ((expression.context[depth - 1].type == EXTYPE_LABEL) 
-					 || (expression.context[depth - 1].type == EXTYPE_LITERAL)) )
-			{
-				// two labels/literals cannot follow each other
-				m_err = WR_ERR_bad_expression;
-				return 0;
-			}
-
-			// it's a literal
-			expression.context[depth].type = EXTYPE_LITERAL;
-			if ( value.type == WR_COMPILER_LITERAL_STRING )
-			{
-				expression.context[depth].literalString = *(WRstr*)value.p;
-			}
-			
-			++depth;
-			continue;
-		}
-
-		if ( token == ";" || token == ")" || token == "}" || token == "," || token == "]" || token == ":" )
-		{
-			end = token[0];
-			break;
-		}
-
-		pushDebug( WRD_LineNumber, expression.bytecode, getSourcePosition() );
-		
-		if ( token == "var" )
-		{
-			expression.context[depth].varSeen = true;
-			continue;
-		}
-		else if ( token == "{" )
-		{
-			depth = parseInitializer( expression, depth ) + 1;
-			if ( depth == 0 )
-			{
-				return false;
-			}
-
-			continue;
-		}
-		
-		if ( operatorFound(token, expression.context, depth) )
-		{
-			++depth;
-			continue;
-		}
-		
-		if ( !m_quoted && token == "new" )
-		{
-			if ( (depth < 2) || 
-				 (expression.context[depth - 1].operation
-				  && expression.context[ depth - 1 ].operation->opcode != O_Assign) )
-			{
-				m_err = WR_ERR_unexpected_token;
-				return 0;
-			}
-
-			if ( (depth < 2) 
-				 || (expression.context[depth - 2].operation
-					 && expression.context[ depth - 2 ].operation->opcode != O_Index) )
-			{
-				m_err = WR_ERR_unexpected_token;
-				return 0;
-			}
-			
-			WRstr& token2 = expression.context[depth].token;
-			WRValue& value2 = expression.context[depth].value;
-
-			bool isGlobal;
-			WRstr prefix;
-			bool isLibConstant;
-
-			if ( !getToken(expression.context[depth]) )
-			{
-				m_err = WR_ERR_bad_expression;
-				return 0;
-			}
-
-			if ( !isValidLabel(token2, isGlobal, prefix, isLibConstant) || isLibConstant )
-			{
-				m_err = WR_ERR_bad_expression;
-				return 0;
-			}
-
-			WRstr functionName = token2;
-			uint32_t hash = wr_hashStr( functionName );
-			
-			if ( !getToken(expression.context[depth]) )
-			{
-				m_err = WR_ERR_bad_expression;
-				return 0;
-			}
-
-			if ( !m_quoted && token2 == ";" )
-			{
-				if ( !parseCallFunction(expression, functionName, depth, false) )
-				{
-					return 0;
-				}
-
-				m_loadedToken = ";";
-				m_loadedValue.p2 = INIT_AS_REF;
-				m_loadedQuoted = m_quoted;
-			}
-			else if ( !m_quoted && token2 == "(" )
-			{
-				if ( !parseCallFunction(expression, functionName, depth, true) )
-				{
-					return 0;
-				}
-
-				if ( !getToken(expression.context[depth]) )
-				{
-					m_err = WR_ERR_unexpected_EOF;
-					return 0;
-				}
-
-				if ( token2 != "{" )
-				{
-					m_loadedToken = token2;
-					m_loadedValue = value2;
-					m_loadedQuoted = m_quoted;
-				}
-			}
-			else if (!m_quoted && token2 == "{")
-			{
-				if ( !parseCallFunction(expression, functionName, depth, false) )
-				{
-					return 0;
-				}
-				token2 = "{";
-			}
-			else if ( !m_quoted && token2 == "[" )
-			{
-				// must be "array" directive
-				if ( !getToken(expression.context[depth], "]") )
-				{
-					m_err = WR_ERR_unexpected_token;
-					return 0;
-				}
-
-				expression.context.remove( depth - 1, 1 ); // knock off the equate
-				depth--;
-
-				WRstr& token3 = expression.context[depth].token;
-				WRValue& value3 = expression.context[depth].value;
-
-				if ( !getToken(expression.context[depth], "{") )
-				{
-					m_err = WR_ERR_unexpected_token;
-					return 0;
-				}
-
-				uint16_t initializer = 0;
-
-				if ( !m_quoted && token3 == "{" )
-				{
-					for(;;)
-					{
-						if ( !getToken(expression.context[depth]) )
-						{
-							m_err = WR_ERR_unexpected_EOF;
-							return 0;
-						}
-
-						if ( !m_quoted && token3 == "}" )
-						{
-							break;
-						}
-
-						if ( !parseCallFunction(expression, functionName, depth, false) )
-						{
-							return 0;
-						}
-
-						if (!m_quoted && token3 != "{")
-						{
-							m_err = WR_ERR_unexpected_token;
-							return 0;
-						}
-
-						if ( !pushObjectTable(expression.context[depth], expression.bytecode.localSpace, hash) )
-						{
-							m_err = WR_ERR_bad_expression;
-							return 0;
-						}
-
-						pushOpcode( expression.context[depth].bytecode, O_AssignToArrayAndPop );
-
-						unsigned char data[2];
-						wr_pack16( initializer, data );
-						++initializer;
-
-						pushData( expression.context[depth].bytecode, data, 2 );
-
-						if ( !getToken(expression.context[depth]) )
-						{
-							m_err = WR_ERR_unexpected_EOF;
-							return 0;
-						}
-
-						if ( !m_quoted && token3 == "," )
-						{
-							continue;
-						}
-						else if ( token3 != "}" )
-						{
-							m_err = WR_ERR_unexpected_token;
-							return 0;
-						}
-						else
-						{
-							break;
-						}
-					}
-					
-					if ( !getToken(expression.context[depth], ";") )
-					{
-						m_err = WR_ERR_unexpected_token;
-						return 0;
-					}
-
-					WRstr t("@init");
-					for( int o=0; c_operations[o].token; o++ )
-					{
-						if ( t == c_operations[o].token )
-						{
-							expression.context[depth].type = EXTYPE_OPERATION;
-							expression.context[depth].operation = c_operations + o;
-							break;
-						}
-					}
-
-					m_loadedToken = token3;
-					m_loadedValue = value3;
-					m_loadedQuoted = m_quoted;
-				}
-				else if ( token2 != ";" )
-				{
-					m_err = WR_ERR_unexpected_token;
-					return 0;
-				}
-
-				++depth;
-				continue;
-			}
-			else if ( token2 != "{" )
-			{
-				m_err = WR_ERR_bad_expression;
-				return 0;
-			}
-
-			if ( !pushObjectTable(expression.context[depth], expression.bytecode.localSpace, hash) )
-			{
-				m_err = WR_ERR_bad_expression;
-				return 0;
-			}
-
-			++depth;
-			continue;
-		}
-
-		if ( !m_quoted && token == "(" )
-		{
-			// might be cast, call or sub-expression
-			
-			if ( (depth > 0) &&
-				 (expression.context[depth - 1].type == EXTYPE_LABEL
-				 || expression.context[depth - 1].type == EXTYPE_LIB_CONSTANT) )
-			{
-				// always only a call
-				expression.context[depth - 1].type = EXTYPE_LABEL;
-				
-				--depth;
-				if ( !parseCallFunction(expression, expression.context[depth].token, depth, true) )
-				{
-					return 0;
-				}
-			}
-			else if ( !getToken(expression.context[depth]) )
-			{
-				m_err = WR_ERR_unexpected_EOF;
-				return 0;
-			}
-			else if ( token == "int" )
-			{
-				if ( !getToken(expression.context[depth], ")") )
-				{
-					m_err = WR_ERR_bad_expression;
-					return 0;
-				}
-
-				operatorFound( WRstr("@i"), expression.context, depth );
-			}
-			else if ( token == "float" )
-			{
-				if ( !getToken(expression.context[depth], ")") )
-				{
-					m_err = WR_ERR_bad_expression;
-					return 0;
-				}
-
-				operatorFound( WRstr("@f"), expression.context, depth );
-			}
-			else if (depth < 0)
-			{
-				m_err = WR_ERR_bad_expression;
-				return 0;
-			}
-			else
-			{
-				WRExpression nex( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
-				nex.context[0].token = token;
-				nex.context[0].value = value;
-				m_loadedToken = token;
-				m_loadedValue = value;
-				m_loadedQuoted = m_quoted;
-				if ( parseExpression(nex) != ')' )
-				{
-					m_err = WR_ERR_unexpected_token;
-					return 0;
-				}
-
-
-				if ( depth > 0 && expression.context[depth - 1].operation
-					 && expression.context[depth - 1].operation->opcode == O_Remove )
-				{
-					--depth;
-					expression.context[depth].bytecode = nex.bytecode;
-					operatorFound( WRstr("._remove"), expression.context, depth );
-				}
-				else if ( depth > 0 && expression.context[depth - 1].operation
-						  && expression.context[depth - 1].operation->opcode == O_HashEntryExists )
-				{
-					--depth;
-					expression.context[depth].bytecode = nex.bytecode;
-					operatorFound( WRstr("._exists"), expression.context, depth );
-				}
-				else
-				{
-					expression.context[depth].type = EXTYPE_BYTECODE_RESULT;
-					expression.context[depth].bytecode = nex.bytecode;
-				}
-			}
-
-			++depth;
-			continue;
-		}
-
-		if ( !m_quoted && token == "[" )
-		{
-			WRExpression nex( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
-			nex.context[0].token = token;
-			nex.context[0].value = value;
-
-			if ( parseExpression(nex) != ']' )
-			{
-				m_err = WR_ERR_unexpected_EOF;
-				return 0;
-			}
-
-			if ( nex.bytecode.all.size() == 0 )
-			{
-				operatorFound( WRstr("@[]"), expression.context, depth );
-				expression.context[depth].bytecode.all.clear();
-				expression.context[depth].bytecode.opcodes.clear();
-				pushOpcode( expression.context[depth].bytecode, O_LiteralZero );
-				pushOpcode( expression.context[depth].bytecode, O_InitArray );
-			}
-			else 
-			{
-				expression.context[depth].bytecode = nex.bytecode;
-				operatorFound( WRstr("@[]"), expression.context, depth );
-			}
-
-			++depth;
-			continue;
-		}
-
-		bool isGlobal;
-		WRstr prefix;
-		bool isLibConstant;
-
-		if ( isValidLabel(token, isGlobal, prefix, isLibConstant) )
-		{
-			if ( (depth > 0) 
-				&& ((expression.context[depth - 1].type == EXTYPE_LABEL) 
-					|| (expression.context[depth - 1].type == EXTYPE_LITERAL)
-					|| (expression.context[depth - 1].type == EXTYPE_LIB_CONSTANT)) )
-			{
-				// two labels/literals cannot follow each other
-				m_err = WR_ERR_bad_expression;
-				return 0;
-			}
-
-			WRstr label = token;
-
-			if ( depth == 0 && !m_parsingFor )
-			{
-				if ( !getToken(expression.context[depth]) )
-				{
-					m_err = WR_ERR_unexpected_EOF;
-					return 0;
-				}
-
-				if ( m_parsingNew )
-				{
-					if ( token == "=" )
-					{
-						m_newHashValue = wr_hashStr( label );
-
-						continue;
-//						getToken(expression.context[depth]) );
-//						--depth;
-						
-					}
-				}
-				
-				if ( !m_quoted && token == ":" )
-				{
-					uint32_t hash = wr_hashStr( label );
-					for( unsigned int i=0; i<expression.bytecode.jumpOffsetTargets.count(); ++i )
-					{
-						if ( expression.bytecode.jumpOffsetTargets[i].gotoHash == hash )
-						{
-							m_err = WR_ERR_bad_goto_label;
-							return false;
-						}
-					}
-					
-					int index = addRelativeJumpTarget( expression.bytecode );
-					expression.bytecode.jumpOffsetTargets[index].gotoHash = hash;
-					expression.bytecode.jumpOffsetTargets[index].offset = expression.bytecode.all.size() + 1;
-
-					// this always return a value
-					pushOpcode( expression.bytecode, O_LiteralZero );
-
-					
-					return ';';
-				}
-				else
-				{
-					m_loadedToken = token;
-					m_loadedValue = value;
-					m_loadedQuoted = m_quoted;
-				}
-			}
-			
-
-			expression.context[depth].type = isLibConstant ? EXTYPE_LIB_CONSTANT : EXTYPE_LABEL;
-			expression.context[depth].token = label;
-			expression.context[depth].global = isGlobal;
-			expression.context[depth].prefix = prefix;
-			++depth;
-
-			continue;
-		}
-
-		m_err = WR_ERR_bad_expression;
-		return 0;
-	}
-
-	expression.context.setCount( expression.context.count() - 1 );
-
-	if ( depth == 2
-		 && expression.lValue
-		 && expression.context[0].type == EXTYPE_LABEL
-		 && expression.context[1].type == EXTYPE_OPERATION
-		 && expression.context[1].operation->opcode == O_Index
-		 && expression.context[1].bytecode.opcodes.size() > 0 )
-	{
-		unsigned int i = expression.context[1].bytecode.opcodes.size() - 1;
-		unsigned int a = expression.context[1].bytecode.all.size() - 1;
-		WROpcode o = (WROpcode)(expression.context[1].bytecode.opcodes[ i ]);
-		
-		switch( o )
-		{
-			case O_Index:
-			{
-				expression.context[1].bytecode.all[a] = O_InitArray;
-				break;
-			}
-
-			case O_IndexLiteral16:
-			{
-				if (a > 1)
-				{
-					expression.context[1].bytecode.all[a - 2] = O_LiteralInt16;
-					pushOpcode(expression.context[1].bytecode, O_InitArray);
-				}
-				break;
-			}
-			
-			case O_IndexLiteral8:
-			{
-				if (a > 0)
-				{
-					expression.context[1].bytecode.all[a - 1] = O_LiteralInt8;
-					pushOpcode(expression.context[1].bytecode, O_InitArray);
-				}
-				break;
-			}
-
-			default: break;
-		}
-	}
-
-	resolveExpression( expression );
-
-	return end;
-}
 
 //------------------------------------------------------------------------------
 bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
@@ -9530,39 +8945,6 @@ parseAsVar:
 }
 
 //------------------------------------------------------------------------------
-void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned char** buf, int* size )
-{
-	if ( unit.bytecode.localSpace.count() == 0 )
-	{
-		*size = 0;
-		*buf = 0;
-		return;
-	}
-
-	WRHashTable<unsigned char> offsets;
-	for( unsigned char i=unit.arguments; i<unit.bytecode.localSpace.count(); ++i )
-	{
-		offsets.set( unit.bytecode.localSpace[i].hash, i - unit.arguments );
-	}
-	
-	*size = 2;
-	*buf = (unsigned char *)g_malloc( (offsets.m_mod * 5) + 4 );
-
-	(*buf)[0] = (unsigned char)(unit.bytecode.localSpace.count() - unit.arguments);
-	(*buf)[1] = unit.arguments;
-
-	wr_pack16( offsets.m_mod, *buf + *size );
-	*size += 2;
-
-	for( int i=0; i<offsets.m_mod; ++i )
-	{
-		wr_pack32( offsets.m_list[i].hash, *buf + *size );
-		*size += 4;
-		(*buf)[(*size)++] = offsets.m_list[i].hash ? offsets.m_list[i].value : (unsigned char)-1;
-	}
-}
-
-//------------------------------------------------------------------------------
 bool WRCompilationContext::checkAsComment( char lead )
 {
 	char c;
@@ -9663,28 +9045,134 @@ bool WRCompilationContext::readCurlyBlock( WRstr& block )
 	return true;
 }
 
-struct NamespacePush
+
+#else // WRENCH_WITHOUT_COMPILER
+
+WRError wr_compile( const char* source,
+					const int size,
+					unsigned char** out,
+					int* outLen,
+					char* errMsg,
+					const uint8_t compilerOptionFlags )
 {
-	int unit;
-	int location;
-	NamespacePush* next;
-};
+	return WR_ERR_compiler_not_loaded;
+}
+	
+#endif
+/*******************************************************************************
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+#ifndef WRENCH_WITHOUT_COMPILER
+#include <assert.h>
+
+#define WR_DUMP_LINK_OUTPUT(D) //D
+#define WR_DUMP_UNIT_OUTPUT(D) //D
+#define WR_DUMP_BYTECODE(D) //D
+//WRstr str;
+
+//------------------------------------------------------------------------------
+void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned char** buf, int* size )
+{
+	if ( unit.bytecode.localSpace.count() == 0 )
+	{
+		*size = 0;
+		*buf = 0;
+		return;
+	}
+
+	WRHashTable<unsigned char> offsets;
+	for( unsigned char i=unit.arguments; i<unit.bytecode.localSpace.count(); ++i )
+	{
+		offsets.set( unit.bytecode.localSpace[i].hash, i - unit.arguments );
+	}
+
+	*buf = (unsigned char *)g_malloc( (offsets.m_mod * 5) + 4 );
+
+	(*buf)[0] = (unsigned char)(unit.bytecode.localSpace.count() - unit.arguments);
+	(*buf)[1] = unit.arguments;
+
+	wr_pack16( offsets.m_mod, *buf + 2 );
+
+	*size = 4;
+
+	for( int i=0; i<offsets.m_mod; ++i )
+	{
+		wr_pack32( offsets.m_list[i].hash, *buf + *size );
+		*size += 4;
+		(*buf)[(*size)++] = offsets.m_list[i].hash ? offsets.m_list[i].value : (unsigned char)-1;
+	}
+}
 
 //------------------------------------------------------------------------------
 void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t compilerOptionFlags )
 {
 	WROpcodeStream code;
 
+	uint8_t data[4];
+
 	NamespacePush *namespaceLookups = 0;
-	
-	code += (unsigned char)(m_units.count() - 1); // function count (for VM allocation)
-	code += (unsigned char)(m_units[0].bytecode.localSpace.count()); // globals count (for VM allocation)
-	code += (unsigned char)compilerOptionFlags;
+
+	unsigned int globals = m_units[0].bytecode.localSpace.count();
+	assert( globals < 256 );
+
+	code += (uint8_t)globals; // globals count (for VM allocation)
+	code += (uint8_t)(m_units.count() - 1); // function count (for VM allocation)
+	code += (uint8_t)compilerOptionFlags;
+
+	// push function signatures
+	for( unsigned int u=1; u<m_units.count(); ++u )
+	{
+		m_units[u].offsetInBytecode = code.size(); // mark these two spots for later
+
+		// WRFunction.namespaceOffset
+		data[0] = 0xAA;
+		data[1] = 0xBB;
+		code.append( data, 2 ); // placeholder
+
+		// WRFunction.functionOffset
+		data[0] = 0xCC;
+		data[1] = 0xDD;
+		code.append( data, 2 ); // placeholder
+
+		// WRFunction.hash
+		code.append( wr_pack32(m_units[u].hash, data), 4 );
+
+		// WRFunction.arguments;
+		data[0] = m_units[u].arguments;
+		code.append( data, 1 );
+
+		// WRFunction.frameSpaceNeeded;
+		data[1] = m_units[u].bytecode.localSpace.count();
+		code.append( data + 1, 1 );
+
+		// WRFunction.frameBaseAdjustment;
+		data[2] = 1 + data[0] + data[1];
+		code.append( data + 2, 1 );
+	}
 
 	m_units[0].name = "::global";
-	
-	unsigned char data[4];
-	unsigned int globals = m_units[0].bytecode.localSpace.count();
 
 	if ( compilerOptionFlags & WR_INCLUDE_GLOBALS )
 	{
@@ -9694,8 +9182,8 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 		}
 	}
 
-	if ( compilerOptionFlags & WR_EMBED_DEBUG_CODE
-		 || compilerOptionFlags & WR_EMBED_SOURCE_CODE )
+	if ( (compilerOptionFlags & WR_EMBED_DEBUG_CODE)
+		 || (compilerOptionFlags & WR_EMBED_SOURCE_CODE) )
 	{
 		// hash of source compiled for this
 		code.append( wr_pack32(wr_hash(m_source, m_sourceLen), data), 4 ); 
@@ -9704,14 +9192,14 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 
 		uint16_t functions = m_units.count();
 		symbols.append( (char*)wr_pack16(functions, data), 2 );
-		
+
 		data[0] = 0; // terminator
 		for( unsigned int u=0; u<m_units.count(); ++u ) // all the local labels by unit
 		{
 			data[1] = m_units[u].bytecode.localSpace.count();
 			data[2] = m_units[u].arguments;
 			symbols.append( (char *)(data + 1), 2 );
-			
+
 			symbols.append( m_units[u].name );
 			symbols.append( (char *)data, 1 ); 
 
@@ -9726,7 +9214,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 		code.append( wr_pack16(symbolSize, data), 2 );
 		code.append( (uint8_t*)symbols.p_str(), symbols.size() );
 	}
-	
+
 	if ( compilerOptionFlags & WR_EMBED_SOURCE_CODE )
 	{
 		code.append( wr_pack32(m_sourceLen, data), 4 );
@@ -9754,95 +9242,54 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 		}
 	}
 
-
-
-
-
-
-	
-
-
-
-	
-	// register the function signatures
-	for( unsigned int u=1; u<m_units.count(); ++u )
-	{
-		uint32_t signature =  (u - 1) // index
-							  | ((m_units[u].bytecode.localSpace.count()) << 8) // local frame size
-							  | ((m_units[u].arguments << 16));
-
-		code += O_LiteralInt32;
-		code.append( wr_pack32(signature, data), 4 );
-
-		code += O_LiteralInt32; // hash
-		code.append( wr_pack32(m_units[u].hash, data), 4 );
-
-		// offset placeholder
-		code += O_LiteralInt16;
-		m_units[u].offsetInBytecode = code.size();
-		code.append( data, 2 ); // placeholder, it doesn't matter
-
-		code += O_RegisterFunction;
-
-		if ( m_units[u].exportNamespace )
-		{
-			int size = 0;
-			unsigned char* map = 0;
-			createLocalHashMap( m_units[u], &map, &size );
-			m_units[u].localNamespaceMap.giveOwnership( (char*)map, size );
-		}
-	}
-
-
-
-
-
-
-
-
-
-	
-
-	WR_DUMP_LINK_OUTPUT(WRstr str);
 	WR_DUMP_LINK_OUTPUT(printf("header funcs[%d] locals[%d] flags[0x%02X]:\n%s\n",
 							   (unsigned char)(m_units.count() - 1),
 							   (unsigned char)(m_units[0].bytecode.localSpace.count()),
 							   (unsigned char)compilerOptionFlags, wr_asciiDump( code.p_str(), code.size(), str )));
-	
+
 	// append all the unit code
 	for( unsigned int u=0; u<m_units.count(); ++u )
 	{
-		uint16_t base = code.size();
+		uint16_t base;
 
-		if ( u > 0 ) // for the non-zero unit fill location into the jump table
+		if ( u > 0 ) // for the non-zero unit fill locations into the jump table
 		{
-			wr_pack16( base, code.p_str(m_units[u].offsetInBytecode) );
-			base = m_units[u].localNamespaceMap.size();
-
-
-			if ( base == 0 )
+			if ( m_units[u].exportNamespace )
 			{
-				data[0] = 0xFF;
-				code.append( data, 1 );
+				base = code.size();
+
+				int size = 0;
+				uint8_t* map = 0;
+				createLocalHashMap( m_units[u], &map, &size );
+				
+				if ( size == 0 )
+				{
+					base = 0;
+				}
+				m_units[u].offsetOfLocalHashMap = base;
+
+				wr_pack16( base, code.p_str(m_units[u].offsetInBytecode)); // WRFunction.namespaceOffset
+
+				WR_DUMP_LINK_OUTPUT(printf("<new> namespace\n%s\n", wr_asciiDump(map, size, str)));
+
+				code.append( map, size );
+				g_free( map );
 			}
 			else
 			{
-				wr_pack16( base, data );
-				code.append( data, 2 );
+				base = 0;
+				wr_pack16( base, code.p_str(m_units[u].offsetInBytecode) ); // WRFunction.namespaceOffset
 			}
 
-			if ( m_units[u].localNamespaceMap.size() )
-			{
-				m_units[u].offsetOfLocalHashMap = code.size();
-				code.append( (uint8_t*)m_units[u].localNamespaceMap.c_str(), m_units[u].localNamespaceMap.size() );
-				
-				WR_DUMP_LINK_OUTPUT(printf("<new> namespace\n%s\n", wr_asciiDump(m_units[u].localNamespaceMap.c_str(), m_units[u].localNamespaceMap.size(), str)));
-			}
+			base = code.size();
+			wr_pack16( base, code.p_str(m_units[u].offsetInBytecode + 2) ); // WRFunction.functionOffset
 		}
+
+		WR_DUMP_UNIT_OUTPUT(printf("unit %d:\n%s\n", u, wr_asciiDump(code, code.size(), str)));
 
 		base = code.size();
 
-		// fill in relative jumps for the gotos
+		// fill relative jumps in for the goto's
 		for( unsigned int g=0; g<m_units[u].bytecode.gotoSource.count(); ++g )
 		{
 			unsigned int j=0;
@@ -9896,7 +9343,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 						namespaceLookups = n;
 						n->unit = u2;
 						n->location = base + N.references[r];
-						
+
 						break;
 					}
 				}
@@ -9925,7 +9372,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 							uint16_t codeword = (uint16_t)WRD_FunctionCall | (uint16_t)u2;
 							wr_pack16( codeword, (unsigned char *)code.p_str(index - 2) );
 						}
-						
+
 						code[index] = O_CallFunctionByIndex;
 
 						code[index+2] = (char)(u2 - 1);
@@ -9964,7 +9411,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 						{
 							code[index] = O_CallFunctionByHash;
 						}
-						
+
 						wr_pack32( N.hash, code.p_str(index+2) );
 					}
 				}
@@ -9984,7 +9431,9 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 	}
 
 	// append a CRC
-	code.append( wr_pack32(wr_hash(code, code.size()), data), 4 );
+	uint32_t salted = wr_hash( code, code.size() );
+	salted += WRENCH_VERSION_MAJOR;
+	code.append( wr_pack32(salted, data), 4 );
 
 	WR_DUMP_BYTECODE(printf("bytecode [%d]:\n%s\n", code.size(), wr_asciiDump(code, code.size(), str)));
 
@@ -9995,18 +9444,584 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 	}
 }
 
-#else // WRENCH_WITHOUT_COMPILER
+#endif
+/*******************************************************************************
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
-WRError wr_compile( const char* source,
-					const int size,
-					unsigned char** out,
-					int* outLen,
-					char* errMsg,
-					const uint8_t compilerOptionFlags )
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+#ifndef WRENCH_WITHOUT_COMPILER
+#include <assert.h>
+
+//------------------------------------------------------------------------------
+char WRCompilationContext::parseExpression( WRExpression& expression )
 {
-	return WR_ERR_compiler_not_loaded;
+	int depth = 0;
+	char end = 0;
+
+	m_newHashValue = 0;
+
+	for(;;)
+	{
+		WRValue& value = expression.context[depth].value;
+		WRstr& token = expression.context[depth].token;
+
+		expression.context[depth].bytecode.clear();
+		expression.context[depth].setLocalSpace( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
+		if ( !getToken(expression.context[depth]) )
+		{
+			return 0;
+		}
+
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		//-----------------------------------------------------------------------------------
+		
+		if ( value.type != WR_REF )
+		{
+			if ( (depth > 0) 
+				 && ((expression.context[depth - 1].type == EXTYPE_LABEL) 
+					 || (expression.context[depth - 1].type == EXTYPE_LITERAL)) )
+			{
+				// two labels/literals cannot follow each other
+				m_err = WR_ERR_bad_expression;
+				return 0;
+			}
+
+			// it's a literal
+			expression.context[depth].type = EXTYPE_LITERAL;
+			if ( value.type == WR_COMPILER_LITERAL_STRING )
+			{
+				expression.context[depth].literalString = *(WRstr*)value.p;
+			}
+			
+			++depth;
+			continue;
+		}
+
+		if ( token == ";" || token == ")" || token == "}" || token == "," || token == "]" || token == ":" )
+		{
+			end = token[0];
+			break;
+		}
+
+		pushDebug( WRD_LineNumber, expression.bytecode, getSourcePosition() );
+		
+		if ( token == "var" )
+		{
+			expression.context[depth].varSeen = true;
+			continue;
+		}
+		else if ( token == "{" )
+		{
+			depth = parseInitializer( expression, depth ) + 1;
+			if ( depth == 0 )
+			{
+				return false;
+			}
+
+			continue;
+		}
+		
+		if ( operatorFound(token, expression.context, depth) )
+		{
+			++depth;
+			continue;
+		}
+		
+		if ( !m_quoted && token == "new" )
+		{
+			if ( (depth < 2) || 
+				 (expression.context[depth - 1].operation
+				  && expression.context[ depth - 1 ].operation->opcode != O_Assign) )
+			{
+				m_err = WR_ERR_unexpected_token;
+				return 0;
+			}
+
+			if ( (depth < 2) 
+				 || (expression.context[depth - 2].operation
+					 && expression.context[ depth - 2 ].operation->opcode != O_Index) )
+			{
+				m_err = WR_ERR_unexpected_token;
+				return 0;
+			}
+			
+			WRstr& token2 = expression.context[depth].token;
+			WRValue& value2 = expression.context[depth].value;
+
+			bool isGlobal;
+			WRstr prefix;
+			bool isLibConstant;
+
+			if ( !getToken(expression.context[depth]) )
+			{
+				m_err = WR_ERR_bad_expression;
+				return 0;
+			}
+
+			if ( !isValidLabel(token2, isGlobal, prefix, isLibConstant) || isLibConstant )
+			{
+				m_err = WR_ERR_bad_expression;
+				return 0;
+			}
+
+			WRstr functionName = token2;
+			uint32_t hash = wr_hashStr( functionName );
+			
+			if ( !getToken(expression.context[depth]) )
+			{
+				m_err = WR_ERR_bad_expression;
+				return 0;
+			}
+
+			if ( !m_quoted && token2 == ";" )
+			{
+				if ( !parseCallFunction(expression, functionName, depth, false) )
+				{
+					return 0;
+				}
+
+				m_loadedToken = ";";
+				m_loadedValue.p2 = INIT_AS_REF;
+				m_loadedQuoted = m_quoted;
+			}
+			else if ( !m_quoted && token2 == "(" )
+			{
+				if ( !parseCallFunction(expression, functionName, depth, true) )
+				{
+					return 0;
+				}
+
+				if ( !getToken(expression.context[depth]) )
+				{
+					m_err = WR_ERR_unexpected_EOF;
+					return 0;
+				}
+
+				if ( token2 != "{" )
+				{
+					m_loadedToken = token2;
+					m_loadedValue = value2;
+					m_loadedQuoted = m_quoted;
+				}
+			}
+			else if (!m_quoted && token2 == "{")
+			{
+				if ( !parseCallFunction(expression, functionName, depth, false) )
+				{
+					return 0;
+				}
+				token2 = "{";
+			}
+			else if ( !m_quoted && token2 == "[" )
+			{
+				// must be "array" directive
+				if ( !getToken(expression.context[depth], "]") )
+				{
+					m_err = WR_ERR_unexpected_token;
+					return 0;
+				}
+
+				expression.context.remove( depth - 1, 1 ); // knock off the equate
+				depth--;
+
+				WRstr& token3 = expression.context[depth].token;
+				WRValue& value3 = expression.context[depth].value;
+
+				if ( !getToken(expression.context[depth], "{") )
+				{
+					m_err = WR_ERR_unexpected_token;
+					return 0;
+				}
+
+				uint16_t initializer = 0;
+
+				if ( !m_quoted && token3 == "{" )
+				{
+					for(;;)
+					{
+						if ( !getToken(expression.context[depth]) )
+						{
+							m_err = WR_ERR_unexpected_EOF;
+							return 0;
+						}
+
+						if ( !m_quoted && token3 == "}" )
+						{
+							break;
+						}
+
+						if ( !parseCallFunction(expression, functionName, depth, false) )
+						{
+							return 0;
+						}
+
+						if (!m_quoted && token3 != "{")
+						{
+							m_err = WR_ERR_unexpected_token;
+							return 0;
+						}
+
+						if ( !pushObjectTable(expression.context[depth], expression.bytecode.localSpace, hash) )
+						{
+							m_err = WR_ERR_bad_expression;
+							return 0;
+						}
+
+						pushOpcode( expression.context[depth].bytecode, O_AssignToArrayAndPop );
+
+						unsigned char data[2];
+						wr_pack16( initializer, data );
+						++initializer;
+
+						pushData( expression.context[depth].bytecode, data, 2 );
+
+						if ( !getToken(expression.context[depth]) )
+						{
+							m_err = WR_ERR_unexpected_EOF;
+							return 0;
+						}
+
+						if ( !m_quoted && token3 == "," )
+						{
+							continue;
+						}
+						else if ( token3 != "}" )
+						{
+							m_err = WR_ERR_unexpected_token;
+							return 0;
+						}
+						else
+						{
+							break;
+						}
+					}
+					
+					if ( !getToken(expression.context[depth], ";") )
+					{
+						m_err = WR_ERR_unexpected_token;
+						return 0;
+					}
+
+					WRstr t("@init");
+					for( int o=0; c_operations[o].token; o++ )
+					{
+						if ( t == c_operations[o].token )
+						{
+							expression.context[depth].type = EXTYPE_OPERATION;
+							expression.context[depth].operation = c_operations + o;
+							break;
+						}
+					}
+
+					m_loadedToken = token3;
+					m_loadedValue = value3;
+					m_loadedQuoted = m_quoted;
+				}
+				else if ( token2 != ";" )
+				{
+					m_err = WR_ERR_unexpected_token;
+					return 0;
+				}
+
+				++depth;
+				continue;
+			}
+			else if ( token2 != "{" )
+			{
+				m_err = WR_ERR_bad_expression;
+				return 0;
+			}
+
+			if ( !pushObjectTable(expression.context[depth], expression.bytecode.localSpace, hash) )
+			{
+				m_err = WR_ERR_bad_expression;
+				return 0;
+			}
+
+			++depth;
+			continue;
+		}
+
+		if ( !m_quoted && token == "(" )
+		{
+			// might be cast, call or sub-expression
+			
+			if ( (depth > 0) &&
+				 (expression.context[depth - 1].type == EXTYPE_LABEL
+				 || expression.context[depth - 1].type == EXTYPE_LIB_CONSTANT) )
+			{
+				// always only a call
+				expression.context[depth - 1].type = EXTYPE_LABEL;
+				
+				--depth;
+				if ( !parseCallFunction(expression, expression.context[depth].token, depth, true) )
+				{
+					return 0;
+				}
+			}
+			else if ( !getToken(expression.context[depth]) )
+			{
+				m_err = WR_ERR_unexpected_EOF;
+				return 0;
+			}
+			else if ( token == "int" )
+			{
+				if ( !getToken(expression.context[depth], ")") )
+				{
+					m_err = WR_ERR_bad_expression;
+					return 0;
+				}
+
+				operatorFound( WRstr("@i"), expression.context, depth );
+			}
+			else if ( token == "float" )
+			{
+				if ( !getToken(expression.context[depth], ")") )
+				{
+					m_err = WR_ERR_bad_expression;
+					return 0;
+				}
+
+				operatorFound( WRstr("@f"), expression.context, depth );
+			}
+			else if (depth < 0)
+			{
+				m_err = WR_ERR_bad_expression;
+				return 0;
+			}
+			else
+			{
+				WRExpression nex( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
+				nex.context[0].token = token;
+				nex.context[0].value = value;
+				m_loadedToken = token;
+				m_loadedValue = value;
+				m_loadedQuoted = m_quoted;
+				if ( parseExpression(nex) != ')' )
+				{
+					m_err = WR_ERR_unexpected_token;
+					return 0;
+				}
+
+
+				if ( depth > 0 && expression.context[depth - 1].operation
+					 && expression.context[depth - 1].operation->opcode == O_Remove )
+				{
+					--depth;
+					expression.context[depth].bytecode = nex.bytecode;
+					operatorFound( WRstr("._remove"), expression.context, depth );
+				}
+				else if ( depth > 0 && expression.context[depth - 1].operation
+						  && expression.context[depth - 1].operation->opcode == O_HashEntryExists )
+				{
+					--depth;
+					expression.context[depth].bytecode = nex.bytecode;
+					operatorFound( WRstr("._exists"), expression.context, depth );
+				}
+				else
+				{
+					expression.context[depth].type = EXTYPE_BYTECODE_RESULT;
+					expression.context[depth].bytecode = nex.bytecode;
+				}
+			}
+
+			++depth;
+			continue;
+		}
+
+		if ( !m_quoted && token == "[" )
+		{
+			WRExpression nex( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
+			nex.context[0].token = token;
+			nex.context[0].value = value;
+
+			if ( parseExpression(nex) != ']' )
+			{
+				m_err = WR_ERR_unexpected_EOF;
+				return 0;
+			}
+
+			if ( nex.bytecode.all.size() == 0 )
+			{
+				operatorFound( WRstr("@[]"), expression.context, depth );
+				expression.context[depth].bytecode.all.clear();
+				expression.context[depth].bytecode.opcodes.clear();
+				pushOpcode( expression.context[depth].bytecode, O_LiteralZero );
+				pushOpcode( expression.context[depth].bytecode, O_InitArray );
+			}
+			else 
+			{
+				expression.context[depth].bytecode = nex.bytecode;
+				operatorFound( WRstr("@[]"), expression.context, depth );
+			}
+
+			++depth;
+			continue;
+		}
+
+		bool isGlobal;
+		WRstr prefix;
+		bool isLibConstant;
+
+		if ( isValidLabel(token, isGlobal, prefix, isLibConstant) )
+		{
+			if ( (depth > 0) 
+				&& ((expression.context[depth - 1].type == EXTYPE_LABEL) 
+					|| (expression.context[depth - 1].type == EXTYPE_LITERAL)
+					|| (expression.context[depth - 1].type == EXTYPE_LIB_CONSTANT)) )
+			{
+				// two labels/literals cannot follow each other
+				m_err = WR_ERR_bad_expression;
+				return 0;
+			}
+
+			WRstr label = token;
+
+			if ( depth == 0 && !m_parsingFor )
+			{
+				if ( !getToken(expression.context[depth]) )
+				{
+					m_err = WR_ERR_unexpected_EOF;
+					return 0;
+				}
+
+				if ( m_parsingNew )
+				{
+					if ( token == "=" )
+					{
+						m_newHashValue = wr_hashStr( label );
+
+						continue;
+//						getToken(expression.context[depth]) );
+//						--depth;
+						
+					}
+				}
+				
+				if ( !m_quoted && token == ":" )
+				{
+					uint32_t hash = wr_hashStr( label );
+					for( unsigned int i=0; i<expression.bytecode.jumpOffsetTargets.count(); ++i )
+					{
+						if ( expression.bytecode.jumpOffsetTargets[i].gotoHash == hash )
+						{
+							m_err = WR_ERR_bad_goto_label;
+							return false;
+						}
+					}
+					
+					int index = addRelativeJumpTarget( expression.bytecode );
+					expression.bytecode.jumpOffsetTargets[index].gotoHash = hash;
+					expression.bytecode.jumpOffsetTargets[index].offset = expression.bytecode.all.size() + 1;
+
+					// this always return a value
+					pushOpcode( expression.bytecode, O_LiteralZero );
+
+					
+					return ';';
+				}
+				else
+				{
+					m_loadedToken = token;
+					m_loadedValue = value;
+					m_loadedQuoted = m_quoted;
+				}
+			}
+			
+
+			expression.context[depth].type = isLibConstant ? EXTYPE_LIB_CONSTANT : EXTYPE_LABEL;
+			expression.context[depth].token = label;
+			expression.context[depth].global = isGlobal;
+			expression.context[depth].prefix = prefix;
+			++depth;
+
+			continue;
+		}
+
+		m_err = WR_ERR_bad_expression;
+		return 0;
+	}
+
+	expression.context.setCount( expression.context.count() - 1 );
+
+	if ( depth == 2
+		 && expression.lValue
+		 && expression.context[0].type == EXTYPE_LABEL
+		 && expression.context[1].type == EXTYPE_OPERATION
+		 && expression.context[1].operation->opcode == O_Index
+		 && expression.context[1].bytecode.opcodes.size() > 0 )
+	{
+		unsigned int i = expression.context[1].bytecode.opcodes.size() - 1;
+		unsigned int a = expression.context[1].bytecode.all.size() - 1;
+		WROpcode o = (WROpcode)(expression.context[1].bytecode.opcodes[ i ]);
+		
+		switch( o )
+		{
+			case O_Index:
+			{
+				expression.context[1].bytecode.all[a] = O_InitArray;
+				break;
+			}
+
+			case O_IndexLiteral16:
+			{
+				if (a > 1)
+				{
+					expression.context[1].bytecode.all[a - 2] = O_LiteralInt16;
+					pushOpcode(expression.context[1].bytecode, O_InitArray);
+				}
+				break;
+			}
+			
+			case O_IndexLiteral8:
+			{
+				if (a > 0)
+				{
+					expression.context[1].bytecode.all[a - 1] = O_LiteralInt8;
+					pushOpcode(expression.context[1].bytecode, O_InitArray);
+				}
+				break;
+			}
+
+			default: break;
+		}
+	}
+
+	resolveExpression( expression );
+
+	return end;
 }
-	
+
 #endif
 /*******************************************************************************
 Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
@@ -10197,7 +10212,7 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 		
 		return false;
 	}
-	else
+	else 
 	{
 		if ( element >= iterator->va->m_size )
 		{
@@ -10210,8 +10225,20 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 			key->i = element;
 		}
 
-		value->p2 = INIT_AS_REF;
-		value->r = iterator->va->m_Vdata + element;
+		if ( iterator->va->m_type == SV_VALUE )
+		{
+			value->p2 = INIT_AS_REF;
+			value->r = iterator->va->m_Vdata + element;
+		}
+		else if ( iterator->va->m_type == SV_CHAR )
+		{
+			value->p2 = INIT_AS_INT;
+			value->i = iterator->va->m_Cdata[element];
+		}
+		else
+		{
+			return false;
+		}
 
 		iterator->p2 = INIT_AS_ITERATOR | ENCODE_ARRAY_ELEMENT_TO_P2(++element);
 	}
@@ -10300,8 +10327,8 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 	const void* opcodeJumptable[] =
 	{
-		&&RegisterFunction,
-		
+		&&Yield,
+
 		&&LiteralInt32,
 		&&LiteralZero,
 		&&LiteralFloat,
@@ -10597,8 +10624,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&InitArray,
 		&&InitVar,
 
-		&&Yield,
-		
 		&&DebugInfo,
 	};
 #endif
@@ -10725,41 +10750,6 @@ yieldContinue:
 		switch( READ_8_FROM_PC(pc++) )
 		{
 #endif
-			CASE(RegisterFunction):
-			{
-				hash = (stackTop -= 3)->i;
-
-				findex = hash;
-				WRFunction* localFunctions = context->localFunctions + findex;
-
-				localFunctions->arguments = (unsigned char)(hash >> 8);
-				localFunctions->frameSpaceNeeded = (unsigned char)(hash >> 16);
-
-				localFunctions->hash = (stackTop + 1)->i;
-
-				localFunctions->namespaceHashOffset = context->bottom + (stackTop + 2)->i; // location of the size vector
-
-				if ( *(uint8_t*)localFunctions->namespaceHashOffset == 0xFF )
-				{
-					localFunctions->offset = localFunctions->namespaceHashOffset + 1; // code starts pas the map + size
-					localFunctions->namespaceHashOffset = 0;
-				}
-				else
-				{
-					uint16_t size = READ_16_FROM_PC( localFunctions->namespaceHashOffset ); // how large is the namespace map?
-					localFunctions->offset = localFunctions->namespaceHashOffset + size + 2; // code starts pas the map + size
-					localFunctions->namespaceHashOffset += 2;
-				}
-				
-				localFunctions->frameBaseAdjustment = 1
-													  + localFunctions->frameSpaceNeeded
-													  + localFunctions->arguments;
-
-				context->registry.getAsRawValueHashTable(localFunctions->hash)->wrf = localFunctions;
-
-				CONTINUE;
-			}
-
 			CASE(LiteralInt32):
 			{
 				register0 = stackTop++;
@@ -10901,12 +10891,13 @@ debugContinue:
 
 								if ( *pc == O_NewObjectTable )
 								{
-									if ( ! (table = I->wrf->namespaceHashOffset) )
+									if ( !I->wrf->namespaceOffset )
 									{
 										w->err = WR_ERR_struct_not_exported;
 										return 0;
 									}
 									
+									table = import->bottom + I->wrf->namespaceOffset;
 									// so this was in service of a new
 									// ObjectTable. no problemo, find
 									// the actual table location and
@@ -11036,7 +11027,7 @@ callFunction:
 				register0->frame = frameBase;
 				register0->returnOffset = pc - context->bottom; // can't use "pc" because it might set the "gc me" bit, this is guaranteed to be small enough
 
-				pc = function->offset;
+				pc = function->functionOffset + context->bottom;
 
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - function->frameBaseAdjustment;
@@ -11144,8 +11135,9 @@ NewObjectTablePastLoad:
 					// table + 4: [static hash table ]
 
 					stackTop->va = context->getSVA( count, SV_VALUE, false );
-
+					
 					stackTop->va->m_ROMHashTable = table + 3;
+					
 					stackTop->va->m_mod = READ_16_FROM_PC(table+1);
 
 					register0 = stackTop->va->m_Vdata;
@@ -13318,24 +13310,27 @@ bool wr_executeFunctionZero( WRContext* context )
 WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership )
 {
 	// CRC the code block, at least is it what the compiler intended?
-	uint32_t hash = READ_32_FROM_PC( block + (blockSize - 4) );
-	if ( hash != wr_hash_read8(block, (blockSize - 4)) )
+	uint32_t hash = READ_32_FROM_PC(block + (blockSize - 4));
+	if ( hash != wr_hash_read8(block, (blockSize - 4)) + WRENCH_VERSION_MAJOR )
 	{
 		w->err = WR_ERR_bad_bytecode_CRC;
 		return 0;
 	}
 
-	int funcs = READ_8_FROM_PC(block);
+	int globals = READ_8_FROM_PC( block );
+	int localFuncs = READ_8_FROM_PC(block  + 1); // how many?
+	
 	int needed = sizeof(WRContext) // class
-				 + funcs * sizeof(WRFunction) // local functions
-				 + READ_8_FROM_PC(block+1) * sizeof(WRValue);  // globals
+				 + (globals * sizeof(WRValue))  // globals
+				 + (localFuncs * sizeof(WRFunction)); // functions;
 
 	WRContext* C = (WRContext *)g_malloc( needed );
 	memset((char*)C, 0, needed);
 
-	C->numLocalFunctions = funcs;
-	
-	C->globals = READ_8_FROM_PC(block + 1);
+	C->numLocalFunctions = localFuncs;
+	C->localFunctions = (WRFunction *)((uint8_t *)(C + 1) + (globals * sizeof(WRValue)));
+
+	C->globals = globals;
 
 	C->allocatedMemoryLimit = WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT;
 
@@ -13343,11 +13338,10 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 	
 	C->w = w;
 
-	C->localFunctions = (WRFunction*)((unsigned char *)C + sizeof(WRContext) + C->globals * sizeof(WRValue));
-
 	C->bottom = block;
-	C->codeStart = block + 3;
 	C->bottomSize = blockSize;
+
+	C->codeStart = block + 3 + (C->numLocalFunctions * 11);
 
 	uint8_t compilerFlags = READ_8_FROM_PC( block + 2 );
 
@@ -13368,6 +13362,24 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 	}
 
 	C->registry.init( 0, SV_VOID_HASH_TABLE, false );
+
+	int pos = 3;
+	for( int i=0; i<C->numLocalFunctions; ++i )
+	{
+		C->localFunctions[i].namespaceOffset = READ_16_FROM_PC( block + pos );
+		pos += 2;
+		C->localFunctions[i].functionOffset = READ_16_FROM_PC( block + pos );
+		pos += 2;
+		C->localFunctions[i].hash = READ_32_FROM_PC( block + pos );
+		pos += 3;
+		C->localFunctions[i].arguments = READ_8_FROM_PC( block + ++pos );
+		C->localFunctions[i].frameSpaceNeeded = READ_8_FROM_PC( block + ++pos );
+		C->localFunctions[i].frameBaseAdjustment = READ_8_FROM_PC( block + ++pos );
+		
+		++pos;
+
+		C->registry.getAsRawValueHashTable(C->localFunctions[i].hash)->wrf = C->localFunctions + i;
+	}
 
 	return C;
 }
@@ -13629,6 +13641,7 @@ bool WRValue::isString( int* len ) const
 	}
 	return false;
 }
+
 //------------------------------------------------------------------------------
 bool WRValue::isWrenchArray( int* len ) const
 {
@@ -13660,10 +13673,18 @@ bool WRValue::isRawArray( int* len ) const
 }
 
 //------------------------------------------------------------------------------
-bool WRValue::isHashTable() const
+bool WRValue::isHashTable( int* len ) const
 {
 	WRValue& V = deref();
-	return IS_HASH_TABLE( V.xtype );
+	if ( IS_HASH_TABLE(V.xtype) )
+	{
+		if ( len )
+		{
+			*len = V.va->m_size;
+		}
+		return true;
+	}
+	return false;
 }
 
 //------------------------------------------------------------------------------
@@ -13882,6 +13903,70 @@ char* WRValue::asString( char* string, size_t maxLen ) const
 }
 
 //------------------------------------------------------------------------------
+WRValue::Iterator::Iterator( WRValue const& V ) : m_va(V.va), m_element(0)
+{
+	memset((char*)&m_current, 0, sizeof(WRIteratorEntry) );
+
+	if ( (V.xtype != WR_EX_ARRAY && V.xtype != WR_EX_HASH_TABLE)
+		 || (m_va->m_type == SV_VOID_HASH_TABLE) )
+	{
+		m_va = 0;
+		m_current.type = 0;
+	}
+	else
+	{
+		m_current.type = m_va->m_type;
+		++*this;
+	}
+}
+
+//------------------------------------------------------------------------------
+const WRValue::Iterator WRValue::Iterator::operator++()
+{
+	if ( m_va )
+	{
+		if ( m_current.type == SV_HASH_TABLE )
+		{
+			int temp = m_element;
+			for( ; temp < m_va->m_mod; ++temp )
+			{
+				if ( m_va->m_hashTable[temp] != WRENCH_NULL_HASH )
+				{
+					temp <<= 1;
+
+					m_current.value = m_va->m_Vdata + temp++;
+					m_current.key = m_va->m_Vdata + temp;
+
+					m_element = ++temp;
+
+					return *this;
+				}
+			}
+		}
+		else if ( m_element < m_va->m_size )
+		{
+			m_current.index = m_element;
+			if ( m_current.type == SV_VALUE )
+			{
+				m_current.value = m_va->m_Vdata + m_element;
+			}
+			else
+			{
+				m_current.character = m_va->m_Cdata[m_element];
+			}
+
+			++m_element;
+
+			return *this;
+		}
+	}
+
+	memset( (char*)&m_current, 0, sizeof(WRIteratorEntry) );
+	m_va = 0;
+	return *this;
+}
+
+//------------------------------------------------------------------------------
 WRValue* wr_callFunction( WRContext* context, const char* functionName, const WRValue* argv, const int argn )
 {
 	return wr_callFunction( context, wr_hashStr(functionName), argv, argn );
@@ -13945,7 +14030,7 @@ WRValue* wr_getGlobalRef( WRContext* context, const char* label )
 		match = wr_hashStr( globalLabel );
 	}
 
-	const unsigned char* symbolsBlock = context->bottom + 3;
+	const unsigned char* symbolsBlock = context->bottom + 3 + (context->numLocalFunctions * 11);
 	for( unsigned int i=0; i<context->globals; ++i, symbolsBlock += 4 )
 	{
 		uint32_t symbolHash = READ_32_FROM_PC( symbolsBlock );
@@ -14029,8 +14114,8 @@ void wr_destroyContainer( WRValue* val )
 //------------------------------------------------------------------------------
 const char* c_opcodeName[] = 
 {
-	"RegisterFunction",
-	
+	"Yield",
+
 	"LiteralInt32",
 	"LiteralZero",
 	"LiteralFloat",
@@ -14325,8 +14410,6 @@ const char* c_opcodeName[] =
 	"LoadLibConstant",
 	"InitArray",
 	"InitVar",
-
-	"Yield",
 
 	"DebugInfo",
 };
@@ -15759,8 +15842,7 @@ WRValue& WRValue::deref() const
 //------------------------------------------------------------------------------
 uint32_t WRValue::getHashEx() const
 {
-	// QUICKLY return the easy answers, thats why this code looks a bit
-	// convoluted
+	// QUICKLY return the easy answers, thats why this code looks a bit convoluted
 	if ( type == WR_REF )
 	{
 		return r->getHash();
@@ -15789,15 +15871,32 @@ uint32_t WRValue::getHashEx() const
 		// hash each element, positionally dependant
 		for( uint32_t i=0; i<va->m_mod; ++i)
 		{
-			uint32_t h = i<<16 | va->m_Vdata[i<<1].getHash();
-			hash = wr_hash( &h, 4, hash );
+			if ( va->m_hashTable[i] != WRENCH_NULL_HASH )
+			{
+				uint32_t h = i<<16 | va->m_Vdata[i<<1].getHash();
+				hash = wr_hash( &h, 4, hash );
+			}
 		}
+		return hash;
+	}
+	else if ( xtype == WR_EX_STRUCT )
+	{
+		uint32_t hash = wr_hash( (char *)&va->m_hashTable, sizeof(void*) ); // this is in ROM and must be identical for the struct to be the same (same namespace)
+
+		for( uint32_t i=0; i<va->m_mod; ++i )
+		{
+			if ((uint32_t)READ_32_FROM_PC(va->m_ROMHashTable + i * 5) != WRENCH_NULL_HASH)
+			{
+				uint32_t h = va->m_Vdata[i].getHash();
+				hash = wr_hash( &h, 4, hash );
+			}
+		}
+
 		return hash;
 	}
 
 	return 0;
 }
-
 
 //------------------------------------------------------------------------------
 void wr_valueToArray( const WRValue* array, WRValue* value )

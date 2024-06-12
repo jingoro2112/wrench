@@ -28,8 +28,8 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 enum WROpcode
 {
-	O_RegisterFunction =0,
-	
+	O_Yield =0,
+
 	O_LiteralInt32,
 	O_LiteralZero,
 	O_LiteralFloat,
@@ -325,8 +325,6 @@ enum WROpcode
 	O_InitArray,
 	O_InitVar,
 
-	O_Yield,
-	
 	O_DebugInfo,
 				
 	// non-interpreted opcodes

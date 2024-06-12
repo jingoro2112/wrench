@@ -29,13 +29,6 @@ SOFTWARE.
 
 #include <assert.h>
 
-// ever solve a rubik's cube? You have if you define your current
-// arrangement as "solved" since it is exactly as unique as the
-// traditional solid-color "solve". That's what this is, so int/floats
-// can be their own hash (0x0 needing to be valid)
-#define WRENCH_NULL_HASH 0xABABABAB  // -1414812757 / -1.2197928214371934e-12
-
-
 //------------------------------------------------------------------------------
 class WRGCObject
 {
@@ -56,7 +49,7 @@ public:
 	union
 	{
 		uint32_t* m_hashTable;
-		const unsigned char* m_ROMHashTable;
+		const uint8_t* m_ROMHashTable;
 		WRContext* m_creatorContext;
 	};
 
@@ -171,6 +164,7 @@ foundExists:
 
 		if ( removeIfPresent )
 		{
+			--m_size;
 			m_hashTable[index] = WRENCH_NULL_HASH;
 		}
 		
@@ -202,7 +196,7 @@ foundExists:
 private:
 
 	//------------------------------------------------------------------------------
-	uint32_t getIndexOfHit( const uint32_t hash, const bool insert )
+	uint32_t getIndexOfHit( const uint32_t hash, const bool inserting )
 	{
 		uint32_t index = hash % m_mod;
 		if ( m_hashTable[index] == hash )
@@ -213,8 +207,9 @@ private:
 		int tries = 3;
 		do
 		{
-			if ( insert && m_hashTable[index] == WRENCH_NULL_HASH )
+			if ( inserting && m_hashTable[index] == WRENCH_NULL_HASH )
 			{
+				++m_size;
 				m_hashTable[index] = hash;
 				return index;
 			}
@@ -228,7 +223,7 @@ private:
 
 		} while( tries-- );
 
-		return insert ? growHash(hash) : getIndexOfHit( hash, true );
+		return inserting ? growHash(hash) : getIndexOfHit( hash, true );
 	}
 
 	//------------------------------------------------------------------------------
@@ -300,7 +295,6 @@ tryAgain:
 			m_hashTable = proposed;
 			int oldMod = m_mod;
 			m_mod = newMod;
-//			m_size = newSize;
 
 			for( int v=0; v<oldMod; ++v )
 			{

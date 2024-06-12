@@ -1,10 +1,15 @@
 /*~ ~*/
 
-var res[] = { newState, newStateDuration, resetCollision };
+var res[] = { "a", 2, 0.3 };
 checkIsWrenchArray( res, 3 );
+checkIter( res, "a", 2, 0.3 );
 
 var h = {:};
-checkIsHashTable( h );
+checkIsHashTable( h, 0 );
+h["one"] = 1;
+h["two"] = 2;
+checkIsHashTable( h, 2 );
+
 
 var s = "a string";
 checkIsString( s, s._count );

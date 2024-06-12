@@ -28,6 +28,8 @@ SOFTWARE.
 
 #ifndef WRENCH_WITHOUT_COMPILER
 
+#define WR_COMPILER_LITERAL_STRING 0x10 
+
 //------------------------------------------------------------------------------
 enum WROperationType
 {
@@ -46,6 +48,14 @@ struct WROperation
 	bool leftToRight;
 	WROperationType type;
 	WROpcode alt;
+};
+
+//------------------------------------------------------------------------------
+struct NamespacePush
+{
+	int unit;
+	int location;
+	NamespacePush* next;
 };
 
 //------------------------------------------------------------------------------
@@ -356,8 +366,6 @@ struct WRUnitContext
 
 	WRarray<ConstantValue> constantValues;
 
-	WRstr localNamespaceMap;
-
 	int16_t offsetOfLocalHashMap;
 	
 	// the code that runs when it loads
@@ -495,24 +503,6 @@ private:
 	WRarray<int> m_breakTargets;
 
 	int m_foreachHash;
-
-/*
-
-jumpOffsetTarget-> code
-                   code
-                   code
-fill 1             jump to jumpOffset
-                   code
-                   code
-fill 2             jump to jumpOffset
-
-  jumpOffset is a list of fills
-
- bytecode has a list of jump offsets it added so it can increment them
-  when appended
-
-*/
-
 };
 
 //------------------------------------------------------------------------------

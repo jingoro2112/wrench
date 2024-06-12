@@ -1,5 +1,5 @@
-var u = io::readFile( "tests/unit_test_lib.c" );
-sys::importCompile( u );
+sys::importCompile(io::readFile( "tests/unit_test_lib.c"));
+
 
 var q = {"a" : 1, "b" : 2, "c" : 3};
 var r = {"a" : 1, "b" : 2, "c" : 4};
@@ -95,3 +95,34 @@ var string6 = "Hello World";
 assertNotEqual(string5, string6, "Hello and Hello World are NOT equal");
 
 
+struct S {
+	var a;
+	var b;
+	var c;
+};
+
+struct V {
+	var a;
+	var b;
+	var c;
+};
+
+
+var s3 = new S { 1, 2, 3 };
+var s4 = new S { 1, 2, 4 }; 
+assertNotEqual(s3, s4, "S(1, 2, 3) and S(1, 2, 4) Structs are equal");
+
+var s1 = new S { 1, 2, 3 };
+var s2 = new S { 1, 2, 3 };
+
+assertEqual(s1, s2, "S(1, 2, 3) and S(1, 2, 3) Structs are equal");
+
+var v1 = new V { 1, 2, 3 };
+
+assertNotEqual(s1, v1, "S(1, 2, 3) and V(1, 2, 3) Structs are equal");
+
+var y1 = {"a" : 1, "b" : 2, "c" : 3};
+var array = {1, 2, 3};
+assertNotEqual(v1, y1, "V(1, 2, 3) and {a: 1, b: 2, c: {d, e}} Struct and HashTable are equal");
+assertNotEqual(y1, v1, "{a: 1, b: 2, c: 3} and V(1, 2, 3) HashTable and Struct are equal");
+assertNotEqual(array, v1, "{1, 2, 3} and V(1, 2, 3) Array and Struct are equal");
