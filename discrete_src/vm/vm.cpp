@@ -221,8 +221,12 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	return true;
 }
 
-// #define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)READ_8_FROM_PC(pc), c_opcodeName[READ_8_FROM_PC(pc)]);
-#define PER_INSTRUCTION
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+  bool g_mallocFailed =false;
+  #define PER_INSTRUCTION {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; return 0; } }
+#else
+  #define PER_INSTRUCTION
+#endif
 
 #define WRENCH_JUMPTABLE_INTERPRETER
 #ifdef WRENCH_REALLY_COMPACT

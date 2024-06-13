@@ -2,7 +2,10 @@
 #define _STR_H
 /* ------------------------------------------------------------------------- */
 
-//#ifndef WRENCH_WITHOUT_COMPILER
+// note; this is used for miscillaneous convenience in the CLI, but
+// nowhere in the VM, so will not actually be used anywhere in the
+// compiler
+// #ifndef WRENCH_WITHOUT_COMPILER
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -754,4 +757,3 @@ WRstr& WRstr::appendFormat( const char* format, ... )
 }
 
 #endif
-//#endif

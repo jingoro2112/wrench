@@ -132,6 +132,20 @@ examples are in
 //#define WRENCH_CUSTOM_FILE_IO    
 /***********************************************************************/
 
+
+/************************************************************************
+for embedded systems that need to know if they have run out of memory,
+define this.
+WARNING: This imposes a small if() check on EVERY INSTRUCTION so the
+malloc failure is detected the moment it happens, but guarantees
+graceful exit if g_malloc() ever returns null
+
+*** DO NOT USE YET ** THIS IS ALPHA PROTOTYPE ONLY **
+
+*/
+//#define WRENCH_HANDLE_MALLOC_FAIL
+
+   
 #include <stdint.h>
 #include <stddef.h>
 
@@ -201,6 +215,8 @@ enum WRError
 	WR_ERR_bad_bytecode_CRC,
 
 	WR_ERR_execute_function_zero_called_more_than_once,
+
+	WR_ERR_malloc_failed,
 
 	WR_ERR_USER_err_out_of_range,
 	
@@ -488,7 +504,6 @@ void wr_addIntToContainer( WRValue* container, const char* name, const int32_t v
 void wr_addFloatToContainer( WRValue* container, const char* name, const float value );
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size );
 
-
 /******************************************************************/
 //                    "standard" functions
 
@@ -603,6 +618,8 @@ The "extended" types are:
 
 extern WR_ALLOC g_malloc;
 extern WR_FREE g_free;
+extern bool g_mallocFailed; // only defined if WRENCH_HANDLE_MALLOC_FAIL is set true
+
 
 //------------------------------------------------------------------------------
 #if __cplusplus <= 199711L
@@ -703,7 +720,7 @@ struct WRValue
 	bool isRawArray( int* len =0 ) const;
 	bool isHashTable( int* members=0 ) const;
 
-	// if this value is an array, return [or create] the 'index'-th element
+	// if this value is an array, return 'index'-th element
 	// if create is true and this value is NOT an array, it will be converted into one
 	WRValue* indexArray( WRContext* context, const uint32_t index, const bool create );
 	
@@ -721,7 +738,7 @@ struct WRValue
 
 	// return a raw pointer to the data array if this is one, otherwise null
 	void* array( unsigned int* len =0, char arrayType =SV_CHAR ) const;
-	int arrayLen() const; // returns length of the array or -1 if this value is not an array
+	int arraySize() const; // returns length of the array or -1 if this value is not an array
 
 //private: // is what this SHOULD be.. but that's impractical since the
 	// VM is not an object that can be friended.
@@ -836,7 +853,7 @@ public:
 
 //------------------------------------------------------------------------------
 // Helper class to represent a wrench value, in all cases it does NOT
-// managerthe memory, but relies on a WRContext to do that
+// manage the memory, but relies on a WRContext to do that
 class WrenchValue
 {
 public:
@@ -857,7 +874,7 @@ public:
 	// this will convert it to an array if it isn't one
 	WRValue& operator[] ( const int index ) { return *asArrayMember( index ); }
 	WRValue* asArrayMember( const int index );
-	const int arraySize() const { return m_value ? m_value->arrayLen() : -1; } // returns -1 if this is not an array
+	const int arraySize() const { return m_value ? m_value->arraySize() : -1; } // returns -1 if this is not an array
 
 private:
 	WRContext* m_context;

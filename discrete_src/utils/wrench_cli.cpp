@@ -97,6 +97,7 @@ void blobToAssemblyInc( WRstr const& blob, WRstr const& variableName, WRstr& hea
 }
 
 //------------------------------------------------------------------------------
+// smush all these files together to make wrench.cpp, in this order!
 const char* sourceOrder[]=
 {
 	"/utils/utils.h",
@@ -115,6 +116,8 @@ const char* sourceOrder[]=
 	"/cc/cc.cpp",
 	"/cc/link.cpp",
 	"/cc/expression.cpp",
+	"/cc/optimizer.cpp",
+	"/cc/token.cpp",
 	"/vm/vm.cpp",
 	"/utils/utils.cpp",
 	"/utils/serializer.cpp",
@@ -321,7 +324,11 @@ int main( int argn, char* argv[] )
 		wr_run( gw, (const unsigned char *)bytes.c_str(), bytes.size() );
 		if ( wr_getLastError( gw ) )
 		{
+#ifndef WRENCH_WITHOUT_COMPILER
 			printf( "err: %s\n", c_errStrings[(int)wr_getLastError(gw)] );
+#else
+			printf( "err: %d\n", (int)wr_getLastError(gw) );
+#endif
 		}
 
 		wr_destroyState( gw );
@@ -549,7 +556,7 @@ void checkIter( WRContext* c, const WRValue* argv, const int argn, WRValue& retV
 	for( WRIteratorEntry const& E : *argv )
 	{
 #endif
-		assert( E.value->getHash() == argv[E.index+1].getHash() );
+		if ( E.value->getHash() != argv[E.index+1].getHash() ) { assert(0); }
 	}
 }
 

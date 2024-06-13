@@ -153,9 +153,10 @@ uint32_t WRValue::getHashEx() const
 
 		for( uint32_t i=0; i<va->m_mod; ++i )
 		{
-			if ((uint32_t)READ_32_FROM_PC(va->m_ROMHashTable + i * 5) != WRENCH_NULL_HASH)
+			const uint8_t* offset = va->m_ROMHashTable + (i * 5);
+			if ( (uint32_t)READ_32_FROM_PC(offset) != WRENCH_NULL_HASH)
 			{
-				uint32_t h = va->m_Vdata[i].getHash();
+				uint32_t h = va->m_Vdata[READ_8_FROM_PC(offset + 4)].getHash();
 				hash = wr_hash( &h, 4, hash );
 			}
 		}

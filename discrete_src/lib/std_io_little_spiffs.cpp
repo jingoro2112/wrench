@@ -179,6 +179,10 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		WRFSFile* entry = (WRFSFile *)g_malloc( sizeof(WRFSFile) );
 
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if(!entry) { g_mallocFailed = true; return; }
+#endif
+		
 		if ( mode & LFS_READ )
 		{
 			entry->file = FILE_OBJ.open( fileName, FILE_READ );

@@ -139,8 +139,8 @@ scripting language that can fit into a very small space but
 retain full power, flexibility, and speed.</h3>
 
 <ul>
-<li><b>Embedable: </b>Fits into less than 30K of Flash, and runs with
-a ~1k memory footprint
+<li><b>Embedable: </b>Comfortably fits into 32k of ROM, and runs with
+a ~1k RAM footprint
 <li><p><b>Comprehensible: </b>c-like syntax, weakly typed
 
 <li><p><b>Fast: </b>as a comparison: fast as or faster than lua (non-JIT of course) 
@@ -164,7 +164,8 @@ and from your main program.
 
 <li><p><b>Tested: </b>A full test-suite must pass
 <a href="https://valgrind.org/">valgrind</a> with zero
-warnings/errors/leaks on multiple architectures.
+warnings/errors/leaks on multiple architectures (including
+cross-compatibility checks tieh big-endian)
 
 </ul>
 
@@ -412,7 +413,7 @@ char* technicalAsString( char* string, size_t maxLen, bool valuesInHex =false ) 
 // return a raw pointer to the raw data array if this is one, otherwise
 // return null
 void* array( unsigned int* len =0, char arrayType =SV_CHAR ) const;
-int arrayLen() const; // returns length of the array or -1 if this value is not an array
+int arraySize() const; // returns length of the array or -1 if this value is not an array
 
 uint32_t getHash() const // returns a hash of this value
 </code></pre>

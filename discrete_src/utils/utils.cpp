@@ -646,12 +646,11 @@ void* WRValue::array( unsigned int* len, char arrayType ) const
 }
 
 //------------------------------------------------------------------------------
-int WRValue::arrayLen() const
+int WRValue::arraySize() const
 {
 	WRValue& V = deref();
-	return (V.xtype == WR_EX_ARRAY && (V.va->m_type == SV_VALUE || V.va->m_type == SV_CHAR)) ? V.va->m_size : -1;
+	return V.xtype == WR_EX_ARRAY ? V.va->m_size : -1;
 }
-
 
 //------------------------------------------------------------------------------
 int wr_technicalAsStringEx( char* string, const WRValue* value, size_t pos, size_t maxLen, bool valuesInHex )
@@ -1361,6 +1360,8 @@ const char* c_errStrings[]=
 	"WR_ERR_bad_bytecode_CRC",
 
 	"WR_ERR_execute_function_zero_called_more_than_once",
+
+	"WR_ERR_malloc_failed",
 
 	"WR_ERR_USER_err_out_of_range",
 };

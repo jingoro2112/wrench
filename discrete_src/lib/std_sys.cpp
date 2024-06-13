@@ -63,6 +63,9 @@ void wr_importByteCode( WRValue* stackTop, const int argn, WRContext* c )
 		if ( data )
 		{
 			uint8_t* import = (uint8_t*)g_malloc( len );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if(!import) { g_mallocFailed = true; return; }
+#endif
 			memcpy( (char*)import, data, len );
 			wr_import( c, import, len, true );
 		}

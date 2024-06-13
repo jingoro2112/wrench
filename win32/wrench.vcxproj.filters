@@ -80,6 +80,12 @@
     <ClCompile Include="..\discrete_src\cc\link.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\discrete_src\cc\optimizer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\cc\token.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\discrete_src\vm\vm.h">
@@ -122,6 +128,9 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="..\discrete_src\utils\debug_client.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\discrete_src\cc\str.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

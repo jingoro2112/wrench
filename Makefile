@@ -25,6 +25,8 @@ OBJS = \
 	$(OBJDIR)/cc.o \
 	$(OBJDIR)/expression.o \
 	$(OBJDIR)/link.o \
+	$(OBJDIR)/optimizer.o \
+	$(OBJDIR)/token.o \
 	$(OBJDIR)/operations.o \
 	$(OBJDIR)/index.o \
 	$(OBJDIR)/vm.o \
@@ -71,6 +73,12 @@ wrench: $(OBJS) discrete_src/utils/wrench_cli.cpp
 	g++ -o wrench -Wall -Werror $(FLAGS) -Isrc src/wrench.cpp discrete_src/utils/wrench_cli.cpp discrete_src/utils/debug_client.cpp
 
 $(OBJDIR)/cc.o: discrete_src/cc/cc.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/optimizer.o: discrete_src/cc/optimizer.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/token.o: discrete_src/cc/token.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/expression.o: discrete_src/cc/expression.cpp
