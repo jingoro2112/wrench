@@ -54,7 +54,7 @@ inline const char* SimpleArgs::get( int argn, char *argv[], int index, char* par
 		a = argn + a;
 	}
 
-	if ( a >= argn )
+	if ( (unsigned int)a >= (unsigned int)argn )
 	{
 		return 0;
 	}
