@@ -74,8 +74,16 @@ public:
 
 		if ( (m_type = type) == SV_VALUE )
 		{
+			m_Vdata = (WRValue*)g_malloc( size * sizeof(WRValue) );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !m_Vdata )
+			{
+				m_size = 0;
+				g_mallocFailed = true;
+				return;
+			}
+#endif
 			m_size = size;
-			m_Vdata = (WRValue*)g_malloc( m_size * sizeof(WRValue) );
 			if ( clear )
 			{
 				memset( m_SCdata, 0, m_size * sizeof(WRValue) );
@@ -84,8 +92,16 @@ public:
 		}
 		else if ( m_type == SV_CHAR )
 		{
+			m_Cdata = (unsigned char*)g_malloc( size + 1 );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !m_Cdata )
+			{
+				m_size = 0;
+				g_mallocFailed = true;
+				return;
+			}
+#endif
 			m_size = size;
-			m_Cdata = (unsigned char*)g_malloc( m_size + 1 );
 			if ( clear )
 			{
 				memset( m_SCdata, 0, m_size + 1 );
@@ -253,6 +269,13 @@ tryAgain:
 
 			int total = newMod*sizeof(uint32_t) + newSize*sizeof(WRValue);
 			uint32_t* proposed = (uint32_t*)g_malloc( total );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !proposed )
+			{
+				g_mallocFailed = true;
+				return 0; // congratulations, clobber this one. we're dying it doesn't matter.
+			}
+#endif
 
 			memset( (unsigned char *)proposed, 0, total );
 			for( int n = 0; n<newMod; ++n )

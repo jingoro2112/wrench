@@ -31,6 +31,15 @@ SOFTWARE.
 #include <sys/time.h>
 
 //------------------------------------------------------------------------------
+void wr_stdout( const char* data, const int size )
+{
+	if ( write( STDOUT_FILENO, data, size ) > 0 )
+	{
+		fflush( stdout );
+	}
+}
+
+//------------------------------------------------------------------------------
 void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
@@ -48,8 +57,14 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 			FILE *infil = fopen( fileName, "rb" );
 			if ( infil )
 			{
-				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = c->getSVA( (int)sbuf.st_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+				if ( !stackTop->va )
+				{
+					return;
+				}
+#endif
+				stackTop->p2 = INIT_AS_ARRAY;
 				if ( fread( stackTop->va->m_Cdata, sbuf.st_size, 1, infil ) != 1 )
 				{
 					stackTop->init();
@@ -116,8 +131,14 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 
 		if ( in == EOF || in == '\n' || in == '\r' || pos >= 256 )
 		{ 
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( pos, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
 			memcpy( stackTop->va->m_Cdata, buf, pos );
 			break;
 		}
@@ -172,6 +193,13 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	
 	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 		
 	int result = read( args[0].asInt(), stackTop->va->m_Cdata, toRead );
 	stackTop->va->m_size = (result > 0) ? result : 0;

@@ -28,7 +28,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 0
+#define WRENCH_VERSION_BUILD 1
 
 /************************************************************************
 The compiler is not particularly memory or space efficient, for
@@ -135,13 +135,10 @@ examples are in
 
 /************************************************************************
 for embedded systems that need to know if they have run out of memory,
-define this.
+
 WARNING: This imposes a small if() check on EVERY INSTRUCTION so the
 malloc failure is detected the moment it happens, but guarantees
 graceful exit if g_malloc() ever returns null
-
-*** DO NOT USE YET ** THIS IS ALPHA PROTOTYPE ONLY **
-
 */
 //#define WRENCH_HANDLE_MALLOC_FAIL
 
@@ -618,7 +615,9 @@ The "extended" types are:
 
 extern WR_ALLOC g_malloc;
 extern WR_FREE g_free;
-extern bool g_mallocFailed; // only defined if WRENCH_HANDLE_MALLOC_FAIL is set true
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+extern bool g_mallocFailed;
+#endif
 
 
 //------------------------------------------------------------------------------

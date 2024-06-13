@@ -96,8 +96,15 @@ void doIndexHash( WRValue* value, WRValue* target, WRValue* index )
 void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
 	// all we know is the value is not an array, so make it one
-	value->p2 = INIT_AS_ARRAY;
 	value->va = c->getSVA( index->ui + 1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !value->va )
+	{
+		value->p2 = INIT_AS_INT;
+		return;
+	}
+#endif
+	value->p2 = INIT_AS_ARRAY;
 	
 	elementToTarget( index->ui, target, value );
 }
@@ -126,13 +133,29 @@ void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 
 		if ( I->type == WR_INT )
 		{
-			value->p2 = INIT_AS_ARRAY;
 			value->va = c->getSVA( index->ui+1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !value->va )
+			{
+				value->p2 = INIT_AS_INT;
+				return;
+			}
+#endif
+			value->p2 = INIT_AS_ARRAY;
+
 		}
 		else
 		{
-			value->p2 = INIT_AS_HASH_TABLE;
 			value->va = c->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !value->va )
+			{
+				value->p2 = INIT_AS_INT;
+				return;
+			}
+#endif
+			value->p2 = INIT_AS_HASH_TABLE;
+
 			doIndexHash( value, target, I );
 			return;
 		}
@@ -166,8 +189,16 @@ void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 	{
 		if ( !IS_HASH_TABLE(V->xtype) )
 		{
-			V->p2 = INIT_AS_HASH_TABLE;
 			V->va = c->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !V->va )
+			{
+				V->p2 = INIT_AS_INT;
+				return;
+			}
+#endif
+			V->p2 = INIT_AS_HASH_TABLE;
+
 		}
 		doIndexHash( V, target, I );
 	}

@@ -126,10 +126,51 @@ void WRContext::gc( WRValue* stackTop )
 	}
 }
 
+/*  meh..
+//------------------------------------------------------------------------------
+void WRContext::scavenge( WRGCObject* va )
+{
+	// free the sub-array from this object, if the object itself
+	// needs to be cleaned that has to happen in the gc but this
+	// can be done anywhere
+	if ( va->m_type == SV_VOID_HASH_TABLE )
+	{
+		return;
+	}
+
+	g_free( va->m_data );
+	va->m_data = 0;
+
+	if ( va->m_type != SV_CHAR )
+	{
+		if ( va->m_type == SV_HASH_TABLE )
+		{
+			g_free( va->m_hashTable );
+			allocatedMemoryHint -= (va->m_mod * 4);
+		}
+
+		allocatedMemoryHint -= va->m_size * 3;
+		va->m_type = SV_CHAR;
+	}
+
+	allocatedMemoryHint -= va->m_size;
+	va->m_size = 0;
+}
+*/
+
 //------------------------------------------------------------------------------
 WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 {
 	WRGCObject* ret = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !ret )
+	{
+		g_mallocFailed = true;
+		return 0;
+	}
+#endif
+
 	ret->init( size, type, init );
 
 	if ( type == SV_CHAR )
@@ -223,7 +264,7 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
   bool g_mallocFailed =false;
-  #define PER_INSTRUCTION {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; return 0; } }
+  #define PER_INSTRUCTION {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; g_mallocFailed = false; return 0; } }
 #else
   #define PER_INSTRUCTION
 #endif
@@ -757,8 +798,15 @@ literalZero:
 				pc += 2;
 				
 				context->gc( stackTop );
-				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = context->getSVA( hash, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+				if ( !stackTop->va )
+				{
+					CONTINUE; // don't need to do anything else, this will immediately return
+				}
+#endif
+				stackTop->p2 = INIT_AS_ARRAY;
+
 
 				for ( char* to = (char *)(stackTop++)->va->m_data ; hash ; --hash )
 				{
@@ -789,6 +837,7 @@ literalZero:
 				register1 = &(stackTop - 1)->deref();
 				register1->p2 = INIT_AS_ARRAY;
 				register1->va = context->getSVA( register0->ui, SV_VALUE, true );
+				// malloc failing here will immediately be detected
 				CONTINUE;
 			}
 
@@ -1115,6 +1164,12 @@ NewObjectTablePastLoad:
 
 					stackTop->va = context->getSVA( count, SV_VALUE, false );
 					
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+					if ( !stackTop->va )
+					{
+						CONTINUE;
+					}
+#endif
 					stackTop->va->m_ROMHashTable = table + 3;
 					
 					stackTop->va->m_mod = READ_16_FROM_PC(table+1);
@@ -1353,6 +1408,12 @@ hashIndexJump:
 				{
 					register0->p2 = INIT_AS_HASH_TABLE;
 					register0->va = context->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+					if ( !register0->va )
+					{
+						CONTINUE;
+					}
+#endif
 				}
 						
 #ifdef WRENCH_COMPACT

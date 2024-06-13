@@ -1,3 +1,15 @@
+6.0.1 ----------------------------------------------------------------------------------
+- implementated WRENCH_HANDLE_MALLOC_FAIL:
+
+        for embedded systems that need to know if they have run out of memory,
+
+        WARNING: This imposes a small if() check on EVERY INSTRUCTION so the
+        malloc failure is detected the moment it happens, but guarantees
+        graceful exit if g_malloc() ever returns null
+
+- sprintf rework to use much less stack and have effectively unlimited format/result size
+
+
 6.0.0 ----------------------------------------------------------------------------------
 - removed function declaration being an in-line process (which was to facilitate executing
    serial streams, a feature dropped long ago) to place the table statically into ROM. this
@@ -25,9 +37,6 @@
 
 - breaking up some files that have gotten out of hand to sub-files, particularly in cc.cpp!
 - fixed obscure memory overrun with struct comparison (valgrind rides again)
-- began implementation of WRENCH_HANDLE_MALLOC_FAIL
-   will be a few iterations before this is ready for production
-
 
 5.0.2 ----------------------------------------------------------------------------------
 - added isString() to WRValue

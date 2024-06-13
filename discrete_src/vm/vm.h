@@ -86,9 +86,9 @@ struct WRContext
 	
 	WRContext* imported; // linked list of contexts this one imported
 
-
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
+	
 	WRGCObject* getSVA( int size, WRGCObjectType type, bool init );
 };
 

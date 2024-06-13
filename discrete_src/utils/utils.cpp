@@ -112,8 +112,15 @@ WRValue* WrenchValue::asArrayMember( const int index )
 	if ( !IS_ARRAY(m_value->xtype) ) 
 	{
 		// then make it one!
-		m_value->p2 = INIT_AS_ARRAY;
 		m_value->va = m_context->getSVA( index + 1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !m_value->va )
+		{
+			m_value->p2 = INIT_AS_INT;
+			return m_value;
+		}
+#endif
+		m_value->p2 = INIT_AS_ARRAY;
 	}
 	else if ( index >= (int)m_value->va->m_size )
 	{
@@ -128,6 +135,10 @@ WRValue* WrenchValue::asArrayMember( const int index )
 WRState* wr_newState( int stackSize )
 {
 	WRState* w = (WRState *)g_malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !w ) { return 0; }
+#endif
+																		   
 	memset( (unsigned char*)w, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
 
 	w->stackSize = stackSize;
@@ -216,6 +227,14 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 				 + (localFuncs * sizeof(WRFunction)); // functions;
 
 	WRContext* C = (WRContext *)g_malloc( needed );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !C )
+	{
+		w->err = WR_ERR_malloc_failed;
+		return 0;
+	}
+#endif
+	
 	memset((char*)C, 0, needed);
 
 	C->numLocalFunctions = localFuncs;
@@ -590,8 +609,17 @@ WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bo
 			return 0;
 		}
 
-		V.p2 = INIT_AS_ARRAY;
 		V.va = context->getSVA( index + 1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !V.va )
+		{
+			V.p2 = INIT_AS_INT;
+			return &V;
+		}
+#endif
+
+		V.p2 = INIT_AS_ARRAY;
+
 	}
 
 	if ( index >= V.va->m_size )
@@ -620,8 +648,16 @@ WRValue* WRValue::indexHash( WRContext* context, const uint32_t hash, const bool
 			return 0;
 		}
 
-		V.p2 = INIT_AS_HASH_TABLE;
 		V.va = context->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !V.va )
+		{
+			V.p2 = INIT_AS_INT;
+			return &V;
+		}
+#endif
+		
+		V.p2 = INIT_AS_HASH_TABLE;
 	}
 
 	return create ? (WRValue*)V.va->get(hash) : V.va->exists(hash, false);
@@ -953,8 +989,15 @@ WRValue& wr_makeFloat( WRValue* val, float f )
 WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, const int len )
 {
 	const int slen = len ? len : strlen(data);
-	val->p2 = INIT_AS_ARRAY;
 	val->va = context->getSVA( slen, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !val->va )
+	{
+		val->p2 = INIT_AS_INT;
+		return *val;
+	}
+#endif
+	val->p2 = INIT_AS_ARRAY;
 	memcpy( (unsigned char *)val->va->m_data, data, slen );
 	return *val;
 }
@@ -962,15 +1005,27 @@ WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, cons
 //------------------------------------------------------------------------------
 void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 {
-	val->p2 = INIT_AS_HASH_TABLE;
 	val->va = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !val->va )
+	{
+		val->init();
+		return;
+	}
+#endif
 	val->va->init( sizeHint, SV_VOID_HASH_TABLE, false );
 	val->va->m_skipGC = 1;
+	val->p2 = INIT_AS_HASH_TABLE;
 }
 
 //------------------------------------------------------------------------------
 void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value )
 {
+	if ( container->xtype != WR_EX_HASH_TABLE )
+	{
+		return;
+	}
+	
 	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
 	entry->r = value;
 	entry->p2 = INIT_AS_REF;
@@ -979,7 +1034,10 @@ void wr_addValueToContainer( WRValue* container, const char* name, WRValue* valu
 //------------------------------------------------------------------------------
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size )
 {
-	assert( size <= 0x1FFFFF );
+	if ( container->xtype != WR_EX_HASH_TABLE || size > 0x1FFFFF )
+	{
+		return;
+	}
 
 	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
 	entry->c = array;

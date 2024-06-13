@@ -34,8 +34,14 @@ void wr_stdSerialize( WRValue* stackTop, const int argn, WRContext* c )
 		int len;
 		if ( wr_serialize(&buf, &len, *(stackTop - argn) ) )
 		{
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( 0, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
 			free( stackTop->va->m_Cdata );
 			stackTop->va->m_data = buf;
 			stackTop->va->m_size = len;

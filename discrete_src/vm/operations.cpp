@@ -31,26 +31,25 @@ void wr_growValueArray( WRGCObject* va, int newMinIndex )
 
 	// increase size to accomodate new element
 	int size_el = va->m_size * size_of;
-	va->m_size = newMinIndex + 1;
 
 	// create new array to hold the data, and g_free the existing one
-	
-#ifdef WRENCH_COMPACT
-
 	uint8_t* old = va->m_Cdata;
 
 	va->m_Cdata = (uint8_t *)g_malloc( (newMinIndex + 1) * size_of );
 
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !va->m_Cdata )
+	{
+		va->m_Cdata = old;
+		g_mallocFailed = true;
+		return;
+	}
+#endif
+	
 	memcpy( va->m_Cdata, old, size_el );
-
 	g_free( old );
 	
-#else 
-	// this increases the code size because this is the only place
-	// "realloc" is used, so the linker has to link it in
-	va->m_data = realloc( va->m_data, size_of * (newMinIndex+1) );
-
-#endif
+	va->m_size = newMinIndex + 1;
 
 	// clear new entries
 	memset( va->m_Cdata + size_el, 0, (va->m_size * size_of) - size_el );
@@ -203,7 +202,15 @@ void wr_valueToArray( const WRValue* array, WRValue* value )
 void wr_addLibraryCleanupFunction( WRState* w, void (*function)(WRState* w, void* param), void* param )
 {
 	WRLibraryCleanup* entry = (WRLibraryCleanup *)g_malloc(sizeof(WRLibraryCleanup));
-
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !entry )
+	{
+		g_mallocFailed = true;
+		w->err = WR_ERR_malloc_failed;
+		return;
+	}
+#endif
+	
 	entry->cleanupFunction = function;
 	entry->param = param;
 	entry->next = w->libCleanupFunctions;
@@ -256,8 +263,15 @@ void wr_assignToHashTable( WRContext* c, WRValue* index, WRValue* value, WRValue
 
 	if ( table->xtype != WR_EX_HASH_TABLE )
 	{
-		table->p2 = INIT_AS_HASH_TABLE;
 		table->va = c->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !table->va )
+		{
+			table->p2 = INIT_AS_INT;
+			return;
+		}
+#endif
+		table->p2 = INIT_AS_HASH_TABLE;
 	}
 
 	WRValue *entry = (WRValue *)table->va->get( index->getHash() );
@@ -459,6 +473,14 @@ void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 	{
 		char* t = to->va->m_SCdata;
 		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size + 1 );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !to->va->m_SCdata )
+		{
+			to->va->m_SCdata = t;
+			g_mallocFailed = true;
+			return;
+		}
+#endif
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
 		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
 		to->va->m_size = to->va->m_size + from->va->m_size;
@@ -541,8 +563,17 @@ void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall 
 			  && IS_ARRAY(from->xtype)
 			  && from->va->m_type == SV_CHAR )
 	{
-		target->p2 = INIT_AS_ARRAY;
 		target->va = from->va->m_creatorContext->getSVA( from->va->m_size + to->va->m_size, SV_CHAR, false );
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !target->va )
+		{
+			target->p2 = INIT_AS_INT;
+			return;
+		}
+#endif
+		target->p2 = INIT_AS_ARRAY;
+
 		memcpy( target->va->m_SCdata, from->va->m_SCdata, from->va->m_size );
 		memcpy( target->va->m_SCdata + from->va->m_size, to->va->m_SCdata, to->va->m_size );
 	}
@@ -825,6 +856,14 @@ void wr_AddAssign_E_E( WRValue* to, WRValue* from )
 	{
 		char* t = to->va->m_SCdata;
 		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size + 1 );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !to->va->m_SCdata )
+		{
+			to->va->m_SCdata = t;
+			g_mallocFailed = true;
+			return;
+		}
+#endif
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
 		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
 		to->va->m_size = to->va->m_size + from->va->m_size;
@@ -944,8 +983,16 @@ void wr_AdditionBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
 			  && IS_ARRAY(from->xtype)
 			  && from->va->m_type == SV_CHAR )
 	{
-		target->p2 = INIT_AS_ARRAY;
 		target->va = from->va->m_creatorContext->getSVA( from->va->m_size + to->va->m_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !target->va )
+		{
+			target->p2 = INIT_AS_INT;
+			return;
+		}
+#endif
+		target->p2 = INIT_AS_ARRAY;
+
 		memcpy( target->va->m_SCdata, to->va->m_SCdata, to->va->m_size );
 		memcpy( target->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
 	}

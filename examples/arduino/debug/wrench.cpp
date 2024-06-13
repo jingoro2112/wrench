@@ -504,7 +504,22 @@ class WRValueSerializer
 public:
 	
 	WRValueSerializer() : m_pos(0), m_size(0), m_buf(0) {}
-	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size), m_buf((char *)g_malloc(size)) { memcpy(m_buf, data, size); }
+	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size)
+	{
+		m_buf = (char*)g_malloc(size);
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !m_buf )
+		{
+			m_size = 0;
+			g_mallocFailed = true;
+		}
+		else
+#endif
+		{
+			memcpy( m_buf, data, size );
+		}
+	}
+	
 	~WRValueSerializer() { g_free(m_buf); }
 
 	void getOwnership( char** buf, int* len )
@@ -1119,8 +1134,16 @@ public:
 
 		if ( (m_type = type) == SV_VALUE )
 		{
+			m_Vdata = (WRValue*)g_malloc( size * sizeof(WRValue) );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !m_Vdata )
+			{
+				m_size = 0;
+				g_mallocFailed = true;
+				return;
+			}
+#endif
 			m_size = size;
-			m_Vdata = (WRValue*)g_malloc( m_size * sizeof(WRValue) );
 			if ( clear )
 			{
 				memset( m_SCdata, 0, m_size * sizeof(WRValue) );
@@ -1129,8 +1152,16 @@ public:
 		}
 		else if ( m_type == SV_CHAR )
 		{
+			m_Cdata = (unsigned char*)g_malloc( size + 1 );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !m_Cdata )
+			{
+				m_size = 0;
+				g_mallocFailed = true;
+				return;
+			}
+#endif
 			m_size = size;
-			m_Cdata = (unsigned char*)g_malloc( m_size + 1 );
 			if ( clear )
 			{
 				memset( m_SCdata, 0, m_size + 1 );
@@ -1298,6 +1329,13 @@ tryAgain:
 
 			int total = newMod*sizeof(uint32_t) + newSize*sizeof(WRValue);
 			uint32_t* proposed = (uint32_t*)g_malloc( total );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !proposed )
+			{
+				g_mallocFailed = true;
+				return 0; // congratulations, clobber this one. we're dying it doesn't matter.
+			}
+#endif
 
 			memset( (unsigned char *)proposed, 0, total );
 			for( int n = 0; n<newMod; ++n )
@@ -1475,9 +1513,9 @@ struct WRContext
 	
 	WRContext* imported; // linked list of contexts this one imported
 
-
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
+	
 	WRGCObject* getSVA( int size, WRGCObjectType type, bool init );
 };
 
@@ -1986,7 +2024,10 @@ extern const char* c_opcodeName[];
 #define _STR_H
 /* ------------------------------------------------------------------------- */
 
-//#ifndef WRENCH_WITHOUT_COMPILER
+// note; this is used for miscillaneous convenience in the CLI, but
+// nowhere in the VM, so will not actually be used anywhere in the
+// compiler
+// #ifndef WRENCH_WITHOUT_COMPILER
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -2738,7 +2779,6 @@ WRstr& WRstr::appendFormat( const char* format, ... )
 }
 
 #endif
-//#endif
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
@@ -3701,6 +3741,8 @@ void wr_ioFSync( WRValue* stackTop, const int argn, WRContext* c );
 
 void wr_ioPushConstants( WRState* w );
 
+void wr_stdout( const char* data, const int size );
+
 #endif
 /*******************************************************************************
 Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
@@ -3729,8 +3771,6 @@ SOFTWARE.
 #include "wrench.h"
 #ifndef WRENCH_WITHOUT_COMPILER
 #include <assert.h>
-
-#define KEYHOLE_OPTIMIZER
 
 //------------------------------------------------------------------------------
 const char* c_reserved[] =
@@ -3980,1799 +4020,6 @@ bool WRCompilationContext::isValidLabel( WRstr& token, bool& isGlobal, WRstr& pr
 	return true;
 }
 
-//------------------------------------------------------------------------------
-bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect )
-{
-	WRValue& value = ex.value;
-	WRstr& token = ex.token;
-	
-	if ( m_loadedToken.size() || (m_loadedValue.type != WR_REF) )
-	{
-		token = m_loadedToken;
-		value = m_loadedValue;
-		m_quoted = m_loadedQuoted;
-	}
-	else
-	{
-		m_quoted = false;
-		value.p2 = INIT_AS_REF;
-
-		ex.spaceBefore = (m_pos < m_sourceLen) && isspace(m_source[m_pos]);
-	
-		do
-		{
-			if ( m_pos >= m_sourceLen )
-			{
-				m_EOF = true;
-				return false;
-			}
-			
-		} while( isspace(m_source[m_pos++]) );
-
-		token = m_source[m_pos - 1];
-
-		unsigned int t=0;
-		for( ; c_operations[t].token && strncmp( c_operations[t].token, "@macroBegin", 11); ++t );
-
-		int offset = m_pos - 1;
-
-		for( ; c_operations[t].token; ++t )
-		{
-			int len = (int)strnlen( c_operations[t].token, 20 );
-			if ( ((offset + len) < m_sourceLen)
-				 && !strncmp(m_source + offset, c_operations[t].token, len) )
-			{
-				if ( isalnum(m_source[offset+len]) )
-				{
-					continue;
-				}
-				
-				m_pos += len - 1;
-				token = c_operations[t].token;
-				goto foundMacroToken;
-			}
-		}
-
-		for( t = 0; t<m_units[0].constantValues.count(); ++t )
-		{
-			int len = m_units[0].constantValues[t].label.size();
-			if ( ((offset + len) < m_sourceLen)
-				 && !strncmp(m_source + offset, m_units[0].constantValues[t].label.c_str(), len) )
-			{
-				if ( isalnum(m_source[offset+len]) )
-				{
-					continue;
-				}
-
-				m_pos += len - 1;
-				token.clear();
-				value = m_units[0].constantValues[t].value;
-				goto foundMacroToken;
-			}
-		}
-
-		for( t = 0; t<m_units[m_unitTop].constantValues.count(); ++t )
-		{
-			int len = m_units[m_unitTop].constantValues[t].label.size();
-			if ( ((offset + len) < m_sourceLen)
-				 && !strncmp(m_source + offset, m_units[m_unitTop].constantValues[t].label.c_str(), len) )
-			{
-				if ( isalnum(m_source[offset+len]) )
-				{
-					continue;
-				}
-
-				m_pos += len - 1;
-				token.clear();
-				value = m_units[m_unitTop].constantValues[t].value;
-				goto foundMacroToken;
-			}
-		}
-
-		if ( token[0] == '-' )
-		{
-			if ( m_pos < m_sourceLen )
-			{
-				if ( (isdigit(m_source[m_pos]) && !m_LastParsedLabel) || m_source[m_pos] == '.' )
-				{
-					goto parseAsNumber;
-				}
-				else if ( m_source[m_pos] == '-' )
-				{
-					token += '-';
-					++m_pos;
-				}
-				else if ( m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-			}
-		}
-		else
-		{
-			m_LastParsedLabel = false;
-		
-			if ( token[0] == '=' )
-			{
-				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-			}
-			else if ( token[0] == '!' )
-			{
-				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-			}
-			else if ( token[0] == '*' )
-			{
-				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-			}
-			else if ( token[0] == '%' )
-			{
-				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-			}
-			else if ( token[0] == '<' )
-			{
-				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-				else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '<' )
-				{
-					token += '<';
-					++m_pos;
-
-					if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-					{
-						token += '=';
-						++m_pos;
-					}
-				}
-			}
-			else if ( token[0] == '>' )
-			{
-				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-				else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '>' )
-				{
-					token += '>';
-					++m_pos;
-
-					if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-					{
-						token += '=';
-						++m_pos;
-					}
-				}
-			}
-			else if ( token[0] == '&' )
-			{
-				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '&' )
-				{
-					token += '&';
-					++m_pos;
-				}
-				else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-			}
-			else if ( token[0] == '^' )
-			{
-				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-			}
-			else if ( token[0] == '|' )
-			{
-				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '|' )
-				{
-					token += '|';
-					++m_pos;
-				}
-				else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
-				{
-					token += '=';
-					++m_pos;
-				}
-			}
-			else if ( token[0] == '+' )
-			{
-				if ( m_pos < m_sourceLen )
-				{
-					if ( m_source[m_pos] == '+' )
-					{
-						token += '+';
-						++m_pos;
-					}
-					else if ( m_source[m_pos] == '=' )
-					{
-						token += '=';
-						++m_pos;
-					}
-				}
-			}
-			else if ( token[0] == '\"' || token[0] == '\'' )
-			{
-				bool single = token[0] == '\'';
-				token.clear();
-				m_quoted = true;
-				
-				do
-				{
-					if (m_pos >= m_sourceLen)
-					{
-						m_err = WR_ERR_unterminated_string_literal;
-						m_EOF = true;
-						return false;
-					}
-
-					char c = m_source[m_pos];
-					if (c == '\"' && !single ) // terminating character
-					{
-						if ( single )
-						{
-							m_err = WR_ERR_bad_expression;
-							return false;
-						}
-						++m_pos;
-						break;
-					}
-					else if ( c == '\'' && single )
-					{
-						if ( !single || (token.size() > 1) )
-						{
-							m_err = WR_ERR_bad_expression;
-							return false;
-						}
-						++m_pos;
-						break;
-					}
-					else if (c == '\n')
-					{
-						m_err = WR_ERR_newline_in_string_literal;
-						return false;
-					}
-					else if (c == '\\')
-					{
-						c = m_source[++m_pos];
-						if (m_pos >= m_sourceLen)
-						{
-							m_err = WR_ERR_unterminated_string_literal;
-							m_EOF = true;
-							return false;
-						}
-
-						if (c == '\\') // escaped slash
-						{
-							token += '\\';
-						}
-						else if (c == '0')
-						{
-							token += atoi(m_source + m_pos);
-							for (; (m_pos < m_sourceLen) && isdigit(m_source[m_pos]); ++m_pos);
-							--m_pos;
-						}
-						else if (c == '\"')
-						{
-							token += '\"';
-						}
-						else if (c == '\'')
-						{
-							token += '\'';
-						}
-						else if (c == 'n')
-						{
-							token += '\n';
-						}
-						else if (c == 'r')
-						{
-							token += '\r';
-						}
-						else if (c == 't')
-						{
-							token += '\t';
-						}
-						else
-						{
-							m_err = WR_ERR_bad_string_escape_sequence;
-							return false;
-						}
-					}
-					else
-					{
-						token += c;
-					}
-
-				} while( ++m_pos < m_sourceLen );
-
-				value.p2 = INIT_AS_INT;
-				if ( single )
-				{
-					value.ui = token.size() == 1 ? token[0] : 0;
-					token.clear();
-				}
-				else
-				{
-					value.p2 = INIT_AS_INT;
-					value.type = (WRValueType)WR_COMPILER_LITERAL_STRING;
-					value.p = &token;
-				}
-			}
-			else if ( token[0] == '/' ) // might be a comment
-			{
-				if ( m_pos < m_sourceLen )
-				{	
-					if ( !isspace(m_source[m_pos]) )
-					{
-						if ( m_source[m_pos] == '/' )
-						{
-							for( ; m_pos<m_sourceLen && m_source[m_pos] != '\n'; ++m_pos ); // clear to end EOL
-
-							return getToken( ex, expect );
-						}
-						else if ( m_source[m_pos] == '*' )
-						{
-							for( ; (m_pos+1)<m_sourceLen
-								 && !(m_source[m_pos] == '*' && m_source[m_pos+1] == '/');
-								 ++m_pos ); // find end of comment
-
-							m_pos += 2;
-
-							return getToken( ex, expect );
-
-						}
-						else if ( m_source[m_pos] == '=' )
-						{
-							token += '=';
-							++m_pos;
-						}
-					}					
-					//else // bare '/' 
-				}
-			}
-			else if ( isdigit(token[0])
-					  || (token[0] == '.' && isdigit(m_source[m_pos])) )
-			{
-				if ( m_pos >= m_sourceLen )
-				{
-					return false;
-				}
-
-parseAsNumber:
-
-				m_LastParsedLabel = true;
-
-				if ( token[0] == '0' && m_source[m_pos] == 'x' ) // interpret as hex
-				{
-					token.clear();
-					m_pos++;
-
-					for(;;)
-					{
-						if ( m_pos >= m_sourceLen )
-						{
-							m_err = WR_ERR_unexpected_EOF;
-							return false;
-						}
-
-						if ( !isxdigit(m_source[m_pos]) )
-						{
-							break;
-						}
-
-						token += m_source[m_pos++];
-					}
-
-					value.p2 = INIT_AS_INT;
-					value.ui = strtoul( token, 0, 16 );
-				}
-				else if (token[0] == '0' && m_source[m_pos] == 'b' )
-				{
-					token.clear();
-					m_pos++;
-
-					for(;;)
-					{
-						if ( m_pos >= m_sourceLen )
-						{
-							m_err = WR_ERR_unexpected_EOF;
-							return false;
-						}
-
-						if ( !isxdigit(m_source[m_pos]) )
-						{
-							break;
-						}
-
-						token += m_source[m_pos++];
-					}
-
-					value.p2 = INIT_AS_INT;
-					value.i = strtol( token, 0, 2 );
-				}
-				else if (token[0] == '0' && isdigit(m_source[m_pos]) ) // octal
-				{
-					token.clear();
-
-					for(;;)
-					{
-						if ( m_pos >= m_sourceLen )
-						{
-							m_err = WR_ERR_unexpected_EOF;
-							return false;
-						}
-
-						if ( !isdigit(m_source[m_pos]) )
-						{
-							break;
-						}
-
-						token += m_source[m_pos++];
-					}
-
-					value.p2 = INIT_AS_INT;
-					value.i = strtol( token, 0, 8 );
-				}
-				else
-				{
-					bool decimal = token[0] == '.';
-					for(;;)
-					{
-						if ( m_pos >= m_sourceLen )
-						{
-							m_err = WR_ERR_unexpected_EOF;
-							return false;
-						}
-
-						if ( m_source[m_pos] == '.' )
-						{
-							if ( decimal )
-							{
-								return false;
-							}
-
-							decimal = true;
-						}
-						else if ( !isdigit(m_source[m_pos]) )
-						{
-							if ( m_source[m_pos] == 'f' || m_source[m_pos] == 'F')
-							{
-								decimal = true;
-								m_pos++;
-							}
-
-							break;
-						}
-
-						token += m_source[m_pos++];
-					}
-
-					if ( decimal )
-					{
-						value.p2 = INIT_AS_FLOAT;
-						value.f = (float)atof( token );
-					}
-					else
-					{
-						value.p2 = INIT_AS_INT;
-						value.ui = (uint32_t)strtoul( token, 0, 10 );
-					}
-				}
-			}
-			else if ( token[0] == ':' && isspace(m_source[m_pos]) )
-			{
-				
-			}
-			else if ( isalpha(token[0]) || token[0] == '_' || token[0] == ':' ) // must be a label
-			{
-				if ( token[0] != ':' || m_source[m_pos] == ':' )
-				{
-					m_LastParsedLabel = true;
-					if ( m_pos < m_sourceLen
-						 && token[0] == ':'
-						 && m_source[m_pos] == ':' )
-					{
-						token += ':';
-						++m_pos;
-					}
-
-					for (; m_pos < m_sourceLen; ++m_pos)
-					{
-						if ( m_source[m_pos] == ':' && m_source[m_pos + 1] == ':' && token.size() > 0 )
-						{
-							token += "::";
-							m_pos ++;
-							continue;
-						}
-						
-						if (!isalnum(m_source[m_pos]) && m_source[m_pos] != '_' )
-						{
-							break;
-						}
-
-						token += m_source[m_pos];
-					}
-
-					if (token == "true")
-					{
-						value.p2 = INIT_AS_INT;
-						value.i = 1;
-						token = "1";
-					}
-					else if (token == "false" || token == "null" )
-					{
-						value.p2 = INIT_AS_INT;
-						value.i = 0;
-						token = "0";
-					}
-				}
-			}
-		}
-
-foundMacroToken:
-	
-		ex.spaceAfter = (m_pos < m_sourceLen) && isspace(m_source[m_pos]);
-	}
-
-	m_loadedToken.clear();
-	m_loadedQuoted = m_quoted;
-	m_loadedValue.p2 = INIT_AS_REF;
-
-	if ( expect && (token != expect) )
-	{
-		return false;
-	}
-
-	return true;
-}
-
-//------------------------------------------------------------------------------
-bool WRCompilationContext::CheckSkipLoad( WROpcode opcode, WRBytecode& bytecode, int a, int o )
-{
-	if ( bytecode.opcodes[o] == O_LoadFromLocal
-		 && bytecode.opcodes[o-1] == O_LoadFromLocal )
-	{
-		bytecode.all[a-3] = O_LLValues;
-		bytecode.all[a-1] = bytecode.all[a];
-		bytecode.all[a] = opcode;
-		bytecode.opcodes.shave(2);
-		bytecode.opcodes += opcode;
-		return true;
-	}
-	else if ( bytecode.opcodes[o] == O_LoadFromGlobal
-			  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-	{
-		bytecode.all[a-3] = O_LGValues;
-		bytecode.all[a-1] = bytecode.all[a];
-		bytecode.all[a] = opcode;
-		bytecode.opcodes.shave(2);
-		bytecode.opcodes += opcode;
-		return true;
-	}
-	else if ( bytecode.opcodes[o] == O_LoadFromLocal
-			  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-	{
-		bytecode.all[a-3] = O_GLValues;
-		bytecode.all[a-1] = bytecode.all[a];
-		bytecode.all[a] = opcode;
-		bytecode.opcodes.shave(2);
-		bytecode.opcodes += opcode;
-		return true;
-	}
-	else if ( bytecode.opcodes[o] == O_LoadFromGlobal
-			  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-	{
-		bytecode.all[a-3] = O_GGValues;
-		bytecode.all[a-1] = bytecode.all[a];
-		bytecode.all[a] = opcode;
-		bytecode.opcodes.shave(2);
-		bytecode.opcodes += opcode;
-		return true;
-	}
-
-	return false;
-}
-
-//------------------------------------------------------------------------------
-bool WRCompilationContext::CheckFastLoad( WROpcode opcode, WRBytecode& bytecode, int a, int o )
-{
-	if ( a <= 2 || o == 0 )
-	{
-		return false;
-	}
-
-	if ( (opcode == O_Index && CheckSkipLoad(O_IndexSkipLoad, bytecode, a, o))
-		 || (opcode == O_BinaryMod && CheckSkipLoad(O_BinaryModSkipLoad, bytecode, a, o)) 
-		 || (opcode == O_BinaryRightShift && CheckSkipLoad(O_BinaryRightShiftSkipLoad, bytecode, a, o))
-		 || (opcode == O_BinaryLeftShift && CheckSkipLoad(O_BinaryLeftShiftSkipLoad, bytecode, a, o)) 
-		 || (opcode == O_BinaryAnd && CheckSkipLoad(O_BinaryAndSkipLoad, bytecode, a, o)) 
-		 || (opcode == O_BinaryOr && CheckSkipLoad(O_BinaryOrSkipLoad, bytecode, a, o)) 
-		 || (opcode == O_BinaryXOR && CheckSkipLoad(O_BinaryXORSkipLoad, bytecode, a, o)) )
-	{
-		return true;
-	}
-	
-	return false;
-}
-
-//------------------------------------------------------------------------------
-bool WRCompilationContext::IsLiteralLoadOpcode( unsigned char opcode )
-{
-	return opcode == O_LiteralInt32
-			|| opcode == O_LiteralZero
-			|| opcode == O_LiteralFloat
-			|| opcode == O_LiteralInt8
-			|| opcode == O_LiteralInt16;
-}
-
-//------------------------------------------------------------------------------
-bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpcode ILS, WROpcode IGS, WRBytecode& bytecode, unsigned int a, unsigned int o )
-{
-	if ( IsLiteralLoadOpcode(bytecode.opcodes[o-1]) )
-	{
-		if ( bytecode.opcodes[o] == O_LoadFromGlobal )
-		{
-			bytecode.all[ a - 1 ] = GS;
-			bytecode.opcodes[o] = GS;
-			return true;
-		}
-		else if ( bytecode.opcodes[o] == O_LoadFromLocal )
-		{
-			bytecode.all[ a - 1 ] = LS;
-			bytecode.opcodes[o] = LS;
-			return true;
-		}
-	}
-	else if ( IsLiteralLoadOpcode(bytecode.opcodes[o]) )
-	{
-		if ( (bytecode.opcodes[o] == O_LiteralInt32 || bytecode.opcodes[o] == O_LiteralFloat)
-			 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-		{
-			bytecode.all[ a - 6 ] = bytecode.all[ a ]; // store i3
-			bytecode.all[ a ] = bytecode.all[ a - 5 ]; // move index
-
-			bytecode.all[ a - 5 ] = bytecode.all[ a - 3 ];
-			bytecode.all[ a - 4 ] = bytecode.all[ a - 2 ];
-			bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
-			bytecode.all[ a - 2 ] = bytecode.all[ a - 6 ];
-			bytecode.all[ a - 6 ] = bytecode.opcodes[o];
-			bytecode.all[ a - 1 ] = IGS;
-
-			bytecode.opcodes[o] = IGS; // reverse the logic
-
-			return true;
-		}
-		else if ( bytecode.opcodes[o] == O_LiteralZero
-				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-		{
-			bytecode.all[ a - 2 ] = O_LiteralZero;
-			bytecode.all[ a ] = bytecode.all[ a - 1];
-			bytecode.all[ a - 1 ] = IGS;
-			bytecode.opcodes[o] = IGS; // reverse the logic
-			return true;
-		}
-		else if ( bytecode.opcodes[o] == O_LiteralZero
-				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-		{
-			bytecode.all[ a - 2 ] = O_LiteralZero;
-			bytecode.all[ a ] = bytecode.all[ a - 1];
-			bytecode.all[ a - 1 ] = IGS;
-			bytecode.opcodes[o] = IGS; // reverse the logic
-			return true;
-		}
-		else if ( bytecode.opcodes[o] == O_LiteralInt8
-				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-		{
-			bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
-			bytecode.all[ a - 2 ] = bytecode.all[ a ];
-			bytecode.all[ a ] = bytecode.all[ a - 1 ];
-			bytecode.all[ a - 1 ] = IGS;
-			bytecode.all[ a - 3 ] = O_LiteralInt8;
-
-			bytecode.opcodes[o] = IGS; // reverse the logic
-			return true;
-		}
-		else if ( bytecode.opcodes[o] == O_LiteralInt16
-				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-		{
-			bytecode.all[ a - 2 ] = bytecode.all[ a ];
-
-			bytecode.all[ a - 4 ] = bytecode.all[ a - 3 ];
-			bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
-			bytecode.all[ a ] = bytecode.all[ a - 4 ];
-			bytecode.all[ a - 1 ] = IGS;
-			bytecode.all[ a - 4 ] = O_LiteralInt16;
-
-			bytecode.opcodes[o] = IGS; // reverse the logic
-			return true;
-		}
-		if ( (bytecode.opcodes[o] == O_LiteralInt32 || bytecode.opcodes[o] == O_LiteralFloat)
-			 && bytecode.opcodes[o-1] == O_LoadFromLocal )
-		{
-			bytecode.all[ a - 6 ] = bytecode.all[ a ]; // store i3
-			bytecode.all[ a ] = bytecode.all[ a - 5 ]; // move index
-
-			bytecode.all[ a - 5 ] = bytecode.all[ a - 3 ];
-			bytecode.all[ a - 4 ] = bytecode.all[ a - 2 ];
-			bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
-			bytecode.all[ a - 2 ] = bytecode.all[ a - 6 ];
-			bytecode.all[ a - 6 ] = bytecode.opcodes[o];
-			bytecode.all[ a - 1 ] = ILS;
-
-			bytecode.opcodes[o] = ILS; // reverse the logic
-
-			return true;
-		}
-		else if ( bytecode.opcodes[o] == O_LiteralZero
-				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-		{
-			bytecode.all[ a - 2 ] = O_LiteralZero;
-			bytecode.all[ a ] = bytecode.all[ a - 1];
-			bytecode.all[ a - 1 ] = ILS;
-			bytecode.opcodes[o] = ILS; // reverse the logic
-			return true;
-		}
-		else if ( bytecode.opcodes[o] == O_LiteralZero
-				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-		{
-			bytecode.all[ a - 2 ] = O_LiteralZero;
-			bytecode.all[ a ] = bytecode.all[ a - 1];
-			bytecode.all[ a - 1 ] = ILS;
-			bytecode.opcodes[o] = ILS; // reverse the logic
-			return true;
-		}
-		else if ( bytecode.opcodes[o] == O_LiteralInt8
-				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-		{
-			bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
-			bytecode.all[ a - 2 ] = bytecode.all[ a ];
-			bytecode.all[ a ] = bytecode.all[ a - 1 ];
-			bytecode.all[ a - 1 ] = ILS;
-			bytecode.all[ a - 3 ] = O_LiteralInt8;
-
-			bytecode.opcodes[o] = ILS; // reverse the logic
-			return true;
-		}
-		else if ( bytecode.opcodes[o] == O_LiteralInt16
-				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-		{
-			bytecode.all[ a - 2 ] = bytecode.all[ a ];
-
-			bytecode.all[ a - 4 ] = bytecode.all[ a - 3 ];
-			bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
-			bytecode.all[ a ] = bytecode.all[ a - 4 ];
-			bytecode.all[ a - 1 ] = ILS;
-			bytecode.all[ a - 4 ] = O_LiteralInt16;
-
-			bytecode.opcodes[o] = ILS; // reverse the logic
-			return true;
-		}
-	}
-
-	return false;
-}
-
-//------------------------------------------------------------------------------
-void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
-{
-#ifdef KEYHOLE_OPTIMIZER
-	unsigned int o = bytecode.opcodes.size();
-	if ( o )
-	{
-		// keyhole optimizations
-
-		--o;
-		unsigned int a = bytecode.all.size() - 1;
-		if ( opcode == O_Return
-			 && bytecode.opcodes[o] == O_LiteralZero )
-		{
-			bytecode.all[a] = O_ReturnZero;
-			bytecode.opcodes[o] = O_ReturnZero;
-			return;
-		}
-		else if ( opcode == O_CompareEQ && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
-		{
-			bytecode.all[ a - 3 ] = O_LLCompareEQ;
-			bytecode.all[ a - 1 ] = bytecode.all[ a ];
-			bytecode.all.shave( 1 );
-			bytecode.opcodes.clear();
-			bytecode.opcodes += O_LLCompareEQ;
-			return;
-		}
-		else if ( opcode == O_CompareNE && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
-		{
-			bytecode.all[ a - 3 ] = O_LLCompareNE;
-			bytecode.all[ a - 1 ] = bytecode.all[ a ];
-			bytecode.all.shave( 1 );
-			bytecode.opcodes.clear();
-			bytecode.opcodes += O_LLCompareNE;
-			return;
-		}
-		else if ( opcode == O_CompareGT && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
-		{
-			bytecode.all[ a - 3 ] = O_LLCompareGT;
-			bytecode.all[ a - 1 ] = bytecode.all[ a ];
-			bytecode.all.shave( 1 );
-			bytecode.opcodes.clear();
-			bytecode.opcodes += O_LLCompareGT;
-			return;
-		}
-		else if ( opcode == O_CompareLT && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
-		{
-			bytecode.all[ a - 3 ] = O_LLCompareLT;
-			bytecode.all[ a - 1 ] = bytecode.all[ a ];
-			bytecode.all.shave( 1 );
-			bytecode.opcodes.clear();
-			bytecode.opcodes += O_LLCompareLT;
-			return;
-		}
-		else if ( opcode == O_CompareGE && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
-		{
-			bytecode.all[ a - 3 ] = O_LLCompareGE;
-			bytecode.all[ a - 1 ] = bytecode.all[ a ];
-			bytecode.all.shave( 1 );
-			bytecode.opcodes.clear();
-			bytecode.opcodes += O_LLCompareGE;
-			return;
-		}
-		else if ( opcode == O_CompareLE && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
-		{
-			bytecode.all[ a - 3 ] = O_LLCompareLE;
-			bytecode.all[ a - 1 ] = bytecode.all[ a ];
-			bytecode.all.shave( 1 );
-			bytecode.opcodes.clear();
-			bytecode.opcodes += O_LLCompareLE;
-			return;
-		}
-		else if ( opcode == O_CompareEQ && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-		{
-			bytecode.all[ a - 3 ] = O_GGCompareEQ;
-			bytecode.all[ a - 1 ] = bytecode.all[ a ];
-			bytecode.all.shave( 1 );
-			bytecode.opcodes.clear();
-			bytecode.opcodes += O_GGCompareEQ;
-			return;
-		}
-		else if ( opcode == O_CompareNE && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-		{
-			bytecode.all[ a - 3 ] = O_GGCompareNE;
-			bytecode.all[ a - 1 ] = bytecode.all[ a ];
-			bytecode.all.shave( 1 );
-			bytecode.opcodes.clear();
-			bytecode.opcodes += O_GGCompareNE;
-			return;
-		}
-		else if ( opcode == O_CompareGT && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-		{
-			bytecode.all[ a - 3 ] = O_GGCompareGT;
-			bytecode.all[ a - 1 ] = bytecode.all[ a ];
-			bytecode.all.shave( 1 );
-			bytecode.opcodes.clear();
-			bytecode.opcodes += O_GGCompareGT;
-			return;
-		}
-		else if ( opcode == O_CompareLT && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-		{
-			bytecode.all[ a - 3 ] = O_GGCompareLT;
-			bytecode.all[ a - 1 ] = bytecode.all[ a ];
-			bytecode.all.shave( 1 );
-			bytecode.opcodes.clear();
-			bytecode.opcodes += O_GGCompareLT;
-			return;
-		}
-		else if ( opcode == O_CompareGE && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-		{
-			bytecode.all[ a - 3 ] = O_GGCompareGE;
-			bytecode.all[ a - 1 ] = bytecode.all[ a ];
-			bytecode.all.shave( 1 );
-			bytecode.opcodes.clear();
-			bytecode.opcodes += O_GGCompareGE;
-			return;
-		}
-		else if ( opcode == O_CompareLE && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-		{
-			bytecode.all[ a - 3 ] = O_GGCompareLE;
-			bytecode.all[ a - 1 ] = bytecode.all[ a ];
-			bytecode.all.shave( 1 );
-			bytecode.opcodes.clear();
-			bytecode.opcodes += O_GGCompareLE;
-			return;
-		}
-		else if ( (opcode == O_CompareEQ && (o>0))
-				  && CheckCompareReplace(O_LSCompareEQ, O_GSCompareEQ, O_LSCompareEQ, O_GSCompareEQ, bytecode, a, o) )
-		{
-			return;
-		}
-		else if ( (opcode == O_CompareNE && (o>0))
-				  && CheckCompareReplace(O_LSCompareNE, O_GSCompareNE, O_LSCompareNE, O_GSCompareNE, bytecode, a, o) )
-		{
-			return;
-		}
-		else if ( (opcode == O_CompareGE && (o>0))
-			 && CheckCompareReplace(O_LSCompareGE, O_GSCompareGE, O_LSCompareLE, O_GSCompareLE, bytecode, a, o) )
-		{
-			return;
-		}
-		else if ( (opcode == O_CompareLE && (o>0))
-				  && CheckCompareReplace(O_LSCompareLE, O_GSCompareLE, O_LSCompareGE, O_GSCompareGE, bytecode, a, o) )
-		{
-			return;
-		}
-		else if ( (opcode == O_CompareGT && (o>0))
-				  && CheckCompareReplace(O_LSCompareGT, O_GSCompareGT, O_LSCompareLT, O_GSCompareLT, bytecode, a, o) )
-		{
-			return;
-		}
-		else if ( (opcode == O_CompareLT && (o>0))
-				  && CheckCompareReplace(O_LSCompareLT, O_GSCompareLT, O_LSCompareGT, O_GSCompareGT, bytecode, a, o) )
-		{
-			return;
-		}
-		else if ( CheckFastLoad(opcode, bytecode, a, o) )
-		{
-			return;
-		}
-		else if ( opcode == O_BinaryMultiplication && (a>2) )
-		{
-			if ( o>1 )
-			{
-				if ( bytecode.opcodes[o] == O_LoadFromGlobal
-					 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-				{
-					// LoadFromGlobal   a - 3
-					// [index]          a - 2
-					// LoadFromGlobal   a - 1
-					// [index]          a
-					
-					bytecode.all[ a - 3 ] = O_GGBinaryMultiplication;
-					bytecode.all[ a - 1 ] = bytecode.all[ a ];
-					bytecode.all.shave(1);
-					bytecode.opcodes.clear();
-					return;
-				}
-				else if ( bytecode.opcodes[o] == O_LoadFromLocal
-						  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-				{
-					bytecode.all[ a - 3 ] = O_GLBinaryMultiplication;
-					bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
-					bytecode.all[ a - 2 ] = bytecode.all[ a ];
-					bytecode.all.shave(1);
-					bytecode.opcodes.clear();
-					return;
-				}
-				else if ( bytecode.opcodes[o] == O_LoadFromGlobal
-						  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-				{
-					bytecode.all[ a - 3 ] = O_GLBinaryMultiplication;
-					bytecode.all[ a - 1 ] = bytecode.all[ a ];
-					bytecode.all.shave(1);
-					bytecode.opcodes.clear();
-					return;
-				}
-				else if ( bytecode.opcodes[o] == O_LoadFromLocal
-						  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-				{
-					bytecode.all[ a - 3 ] = O_LLBinaryMultiplication;
-					bytecode.all[ a - 1 ] = bytecode.all[ a ];
-					bytecode.all.shave(1);
-					bytecode.opcodes.clear();
-					return;
-				}
-			}
-			
-			bytecode.all += opcode;
-			bytecode.opcodes += opcode;
-			return;
-		}
-		else if ( opcode == O_BinaryAddition && (a>2) )
-		{
-			if ( bytecode.opcodes[o] == O_LoadFromGlobal
-				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-			{
-				bytecode.all[ a - 3 ] = O_GGBinaryAddition;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else if ( bytecode.opcodes[o] == O_LoadFromLocal
-					  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-			{
-				bytecode.all[ a - 3 ] = O_GLBinaryAddition;
-				bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
-				bytecode.all[ a - 2 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else if ( bytecode.opcodes[o] == O_LoadFromGlobal
-					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-			{
-				bytecode.all[ a - 3 ] = O_GLBinaryAddition;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else if ( bytecode.opcodes[o] == O_LoadFromLocal
-					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-			{
-				bytecode.all[ a - 3 ] = O_LLBinaryAddition;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else
-			{
-				bytecode.all += opcode;
-				bytecode.opcodes += opcode;
-			}
-
-			return;
-		}
-		else if ( opcode == O_BinarySubtraction && (a>2) )
-		{
-			if ( bytecode.opcodes[o] == O_LoadFromGlobal
-				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-			{
-				bytecode.all[ a - 3 ] = O_GGBinarySubtraction;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else if ( bytecode.opcodes[o] == O_LoadFromLocal
-					  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-			{
-				bytecode.all[ a - 3 ] = O_LGBinarySubtraction;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else if ( bytecode.opcodes[o] == O_LoadFromGlobal
-					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-			{
-				bytecode.all[ a - 3 ] = O_GLBinarySubtraction;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else if ( bytecode.opcodes[o] == O_LoadFromLocal
-					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-			{
-				bytecode.all[ a - 3 ] = O_LLBinarySubtraction;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else
-			{
-				bytecode.all += opcode;
-				bytecode.opcodes += opcode;
-			}
-
-			return;
-		}
-		else if ( opcode == O_BinaryDivision && (a>2) )
-		{
-			if ( bytecode.opcodes[o] == O_LoadFromGlobal
-				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-			{
-				bytecode.all[ a - 3 ] = O_GGBinaryDivision;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else if ( bytecode.opcodes[o] == O_LoadFromLocal
-					  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-			{
-				bytecode.all[ a - 3 ] = O_LGBinaryDivision;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else if ( bytecode.opcodes[o] == O_LoadFromGlobal
-					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-			{
-				bytecode.all[ a - 3 ] = O_GLBinaryDivision;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else if ( bytecode.opcodes[o] == O_LoadFromLocal
-					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
-			{
-				bytecode.all[ a - 3 ] = O_LLBinaryDivision;
-				bytecode.all[ a - 1 ] = bytecode.all[ a ];
-				bytecode.all.shave(1);
-				bytecode.opcodes.clear();
-			}
-			else
-			{
-				bytecode.all += opcode;
-				bytecode.opcodes += opcode;
-			}
-
-			return;
-		}
-		else if ( opcode == O_Index )
-		{
-			if ( bytecode.opcodes[o] == O_LiteralInt16 )
-			{
-				bytecode.all[a-2] = O_IndexLiteral16;
-				bytecode.opcodes[o] = O_IndexLiteral16;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LiteralInt8 )
-			{
-				bytecode.all[a-1] = O_IndexLiteral8;
-				bytecode.opcodes[o] = O_IndexLiteral8;
-				return;
-			}
-		}
-		else if ( opcode == O_BZ )
-		{
-			if ( bytecode.opcodes[o] == O_LLCompareLT )
-			{
-				bytecode.opcodes[o] = O_LLCompareLTBZ;
-				bytecode.all[ a - 2 ] = O_LLCompareLTBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LLCompareGT )
-			{
-				bytecode.opcodes[o] = O_LLCompareGTBZ;
-				bytecode.all[ a - 2 ] = O_LLCompareGTBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LLCompareGE )
-			{
-				bytecode.opcodes[o] = O_LLCompareGEBZ;
-				bytecode.all[ a - 2 ] = O_LLCompareGEBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LLCompareLE )
-			{
-				bytecode.opcodes[o] = O_LLCompareLEBZ;
-				bytecode.all[ a - 2 ] = O_LLCompareLEBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LLCompareEQ )
-			{
-				bytecode.opcodes[o] = O_LLCompareEQBZ;
-				bytecode.all[ a - 2 ] = O_LLCompareEQBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LLCompareNE )
-			{
-				bytecode.opcodes[o] = O_LLCompareNEBZ;
-				bytecode.all[ a - 2 ] = O_LLCompareNEBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_GGCompareLT )
-			{
-				bytecode.opcodes[o] = O_GGCompareLTBZ;
-				bytecode.all[ a - 2 ] = O_GGCompareLTBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_GGCompareGT )
-			{
-				bytecode.opcodes[o] = O_GGCompareGTBZ;
-				bytecode.all[ a - 2 ] = O_GGCompareGTBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_GGCompareLE )
-			{
-				bytecode.opcodes[o] = O_GGCompareLEBZ;
-				bytecode.all[ a - 2 ] = O_GGCompareLEBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_GGCompareGE )
-			{
-				bytecode.opcodes[o] = O_GGCompareGEBZ;
-				bytecode.all[ a - 2 ] = O_GGCompareGEBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_GGCompareEQ )
-			{
-				bytecode.opcodes[o] = O_GGCompareEQBZ;
-				bytecode.all[ a - 2 ] = O_GGCompareEQBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_GGCompareNE )
-			{
-				bytecode.opcodes[o] = O_GGCompareNEBZ;
-				bytecode.all[ a - 2 ] = O_GGCompareNEBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_GSCompareEQ )
-			{
-				bytecode.opcodes[o] = O_GSCompareEQBZ;
-				bytecode.all[ a - 1 ] = O_GSCompareEQBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LSCompareEQ )
-			{
-				bytecode.opcodes[o] = O_LSCompareEQBZ;
-				bytecode.all[ a - 1 ] = O_LSCompareEQBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_GSCompareNE )
-			{
-				bytecode.opcodes[o] = O_GSCompareNEBZ;
-				bytecode.all[ a - 1 ] = O_GSCompareNEBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LSCompareNE )
-			{
-				bytecode.opcodes[o] = O_LSCompareNEBZ;
-				bytecode.all[ a - 1 ] = O_LSCompareNEBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_GSCompareGE )
-			{
-				bytecode.opcodes[o] = O_GSCompareGEBZ;
-				bytecode.all[ a - 1 ] = O_GSCompareGEBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LSCompareGE )
-			{
-				bytecode.opcodes[o] = O_LSCompareGEBZ;
-				bytecode.all[ a - 1 ] = O_LSCompareGEBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_GSCompareLE )
-			{
-				bytecode.opcodes[o] = O_GSCompareLEBZ;
-				bytecode.all[ a - 1 ] = O_GSCompareLEBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LSCompareLE )
-			{
-				bytecode.opcodes[o] = O_LSCompareLEBZ;
-				bytecode.all[ a - 1 ] = O_LSCompareLEBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_GSCompareGT )
-			{
-				bytecode.opcodes[o] = O_GSCompareGTBZ;
-				bytecode.all[ a - 1 ] = O_GSCompareGTBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LSCompareGT )
-			{
-				bytecode.opcodes[o] = O_LSCompareGTBZ;
-				bytecode.all[ a - 1 ] = O_LSCompareGTBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_GSCompareLT )
-			{
-				bytecode.opcodes[o] = O_GSCompareLTBZ;
-				bytecode.all[ a - 1 ] = O_GSCompareLTBZ;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LSCompareLT )
-			{
-				bytecode.opcodes[o] = O_LSCompareLTBZ;
-				bytecode.all[ a - 1 ] = O_LSCompareLTBZ;
-				return;
-			}			
-			else if ( bytecode.opcodes[o] == O_CompareEQ ) // assign+pop is very common
-			{
-				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
-				{
-					bytecode.all[a-4] = O_LLCompareEQBZ;
-					bytecode.all[a-2] = bytecode.all[a-1];
-					bytecode.opcodes.clear();
-					bytecode.opcodes[o-2] = O_LLCompareEQBZ;
-					bytecode.all.shave(2);
-				}
-				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
-				{
-					bytecode.all[a-4] = O_GGCompareEQBZ;
-					bytecode.all[a-2] = bytecode.all[a-1];
-					bytecode.opcodes.clear();
-					bytecode.opcodes[o-2] = O_GGCompareEQBZ;
-					bytecode.all.shave(2);
-				}
-				else
-				{
-					bytecode.all[a] = O_CompareBEQ;
-					bytecode.opcodes[o] = O_CompareBEQ;
-				}
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_CompareLT )
-			{
-				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
-				{
-					bytecode.all[a-4] = O_LLCompareLTBZ;
-					bytecode.all[a-2] = bytecode.all[a-1];
-					bytecode.opcodes.clear();
-					bytecode.opcodes[o-2] = O_LLCompareLTBZ;
-					bytecode.all.shave(2);
-				}
-				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
-				{
-					bytecode.all[a-4] = O_GGCompareLTBZ;
-					bytecode.all[a-2] = bytecode.all[a-1];
-					bytecode.opcodes.clear();
-					bytecode.opcodes[o-2] = O_GGCompareLTBZ;
-					bytecode.all.shave(2);
-				}
-				else
-				{
-					bytecode.all[a] = O_CompareBLT;
-					bytecode.opcodes[o] = O_CompareBLT;
-				}
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_CompareGT )
-			{
-				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
-				{
-					bytecode.all[a-4] = O_LLCompareGTBZ;
-					bytecode.all[a-2] = bytecode.all[a-1];
-					bytecode.opcodes.clear();
-					bytecode.opcodes[o-2] = O_LLCompareGTBZ;
-					bytecode.all.shave(2);
-				}
-				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
-				{
-					bytecode.all[a-4] = O_GGCompareGTBZ;
-					bytecode.all[a-2] = bytecode.all[a-1];
-					bytecode.opcodes.clear();
-					bytecode.opcodes[o-2] = O_GGCompareGTBZ;
-					bytecode.all.shave(2);
-				}
-				else
-				{
-					bytecode.all[a] = O_CompareBGT;
-					bytecode.opcodes[o] = O_CompareBGT;
-				}
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_CompareGE )
-			{
-				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
-				{
-					bytecode.all[a-4] = O_LLCompareGEBZ;
-					bytecode.all[a-2] = bytecode.all[a-3];
-					bytecode.all[a-3] = bytecode.all[a-1];
-					bytecode.opcodes.clear();
-					bytecode.opcodes[o-2] = O_LLCompareLTBZ;
-					bytecode.all.shave(2);
-				}
-				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
-				{
-					bytecode.all[a-4] = O_GGCompareGEBZ;
-					bytecode.all[a-2] = bytecode.all[a-3];
-					bytecode.all[a-3] = bytecode.all[a-1];
-					bytecode.opcodes.clear();
-					bytecode.opcodes[o-2] = O_GGCompareLTBZ;
-					bytecode.all.shave(2);
-				}
-				else
-				{
-					bytecode.all[a] = O_CompareBGE;
-					bytecode.opcodes[o] = O_CompareBGE;
-				}
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_CompareLE )
-			{
-				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
-				{
-					bytecode.all[a-4] = O_LLCompareLEBZ;
-					bytecode.all[a-2] = bytecode.all[a-3];
-					bytecode.all[a-3] = bytecode.all[a-1];
-					bytecode.opcodes.clear();
-					bytecode.opcodes[o-2] = O_LLCompareGTBZ;
-					bytecode.all.shave(2);
-				}
-				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
-				{
-					bytecode.all[a-4] = O_GGCompareLEBZ;
-					bytecode.all[a-2] = bytecode.all[a-3];
-					bytecode.all[a-3] = bytecode.all[a-1];
-					bytecode.opcodes.clear();
-					bytecode.opcodes[o-2] = O_GGCompareGTBZ;
-					bytecode.all.shave(2);
-				}
-				else
-				{
-					bytecode.all[a] = O_CompareBLE;
-					bytecode.opcodes[o] = O_CompareBLE;
-				}
-
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_CompareNE ) // assign+pop is very common
-			{
-				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
-				{
-					bytecode.all[a-4] = O_LLCompareNEBZ;
-					bytecode.all[a-2] = bytecode.all[a-1];
-					bytecode.opcodes.clear();
-					bytecode.opcodes[o-2] = O_LLCompareNEBZ;
-					bytecode.all.shave(2);
-				}
-				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
-				{
-					bytecode.all[a-4] = O_GGCompareNEBZ;
-					bytecode.all[a-2] = bytecode.all[a-1];
-					bytecode.opcodes.clear();
-					bytecode.opcodes[o-2] = O_GGCompareNEBZ;
-					bytecode.all.shave(2);
-				}
-				else
-				{
-					bytecode.all[a] = O_CompareBNE;
-					bytecode.opcodes[o] = O_CompareBNE;
-				}
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LogicalOr ) // assign+pop is very common
-			{
-				bytecode.all[a] = O_BLO;
-				bytecode.opcodes[o] = O_BLO;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LogicalAnd ) // assign+pop is very common
-			{
-				bytecode.all[a] = O_BLA;
-				bytecode.opcodes[o] = O_BLA;
-				return;
-			}
-		}
-		else if ( opcode == O_PopOne )
-		{
-			if ( bytecode.opcodes[o] == O_LoadFromLocal || bytecode.opcodes[o] == O_LoadFromGlobal ) 
-			{
-				bytecode.all.shave(2);
-				bytecode.opcodes.clear();
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_CallLibFunction && (a > 4) )
-			{
-				bytecode.all[a-5] = O_CallLibFunctionAndPop;
-				bytecode.opcodes[o] = O_CallLibFunctionAndPop;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_FUNCTION_CALL_PLACEHOLDER )
-			{
-				bytecode.all[ a ] = O_PopOne;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_PreIncrement || bytecode.opcodes[o] == O_PostIncrement )
-			{	
-				if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-				{
-					bytecode.all[ a - 2 ] = O_IncGlobal;
-										
-					bytecode.all.shave(1);
-					bytecode.opcodes.clear();
-				}
-				else if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromLocal )
-				{
-					bytecode.all[ a - 2 ] = O_IncLocal;
-					bytecode.all.shave(1);
-					bytecode.opcodes.clear();
-				}
-				else
-				{
-					bytecode.all[a] = O_PreIncrementAndPop;
-					bytecode.opcodes[o] = O_PreIncrementAndPop;
-				}
-
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_PreDecrement || bytecode.opcodes[o] == O_PostDecrement )
-			{	
-				if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromGlobal )
-				{
-					bytecode.all[ a - 2 ] = O_DecGlobal;
-					bytecode.all.shave(1);
-					bytecode.opcodes.clear();
-				}
-				else if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromLocal )
-				{
-					bytecode.all[ a - 2 ] = O_DecLocal;
-					bytecode.all.shave(1);
-					bytecode.opcodes.clear();
-				}
-				else
-				{
-					bytecode.all[a] = O_PreDecrementAndPop;
-					bytecode.opcodes[o] = O_PreDecrementAndPop;
-				}
-				
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_Assign ) // assign+pop is very common
-			{
-				if ( o > 0 )
-				{
-					if ( bytecode.opcodes[o-1] == O_LoadFromGlobal )
-					{
-						if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt8 )
-						{
-							// a - 4: O_literalInt8
-							// a - 3: val
-							// a - 2: load from global
-							// a - 1: index
-							// a -- assign
-
-							bytecode.all[ a - 4 ] = O_LiteralInt8ToGlobal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
-							bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt16 )
-						{
-							bytecode.all[ a - 5 ] = O_LiteralInt16ToGlobal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
-							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
-							bytecode.all[ a - 4 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt32 )
-						{
-							bytecode.all[ a - 7 ] = O_LiteralInt32ToGlobal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
-							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
-							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
-							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
-							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
-						{
-							bytecode.all[ a - 7 ] = O_LiteralFloatToGlobal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
-							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
-							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
-							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
-							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( (o > 1) && bytecode.opcodes[o-2] == O_LiteralZero )
-						{
-							bytecode.all[ a - 3 ] = O_LiteralInt8ToGlobal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
-							bytecode.all[ a - 1 ] = 0;
-							bytecode.all.shave(1);
-							bytecode.opcodes.clear();
-						}
-						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryDivision )
-						{
-							bytecode.all[ a - 3 ] = O_BinaryDivisionAndStoreGlobal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryAddition )
-						{
-							bytecode.all[ a - 3 ] = O_BinaryAdditionAndStoreGlobal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryMultiplication )
-						{
-							bytecode.all[ a - 3 ] = O_BinaryMultiplicationAndStoreGlobal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinarySubtraction )
-						{
-							bytecode.all[ a - 3 ] = O_BinarySubtractionAndStoreGlobal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_FUNCTION_CALL_PLACEHOLDER )
-						{
-							bytecode.all[a-2] = O_AssignToGlobalAndPop;
-							bytecode.all.shave(1);
-							bytecode.opcodes[o] = O_AssignToGlobalAndPop;
-						}
-						else
-						{
-							bytecode.all[ a - 2 ] = O_AssignToGlobalAndPop;
-							bytecode.all.shave(1);
-							bytecode.opcodes.clear();
-						}
-
-						return;
-					}
-					else if ( bytecode.opcodes[ o - 1 ] == O_LoadFromLocal )
-					{
-						if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt8 )
-						{
-							bytecode.all[ a - 4 ] = O_LiteralInt8ToLocal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
-							bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt16 )
-						{
-							bytecode.all[ a - 5 ] = O_LiteralInt16ToLocal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
-							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
-							bytecode.all[ a - 4 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt32 )
-						{
-							bytecode.all[ a - 7 ] = O_LiteralInt32ToLocal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
-							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
-							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
-							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
-							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
-						{
-							bytecode.all[ a - 7 ] = O_LiteralFloatToLocal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
-							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
-							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
-							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
-							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralZero )
-						{
-							bytecode.all[ a - 3 ] = O_LiteralInt8ToLocal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
-							bytecode.all[ a - 1 ] = 0;
-							bytecode.all.shave(1);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinaryDivision )
-						{
-							bytecode.all[ a - 3 ] = O_BinaryDivisionAndStoreLocal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinaryAddition )
-						{
-							bytecode.all[ a - 3 ] = O_BinaryAdditionAndStoreLocal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinaryMultiplication )
-						{
-							bytecode.all[ a - 3 ] = O_BinaryMultiplicationAndStoreLocal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinarySubtraction )
-						{
-							bytecode.all[ a - 3 ] = O_BinarySubtractionAndStoreLocal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else
-						{
-							bytecode.all[ a - 2 ] = O_AssignToLocalAndPop;
-							bytecode.all.shave(1);
-							bytecode.opcodes.clear();
-						}
-						return;
-					}
-				}
-								
-				bytecode.all[a] = O_AssignAndPop;
-				bytecode.opcodes[o] = O_AssignAndPop;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LiteralZero ) // put a zero on just to pop it off..
-			{
-				bytecode.opcodes.clear();
-				bytecode.all.shave(1);
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_SubtractAssign )
-			{
-				bytecode.all[a] = O_SubtractAssignAndPop;
-				bytecode.opcodes[o] = O_SubtractAssignAndPop;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_AddAssign )
-			{
-				bytecode.all[a] = O_AddAssignAndPop;
-				bytecode.opcodes[o] = O_AddAssignAndPop;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_ModAssign )
-			{
-				bytecode.all[a] = O_ModAssignAndPop;
-				bytecode.opcodes[o] = O_ModAssignAndPop;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_MultiplyAssign )
-			{
-				bytecode.all[a] = O_MultiplyAssignAndPop;
-				bytecode.opcodes[o] = O_MultiplyAssignAndPop;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_DivideAssign )
-			{
-				bytecode.all[a] = O_DivideAssignAndPop;
-				bytecode.opcodes[o] = O_DivideAssignAndPop;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_ORAssign )
-			{
-				bytecode.all[a] = O_ORAssignAndPop;
-				bytecode.opcodes[o] = O_ORAssignAndPop;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_ANDAssign )
-			{
-				bytecode.all[a] = O_ANDAssignAndPop;
-				bytecode.opcodes[o] = O_ANDAssignAndPop;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_XORAssign )
-			{
-				bytecode.all[a] = O_XORAssignAndPop;
-				bytecode.opcodes[o] = O_XORAssignAndPop;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_RightShiftAssign )
-			{
-				bytecode.all[a] = O_RightShiftAssignAndPop;
-				bytecode.opcodes[o] = O_RightShiftAssignAndPop;
-				return;
-			}
-			else if ( bytecode.opcodes[o] == O_LeftShiftAssign )
-			{
-				bytecode.all[a] = O_LeftShiftAssignAndPop;
-				bytecode.opcodes[o] = O_LeftShiftAssignAndPop;
-				return;
-			}
-		}
-	}
-#endif
-	bytecode.all += opcode;
-	bytecode.opcodes += opcode;
-}
 
 //------------------------------------------------------------------------------
 void WRCompilationContext::pushDebug( uint16_t code, WRBytecode& bytecode, int param )
@@ -6228,279 +4475,6 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 			}
 		}
 	}
-}
-
-//------------------------------------------------------------------------------
-void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& addMe )
-{
-	for (unsigned int n = 0; n < addMe.jumpOffsetTargets.count(); ++n)
-	{
-		if (addMe.jumpOffsetTargets[n].gotoHash)
-		{
-			int index = addRelativeJumpTarget(bytecode);
-			bytecode.jumpOffsetTargets[index].gotoHash = addMe.jumpOffsetTargets[n].gotoHash;
-			bytecode.jumpOffsetTargets[index].offset = addMe.jumpOffsetTargets[n].offset + bytecode.all.size();
-		}
-	}
-
-	// add the namespace, making sure to offset it into the new block properly
-	for (unsigned int n = 0; n < addMe.localSpace.count(); ++n)
-	{
-		unsigned int m = 0;
-		for (m = 0; m < bytecode.localSpace.count(); ++m)
-		{
-			if (bytecode.localSpace[m].hash == addMe.localSpace[n].hash)
-			{
-				for (unsigned int s = 0; s < addMe.localSpace[n].references.count(); ++s)
-				{
-					bytecode.localSpace[m].references.append() = addMe.localSpace[n].references[s] + bytecode.all.size();
-				}
-
-				break;
-			}
-		}
-
-		if (m >= bytecode.localSpace.count())
-		{
-			WRNamespaceLookup* space = &bytecode.localSpace.append();
-			*space = addMe.localSpace[n];
-			for (unsigned int s = 0; s < space->references.count(); ++s)
-			{
-				space->references[s] += bytecode.all.size();
-			}
-		}
-	}
-
-	// add the function space, making sure to offset it into the new block properly
-	for (unsigned int n = 0; n < addMe.functionSpace.count(); ++n)
-	{
-		WRNamespaceLookup* space = &bytecode.functionSpace.append();
-		*space = addMe.functionSpace[n];
-		for (unsigned int s = 0; s < space->references.count(); ++s)
-		{
-			space->references[s] += bytecode.all.size();
-		}
-	}
-
-	// add the function space, making sure to offset it into the new block properly
-	for (unsigned int u = 0; u < addMe.unitObjectSpace.count(); ++u)
-	{
-		WRNamespaceLookup* space = &bytecode.unitObjectSpace.append();
-		*space = addMe.unitObjectSpace[u];
-		for (unsigned int s = 0; s < space->references.count(); ++s)
-		{
-			space->references[s] += bytecode.all.size();
-		}
-	}
-
-	// add the goto targets, making sure to offset it into the new block properly
-	for (unsigned int u = 0; u < addMe.gotoSource.count(); ++u)
-	{
-		GotoSource* G = &bytecode.gotoSource.append();
-		G->hash = addMe.gotoSource[u].hash;
-		G->offset = addMe.gotoSource[u].offset + bytecode.all.size();
-	}
-
-	if ( bytecode.all.size() > 1
-		 && bytecode.opcodes.size() > 0
-		 && addMe.opcodes.size() == 1
-		 && addMe.all.size() > 2
-		 && addMe.gotoSource.count() == 0
-		 && addMe.opcodes[0] == O_IndexLiteral16
-		 && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal )
-	{
-		bytecode.all[bytecode.all.size()-2] = O_IndexLocalLiteral16;
-		for( unsigned int i=1; i<addMe.all.size(); ++i )
-		{
-			bytecode.all += addMe.all[i];	
-		}
-		bytecode.opcodes.clear();
-		bytecode.opcodes += O_IndexLocalLiteral16;
-		return;
-	}
-	else if ( bytecode.all.size() > 1
-			  && bytecode.opcodes.size() > 0
-			  && addMe.opcodes.size() == 1
-			  && addMe.all.size() > 2
-			  && addMe.gotoSource.count() == 0
-			  && addMe.opcodes[0] == O_IndexLiteral16
-			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal )
-	{
-		bytecode.all[bytecode.all.size()-2] = O_IndexGlobalLiteral16;
-		for( unsigned int i=1; i<addMe.all.size(); ++i )
-		{
-			bytecode.all += addMe.all[i];	
-		}
-		bytecode.opcodes.clear();
-		bytecode.opcodes += O_IndexGlobalLiteral16;
-		return;
-	}
-	else if ( bytecode.all.size() > 1
-			  && bytecode.opcodes.size() > 0
-			  && addMe.opcodes.size() == 1
-			  && addMe.all.size() > 1
-			  && addMe.gotoSource.count() == 0
-			  && addMe.opcodes[0] == O_IndexLiteral8
-			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal )
-	{
-		bytecode.all[bytecode.all.size()-2] = O_IndexLocalLiteral8;
-		for( unsigned int i=1; i<addMe.all.size(); ++i )
-		{
-			bytecode.all += addMe.all[i];	
-		}
-		bytecode.opcodes.clear();
-		bytecode.opcodes += O_IndexLocalLiteral8;
-		return;
-	}
-	else if ( bytecode.all.size() > 1
-			  && bytecode.opcodes.size() > 0
-			  && addMe.opcodes.size() == 1
-			  && addMe.all.size() > 1
-			  && addMe.gotoSource.count() == 0
-			  && addMe.opcodes[0] == O_IndexLiteral8
-			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal )
-	{
-		bytecode.all[bytecode.all.size()-2] = O_IndexGlobalLiteral8;
-		for( unsigned int i=1; i<addMe.all.size(); ++i )
-		{
-			bytecode.all += addMe.all[i];	
-		}
-		bytecode.opcodes.clear();
-		bytecode.opcodes += O_IndexGlobalLiteral8;
-		return;
-	}
-	else if ( bytecode.all.size() > 0
-			  && bytecode.opcodes.size() > 0
-			  && addMe.opcodes.size() == 2
-			  && addMe.gotoSource.count() == 0
-			  && addMe.all.size() == 3
-			  && addMe.opcodes[1] == O_Index )
-	{
-		if ( bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal
-			 && addMe.opcodes[0] == O_LoadFromLocal )
-		{
-			int a = bytecode.all.size() - 1;
-			
-			addMe.all[0] = bytecode.all[a];
-			bytecode.all[a] = addMe.all[1];
-			bytecode.all[a-1] = O_LLValues;
-			bytecode.all += addMe.all[0];
-			bytecode.all += O_IndexSkipLoad;
-			
-			bytecode.opcodes += O_LoadFromLocal;
-			bytecode.opcodes += O_IndexSkipLoad;
-			return;
-		}
-		else if ( bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal
-			 && addMe.opcodes[0] == O_LoadFromGlobal )
-		{
-			int a = bytecode.all.size() - 1;
-
-			addMe.all[0] = bytecode.all[a];
-			bytecode.all[a] = addMe.all[1];
-			bytecode.all[a-1] = O_GGValues;
-			bytecode.all += addMe.all[0];
-			bytecode.all += O_IndexSkipLoad;
-
-			bytecode.opcodes += O_LoadFromLocal;
-			bytecode.opcodes += O_IndexSkipLoad;
-			return;
-		}
-		else if ( bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal
-				  && addMe.opcodes[0] == O_LoadFromGlobal )
-		{
-			int a = bytecode.all.size() - 1;
-
-			addMe.all[0] = bytecode.all[a];
-			bytecode.all[a] = addMe.all[1];
-			bytecode.all[a-1] = O_GLValues;
-			bytecode.all += addMe.all[0];
-			bytecode.all += O_IndexSkipLoad;
-
-			bytecode.opcodes += O_LoadFromLocal;
-			bytecode.opcodes += O_IndexSkipLoad;
-			return;
-		}
-		else if ( bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal
-				  && addMe.opcodes[0] == O_LoadFromLocal )
-		{
-			int a = bytecode.all.size() - 1;
-
-			addMe.all[0] = bytecode.all[a];
-			bytecode.all[a] = addMe.all[1];
-			bytecode.all[a-1] = O_LGValues;
-			bytecode.all += addMe.all[0];
-			bytecode.all += O_IndexSkipLoad;
-
-			bytecode.opcodes += O_LoadFromLocal;
-			bytecode.opcodes += O_IndexSkipLoad;
-			return;
-		}
-	}
-	else if ( addMe.all.size() == 1 )
-	{
-		if ( addMe.opcodes[0] == O_HASH_PLACEHOLDER )
-		{
-			if ( bytecode.opcodes.size() > 1
-				 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
-				 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_LoadFromLocal )
-			{
-				int o = bytecode.all.size() - 7;
-
-				bytecode.all[o] = O_LocalIndexHash;
-				bytecode.all[o + 5] = bytecode.all[o + 4];
-				bytecode.all[o + 4] = bytecode.all[o + 3];
-				bytecode.all[o + 3] = bytecode.all[o + 2];
-				bytecode.all[o + 2] = bytecode.all[o + 1];
-				bytecode.all[o + 1] = bytecode.all[o + 6];
-
-				bytecode.opcodes.clear();
-				bytecode.all.shave(1);
-			}
-			else if (bytecode.opcodes.size() > 1
-					 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
-					 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_LoadFromGlobal )
-			{
-				int o = bytecode.all.size() - 7;
-
-				bytecode.all[o] = O_GlobalIndexHash;
-				bytecode.all[o + 5] = bytecode.all[o + 4];
-				bytecode.all[o + 4] = bytecode.all[o + 3];
-				bytecode.all[o + 3] = bytecode.all[o + 2];
-				bytecode.all[o + 2] = bytecode.all[o + 1];
-				bytecode.all[o + 1] = bytecode.all[o + 6];
-
-				bytecode.opcodes.clear();
-				bytecode.all.shave(1);
-			}
-			else if (bytecode.opcodes.size() > 1
-					 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
-					 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_StackSwap )
-			{
-				int a = bytecode.all.size() - 7;
-
-				bytecode.all[a] = O_StackIndexHash;
-
-				bytecode.opcodes.clear();
-				bytecode.all.shave(2);
-
-			}
-			else
-			{
-				m_err = WR_ERR_compiler_panic;
-			}
-
-			return;
-		}
-
-		pushOpcode( bytecode, (WROpcode)addMe.opcodes[0] );
-		return;
-	}
-
-	resolveRelativeJumps( addMe );
-
-	bytecode.all += addMe.all;
-	bytecode.opcodes += addMe.opcodes;
 }
 
 //------------------------------------------------------------------------------
@@ -9493,18 +7467,6 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			return 0;
 		}
 
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		//-----------------------------------------------------------------------------------
-		
 		if ( value.type != WR_REF )
 		{
 			if ( (depth > 0) 
@@ -10048,6 +8010,2132 @@ SOFTWARE.
 *******************************************************************************/
 
 #include "wrench.h"
+#ifndef WRENCH_WITHOUT_COMPILER
+
+#define KEYHOLE_OPTIMIZER
+
+//------------------------------------------------------------------------------
+bool WRCompilationContext::CheckSkipLoad( WROpcode opcode, WRBytecode& bytecode, int a, int o )
+{
+	if ( bytecode.opcodes[o] == O_LoadFromLocal
+		 && bytecode.opcodes[o-1] == O_LoadFromLocal )
+	{
+		bytecode.all[a-3] = O_LLValues;
+		bytecode.all[a-1] = bytecode.all[a];
+		bytecode.all[a] = opcode;
+		bytecode.opcodes.shave(2);
+		bytecode.opcodes += opcode;
+		return true;
+	}
+	else if ( bytecode.opcodes[o] == O_LoadFromGlobal
+			  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+	{
+		bytecode.all[a-3] = O_LGValues;
+		bytecode.all[a-1] = bytecode.all[a];
+		bytecode.all[a] = opcode;
+		bytecode.opcodes.shave(2);
+		bytecode.opcodes += opcode;
+		return true;
+	}
+	else if ( bytecode.opcodes[o] == O_LoadFromLocal
+			  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+	{
+		bytecode.all[a-3] = O_GLValues;
+		bytecode.all[a-1] = bytecode.all[a];
+		bytecode.all[a] = opcode;
+		bytecode.opcodes.shave(2);
+		bytecode.opcodes += opcode;
+		return true;
+	}
+	else if ( bytecode.opcodes[o] == O_LoadFromGlobal
+			  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+	{
+		bytecode.all[a-3] = O_GGValues;
+		bytecode.all[a-1] = bytecode.all[a];
+		bytecode.all[a] = opcode;
+		bytecode.opcodes.shave(2);
+		bytecode.opcodes += opcode;
+		return true;
+	}
+
+	return false;
+}
+
+//------------------------------------------------------------------------------
+bool WRCompilationContext::CheckFastLoad( WROpcode opcode, WRBytecode& bytecode, int a, int o )
+{
+	if ( a <= 2 || o == 0 )
+	{
+		return false;
+	}
+
+	if ( (opcode == O_Index && CheckSkipLoad(O_IndexSkipLoad, bytecode, a, o))
+		 || (opcode == O_BinaryMod && CheckSkipLoad(O_BinaryModSkipLoad, bytecode, a, o)) 
+		 || (opcode == O_BinaryRightShift && CheckSkipLoad(O_BinaryRightShiftSkipLoad, bytecode, a, o))
+		 || (opcode == O_BinaryLeftShift && CheckSkipLoad(O_BinaryLeftShiftSkipLoad, bytecode, a, o)) 
+		 || (opcode == O_BinaryAnd && CheckSkipLoad(O_BinaryAndSkipLoad, bytecode, a, o)) 
+		 || (opcode == O_BinaryOr && CheckSkipLoad(O_BinaryOrSkipLoad, bytecode, a, o)) 
+		 || (opcode == O_BinaryXOR && CheckSkipLoad(O_BinaryXORSkipLoad, bytecode, a, o)) )
+	{
+		return true;
+	}
+
+	return false;
+}
+
+//------------------------------------------------------------------------------
+bool WRCompilationContext::IsLiteralLoadOpcode( unsigned char opcode )
+{
+	return opcode == O_LiteralInt32
+			|| opcode == O_LiteralZero
+			|| opcode == O_LiteralFloat
+			|| opcode == O_LiteralInt8
+			|| opcode == O_LiteralInt16;
+}
+
+//------------------------------------------------------------------------------
+bool WRCompilationContext::CheckCompareReplace( WROpcode LS, WROpcode GS, WROpcode ILS, WROpcode IGS, WRBytecode& bytecode, unsigned int a, unsigned int o )
+{
+	if ( IsLiteralLoadOpcode(bytecode.opcodes[o-1]) )
+	{
+		if ( bytecode.opcodes[o] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 1 ] = GS;
+			bytecode.opcodes[o] = GS;
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 1 ] = LS;
+			bytecode.opcodes[o] = LS;
+			return true;
+		}
+	}
+	else if ( IsLiteralLoadOpcode(bytecode.opcodes[o]) )
+	{
+		if ( (bytecode.opcodes[o] == O_LiteralInt32 || bytecode.opcodes[o] == O_LiteralFloat)
+			 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 6 ] = bytecode.all[ a ]; // store i3
+			bytecode.all[ a ] = bytecode.all[ a - 5 ]; // move index
+
+			bytecode.all[ a - 5 ] = bytecode.all[ a - 3 ];
+			bytecode.all[ a - 4 ] = bytecode.all[ a - 2 ];
+			bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
+			bytecode.all[ a - 2 ] = bytecode.all[ a - 6 ];
+			bytecode.all[ a - 6 ] = bytecode.opcodes[o];
+			bytecode.all[ a - 1 ] = IGS;
+
+			bytecode.opcodes[o] = IGS; // reverse the logic
+
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralZero
+				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 2 ] = O_LiteralZero;
+			bytecode.all[ a ] = bytecode.all[ a - 1];
+			bytecode.all[ a - 1 ] = IGS;
+			bytecode.opcodes[o] = IGS; // reverse the logic
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralZero
+				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 2 ] = O_LiteralZero;
+			bytecode.all[ a ] = bytecode.all[ a - 1];
+			bytecode.all[ a - 1 ] = IGS;
+			bytecode.opcodes[o] = IGS; // reverse the logic
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralInt8
+				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
+			bytecode.all[ a - 2 ] = bytecode.all[ a ];
+			bytecode.all[ a ] = bytecode.all[ a - 1 ];
+			bytecode.all[ a - 1 ] = IGS;
+			bytecode.all[ a - 3 ] = O_LiteralInt8;
+
+			bytecode.opcodes[o] = IGS; // reverse the logic
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralInt16
+				  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 2 ] = bytecode.all[ a ];
+
+			bytecode.all[ a - 4 ] = bytecode.all[ a - 3 ];
+			bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
+			bytecode.all[ a ] = bytecode.all[ a - 4 ];
+			bytecode.all[ a - 1 ] = IGS;
+			bytecode.all[ a - 4 ] = O_LiteralInt16;
+
+			bytecode.opcodes[o] = IGS; // reverse the logic
+			return true;
+		}
+		if ( (bytecode.opcodes[o] == O_LiteralInt32 || bytecode.opcodes[o] == O_LiteralFloat)
+			 && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 6 ] = bytecode.all[ a ]; // store i3
+			bytecode.all[ a ] = bytecode.all[ a - 5 ]; // move index
+
+			bytecode.all[ a - 5 ] = bytecode.all[ a - 3 ];
+			bytecode.all[ a - 4 ] = bytecode.all[ a - 2 ];
+			bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
+			bytecode.all[ a - 2 ] = bytecode.all[ a - 6 ];
+			bytecode.all[ a - 6 ] = bytecode.opcodes[o];
+			bytecode.all[ a - 1 ] = ILS;
+
+			bytecode.opcodes[o] = ILS; // reverse the logic
+
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralZero
+				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 2 ] = O_LiteralZero;
+			bytecode.all[ a ] = bytecode.all[ a - 1];
+			bytecode.all[ a - 1 ] = ILS;
+			bytecode.opcodes[o] = ILS; // reverse the logic
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralZero
+				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 2 ] = O_LiteralZero;
+			bytecode.all[ a ] = bytecode.all[ a - 1];
+			bytecode.all[ a - 1 ] = ILS;
+			bytecode.opcodes[o] = ILS; // reverse the logic
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralInt8
+				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
+			bytecode.all[ a - 2 ] = bytecode.all[ a ];
+			bytecode.all[ a ] = bytecode.all[ a - 1 ];
+			bytecode.all[ a - 1 ] = ILS;
+			bytecode.all[ a - 3 ] = O_LiteralInt8;
+
+			bytecode.opcodes[o] = ILS; // reverse the logic
+			return true;
+		}
+		else if ( bytecode.opcodes[o] == O_LiteralInt16
+				  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 2 ] = bytecode.all[ a ];
+
+			bytecode.all[ a - 4 ] = bytecode.all[ a - 3 ];
+			bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
+			bytecode.all[ a ] = bytecode.all[ a - 4 ];
+			bytecode.all[ a - 1 ] = ILS;
+			bytecode.all[ a - 4 ] = O_LiteralInt16;
+
+			bytecode.opcodes[o] = ILS; // reverse the logic
+			return true;
+		}
+	}
+
+	return false;
+}
+
+//------------------------------------------------------------------------------
+void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
+{
+#ifdef KEYHOLE_OPTIMIZER
+	unsigned int o = bytecode.opcodes.size();
+	if ( o )
+	{
+		// keyhole optimizations
+
+		--o;
+		unsigned int a = bytecode.all.size() - 1;
+		if ( opcode == O_Return
+			 && bytecode.opcodes[o] == O_LiteralZero )
+		{
+			bytecode.all[a] = O_ReturnZero;
+			bytecode.opcodes[o] = O_ReturnZero;
+			return;
+		}
+		else if ( opcode == O_CompareEQ && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 3 ] = O_LLCompareEQ;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.clear();
+			bytecode.opcodes += O_LLCompareEQ;
+			return;
+		}
+		else if ( opcode == O_CompareNE && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 3 ] = O_LLCompareNE;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.clear();
+			bytecode.opcodes += O_LLCompareNE;
+			return;
+		}
+		else if ( opcode == O_CompareGT && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 3 ] = O_LLCompareGT;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.clear();
+			bytecode.opcodes += O_LLCompareGT;
+			return;
+		}
+		else if ( opcode == O_CompareLT && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 3 ] = O_LLCompareLT;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.clear();
+			bytecode.opcodes += O_LLCompareLT;
+			return;
+		}
+		else if ( opcode == O_CompareGE && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 3 ] = O_LLCompareGE;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.clear();
+			bytecode.opcodes += O_LLCompareGE;
+			return;
+		}
+		else if ( opcode == O_CompareLE && o>0 && bytecode.opcodes[o] == O_LoadFromLocal && bytecode.opcodes[o-1] == O_LoadFromLocal )
+		{
+			bytecode.all[ a - 3 ] = O_LLCompareLE;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.clear();
+			bytecode.opcodes += O_LLCompareLE;
+			return;
+		}
+		else if ( opcode == O_CompareEQ && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 3 ] = O_GGCompareEQ;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.clear();
+			bytecode.opcodes += O_GGCompareEQ;
+			return;
+		}
+		else if ( opcode == O_CompareNE && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 3 ] = O_GGCompareNE;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.clear();
+			bytecode.opcodes += O_GGCompareNE;
+			return;
+		}
+		else if ( opcode == O_CompareGT && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 3 ] = O_GGCompareGT;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.clear();
+			bytecode.opcodes += O_GGCompareGT;
+			return;
+		}
+		else if ( opcode == O_CompareLT && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 3 ] = O_GGCompareLT;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.clear();
+			bytecode.opcodes += O_GGCompareLT;
+			return;
+		}
+		else if ( opcode == O_CompareGE && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 3 ] = O_GGCompareGE;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.clear();
+			bytecode.opcodes += O_GGCompareGE;
+			return;
+		}
+		else if ( opcode == O_CompareLE && o>0 && bytecode.opcodes[o] == O_LoadFromGlobal && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+		{
+			bytecode.all[ a - 3 ] = O_GGCompareLE;
+			bytecode.all[ a - 1 ] = bytecode.all[ a ];
+			bytecode.all.shave( 1 );
+			bytecode.opcodes.clear();
+			bytecode.opcodes += O_GGCompareLE;
+			return;
+		}
+		else if ( (opcode == O_CompareEQ && (o>0))
+				  && CheckCompareReplace(O_LSCompareEQ, O_GSCompareEQ, O_LSCompareEQ, O_GSCompareEQ, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( (opcode == O_CompareNE && (o>0))
+				  && CheckCompareReplace(O_LSCompareNE, O_GSCompareNE, O_LSCompareNE, O_GSCompareNE, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( (opcode == O_CompareGE && (o>0))
+			 && CheckCompareReplace(O_LSCompareGE, O_GSCompareGE, O_LSCompareLE, O_GSCompareLE, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( (opcode == O_CompareLE && (o>0))
+				  && CheckCompareReplace(O_LSCompareLE, O_GSCompareLE, O_LSCompareGE, O_GSCompareGE, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( (opcode == O_CompareGT && (o>0))
+				  && CheckCompareReplace(O_LSCompareGT, O_GSCompareGT, O_LSCompareLT, O_GSCompareLT, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( (opcode == O_CompareLT && (o>0))
+				  && CheckCompareReplace(O_LSCompareLT, O_GSCompareLT, O_LSCompareGT, O_GSCompareGT, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( CheckFastLoad(opcode, bytecode, a, o) )
+		{
+			return;
+		}
+		else if ( opcode == O_BinaryMultiplication && (a>2) )
+		{
+			if ( o>1 )
+			{
+				if ( bytecode.opcodes[o] == O_LoadFromGlobal
+					 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+				{
+					// LoadFromGlobal   a - 3
+					// [index]          a - 2
+					// LoadFromGlobal   a - 1
+					// [index]          a
+					
+					bytecode.all[ a - 3 ] = O_GGBinaryMultiplication;
+					bytecode.all[ a - 1 ] = bytecode.all[ a ];
+					bytecode.all.shave(1);
+					bytecode.opcodes.clear();
+					return;
+				}
+				else if ( bytecode.opcodes[o] == O_LoadFromLocal
+						  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+				{
+					bytecode.all[ a - 3 ] = O_GLBinaryMultiplication;
+					bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
+					bytecode.all[ a - 2 ] = bytecode.all[ a ];
+					bytecode.all.shave(1);
+					bytecode.opcodes.clear();
+					return;
+				}
+				else if ( bytecode.opcodes[o] == O_LoadFromGlobal
+						  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+				{
+					bytecode.all[ a - 3 ] = O_GLBinaryMultiplication;
+					bytecode.all[ a - 1 ] = bytecode.all[ a ];
+					bytecode.all.shave(1);
+					bytecode.opcodes.clear();
+					return;
+				}
+				else if ( bytecode.opcodes[o] == O_LoadFromLocal
+						  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+				{
+					bytecode.all[ a - 3 ] = O_LLBinaryMultiplication;
+					bytecode.all[ a - 1 ] = bytecode.all[ a ];
+					bytecode.all.shave(1);
+					bytecode.opcodes.clear();
+					return;
+				}
+			}
+			
+			bytecode.all += opcode;
+			bytecode.opcodes += opcode;
+			return;
+		}
+		else if ( opcode == O_BinaryAddition && (a>2) )
+		{
+			if ( bytecode.opcodes[o] == O_LoadFromGlobal
+				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				bytecode.all[ a - 3 ] = O_GGBinaryAddition;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.clear();
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				bytecode.all[ a - 3 ] = O_GLBinaryAddition;
+				bytecode.all[ a - 1 ] = bytecode.all[ a - 2 ];
+				bytecode.all[ a - 2 ] = bytecode.all[ a ];
+				bytecode.all.shave(1);
+				bytecode.opcodes.clear();
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromGlobal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				bytecode.all[ a - 3 ] = O_GLBinaryAddition;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+				bytecode.all.shave(1);
+				bytecode.opcodes.clear();
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				bytecode.all[ a - 3 ] = O_LLBinaryAddition;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+				bytecode.all.shave(1);
+				bytecode.opcodes.clear();
+			}
+			else
+			{
+				bytecode.all += opcode;
+				bytecode.opcodes += opcode;
+			}
+
+			return;
+		}
+		else if ( opcode == O_BinarySubtraction && (a>2) )
+		{
+			if ( bytecode.opcodes[o] == O_LoadFromGlobal
+				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				bytecode.all[ a - 3 ] = O_GGBinarySubtraction;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+
+				bytecode.all.shave(1);
+				bytecode.opcodes.clear();
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				bytecode.all[ a - 3 ] = O_LGBinarySubtraction;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+				bytecode.all.shave(1);
+				bytecode.opcodes.clear();
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromGlobal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				bytecode.all[ a - 3 ] = O_GLBinarySubtraction;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+				bytecode.all.shave(1);
+				bytecode.opcodes.clear();
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				bytecode.all[ a - 3 ] = O_LLBinarySubtraction;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+				bytecode.all.shave(1);
+				bytecode.opcodes.clear();
+			}
+			else
+			{
+				bytecode.all += opcode;
+				bytecode.opcodes += opcode;
+			}
+
+			return;
+		}
+		else if ( opcode == O_BinaryDivision && (a>2) )
+		{
+			if ( bytecode.opcodes[o] == O_LoadFromGlobal
+				 && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				bytecode.all[ a - 3 ] = O_GGBinaryDivision;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+				bytecode.all.shave(1);
+				bytecode.opcodes.clear();
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+			{
+				bytecode.all[ a - 3 ] = O_LGBinaryDivision;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+				bytecode.all.shave(1);
+				bytecode.opcodes.clear();
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromGlobal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				bytecode.all[ a - 3 ] = O_GLBinaryDivision;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+				bytecode.all.shave(1);
+				bytecode.opcodes.clear();
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal
+					  && bytecode.opcodes[o-1] == O_LoadFromLocal )
+			{
+				bytecode.all[ a - 3 ] = O_LLBinaryDivision;
+				bytecode.all[ a - 1 ] = bytecode.all[ a ];
+				bytecode.all.shave(1);
+				bytecode.opcodes.clear();
+			}
+			else
+			{
+				bytecode.all += opcode;
+				bytecode.opcodes += opcode;
+			}
+
+			return;
+		}
+		else if ( opcode == O_Index )
+		{
+			if ( bytecode.opcodes[o] == O_LiteralInt16 )
+			{
+				bytecode.all[a-2] = O_IndexLiteral16;
+				bytecode.opcodes[o] = O_IndexLiteral16;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LiteralInt8 )
+			{
+				bytecode.all[a-1] = O_IndexLiteral8;
+				bytecode.opcodes[o] = O_IndexLiteral8;
+				return;
+			}
+		}
+		else if ( opcode == O_BZ )
+		{
+			if ( bytecode.opcodes[o] == O_LLCompareLT )
+			{
+				bytecode.opcodes[o] = O_LLCompareLTBZ;
+				bytecode.all[ a - 2 ] = O_LLCompareLTBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LLCompareGT )
+			{
+				bytecode.opcodes[o] = O_LLCompareGTBZ;
+				bytecode.all[ a - 2 ] = O_LLCompareGTBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LLCompareGE )
+			{
+				bytecode.opcodes[o] = O_LLCompareGEBZ;
+				bytecode.all[ a - 2 ] = O_LLCompareGEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LLCompareLE )
+			{
+				bytecode.opcodes[o] = O_LLCompareLEBZ;
+				bytecode.all[ a - 2 ] = O_LLCompareLEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LLCompareEQ )
+			{
+				bytecode.opcodes[o] = O_LLCompareEQBZ;
+				bytecode.all[ a - 2 ] = O_LLCompareEQBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LLCompareNE )
+			{
+				bytecode.opcodes[o] = O_LLCompareNEBZ;
+				bytecode.all[ a - 2 ] = O_LLCompareNEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GGCompareLT )
+			{
+				bytecode.opcodes[o] = O_GGCompareLTBZ;
+				bytecode.all[ a - 2 ] = O_GGCompareLTBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GGCompareGT )
+			{
+				bytecode.opcodes[o] = O_GGCompareGTBZ;
+				bytecode.all[ a - 2 ] = O_GGCompareGTBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GGCompareLE )
+			{
+				bytecode.opcodes[o] = O_GGCompareLEBZ;
+				bytecode.all[ a - 2 ] = O_GGCompareLEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GGCompareGE )
+			{
+				bytecode.opcodes[o] = O_GGCompareGEBZ;
+				bytecode.all[ a - 2 ] = O_GGCompareGEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GGCompareEQ )
+			{
+				bytecode.opcodes[o] = O_GGCompareEQBZ;
+				bytecode.all[ a - 2 ] = O_GGCompareEQBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GGCompareNE )
+			{
+				bytecode.opcodes[o] = O_GGCompareNEBZ;
+				bytecode.all[ a - 2 ] = O_GGCompareNEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GSCompareEQ )
+			{
+				bytecode.opcodes[o] = O_GSCompareEQBZ;
+				bytecode.all[ a - 1 ] = O_GSCompareEQBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LSCompareEQ )
+			{
+				bytecode.opcodes[o] = O_LSCompareEQBZ;
+				bytecode.all[ a - 1 ] = O_LSCompareEQBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GSCompareNE )
+			{
+				bytecode.opcodes[o] = O_GSCompareNEBZ;
+				bytecode.all[ a - 1 ] = O_GSCompareNEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LSCompareNE )
+			{
+				bytecode.opcodes[o] = O_LSCompareNEBZ;
+				bytecode.all[ a - 1 ] = O_LSCompareNEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GSCompareGE )
+			{
+				bytecode.opcodes[o] = O_GSCompareGEBZ;
+				bytecode.all[ a - 1 ] = O_GSCompareGEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LSCompareGE )
+			{
+				bytecode.opcodes[o] = O_LSCompareGEBZ;
+				bytecode.all[ a - 1 ] = O_LSCompareGEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GSCompareLE )
+			{
+				bytecode.opcodes[o] = O_GSCompareLEBZ;
+				bytecode.all[ a - 1 ] = O_GSCompareLEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LSCompareLE )
+			{
+				bytecode.opcodes[o] = O_LSCompareLEBZ;
+				bytecode.all[ a - 1 ] = O_LSCompareLEBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GSCompareGT )
+			{
+				bytecode.opcodes[o] = O_GSCompareGTBZ;
+				bytecode.all[ a - 1 ] = O_GSCompareGTBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LSCompareGT )
+			{
+				bytecode.opcodes[o] = O_LSCompareGTBZ;
+				bytecode.all[ a - 1 ] = O_LSCompareGTBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_GSCompareLT )
+			{
+				bytecode.opcodes[o] = O_GSCompareLTBZ;
+				bytecode.all[ a - 1 ] = O_GSCompareLTBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LSCompareLT )
+			{
+				bytecode.opcodes[o] = O_LSCompareLTBZ;
+				bytecode.all[ a - 1 ] = O_LSCompareLTBZ;
+				return;
+			}			
+			else if ( bytecode.opcodes[o] == O_CompareEQ ) // assign+pop is very common
+			{
+				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
+				{
+					bytecode.all[a-4] = O_LLCompareEQBZ;
+					bytecode.all[a-2] = bytecode.all[a-1];
+					bytecode.opcodes.clear();
+					bytecode.opcodes[o-2] = O_LLCompareEQBZ;
+					bytecode.all.shave(2);
+				}
+				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
+				{
+					bytecode.all[a-4] = O_GGCompareEQBZ;
+					bytecode.all[a-2] = bytecode.all[a-1];
+					bytecode.opcodes.clear();
+					bytecode.opcodes[o-2] = O_GGCompareEQBZ;
+					bytecode.all.shave(2);
+				}
+				else
+				{
+					bytecode.all[a] = O_CompareBEQ;
+					bytecode.opcodes[o] = O_CompareBEQ;
+				}
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CompareLT )
+			{
+				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
+				{
+					bytecode.all[a-4] = O_LLCompareLTBZ;
+					bytecode.all[a-2] = bytecode.all[a-1];
+					bytecode.opcodes.clear();
+					bytecode.opcodes[o-2] = O_LLCompareLTBZ;
+					bytecode.all.shave(2);
+				}
+				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
+				{
+					bytecode.all[a-4] = O_GGCompareLTBZ;
+					bytecode.all[a-2] = bytecode.all[a-1];
+					bytecode.opcodes.clear();
+					bytecode.opcodes[o-2] = O_GGCompareLTBZ;
+					bytecode.all.shave(2);
+				}
+				else
+				{
+					bytecode.all[a] = O_CompareBLT;
+					bytecode.opcodes[o] = O_CompareBLT;
+				}
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CompareGT )
+			{
+				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
+				{
+					bytecode.all[a-4] = O_LLCompareGTBZ;
+					bytecode.all[a-2] = bytecode.all[a-1];
+					bytecode.opcodes.clear();
+					bytecode.opcodes[o-2] = O_LLCompareGTBZ;
+					bytecode.all.shave(2);
+				}
+				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
+				{
+					bytecode.all[a-4] = O_GGCompareGTBZ;
+					bytecode.all[a-2] = bytecode.all[a-1];
+					bytecode.opcodes.clear();
+					bytecode.opcodes[o-2] = O_GGCompareGTBZ;
+					bytecode.all.shave(2);
+				}
+				else
+				{
+					bytecode.all[a] = O_CompareBGT;
+					bytecode.opcodes[o] = O_CompareBGT;
+				}
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CompareGE )
+			{
+				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
+				{
+					bytecode.all[a-4] = O_LLCompareGEBZ;
+					bytecode.all[a-2] = bytecode.all[a-3];
+					bytecode.all[a-3] = bytecode.all[a-1];
+					bytecode.opcodes.clear();
+					bytecode.opcodes[o-2] = O_LLCompareLTBZ;
+					bytecode.all.shave(2);
+				}
+				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
+				{
+					bytecode.all[a-4] = O_GGCompareGEBZ;
+					bytecode.all[a-2] = bytecode.all[a-3];
+					bytecode.all[a-3] = bytecode.all[a-1];
+					bytecode.opcodes.clear();
+					bytecode.opcodes[o-2] = O_GGCompareLTBZ;
+					bytecode.all.shave(2);
+				}
+				else
+				{
+					bytecode.all[a] = O_CompareBGE;
+					bytecode.opcodes[o] = O_CompareBGE;
+				}
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CompareLE )
+			{
+				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
+				{
+					bytecode.all[a-4] = O_LLCompareLEBZ;
+					bytecode.all[a-2] = bytecode.all[a-3];
+					bytecode.all[a-3] = bytecode.all[a-1];
+					bytecode.opcodes.clear();
+					bytecode.opcodes[o-2] = O_LLCompareGTBZ;
+					bytecode.all.shave(2);
+				}
+				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
+				{
+					bytecode.all[a-4] = O_GGCompareLEBZ;
+					bytecode.all[a-2] = bytecode.all[a-3];
+					bytecode.all[a-3] = bytecode.all[a-1];
+					bytecode.opcodes.clear();
+					bytecode.opcodes[o-2] = O_GGCompareGTBZ;
+					bytecode.all.shave(2);
+				}
+				else
+				{
+					bytecode.all[a] = O_CompareBLE;
+					bytecode.opcodes[o] = O_CompareBLE;
+				}
+
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CompareNE ) // assign+pop is very common
+			{
+				if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromLocal) && (bytecode.opcodes[o-2] == O_LoadFromLocal) )
+				{
+					bytecode.all[a-4] = O_LLCompareNEBZ;
+					bytecode.all[a-2] = bytecode.all[a-1];
+					bytecode.opcodes.clear();
+					bytecode.opcodes[o-2] = O_LLCompareNEBZ;
+					bytecode.all.shave(2);
+				}
+				else if ( (o>1) && (bytecode.opcodes[o-1] == O_LoadFromGlobal) && (bytecode.opcodes[o-2] == O_LoadFromGlobal) )
+				{
+					bytecode.all[a-4] = O_GGCompareNEBZ;
+					bytecode.all[a-2] = bytecode.all[a-1];
+					bytecode.opcodes.clear();
+					bytecode.opcodes[o-2] = O_GGCompareNEBZ;
+					bytecode.all.shave(2);
+				}
+				else
+				{
+					bytecode.all[a] = O_CompareBNE;
+					bytecode.opcodes[o] = O_CompareBNE;
+				}
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LogicalOr ) // assign+pop is very common
+			{
+				bytecode.all[a] = O_BLO;
+				bytecode.opcodes[o] = O_BLO;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LogicalAnd ) // assign+pop is very common
+			{
+				bytecode.all[a] = O_BLA;
+				bytecode.opcodes[o] = O_BLA;
+				return;
+			}
+		}
+		else if ( opcode == O_PopOne )
+		{
+			if ( bytecode.opcodes[o] == O_LoadFromLocal || bytecode.opcodes[o] == O_LoadFromGlobal ) 
+			{
+				bytecode.all.shave(2);
+				bytecode.opcodes.clear();
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_CallLibFunction && (a > 4) )
+			{
+				bytecode.all[a-5] = O_CallLibFunctionAndPop;
+				bytecode.opcodes[o] = O_CallLibFunctionAndPop;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_FUNCTION_CALL_PLACEHOLDER )
+			{
+				bytecode.all[ a ] = O_PopOne;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_PreIncrement || bytecode.opcodes[o] == O_PostIncrement )
+			{	
+				if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+				{
+					bytecode.all[ a - 2 ] = O_IncGlobal;
+										
+					bytecode.all.shave(1);
+					bytecode.opcodes.clear();
+				}
+				else if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromLocal )
+				{
+					bytecode.all[ a - 2 ] = O_IncLocal;
+					bytecode.all.shave(1);
+					bytecode.opcodes.clear();
+				}
+				else
+				{
+					bytecode.all[a] = O_PreIncrementAndPop;
+					bytecode.opcodes[o] = O_PreIncrementAndPop;
+				}
+
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_PreDecrement || bytecode.opcodes[o] == O_PostDecrement )
+			{	
+				if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromGlobal )
+				{
+					bytecode.all[ a - 2 ] = O_DecGlobal;
+					bytecode.all.shave(1);
+					bytecode.opcodes.clear();
+				}
+				else if ( (o > 0) && bytecode.opcodes[o-1] == O_LoadFromLocal )
+				{
+					bytecode.all[ a - 2 ] = O_DecLocal;
+					bytecode.all.shave(1);
+					bytecode.opcodes.clear();
+				}
+				else
+				{
+					bytecode.all[a] = O_PreDecrementAndPop;
+					bytecode.opcodes[o] = O_PreDecrementAndPop;
+				}
+				
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_Assign ) // assign+pop is very common
+			{
+				if ( o > 0 )
+				{
+					if ( bytecode.opcodes[o-1] == O_LoadFromGlobal )
+					{
+						if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt8 )
+						{
+							// a - 4: O_literalInt8
+							// a - 3: val
+							// a - 2: load from global
+							// a - 1: index
+							// a -- assign
+
+							bytecode.all[ a - 4 ] = O_LiteralInt8ToGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt16 )
+						{
+							bytecode.all[ a - 5 ] = O_LiteralInt16ToGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
+							bytecode.all[ a - 4 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt32 )
+						{
+							bytecode.all[ a - 7 ] = O_LiteralInt32ToGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
+							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
+							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
+							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
+						{
+							bytecode.all[ a - 7 ] = O_LiteralFloatToGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
+							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
+							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
+							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( (o > 1) && bytecode.opcodes[o-2] == O_LiteralZero )
+						{
+							bytecode.all[ a - 3 ] = O_LiteralInt8ToGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all[ a - 1 ] = 0;
+							bytecode.all.shave(1);
+							bytecode.opcodes.clear();
+						}
+						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryDivision )
+						{
+							bytecode.all[ a - 3 ] = O_BinaryDivisionAndStoreGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryAddition )
+						{
+							bytecode.all[ a - 3 ] = O_BinaryAdditionAndStoreGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinaryMultiplication )
+						{
+							bytecode.all[ a - 3 ] = O_BinaryMultiplicationAndStoreGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_BinarySubtraction )
+						{
+							bytecode.all[ a - 3 ] = O_BinarySubtractionAndStoreGlobal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( (o > 1) && bytecode.opcodes[o - 2] == O_FUNCTION_CALL_PLACEHOLDER )
+						{
+							bytecode.all[a-2] = O_AssignToGlobalAndPop;
+							bytecode.all.shave(1);
+							bytecode.opcodes[o] = O_AssignToGlobalAndPop;
+						}
+						else
+						{
+							bytecode.all[ a - 2 ] = O_AssignToGlobalAndPop;
+							bytecode.all.shave(1);
+							bytecode.opcodes.clear();
+						}
+
+						return;
+					}
+					else if ( bytecode.opcodes[ o - 1 ] == O_LoadFromLocal )
+					{
+						if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt8 )
+						{
+							bytecode.all[ a - 4 ] = O_LiteralInt8ToLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt16 )
+						{
+							bytecode.all[ a - 5 ] = O_LiteralInt16ToLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
+							bytecode.all[ a - 4 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralInt32 )
+						{
+							bytecode.all[ a - 7 ] = O_LiteralInt32ToLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
+							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
+							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
+							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
+						{
+							bytecode.all[ a - 7 ] = O_LiteralFloatToLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
+							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
+							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
+							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralZero )
+						{
+							bytecode.all[ a - 3 ] = O_LiteralInt8ToLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all[ a - 1 ] = 0;
+							bytecode.all.shave(1);
+							bytecode.opcodes.clear();
+						}
+						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinaryDivision )
+						{
+							bytecode.all[ a - 3 ] = O_BinaryDivisionAndStoreLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinaryAddition )
+						{
+							bytecode.all[ a - 3 ] = O_BinaryAdditionAndStoreLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinaryMultiplication )
+						{
+							bytecode.all[ a - 3 ] = O_BinaryMultiplicationAndStoreLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else if ( o > 1 && bytecode.opcodes[o - 2] == O_BinarySubtraction )
+						{
+							bytecode.all[ a - 3 ] = O_BinarySubtractionAndStoreLocal;
+							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
+							bytecode.all.shave(2);
+							bytecode.opcodes.clear();
+						}
+						else
+						{
+							bytecode.all[ a - 2 ] = O_AssignToLocalAndPop;
+							bytecode.all.shave(1);
+							bytecode.opcodes.clear();
+						}
+						return;
+					}
+				}
+								
+				bytecode.all[a] = O_AssignAndPop;
+				bytecode.opcodes[o] = O_AssignAndPop;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LiteralZero ) // put a zero on just to pop it off..
+			{
+				bytecode.opcodes.clear();
+				bytecode.all.shave(1);
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_SubtractAssign )
+			{
+				bytecode.all[a] = O_SubtractAssignAndPop;
+				bytecode.opcodes[o] = O_SubtractAssignAndPop;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_AddAssign )
+			{
+				bytecode.all[a] = O_AddAssignAndPop;
+				bytecode.opcodes[o] = O_AddAssignAndPop;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_ModAssign )
+			{
+				bytecode.all[a] = O_ModAssignAndPop;
+				bytecode.opcodes[o] = O_ModAssignAndPop;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_MultiplyAssign )
+			{
+				bytecode.all[a] = O_MultiplyAssignAndPop;
+				bytecode.opcodes[o] = O_MultiplyAssignAndPop;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_DivideAssign )
+			{
+				bytecode.all[a] = O_DivideAssignAndPop;
+				bytecode.opcodes[o] = O_DivideAssignAndPop;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_ORAssign )
+			{
+				bytecode.all[a] = O_ORAssignAndPop;
+				bytecode.opcodes[o] = O_ORAssignAndPop;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_ANDAssign )
+			{
+				bytecode.all[a] = O_ANDAssignAndPop;
+				bytecode.opcodes[o] = O_ANDAssignAndPop;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_XORAssign )
+			{
+				bytecode.all[a] = O_XORAssignAndPop;
+				bytecode.opcodes[o] = O_XORAssignAndPop;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_RightShiftAssign )
+			{
+				bytecode.all[a] = O_RightShiftAssignAndPop;
+				bytecode.opcodes[o] = O_RightShiftAssignAndPop;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LeftShiftAssign )
+			{
+				bytecode.all[a] = O_LeftShiftAssignAndPop;
+				bytecode.opcodes[o] = O_LeftShiftAssignAndPop;
+				return;
+			}
+		}
+	}
+#endif
+	bytecode.all += opcode;
+	bytecode.opcodes += opcode;
+}
+
+//------------------------------------------------------------------------------
+void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& addMe )
+{
+	for (unsigned int n = 0; n < addMe.jumpOffsetTargets.count(); ++n)
+	{
+		if (addMe.jumpOffsetTargets[n].gotoHash)
+		{
+			int index = addRelativeJumpTarget(bytecode);
+			bytecode.jumpOffsetTargets[index].gotoHash = addMe.jumpOffsetTargets[n].gotoHash;
+			bytecode.jumpOffsetTargets[index].offset = addMe.jumpOffsetTargets[n].offset + bytecode.all.size();
+		}
+	}
+
+	// add the namespace, making sure to offset it into the new block properly
+	for (unsigned int n = 0; n < addMe.localSpace.count(); ++n)
+	{
+		unsigned int m = 0;
+		for (m = 0; m < bytecode.localSpace.count(); ++m)
+		{
+			if (bytecode.localSpace[m].hash == addMe.localSpace[n].hash)
+			{
+				for (unsigned int s = 0; s < addMe.localSpace[n].references.count(); ++s)
+				{
+					bytecode.localSpace[m].references.append() = addMe.localSpace[n].references[s] + bytecode.all.size();
+				}
+
+				break;
+			}
+		}
+
+		if (m >= bytecode.localSpace.count())
+		{
+			WRNamespaceLookup* space = &bytecode.localSpace.append();
+			*space = addMe.localSpace[n];
+			for (unsigned int s = 0; s < space->references.count(); ++s)
+			{
+				space->references[s] += bytecode.all.size();
+			}
+		}
+	}
+
+	// add the function space, making sure to offset it into the new block properly
+	for (unsigned int n = 0; n < addMe.functionSpace.count(); ++n)
+	{
+		WRNamespaceLookup* space = &bytecode.functionSpace.append();
+		*space = addMe.functionSpace[n];
+		for (unsigned int s = 0; s < space->references.count(); ++s)
+		{
+			space->references[s] += bytecode.all.size();
+		}
+	}
+
+	// add the function space, making sure to offset it into the new block properly
+	for (unsigned int u = 0; u < addMe.unitObjectSpace.count(); ++u)
+	{
+		WRNamespaceLookup* space = &bytecode.unitObjectSpace.append();
+		*space = addMe.unitObjectSpace[u];
+		for (unsigned int s = 0; s < space->references.count(); ++s)
+		{
+			space->references[s] += bytecode.all.size();
+		}
+	}
+
+	// add the goto targets, making sure to offset it into the new block properly
+	for (unsigned int u = 0; u < addMe.gotoSource.count(); ++u)
+	{
+		GotoSource* G = &bytecode.gotoSource.append();
+		G->hash = addMe.gotoSource[u].hash;
+		G->offset = addMe.gotoSource[u].offset + bytecode.all.size();
+	}
+
+	if ( bytecode.all.size() > 1
+		 && bytecode.opcodes.size() > 0
+		 && addMe.opcodes.size() == 1
+		 && addMe.all.size() > 2
+		 && addMe.gotoSource.count() == 0
+		 && addMe.opcodes[0] == O_IndexLiteral16
+		 && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal )
+	{
+		bytecode.all[bytecode.all.size()-2] = O_IndexLocalLiteral16;
+		for( unsigned int i=1; i<addMe.all.size(); ++i )
+		{
+			bytecode.all += addMe.all[i];	
+		}
+		bytecode.opcodes.clear();
+		bytecode.opcodes += O_IndexLocalLiteral16;
+		return;
+	}
+	else if ( bytecode.all.size() > 1
+			  && bytecode.opcodes.size() > 0
+			  && addMe.opcodes.size() == 1
+			  && addMe.all.size() > 2
+			  && addMe.gotoSource.count() == 0
+			  && addMe.opcodes[0] == O_IndexLiteral16
+			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal )
+	{
+		bytecode.all[bytecode.all.size()-2] = O_IndexGlobalLiteral16;
+		for( unsigned int i=1; i<addMe.all.size(); ++i )
+		{
+			bytecode.all += addMe.all[i];	
+		}
+		bytecode.opcodes.clear();
+		bytecode.opcodes += O_IndexGlobalLiteral16;
+		return;
+	}
+	else if ( bytecode.all.size() > 1
+			  && bytecode.opcodes.size() > 0
+			  && addMe.opcodes.size() == 1
+			  && addMe.all.size() > 1
+			  && addMe.gotoSource.count() == 0
+			  && addMe.opcodes[0] == O_IndexLiteral8
+			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal )
+	{
+		bytecode.all[bytecode.all.size()-2] = O_IndexLocalLiteral8;
+		for( unsigned int i=1; i<addMe.all.size(); ++i )
+		{
+			bytecode.all += addMe.all[i];	
+		}
+		bytecode.opcodes.clear();
+		bytecode.opcodes += O_IndexLocalLiteral8;
+		return;
+	}
+	else if ( bytecode.all.size() > 1
+			  && bytecode.opcodes.size() > 0
+			  && addMe.opcodes.size() == 1
+			  && addMe.all.size() > 1
+			  && addMe.gotoSource.count() == 0
+			  && addMe.opcodes[0] == O_IndexLiteral8
+			  && bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal )
+	{
+		bytecode.all[bytecode.all.size()-2] = O_IndexGlobalLiteral8;
+		for( unsigned int i=1; i<addMe.all.size(); ++i )
+		{
+			bytecode.all += addMe.all[i];	
+		}
+		bytecode.opcodes.clear();
+		bytecode.opcodes += O_IndexGlobalLiteral8;
+		return;
+	}
+	else if ( bytecode.all.size() > 0
+			  && bytecode.opcodes.size() > 0
+			  && addMe.opcodes.size() == 2
+			  && addMe.gotoSource.count() == 0
+			  && addMe.all.size() == 3
+			  && addMe.opcodes[1] == O_Index )
+	{
+		if ( bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal
+			 && addMe.opcodes[0] == O_LoadFromLocal )
+		{
+			int a = bytecode.all.size() - 1;
+
+			addMe.all[0] = bytecode.all[a];
+			bytecode.all[a] = addMe.all[1];
+			bytecode.all[a-1] = O_LLValues;
+			bytecode.all += addMe.all[0];
+			bytecode.all += O_IndexSkipLoad;
+
+			bytecode.opcodes += O_LoadFromLocal;
+			bytecode.opcodes += O_IndexSkipLoad;
+			return;
+		}
+		else if ( bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal
+				  && addMe.opcodes[0] == O_LoadFromGlobal )
+		{
+			int a = bytecode.all.size() - 1;
+
+			addMe.all[0] = bytecode.all[a];
+			bytecode.all[a] = addMe.all[1];
+			bytecode.all[a-1] = O_GGValues;
+			bytecode.all += addMe.all[0];
+			bytecode.all += O_IndexSkipLoad;
+
+			bytecode.opcodes += O_LoadFromLocal;
+			bytecode.opcodes += O_IndexSkipLoad;
+			return;
+		}
+		else if ( bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromLocal
+				  && addMe.opcodes[0] == O_LoadFromGlobal )
+		{
+			int a = bytecode.all.size() - 1;
+
+			addMe.all[0] = bytecode.all[a];
+			bytecode.all[a] = addMe.all[1];
+			bytecode.all[a-1] = O_GLValues;
+			bytecode.all += addMe.all[0];
+			bytecode.all += O_IndexSkipLoad;
+
+			bytecode.opcodes += O_LoadFromLocal;
+			bytecode.opcodes += O_IndexSkipLoad;
+			return;
+		}
+		else if ( bytecode.opcodes[bytecode.opcodes.size() - 1] == O_LoadFromGlobal
+				  && addMe.opcodes[0] == O_LoadFromLocal )
+		{
+			int a = bytecode.all.size() - 1;
+
+			addMe.all[0] = bytecode.all[a];
+			bytecode.all[a] = addMe.all[1];
+			bytecode.all[a-1] = O_LGValues;
+			bytecode.all += addMe.all[0];
+			bytecode.all += O_IndexSkipLoad;
+
+			bytecode.opcodes += O_LoadFromLocal;
+			bytecode.opcodes += O_IndexSkipLoad;
+			return;
+		}
+	}
+	else if ( addMe.all.size() == 1 )
+	{
+		if ( addMe.opcodes[0] == O_HASH_PLACEHOLDER )
+		{
+			if ( bytecode.opcodes.size() > 1
+				 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
+				 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_LoadFromLocal )
+			{
+				int o = bytecode.all.size() - 7;
+
+				bytecode.all[o] = O_LocalIndexHash;
+				bytecode.all[o + 5] = bytecode.all[o + 4];
+				bytecode.all[o + 4] = bytecode.all[o + 3];
+				bytecode.all[o + 3] = bytecode.all[o + 2];
+				bytecode.all[o + 2] = bytecode.all[o + 1];
+				bytecode.all[o + 1] = bytecode.all[o + 6];
+
+				bytecode.opcodes.clear();
+				bytecode.all.shave(1);
+			}
+			else if (bytecode.opcodes.size() > 1
+					 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
+					 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_LoadFromGlobal )
+			{
+				int o = bytecode.all.size() - 7;
+
+				bytecode.all[o] = O_GlobalIndexHash;
+				bytecode.all[o + 5] = bytecode.all[o + 4];
+				bytecode.all[o + 4] = bytecode.all[o + 3];
+				bytecode.all[o + 3] = bytecode.all[o + 2];
+				bytecode.all[o + 2] = bytecode.all[o + 1];
+				bytecode.all[o + 1] = bytecode.all[o + 6];
+
+				bytecode.opcodes.clear();
+				bytecode.all.shave(1);
+			}
+			else if (bytecode.opcodes.size() > 1
+					 && bytecode.opcodes[ bytecode.opcodes.size() - 2 ] == O_LiteralInt32
+					 && bytecode.opcodes[ bytecode.opcodes.size() - 1 ] == O_StackSwap )
+			{
+				int a = bytecode.all.size() - 7;
+
+				bytecode.all[a] = O_StackIndexHash;
+
+				bytecode.opcodes.clear();
+				bytecode.all.shave(2);
+
+			}
+			else
+			{
+				m_err = WR_ERR_compiler_panic;
+			}
+
+			return;
+		}
+
+		pushOpcode( bytecode, (WROpcode)addMe.opcodes[0] );
+		return;
+	}
+
+	resolveRelativeJumps( addMe );
+
+	bytecode.all += addMe.all;
+	bytecode.opcodes += addMe.opcodes;
+}
+
+
+#endif
+/*******************************************************************************
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+#ifndef WRENCH_WITHOUT_COMPILER
+
+//------------------------------------------------------------------------------
+bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect )
+{
+	WRValue& value = ex.value;
+	WRstr& token = ex.token;
+	
+	if ( m_loadedToken.size() || (m_loadedValue.type != WR_REF) )
+	{
+		token = m_loadedToken;
+		value = m_loadedValue;
+		m_quoted = m_loadedQuoted;
+	}
+	else
+	{
+		m_quoted = false;
+		value.p2 = INIT_AS_REF;
+
+		ex.spaceBefore = (m_pos < m_sourceLen) && isspace(m_source[m_pos]);
+	
+		do
+		{
+			if ( m_pos >= m_sourceLen )
+			{
+				m_EOF = true;
+				return false;
+			}
+			
+		} while( isspace(m_source[m_pos++]) );
+
+		token = m_source[m_pos - 1];
+
+		unsigned int t=0;
+		for( ; c_operations[t].token && strncmp( c_operations[t].token, "@macroBegin", 11); ++t );
+
+		int offset = m_pos - 1;
+
+		for( ; c_operations[t].token; ++t )
+		{
+			int len = (int)strnlen( c_operations[t].token, 20 );
+			if ( ((offset + len) < m_sourceLen)
+				 && !strncmp(m_source + offset, c_operations[t].token, len) )
+			{
+				if ( isalnum(m_source[offset+len]) )
+				{
+					continue;
+				}
+				
+				m_pos += len - 1;
+				token = c_operations[t].token;
+				goto foundMacroToken;
+			}
+		}
+
+		for( t = 0; t<m_units[0].constantValues.count(); ++t )
+		{
+			int len = m_units[0].constantValues[t].label.size();
+			if ( ((offset + len) < m_sourceLen)
+				 && !strncmp(m_source + offset, m_units[0].constantValues[t].label.c_str(), len) )
+			{
+				if ( isalnum(m_source[offset+len]) )
+				{
+					continue;
+				}
+
+				m_pos += len - 1;
+				token.clear();
+				value = m_units[0].constantValues[t].value;
+				goto foundMacroToken;
+			}
+		}
+
+		for( t = 0; t<m_units[m_unitTop].constantValues.count(); ++t )
+		{
+			int len = m_units[m_unitTop].constantValues[t].label.size();
+			if ( ((offset + len) < m_sourceLen)
+				 && !strncmp(m_source + offset, m_units[m_unitTop].constantValues[t].label.c_str(), len) )
+			{
+				if ( isalnum(m_source[offset+len]) )
+				{
+					continue;
+				}
+
+				m_pos += len - 1;
+				token.clear();
+				value = m_units[m_unitTop].constantValues[t].value;
+				goto foundMacroToken;
+			}
+		}
+
+		if ( token[0] == '-' )
+		{
+			if ( m_pos < m_sourceLen )
+			{
+				if ( (isdigit(m_source[m_pos]) && !m_LastParsedLabel) || m_source[m_pos] == '.' )
+				{
+					goto parseAsNumber;
+				}
+				else if ( m_source[m_pos] == '-' )
+				{
+					token += '-';
+					++m_pos;
+				}
+				else if ( m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+			}
+		}
+		else
+		{
+			m_LastParsedLabel = false;
+		
+			if ( token[0] == '=' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+			}
+			else if ( token[0] == '!' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+			}
+			else if ( token[0] == '*' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+			}
+			else if ( token[0] == '%' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+			}
+			else if ( token[0] == '<' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+				else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '<' )
+				{
+					token += '<';
+					++m_pos;
+
+					if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+					{
+						token += '=';
+						++m_pos;
+					}
+				}
+			}
+			else if ( token[0] == '>' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+				else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '>' )
+				{
+					token += '>';
+					++m_pos;
+
+					if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+					{
+						token += '=';
+						++m_pos;
+					}
+				}
+			}
+			else if ( token[0] == '&' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '&' )
+				{
+					token += '&';
+					++m_pos;
+				}
+				else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+			}
+			else if ( token[0] == '^' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+			}
+			else if ( token[0] == '|' )
+			{
+				if ( (m_pos < m_sourceLen) && m_source[m_pos] == '|' )
+				{
+					token += '|';
+					++m_pos;
+				}
+				else if ( (m_pos < m_sourceLen) && m_source[m_pos] == '=' )
+				{
+					token += '=';
+					++m_pos;
+				}
+			}
+			else if ( token[0] == '+' )
+			{
+				if ( m_pos < m_sourceLen )
+				{
+					if ( m_source[m_pos] == '+' )
+					{
+						token += '+';
+						++m_pos;
+					}
+					else if ( m_source[m_pos] == '=' )
+					{
+						token += '=';
+						++m_pos;
+					}
+				}
+			}
+			else if ( token[0] == '\"' || token[0] == '\'' )
+			{
+				bool single = token[0] == '\'';
+				token.clear();
+				m_quoted = true;
+				
+				do
+				{
+					if (m_pos >= m_sourceLen)
+					{
+						m_err = WR_ERR_unterminated_string_literal;
+						m_EOF = true;
+						return false;
+					}
+
+					char c = m_source[m_pos];
+					if (c == '\"' && !single ) // terminating character
+					{
+						if ( single )
+						{
+							m_err = WR_ERR_bad_expression;
+							return false;
+						}
+						++m_pos;
+						break;
+					}
+					else if ( c == '\'' && single )
+					{
+						if ( !single || (token.size() > 1) )
+						{
+							m_err = WR_ERR_bad_expression;
+							return false;
+						}
+						++m_pos;
+						break;
+					}
+					else if (c == '\n')
+					{
+						m_err = WR_ERR_newline_in_string_literal;
+						return false;
+					}
+					else if (c == '\\')
+					{
+						c = m_source[++m_pos];
+						if (m_pos >= m_sourceLen)
+						{
+							m_err = WR_ERR_unterminated_string_literal;
+							m_EOF = true;
+							return false;
+						}
+
+						if (c == '\\') // escaped slash
+						{
+							token += '\\';
+						}
+						else if (c == '0')
+						{
+							token += atoi(m_source + m_pos);
+							for (; (m_pos < m_sourceLen) && isdigit(m_source[m_pos]); ++m_pos);
+							--m_pos;
+						}
+						else if (c == '\"')
+						{
+							token += '\"';
+						}
+						else if (c == '\'')
+						{
+							token += '\'';
+						}
+						else if (c == 'n')
+						{
+							token += '\n';
+						}
+						else if (c == 'r')
+						{
+							token += '\r';
+						}
+						else if (c == 't')
+						{
+							token += '\t';
+						}
+						else
+						{
+							m_err = WR_ERR_bad_string_escape_sequence;
+							return false;
+						}
+					}
+					else
+					{
+						token += c;
+					}
+
+				} while( ++m_pos < m_sourceLen );
+
+				value.p2 = INIT_AS_INT;
+				if ( single )
+				{
+					value.ui = token.size() == 1 ? token[0] : 0;
+					token.clear();
+				}
+				else
+				{
+					value.p2 = INIT_AS_INT;
+					value.type = (WRValueType)WR_COMPILER_LITERAL_STRING;
+					value.p = &token;
+				}
+			}
+			else if ( token[0] == '/' ) // might be a comment
+			{
+				if ( m_pos < m_sourceLen )
+				{	
+					if ( !isspace(m_source[m_pos]) )
+					{
+						if ( m_source[m_pos] == '/' )
+						{
+							for( ; m_pos<m_sourceLen && m_source[m_pos] != '\n'; ++m_pos ); // clear to end EOL
+
+							return getToken( ex, expect );
+						}
+						else if ( m_source[m_pos] == '*' )
+						{
+							for( ; (m_pos+1)<m_sourceLen
+								 && !(m_source[m_pos] == '*' && m_source[m_pos+1] == '/');
+								 ++m_pos ); // find end of comment
+
+							m_pos += 2;
+
+							return getToken( ex, expect );
+
+						}
+						else if ( m_source[m_pos] == '=' )
+						{
+							token += '=';
+							++m_pos;
+						}
+					}					
+					//else // bare '/' 
+				}
+			}
+			else if ( isdigit(token[0])
+					  || (token[0] == '.' && isdigit(m_source[m_pos])) )
+			{
+				if ( m_pos >= m_sourceLen )
+				{
+					return false;
+				}
+
+parseAsNumber:
+
+				m_LastParsedLabel = true;
+
+				if ( token[0] == '0' && m_source[m_pos] == 'x' ) // interpret as hex
+				{
+					token.clear();
+					m_pos++;
+
+					for(;;)
+					{
+						if ( m_pos >= m_sourceLen )
+						{
+							m_err = WR_ERR_unexpected_EOF;
+							return false;
+						}
+
+						if ( !isxdigit(m_source[m_pos]) )
+						{
+							break;
+						}
+
+						token += m_source[m_pos++];
+					}
+
+					value.p2 = INIT_AS_INT;
+					value.ui = strtoul( token, 0, 16 );
+				}
+				else if (token[0] == '0' && m_source[m_pos] == 'b' )
+				{
+					token.clear();
+					m_pos++;
+
+					for(;;)
+					{
+						if ( m_pos >= m_sourceLen )
+						{
+							m_err = WR_ERR_unexpected_EOF;
+							return false;
+						}
+
+						if ( !isxdigit(m_source[m_pos]) )
+						{
+							break;
+						}
+
+						token += m_source[m_pos++];
+					}
+
+					value.p2 = INIT_AS_INT;
+					value.i = strtol( token, 0, 2 );
+				}
+				else if (token[0] == '0' && isdigit(m_source[m_pos]) ) // octal
+				{
+					token.clear();
+
+					for(;;)
+					{
+						if ( m_pos >= m_sourceLen )
+						{
+							m_err = WR_ERR_unexpected_EOF;
+							return false;
+						}
+
+						if ( !isdigit(m_source[m_pos]) )
+						{
+							break;
+						}
+
+						token += m_source[m_pos++];
+					}
+
+					value.p2 = INIT_AS_INT;
+					value.i = strtol( token, 0, 8 );
+				}
+				else
+				{
+					bool decimal = token[0] == '.';
+					for(;;)
+					{
+						if ( m_pos >= m_sourceLen )
+						{
+							m_err = WR_ERR_unexpected_EOF;
+							return false;
+						}
+
+						if ( m_source[m_pos] == '.' )
+						{
+							if ( decimal )
+							{
+								return false;
+							}
+
+							decimal = true;
+						}
+						else if ( !isdigit(m_source[m_pos]) )
+						{
+							if ( m_source[m_pos] == 'f' || m_source[m_pos] == 'F')
+							{
+								decimal = true;
+								m_pos++;
+							}
+
+							break;
+						}
+
+						token += m_source[m_pos++];
+					}
+
+					if ( decimal )
+					{
+						value.p2 = INIT_AS_FLOAT;
+						value.f = (float)atof( token );
+					}
+					else
+					{
+						value.p2 = INIT_AS_INT;
+						value.ui = (uint32_t)strtoul( token, 0, 10 );
+					}
+				}
+			}
+			else if ( token[0] == ':' && isspace(m_source[m_pos]) )
+			{
+				
+			}
+			else if ( isalpha(token[0]) || token[0] == '_' || token[0] == ':' ) // must be a label
+			{
+				if ( token[0] != ':' || m_source[m_pos] == ':' )
+				{
+					m_LastParsedLabel = true;
+					if ( m_pos < m_sourceLen
+						 && token[0] == ':'
+						 && m_source[m_pos] == ':' )
+					{
+						token += ':';
+						++m_pos;
+					}
+
+					for (; m_pos < m_sourceLen; ++m_pos)
+					{
+						if ( m_source[m_pos] == ':' && m_source[m_pos + 1] == ':' && token.size() > 0 )
+						{
+							token += "::";
+							m_pos ++;
+							continue;
+						}
+						
+						if (!isalnum(m_source[m_pos]) && m_source[m_pos] != '_' )
+						{
+							break;
+						}
+
+						token += m_source[m_pos];
+					}
+
+					if (token == "true")
+					{
+						value.p2 = INIT_AS_INT;
+						value.i = 1;
+						token = "1";
+					}
+					else if (token == "false" || token == "null" )
+					{
+						value.p2 = INIT_AS_INT;
+						value.i = 0;
+						token = "0";
+					}
+				}
+			}
+		}
+
+foundMacroToken:
+	
+		ex.spaceAfter = (m_pos < m_sourceLen) && isspace(m_source[m_pos]);
+	}
+
+	m_loadedToken.clear();
+	m_loadedQuoted = m_quoted;
+	m_loadedValue.p2 = INIT_AS_REF;
+
+	if ( expect && (token != expect) )
+	{
+		return false;
+	}
+
+	return true;
+}
+
+#endif
+/*******************************************************************************
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
 
 //------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
@@ -10151,10 +10239,51 @@ void WRContext::gc( WRValue* stackTop )
 	}
 }
 
+/*  meh..
+//------------------------------------------------------------------------------
+void WRContext::scavenge( WRGCObject* va )
+{
+	// free the sub-array from this object, if the object itself
+	// needs to be cleaned that has to happen in the gc but this
+	// can be done anywhere
+	if ( va->m_type == SV_VOID_HASH_TABLE )
+	{
+		return;
+	}
+
+	g_free( va->m_data );
+	va->m_data = 0;
+
+	if ( va->m_type != SV_CHAR )
+	{
+		if ( va->m_type == SV_HASH_TABLE )
+		{
+			g_free( va->m_hashTable );
+			allocatedMemoryHint -= (va->m_mod * 4);
+		}
+
+		allocatedMemoryHint -= va->m_size * 3;
+		va->m_type = SV_CHAR;
+	}
+
+	allocatedMemoryHint -= va->m_size;
+	va->m_size = 0;
+}
+*/
+
 //------------------------------------------------------------------------------
 WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 {
 	WRGCObject* ret = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !ret )
+	{
+		g_mallocFailed = true;
+		return 0;
+	}
+#endif
+
 	ret->init( size, type, init );
 
 	if ( type == SV_CHAR )
@@ -10246,8 +10375,12 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	return true;
 }
 
-// #define PER_INSTRUCTION printf( "S[%d] %d:%s\n", (int)(stackTop - w->stack), (int)READ_8_FROM_PC(pc), c_opcodeName[READ_8_FROM_PC(pc)]);
-#define PER_INSTRUCTION
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+  bool g_mallocFailed =false;
+  #define PER_INSTRUCTION {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; g_mallocFailed = false; return 0; } }
+#else
+  #define PER_INSTRUCTION
+#endif
 
 #define WRENCH_JUMPTABLE_INTERPRETER
 #ifdef WRENCH_REALLY_COMPACT
@@ -10778,8 +10911,15 @@ literalZero:
 				pc += 2;
 				
 				context->gc( stackTop );
-				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = context->getSVA( hash, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+				if ( !stackTop->va )
+				{
+					CONTINUE; // don't need to do anything else, this will immediately return
+				}
+#endif
+				stackTop->p2 = INIT_AS_ARRAY;
+
 
 				for ( char* to = (char *)(stackTop++)->va->m_data ; hash ; --hash )
 				{
@@ -10810,6 +10950,7 @@ literalZero:
 				register1 = &(stackTop - 1)->deref();
 				register1->p2 = INIT_AS_ARRAY;
 				register1->va = context->getSVA( register0->ui, SV_VALUE, true );
+				// malloc failing here will immediately be detected
 				CONTINUE;
 			}
 
@@ -11136,6 +11277,12 @@ NewObjectTablePastLoad:
 
 					stackTop->va = context->getSVA( count, SV_VALUE, false );
 					
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+					if ( !stackTop->va )
+					{
+						CONTINUE;
+					}
+#endif
 					stackTop->va->m_ROMHashTable = table + 3;
 					
 					stackTop->va->m_mod = READ_16_FROM_PC(table+1);
@@ -11374,6 +11521,12 @@ hashIndexJump:
 				{
 					register0->p2 = INIT_AS_HASH_TABLE;
 					register0->va = context->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+					if ( !register0->va )
+					{
+						CONTINUE;
+					}
+#endif
 				}
 						
 #ifdef WRENCH_COMPACT
@@ -13221,8 +13374,15 @@ WRValue* WrenchValue::asArrayMember( const int index )
 	if ( !IS_ARRAY(m_value->xtype) ) 
 	{
 		// then make it one!
-		m_value->p2 = INIT_AS_ARRAY;
 		m_value->va = m_context->getSVA( index + 1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !m_value->va )
+		{
+			m_value->p2 = INIT_AS_INT;
+			return m_value;
+		}
+#endif
+		m_value->p2 = INIT_AS_ARRAY;
 	}
 	else if ( index >= (int)m_value->va->m_size )
 	{
@@ -13237,6 +13397,10 @@ WRValue* WrenchValue::asArrayMember( const int index )
 WRState* wr_newState( int stackSize )
 {
 	WRState* w = (WRState *)g_malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !w ) { return 0; }
+#endif
+																		   
 	memset( (unsigned char*)w, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
 
 	w->stackSize = stackSize;
@@ -13325,6 +13489,14 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 				 + (localFuncs * sizeof(WRFunction)); // functions;
 
 	WRContext* C = (WRContext *)g_malloc( needed );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !C )
+	{
+		w->err = WR_ERR_malloc_failed;
+		return 0;
+	}
+#endif
+	
 	memset((char*)C, 0, needed);
 
 	C->numLocalFunctions = localFuncs;
@@ -13699,8 +13871,17 @@ WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bo
 			return 0;
 		}
 
-		V.p2 = INIT_AS_ARRAY;
 		V.va = context->getSVA( index + 1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !V.va )
+		{
+			V.p2 = INIT_AS_INT;
+			return &V;
+		}
+#endif
+
+		V.p2 = INIT_AS_ARRAY;
+
 	}
 
 	if ( index >= V.va->m_size )
@@ -13729,8 +13910,16 @@ WRValue* WRValue::indexHash( WRContext* context, const uint32_t hash, const bool
 			return 0;
 		}
 
-		V.p2 = INIT_AS_HASH_TABLE;
 		V.va = context->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !V.va )
+		{
+			V.p2 = INIT_AS_INT;
+			return &V;
+		}
+#endif
+		
+		V.p2 = INIT_AS_HASH_TABLE;
 	}
 
 	return create ? (WRValue*)V.va->get(hash) : V.va->exists(hash, false);
@@ -13755,12 +13944,11 @@ void* WRValue::array( unsigned int* len, char arrayType ) const
 }
 
 //------------------------------------------------------------------------------
-int WRValue::arrayLen() const
+int WRValue::arraySize() const
 {
 	WRValue& V = deref();
-	return (V.xtype == WR_EX_ARRAY && (V.va->m_type == SV_VALUE || V.va->m_type == SV_CHAR)) ? V.va->m_size : -1;
+	return V.xtype == WR_EX_ARRAY ? V.va->m_size : -1;
 }
-
 
 //------------------------------------------------------------------------------
 int wr_technicalAsStringEx( char* string, const WRValue* value, size_t pos, size_t maxLen, bool valuesInHex )
@@ -14063,8 +14251,15 @@ WRValue& wr_makeFloat( WRValue* val, float f )
 WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, const int len )
 {
 	const int slen = len ? len : strlen(data);
-	val->p2 = INIT_AS_ARRAY;
 	val->va = context->getSVA( slen, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !val->va )
+	{
+		val->p2 = INIT_AS_INT;
+		return *val;
+	}
+#endif
+	val->p2 = INIT_AS_ARRAY;
 	memcpy( (unsigned char *)val->va->m_data, data, slen );
 	return *val;
 }
@@ -14072,15 +14267,27 @@ WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, cons
 //------------------------------------------------------------------------------
 void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 {
-	val->p2 = INIT_AS_HASH_TABLE;
 	val->va = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !val->va )
+	{
+		val->init();
+		return;
+	}
+#endif
 	val->va->init( sizeHint, SV_VOID_HASH_TABLE, false );
 	val->va->m_skipGC = 1;
+	val->p2 = INIT_AS_HASH_TABLE;
 }
 
 //------------------------------------------------------------------------------
 void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value )
 {
+	if ( container->xtype != WR_EX_HASH_TABLE )
+	{
+		return;
+	}
+	
 	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
 	entry->r = value;
 	entry->p2 = INIT_AS_REF;
@@ -14089,7 +14296,10 @@ void wr_addValueToContainer( WRValue* container, const char* name, WRValue* valu
 //------------------------------------------------------------------------------
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size )
 {
-	assert( size <= 0x1FFFFF );
+	if ( container->xtype != WR_EX_HASH_TABLE || size > 0x1FFFFF )
+	{
+		return;
+	}
 
 	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
 	entry->c = array;
@@ -14471,6 +14681,8 @@ const char* c_errStrings[]=
 
 	"WR_ERR_execute_function_zero_called_more_than_once",
 
+	"WR_ERR_malloc_failed",
+
 	"WR_ERR_USER_err_out_of_range",
 };
 
@@ -14633,6 +14845,13 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 						case SV_CHAR:
 						{
 							value.va = context->getSVA( temp16, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+							if ( !value.va )
+							{
+								value.p2 = INIT_AS_INT;
+								return false;
+							}
+#endif
 							if ( !serializer.read(value.va->m_SCdata, temp16) )
 							{
 								return false;
@@ -14643,6 +14862,13 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 						case SV_VALUE:
 						{
 							value.va = context->getSVA( temp16, SV_VALUE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+							if ( !value.va )
+							{
+								value.p2 = INIT_AS_INT;
+								return false;
+							}
+#endif
 							for( uint16_t i=0; i<temp16; ++i )
 							{
 								if ( !wr_deserializeEx(value.va->m_Vdata[i], serializer, context) )
@@ -14667,8 +14893,16 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 
 					temp16 = wr_x16( temp16 );
 					
-					value.p2 = INIT_AS_HASH_TABLE;
 					value.va = context->getSVA( temp16 - 1, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+					if ( !value.va )
+					{
+						value.p2 = INIT_AS_INT;
+						return false;
+					}
+#endif
+					value.p2 = INIT_AS_HASH_TABLE;
+
 
 					for( uint16_t i=0; i<temp16; ++i )
 					{
@@ -15763,26 +15997,25 @@ void wr_growValueArray( WRGCObject* va, int newMinIndex )
 
 	// increase size to accomodate new element
 	int size_el = va->m_size * size_of;
-	va->m_size = newMinIndex + 1;
 
 	// create new array to hold the data, and g_free the existing one
-	
-#ifdef WRENCH_COMPACT
-
 	uint8_t* old = va->m_Cdata;
 
 	va->m_Cdata = (uint8_t *)g_malloc( (newMinIndex + 1) * size_of );
 
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !va->m_Cdata )
+	{
+		va->m_Cdata = old;
+		g_mallocFailed = true;
+		return;
+	}
+#endif
+	
 	memcpy( va->m_Cdata, old, size_el );
-
 	g_free( old );
 	
-#else 
-	// this increases the code size because this is the only place
-	// "realloc" is used, so the linker has to link it in
-	va->m_data = realloc( va->m_data, size_of * (newMinIndex+1) );
-
-#endif
+	va->m_size = newMinIndex + 1;
 
 	// clear new entries
 	memset( va->m_Cdata + size_el, 0, (va->m_size * size_of) - size_el );
@@ -15885,9 +16118,10 @@ uint32_t WRValue::getHashEx() const
 
 		for( uint32_t i=0; i<va->m_mod; ++i )
 		{
-			if ((uint32_t)READ_32_FROM_PC(va->m_ROMHashTable + i * 5) != WRENCH_NULL_HASH)
+			const uint8_t* offset = va->m_ROMHashTable + (i * 5);
+			if ( (uint32_t)READ_32_FROM_PC(offset) != WRENCH_NULL_HASH)
 			{
-				uint32_t h = va->m_Vdata[i].getHash();
+				uint32_t h = va->m_Vdata[READ_8_FROM_PC(offset + 4)].getHash();
 				hash = wr_hash( &h, 4, hash );
 			}
 		}
@@ -15934,7 +16168,15 @@ void wr_valueToArray( const WRValue* array, WRValue* value )
 void wr_addLibraryCleanupFunction( WRState* w, void (*function)(WRState* w, void* param), void* param )
 {
 	WRLibraryCleanup* entry = (WRLibraryCleanup *)g_malloc(sizeof(WRLibraryCleanup));
-
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !entry )
+	{
+		g_mallocFailed = true;
+		w->err = WR_ERR_malloc_failed;
+		return;
+	}
+#endif
+	
 	entry->cleanupFunction = function;
 	entry->param = param;
 	entry->next = w->libCleanupFunctions;
@@ -15987,8 +16229,15 @@ void wr_assignToHashTable( WRContext* c, WRValue* index, WRValue* value, WRValue
 
 	if ( table->xtype != WR_EX_HASH_TABLE )
 	{
-		table->p2 = INIT_AS_HASH_TABLE;
 		table->va = c->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !table->va )
+		{
+			table->p2 = INIT_AS_INT;
+			return;
+		}
+#endif
+		table->p2 = INIT_AS_HASH_TABLE;
 	}
 
 	WRValue *entry = (WRValue *)table->va->get( index->getHash() );
@@ -16190,6 +16439,14 @@ void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 	{
 		char* t = to->va->m_SCdata;
 		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size + 1 );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !to->va->m_SCdata )
+		{
+			to->va->m_SCdata = t;
+			g_mallocFailed = true;
+			return;
+		}
+#endif
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
 		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
 		to->va->m_size = to->va->m_size + from->va->m_size;
@@ -16272,8 +16529,17 @@ void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall 
 			  && IS_ARRAY(from->xtype)
 			  && from->va->m_type == SV_CHAR )
 	{
-		target->p2 = INIT_AS_ARRAY;
 		target->va = from->va->m_creatorContext->getSVA( from->va->m_size + to->va->m_size, SV_CHAR, false );
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !target->va )
+		{
+			target->p2 = INIT_AS_INT;
+			return;
+		}
+#endif
+		target->p2 = INIT_AS_ARRAY;
+
 		memcpy( target->va->m_SCdata, from->va->m_SCdata, from->va->m_size );
 		memcpy( target->va->m_SCdata + from->va->m_size, to->va->m_SCdata, to->va->m_size );
 	}
@@ -16556,6 +16822,14 @@ void wr_AddAssign_E_E( WRValue* to, WRValue* from )
 	{
 		char* t = to->va->m_SCdata;
 		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size + 1 );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !to->va->m_SCdata )
+		{
+			to->va->m_SCdata = t;
+			g_mallocFailed = true;
+			return;
+		}
+#endif
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
 		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
 		to->va->m_size = to->va->m_size + from->va->m_size;
@@ -16675,8 +16949,16 @@ void wr_AdditionBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
 			  && IS_ARRAY(from->xtype)
 			  && from->va->m_type == SV_CHAR )
 	{
-		target->p2 = INIT_AS_ARRAY;
 		target->va = from->va->m_creatorContext->getSVA( from->va->m_size + to->va->m_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !target->va )
+		{
+			target->p2 = INIT_AS_INT;
+			return;
+		}
+#endif
+		target->p2 = INIT_AS_ARRAY;
+
 		memcpy( target->va->m_SCdata, to->va->m_SCdata, to->va->m_size );
 		memcpy( target->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
 	}
@@ -16948,8 +17230,15 @@ void doIndexHash( WRValue* value, WRValue* target, WRValue* index )
 void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
 	// all we know is the value is not an array, so make it one
-	value->p2 = INIT_AS_ARRAY;
 	value->va = c->getSVA( index->ui + 1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !value->va )
+	{
+		value->p2 = INIT_AS_INT;
+		return;
+	}
+#endif
+	value->p2 = INIT_AS_ARRAY;
 	
 	elementToTarget( index->ui, target, value );
 }
@@ -16978,13 +17267,29 @@ void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 
 		if ( I->type == WR_INT )
 		{
-			value->p2 = INIT_AS_ARRAY;
 			value->va = c->getSVA( index->ui+1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !value->va )
+			{
+				value->p2 = INIT_AS_INT;
+				return;
+			}
+#endif
+			value->p2 = INIT_AS_ARRAY;
+
 		}
 		else
 		{
-			value->p2 = INIT_AS_HASH_TABLE;
 			value->va = c->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !value->va )
+			{
+				value->p2 = INIT_AS_INT;
+				return;
+			}
+#endif
+			value->p2 = INIT_AS_HASH_TABLE;
+
 			doIndexHash( value, target, I );
 			return;
 		}
@@ -17018,8 +17323,16 @@ void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 	{
 		if ( !IS_HASH_TABLE(V->xtype) )
 		{
-			V->p2 = INIT_AS_HASH_TABLE;
 			V->va = c->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !V->va )
+			{
+				V->p2 = INIT_AS_INT;
+				return;
+			}
+#endif
+			V->p2 = INIT_AS_HASH_TABLE;
+
 		}
 		doIndexHash( V, target, I );
 	}
@@ -17431,6 +17744,15 @@ SOFTWARE.
 #include <sys/time.h>
 
 //------------------------------------------------------------------------------
+void wr_stdout( const char* data, const int size )
+{
+	if ( write( STDOUT_FILENO, data, size ) > 0 )
+	{
+		fflush( stdout );
+	}
+}
+
+//------------------------------------------------------------------------------
 void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
@@ -17448,8 +17770,14 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 			FILE *infil = fopen( fileName, "rb" );
 			if ( infil )
 			{
-				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = c->getSVA( (int)sbuf.st_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+				if ( !stackTop->va )
+				{
+					return;
+				}
+#endif
+				stackTop->p2 = INIT_AS_ARRAY;
 				if ( fread( stackTop->va->m_Cdata, sbuf.st_size, 1, infil ) != 1 )
 				{
 					stackTop->init();
@@ -17516,8 +17844,14 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 
 		if ( in == EOF || in == '\n' || in == '\r' || pos >= 256 )
 		{ 
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( pos, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
 			memcpy( stackTop->va->m_Cdata, buf, pos );
 			break;
 		}
@@ -17572,6 +17906,13 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	
 	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 		
 	int result = read( args[0].asInt(), stackTop->va->m_Cdata, toRead );
 	stackTop->va->m_size = (result > 0) ? result : 0;
@@ -17697,6 +18038,13 @@ SOFTWARE.
 #include <io.h>
 
 //------------------------------------------------------------------------------
+void wr_stdout( const char* data, const int size )
+{
+	_write( _fileno(stdout), data, size );
+	fflush( stdout );
+}
+
+//------------------------------------------------------------------------------
 void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
@@ -17715,8 +18063,15 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 			FILE *infil = fopen( fileName, "rb" );
 			if ( infil )
 			{
-				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = c->getSVA( (int)sbuf.st_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+				if ( !stackTop->va )
+				{
+					return;
+				}
+#endif
+				stackTop->p2 = INIT_AS_ARRAY;
+
 				if ( fread( stackTop->va->m_Cdata, sbuf.st_size, 1, infil ) != 1 )
 				{
 					stackTop->init();
@@ -17783,8 +18138,15 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 
 		if ( in == EOF || in == '\n' || in == '\r' || pos >= 256 )
 		{ 
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( pos, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
+
 			memcpy( stackTop->va->m_Cdata, buf, pos );
 			break;
 		}
@@ -17841,6 +18203,13 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 	}
 
 	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 
 	int result = _read( args[0].asInt(), stackTop->va->m_Cdata, toRead );
 	stackTop->va->m_size = (result > 0) ? result : 0;
@@ -17973,6 +18342,12 @@ SOFTWARE.
 #endif
 
 //------------------------------------------------------------------------------
+void wr_stdout( const char* data, const int size )
+{
+}
+
+
+//------------------------------------------------------------------------------
 enum WRFSOpenModes
 {
 	LFS_READ   = 0x1,
@@ -18027,8 +18402,15 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 	File file = FILE_OBJ.open( fileName );
 	if ( file && !file.isDirectory() )
 	{
-		stackTop->p2 = INIT_AS_ARRAY;
 		stackTop->va = c->getSVA( file.size(), SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !stackTop->va )
+		{
+			return;
+		}
+#endif
+		stackTop->p2 = INIT_AS_ARRAY;
+
 		if ( file.readBytes( stackTop->va->m_SCdata, file.size() ) != file.size() )
 		{
 			stackTop->init();
@@ -18113,6 +18495,10 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		WRFSFile* entry = (WRFSFile *)g_malloc( sizeof(WRFSFile) );
 
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if(!entry) { g_mallocFailed = true; return; }
+#endif
+		
 		if ( mode & LFS_READ )
 		{
 			entry->file = FILE_OBJ.open( fileName, FILE_READ );
@@ -18205,6 +18591,13 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 	}
 		
 	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 
 	int result = fd->file.readBytes( stackTop->va->m_SCdata, toRead );
 	
@@ -18384,13 +18777,29 @@ void wr_strlen( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
-int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn )
+inline void addChar( char* out, char c, unsigned int& pos, const unsigned int max )
+{
+	if ( pos < max )
+	{
+		out[pos] = c;
+	}
+	
+	++pos;
+}
+
+//------------------------------------------------------------------------------
+int wr_sprintfEx( char* outbuf,
+				  const unsigned int outsize,
+				  const char* fmt,
+				  const unsigned int fmtsize,
+				  WRValue* args,
+				  const int argn )
 {
 	if ( !fmt )
 	{
 		return 0;
 	}
-	
+
 	enum
 	{
 		zeroPad         = 1<<0,
@@ -18401,7 +18810,9 @@ int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn )
 		altRep			= 1<<5,
 	};
 
-	char* out = outbuf;
+	unsigned int pos = 0;
+	const char* fmtend = fmt + fmtsize;
+
 	int listPtr = 0;
 
 resetState:
@@ -18412,20 +18823,18 @@ resetState:
 
 	for(;;)
 	{
-		char c = *fmt;
-		fmt++;
-
-		if ( !c )
+		if ( fmt >= fmtend )
 		{
-			*out = 0;
-			break;
+			goto sprintf_end;
 		}
+		
+		char c = *fmt++;
 
 		if ( !(secondPass & flags) )
 		{
 			if ( c != '%' ) // literal
 			{
-				*out++ = c;
+				addChar( outbuf, c, pos, outsize );
 			}
 			else // possibly % format specifier
 			{
@@ -18458,13 +18867,13 @@ resetState:
 		{
 			if ( listPtr < argn )
 			{
-				*out++ = (char)(args[listPtr++].asInt());
+				addChar( outbuf, (char)(args[listPtr++].asInt()), pos, outsize );
 			}
 			goto resetState;
 		}
 		else if ( c == '%' ) // literal %
 		{
-			*out++ = c;
+			addChar( outbuf, c, pos, outsize );
 			goto resetState;
 		}
 		else // string or integer
@@ -18501,38 +18910,38 @@ copyToString:
 				{
 					len++;
 				}
-				
+
 				ptr -= len;
-				
+
 				// Right-justify
 				if ( !(flags & negativeJustify) )
 				{
 					for ( ; columns > len; columns-- )
 					{
-						*out++ = padChar;
+						addChar( outbuf, padChar, pos, outsize );
 					}
 				}
-				
+
 				if ( flags & negativeSign )
 				{
-					*out++ = '-';
+					addChar( outbuf, '-', pos, outsize );
 				}
 
 				if ( flags & altRep || c == 'p' )
 				{
-					*out++ = '0';
-					*out++ = 'x';
+					addChar( outbuf, '0', pos, outsize );
+					addChar( outbuf, 'x', pos, outsize );
 				}
 
 				for (unsigned char l = 0; l < len; ++l )
 				{
-					*out++ = *ptr++;
+					addChar( outbuf, *ptr++, pos, outsize );
 				}
 
 				// Left-justify
 				for ( ; columns > len; columns-- )
 				{
-					*out++ = ' ';
+					addChar( outbuf, ' ', pos, outsize );
 				}
 
 				goto resetState;
@@ -18565,11 +18974,11 @@ copyToString:
 					const int chars = snprintf( buf, 31, floatBuf + i, args[listPtr++].asFloat());
 
 					// your system not have snprintf? the unsafe version is:
-//					const int chars = sprintf( buf, floatBuf + i, args[listPtr++].asFloat());
-					
+					//					const int chars = sprintf( buf, floatBuf + i, args[listPtr++].asFloat());
+
 					for( int j=0; j<chars; ++j )
 					{
-						*out++ = buf[j];
+						addChar( outbuf, buf[j], pos, outsize );
 					}
 					goto resetState;
 				}
@@ -18652,44 +19061,98 @@ convertBase:
 			}
 		}
 	}
-
-	return out - outbuf;
+	
+sprintf_end:
+	
+	return pos;
 }
+
+
+#ifndef WR_FORMAT_TRY_SIZE
+#define WR_FORMAT_TRY_SIZE 80
+#endif
+
+//------------------------------------------------------------------------------
+unsigned int wr_doSprintf( WRValue& to, WRValue& fmt, WRValue* args, const int argn, WRContext* c )
+{
+	unsigned int fmtBufferSize = 0;
+	char* fmtbuffer = (char*)fmt.array( &fmtBufferSize, SV_CHAR );
+	if ( !fmtbuffer )
+	{
+		return 0;
+	}
+
+	unsigned int outbufSize = 0;
+	char* outbuf = (char*)to.array( &outbufSize, SV_CHAR );
+
+	unsigned int size;
+
+	if ( !outbuf ) // going to have to make one then
+	{
+		char tmpbuf[WR_FORMAT_TRY_SIZE + 1]; // start with a temp buf
+		
+		size = wr_sprintfEx( tmpbuf, WR_FORMAT_TRY_SIZE, fmtbuffer, fmtBufferSize, args, argn );
+
+		if ( size > WR_FORMAT_TRY_SIZE )
+		{
+			goto createNewBuffer;
+		}
+
+		to.va = c->getSVA( size, SV_CHAR, false );
+
+		#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !to.va )
+		{
+			to.p2 = WR_INT;
+			return 0;
+		}
+		#endif
+
+		memcpy( to.va->m_Cdata, tmpbuf, size );
+	}
+	else
+	{
+		size = wr_sprintfEx( outbuf, outbufSize, fmtbuffer, fmtBufferSize, args, argn );
+
+		if ( size > outbufSize )
+		{
+createNewBuffer:
+
+			to.va = c->getSVA( size, SV_CHAR, false );
+
+			#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !to.va )
+			{
+				to.p2 = WR_INT;
+				return 0;
+			}
+			#endif
+			wr_sprintfEx( (char *)to.va->m_Cdata, size, fmtbuffer, fmtBufferSize, args, argn );
+		}
+		else
+		{
+			to.va->m_size = size; // just is the new size, TODO- recover memory? seems like not worth the squeeze
+		}
+	}
+
+	to.p2 = INIT_AS_ARRAY;
+
+	return size;
+
+}
+
 
 //------------------------------------------------------------------------------
 void wr_format( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
-	if( argn >= 1 )
+	if( argn > 0 )
 	{
 		WRValue* args = stackTop - argn;
-		char outbuf[512];
-		char inbuf[512];
-		args[0].asString( inbuf, 512 );
-		
-		int size = wr_sprintfEx( outbuf, inbuf, args + 1, argn - 1 );
-
-		stackTop->p2 = INIT_AS_ARRAY;
-		stackTop->va = c->getSVA( size, SV_CHAR, false );
-		memcpy( stackTop->va->m_Cdata, outbuf, size );
+		wr_doSprintf( *stackTop, args->deref(), args + 1, argn - 1, c );
 	}
-}
-
-//------------------------------------------------------------------------------
-void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
-{
-	stackTop->init();
-
-	if( argn >= 1 )
+	else
 	{
-		WRValue* args = stackTop - argn;
-
-		char inbuf[512];
-		char outbuf[512];
-		stackTop->i = wr_sprintfEx( outbuf, args[0].asString(inbuf), args + 1, argn - 1 );
-		
-		printf( "%s", outbuf );
+		stackTop->init();
 	}
 }
 
@@ -18697,24 +19160,29 @@ void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
 void wr_sprintf( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
-	WRValue* args = stackTop - argn;
-	
-	if ( argn < 2
-		 || args[0].type != WR_REF
-		 || args[1].xtype != WR_EX_ARRAY
-		 || args[1].va->m_type != SV_CHAR )
+
+	if( argn > 1 )
 	{
-		return;
+		WRValue* args = stackTop - argn;
+		stackTop->i = wr_doSprintf( args->deref(), args[1].deref(), args + 2, argn - 2, c );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
+{
+	unsigned int chars = 0;
+	if( argn > 0 )
+	{
+		WRValue* args = stackTop - argn;
+		if ( (chars = wr_doSprintf( *stackTop, args->deref(), args + 1, argn - 1, c )) )
+		{
+			wr_stdout( (const char*)stackTop->va->m_Cdata, stackTop->va->m_size );
+		}
 	}
 
-	char outbuf[512];
-	char inbuf[512];
-	args[1].asString(inbuf);
-	stackTop->i = wr_sprintfEx( outbuf, inbuf, args + 2, argn - 2 );
-
-	args[0].r->p2 = INIT_AS_ARRAY;
-	args[0].r->va = c->getSVA( stackTop->i, SV_CHAR, false );
-	memcpy( args[0].r->va->m_Cdata, outbuf, stackTop->i );
+	stackTop->p2 = WR_INT;
+	stackTop->i = chars;
 }
 
 //------------------------------------------------------------------------------
@@ -18773,7 +19241,6 @@ void wr_mid( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	
 	unsigned int start = args[1].asInt();
-	stackTop->p2 = INIT_AS_ARRAY;
 
 	unsigned int chars = 0;
 	if ( start < len )
@@ -18786,6 +19253,15 @@ void wr_mid( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	
 	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+
+	#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+	#endif
+	
+	stackTop->p2 = INIT_AS_ARRAY;
 	memcpy( stackTop->va->m_Cdata, data + start, chars );
 }
 
@@ -18823,8 +19299,15 @@ void wr_tolower( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue& value = (stackTop - 1)->deref();
 		if ( value.xtype == WR_EX_ARRAY && value.va->m_type == SV_CHAR )
 		{
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( value.va->m_size, SV_CHAR, false );
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
 
 			for( uint32_t i=0; i<value.va->m_size; ++i )
 			{
@@ -18846,8 +19329,14 @@ void wr_toupper( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue& value = (stackTop - 1)->deref();
 		if ( value.xtype == WR_EX_ARRAY && value.va->m_type == SV_CHAR )
 		{
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( value.va->m_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
 
 			for( uint32_t i=0; i<value.va->m_size; ++i )
 			{
@@ -18886,8 +19375,6 @@ void wr_tol( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_concat( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn < 2 )
 	{
 		return;
@@ -18904,8 +19391,14 @@ void wr_concat( WRValue* stackTop, const int argn, WRContext* c )
 		return;
 	}
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( len1 + len2, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 	memcpy( stackTop->va->m_Cdata, data1, len1 );
 	memcpy( stackTop->va->m_Cdata + len1, data2, len2 );
 }
@@ -18929,14 +19422,20 @@ void wr_left( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	unsigned int chars = args[1].asInt();
 
-	stackTop->p2 = INIT_AS_ARRAY;
-	
 	if ( chars > len )
 	{
 		chars = len;
 	}
 	
 	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
+
 	memcpy( stackTop->va->m_Cdata, data, chars );
 }
 
@@ -18964,8 +19463,14 @@ void wr_right( WRValue* stackTop, const int argn, WRContext* c )
 		chars = len;
 	}
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 	memcpy( stackTop->va->m_Cdata, data + (len - chars), chars );
 }
 
@@ -18987,8 +19492,15 @@ void wr_trimright( WRValue* stackTop, const int argn, WRContext* c )
 
 	++len;
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( len, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
+
 	memcpy( stackTop->va->m_Cdata, data, len );
 }
 
@@ -19009,8 +19521,15 @@ void wr_trimleft( WRValue* stackTop, const int argn, WRContext* c )
 	unsigned int marker = 0;
 	while( marker < len && isspace(data[marker]) ) { ++marker; }
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( len - marker, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
+
 	memcpy( stackTop->va->m_Cdata, data + marker, len - marker );
 }
 
@@ -19034,8 +19553,15 @@ void wr_trim( WRValue* stackTop, const int argn, WRContext* c )
 
 	++len;
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( len - marker, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
+
 	memcpy( stackTop->va->m_Cdata, data + marker, len - marker );
 }
 
@@ -19066,9 +19592,15 @@ void wr_insert( WRValue* stackTop, const int argn, WRContext* c )
 		pos = len1;
 	}
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	unsigned int newlen = len1 + len2;
 	stackTop->va = c->getSVA( newlen, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 
 	memcpy( stackTop->va->m_Cdata, data1, pos );
 	memcpy( stackTop->va->m_Cdata + pos, data2, len2 );
@@ -19093,9 +19625,11 @@ void wr_tprint( WRValue* stackTop, const int argn, WRContext* c )
 void wr_loadStringLib( WRState* w )
 {
 	wr_registerLibraryFunction( w, "str::strlen", wr_strlen );
+
 	wr_registerLibraryFunction( w, "str::sprintf", wr_sprintf );
-	wr_registerLibraryFunction( w, "str::printf", wr_printf );
 	wr_registerLibraryFunction( w, "str::format", wr_format );
+	
+	wr_registerLibraryFunction( w, "str::printf", wr_printf );
 	wr_registerLibraryFunction( w, "str::isspace", wr_isspace );
 	wr_registerLibraryFunction( w, "str::isdigit", wr_isdigit );
 	wr_registerLibraryFunction( w, "str::isalpha", wr_isalpha );
@@ -19601,6 +20135,9 @@ void wr_importByteCode( WRValue* stackTop, const int argn, WRContext* c )
 		if ( data )
 		{
 			uint8_t* import = (uint8_t*)g_malloc( len );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if(!import) { g_mallocFailed = true; return; }
+#endif
 			memcpy( (char*)import, data, len );
 			wr_import( c, import, len, true );
 		}
@@ -19689,8 +20226,14 @@ void wr_stdSerialize( WRValue* stackTop, const int argn, WRContext* c )
 		int len;
 		if ( wr_serialize(&buf, &len, *(stackTop - argn) ) )
 		{
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( 0, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
 			free( stackTop->va->m_Cdata );
 			stackTop->va->m_data = buf;
 			stackTop->va->m_size = len;

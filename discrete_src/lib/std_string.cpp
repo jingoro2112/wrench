@@ -45,13 +45,29 @@ void wr_strlen( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
-int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn )
+inline void addChar( char* out, char c, unsigned int& pos, const unsigned int max )
+{
+	if ( pos < max )
+	{
+		out[pos] = c;
+	}
+	
+	++pos;
+}
+
+//------------------------------------------------------------------------------
+int wr_sprintfEx( char* outbuf,
+				  const unsigned int outsize,
+				  const char* fmt,
+				  const unsigned int fmtsize,
+				  WRValue* args,
+				  const int argn )
 {
 	if ( !fmt )
 	{
 		return 0;
 	}
-	
+
 	enum
 	{
 		zeroPad         = 1<<0,
@@ -62,7 +78,9 @@ int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn )
 		altRep			= 1<<5,
 	};
 
-	char* out = outbuf;
+	unsigned int pos = 0;
+	const char* fmtend = fmt + fmtsize;
+
 	int listPtr = 0;
 
 resetState:
@@ -73,20 +91,18 @@ resetState:
 
 	for(;;)
 	{
-		char c = *fmt;
-		fmt++;
-
-		if ( !c )
+		if ( fmt >= fmtend )
 		{
-			*out = 0;
-			break;
+			goto sprintf_end;
 		}
+		
+		char c = *fmt++;
 
 		if ( !(secondPass & flags) )
 		{
 			if ( c != '%' ) // literal
 			{
-				*out++ = c;
+				addChar( outbuf, c, pos, outsize );
 			}
 			else // possibly % format specifier
 			{
@@ -119,13 +135,13 @@ resetState:
 		{
 			if ( listPtr < argn )
 			{
-				*out++ = (char)(args[listPtr++].asInt());
+				addChar( outbuf, (char)(args[listPtr++].asInt()), pos, outsize );
 			}
 			goto resetState;
 		}
 		else if ( c == '%' ) // literal %
 		{
-			*out++ = c;
+			addChar( outbuf, c, pos, outsize );
 			goto resetState;
 		}
 		else // string or integer
@@ -162,38 +178,38 @@ copyToString:
 				{
 					len++;
 				}
-				
+
 				ptr -= len;
-				
+
 				// Right-justify
 				if ( !(flags & negativeJustify) )
 				{
 					for ( ; columns > len; columns-- )
 					{
-						*out++ = padChar;
+						addChar( outbuf, padChar, pos, outsize );
 					}
 				}
-				
+
 				if ( flags & negativeSign )
 				{
-					*out++ = '-';
+					addChar( outbuf, '-', pos, outsize );
 				}
 
 				if ( flags & altRep || c == 'p' )
 				{
-					*out++ = '0';
-					*out++ = 'x';
+					addChar( outbuf, '0', pos, outsize );
+					addChar( outbuf, 'x', pos, outsize );
 				}
 
 				for (unsigned char l = 0; l < len; ++l )
 				{
-					*out++ = *ptr++;
+					addChar( outbuf, *ptr++, pos, outsize );
 				}
 
 				// Left-justify
 				for ( ; columns > len; columns-- )
 				{
-					*out++ = ' ';
+					addChar( outbuf, ' ', pos, outsize );
 				}
 
 				goto resetState;
@@ -226,11 +242,11 @@ copyToString:
 					const int chars = snprintf( buf, 31, floatBuf + i, args[listPtr++].asFloat());
 
 					// your system not have snprintf? the unsafe version is:
-//					const int chars = sprintf( buf, floatBuf + i, args[listPtr++].asFloat());
-					
+					//					const int chars = sprintf( buf, floatBuf + i, args[listPtr++].asFloat());
+
 					for( int j=0; j<chars; ++j )
 					{
-						*out++ = buf[j];
+						addChar( outbuf, buf[j], pos, outsize );
 					}
 					goto resetState;
 				}
@@ -313,44 +329,98 @@ convertBase:
 			}
 		}
 	}
-
-	return out - outbuf;
+	
+sprintf_end:
+	
+	return pos;
 }
+
+
+#ifndef WR_FORMAT_TRY_SIZE
+#define WR_FORMAT_TRY_SIZE 80
+#endif
+
+//------------------------------------------------------------------------------
+unsigned int wr_doSprintf( WRValue& to, WRValue& fmt, WRValue* args, const int argn, WRContext* c )
+{
+	unsigned int fmtBufferSize = 0;
+	char* fmtbuffer = (char*)fmt.array( &fmtBufferSize, SV_CHAR );
+	if ( !fmtbuffer )
+	{
+		return 0;
+	}
+
+	unsigned int outbufSize = 0;
+	char* outbuf = (char*)to.array( &outbufSize, SV_CHAR );
+
+	unsigned int size;
+
+	if ( !outbuf ) // going to have to make one then
+	{
+		char tmpbuf[WR_FORMAT_TRY_SIZE + 1]; // start with a temp buf
+		
+		size = wr_sprintfEx( tmpbuf, WR_FORMAT_TRY_SIZE, fmtbuffer, fmtBufferSize, args, argn );
+
+		if ( size > WR_FORMAT_TRY_SIZE )
+		{
+			goto createNewBuffer;
+		}
+
+		to.va = c->getSVA( size, SV_CHAR, false );
+
+		#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !to.va )
+		{
+			to.p2 = WR_INT;
+			return 0;
+		}
+		#endif
+
+		memcpy( to.va->m_Cdata, tmpbuf, size );
+	}
+	else
+	{
+		size = wr_sprintfEx( outbuf, outbufSize, fmtbuffer, fmtBufferSize, args, argn );
+
+		if ( size > outbufSize )
+		{
+createNewBuffer:
+
+			to.va = c->getSVA( size, SV_CHAR, false );
+
+			#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !to.va )
+			{
+				to.p2 = WR_INT;
+				return 0;
+			}
+			#endif
+			wr_sprintfEx( (char *)to.va->m_Cdata, size, fmtbuffer, fmtBufferSize, args, argn );
+		}
+		else
+		{
+			to.va->m_size = size; // just is the new size, TODO- recover memory? seems like not worth the squeeze
+		}
+	}
+
+	to.p2 = INIT_AS_ARRAY;
+
+	return size;
+
+}
+
 
 //------------------------------------------------------------------------------
 void wr_format( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
-	if( argn >= 1 )
+	if( argn > 0 )
 	{
 		WRValue* args = stackTop - argn;
-		char outbuf[512];
-		char inbuf[512];
-		args[0].asString( inbuf, 512 );
-		
-		int size = wr_sprintfEx( outbuf, inbuf, args + 1, argn - 1 );
-
-		stackTop->p2 = INIT_AS_ARRAY;
-		stackTop->va = c->getSVA( size, SV_CHAR, false );
-		memcpy( stackTop->va->m_Cdata, outbuf, size );
+		wr_doSprintf( *stackTop, args->deref(), args + 1, argn - 1, c );
 	}
-}
-
-//------------------------------------------------------------------------------
-void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
-{
-	stackTop->init();
-
-	if( argn >= 1 )
+	else
 	{
-		WRValue* args = stackTop - argn;
-
-		char inbuf[512];
-		char outbuf[512];
-		stackTop->i = wr_sprintfEx( outbuf, args[0].asString(inbuf), args + 1, argn - 1 );
-		
-		printf( "%s", outbuf );
+		stackTop->init();
 	}
 }
 
@@ -358,24 +428,29 @@ void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
 void wr_sprintf( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
-	WRValue* args = stackTop - argn;
-	
-	if ( argn < 2
-		 || args[0].type != WR_REF
-		 || args[1].xtype != WR_EX_ARRAY
-		 || args[1].va->m_type != SV_CHAR )
+
+	if( argn > 1 )
 	{
-		return;
+		WRValue* args = stackTop - argn;
+		stackTop->i = wr_doSprintf( args->deref(), args[1].deref(), args + 2, argn - 2, c );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
+{
+	unsigned int chars = 0;
+	if( argn > 0 )
+	{
+		WRValue* args = stackTop - argn;
+		if ( (chars = wr_doSprintf( *stackTop, args->deref(), args + 1, argn - 1, c )) )
+		{
+			wr_stdout( (const char*)stackTop->va->m_Cdata, stackTop->va->m_size );
+		}
 	}
 
-	char outbuf[512];
-	char inbuf[512];
-	args[1].asString(inbuf);
-	stackTop->i = wr_sprintfEx( outbuf, inbuf, args + 2, argn - 2 );
-
-	args[0].r->p2 = INIT_AS_ARRAY;
-	args[0].r->va = c->getSVA( stackTop->i, SV_CHAR, false );
-	memcpy( args[0].r->va->m_Cdata, outbuf, stackTop->i );
+	stackTop->p2 = WR_INT;
+	stackTop->i = chars;
 }
 
 //------------------------------------------------------------------------------
@@ -434,7 +509,6 @@ void wr_mid( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	
 	unsigned int start = args[1].asInt();
-	stackTop->p2 = INIT_AS_ARRAY;
 
 	unsigned int chars = 0;
 	if ( start < len )
@@ -447,6 +521,15 @@ void wr_mid( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	
 	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+
+	#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+	#endif
+	
+	stackTop->p2 = INIT_AS_ARRAY;
 	memcpy( stackTop->va->m_Cdata, data + start, chars );
 }
 
@@ -484,8 +567,15 @@ void wr_tolower( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue& value = (stackTop - 1)->deref();
 		if ( value.xtype == WR_EX_ARRAY && value.va->m_type == SV_CHAR )
 		{
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( value.va->m_size, SV_CHAR, false );
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
 
 			for( uint32_t i=0; i<value.va->m_size; ++i )
 			{
@@ -507,8 +597,14 @@ void wr_toupper( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue& value = (stackTop - 1)->deref();
 		if ( value.xtype == WR_EX_ARRAY && value.va->m_type == SV_CHAR )
 		{
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( value.va->m_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
 
 			for( uint32_t i=0; i<value.va->m_size; ++i )
 			{
@@ -547,8 +643,6 @@ void wr_tol( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_concat( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn < 2 )
 	{
 		return;
@@ -565,8 +659,14 @@ void wr_concat( WRValue* stackTop, const int argn, WRContext* c )
 		return;
 	}
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( len1 + len2, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 	memcpy( stackTop->va->m_Cdata, data1, len1 );
 	memcpy( stackTop->va->m_Cdata + len1, data2, len2 );
 }
@@ -590,14 +690,20 @@ void wr_left( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	unsigned int chars = args[1].asInt();
 
-	stackTop->p2 = INIT_AS_ARRAY;
-	
 	if ( chars > len )
 	{
 		chars = len;
 	}
 	
 	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
+
 	memcpy( stackTop->va->m_Cdata, data, chars );
 }
 
@@ -625,8 +731,14 @@ void wr_right( WRValue* stackTop, const int argn, WRContext* c )
 		chars = len;
 	}
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 	memcpy( stackTop->va->m_Cdata, data + (len - chars), chars );
 }
 
@@ -648,8 +760,15 @@ void wr_trimright( WRValue* stackTop, const int argn, WRContext* c )
 
 	++len;
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( len, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
+
 	memcpy( stackTop->va->m_Cdata, data, len );
 }
 
@@ -670,8 +789,15 @@ void wr_trimleft( WRValue* stackTop, const int argn, WRContext* c )
 	unsigned int marker = 0;
 	while( marker < len && isspace(data[marker]) ) { ++marker; }
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( len - marker, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
+
 	memcpy( stackTop->va->m_Cdata, data + marker, len - marker );
 }
 
@@ -695,8 +821,15 @@ void wr_trim( WRValue* stackTop, const int argn, WRContext* c )
 
 	++len;
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( len - marker, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
+
 	memcpy( stackTop->va->m_Cdata, data + marker, len - marker );
 }
 
@@ -727,9 +860,15 @@ void wr_insert( WRValue* stackTop, const int argn, WRContext* c )
 		pos = len1;
 	}
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	unsigned int newlen = len1 + len2;
 	stackTop->va = c->getSVA( newlen, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 
 	memcpy( stackTop->va->m_Cdata, data1, pos );
 	memcpy( stackTop->va->m_Cdata + pos, data2, len2 );
@@ -754,9 +893,11 @@ void wr_tprint( WRValue* stackTop, const int argn, WRContext* c )
 void wr_loadStringLib( WRState* w )
 {
 	wr_registerLibraryFunction( w, "str::strlen", wr_strlen );
+
 	wr_registerLibraryFunction( w, "str::sprintf", wr_sprintf );
-	wr_registerLibraryFunction( w, "str::printf", wr_printf );
 	wr_registerLibraryFunction( w, "str::format", wr_format );
+	
+	wr_registerLibraryFunction( w, "str::printf", wr_printf );
 	wr_registerLibraryFunction( w, "str::isspace", wr_isspace );
 	wr_registerLibraryFunction( w, "str::isdigit", wr_isdigit );
 	wr_registerLibraryFunction( w, "str::isalpha", wr_isalpha );

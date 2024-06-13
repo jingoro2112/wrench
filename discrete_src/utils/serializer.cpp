@@ -155,6 +155,13 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 						case SV_CHAR:
 						{
 							value.va = context->getSVA( temp16, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+							if ( !value.va )
+							{
+								value.p2 = INIT_AS_INT;
+								return false;
+							}
+#endif
 							if ( !serializer.read(value.va->m_SCdata, temp16) )
 							{
 								return false;
@@ -165,6 +172,13 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 						case SV_VALUE:
 						{
 							value.va = context->getSVA( temp16, SV_VALUE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+							if ( !value.va )
+							{
+								value.p2 = INIT_AS_INT;
+								return false;
+							}
+#endif
 							for( uint16_t i=0; i<temp16; ++i )
 							{
 								if ( !wr_deserializeEx(value.va->m_Vdata[i], serializer, context) )
@@ -189,8 +203,16 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 
 					temp16 = wr_x16( temp16 );
 					
-					value.p2 = INIT_AS_HASH_TABLE;
 					value.va = context->getSVA( temp16 - 1, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+					if ( !value.va )
+					{
+						value.p2 = INIT_AS_INT;
+						return false;
+					}
+#endif
+					value.p2 = INIT_AS_HASH_TABLE;
+
 
 					for( uint16_t i=0; i<temp16; ++i )
 					{

@@ -302,7 +302,6 @@ sprintf-style formatting from str::sprintf then define this. Not
 a huge amount of code but unecessary for most embedded aplications
 
 
-
 <pre><code>//#define WRENCH_WIN32_FILE_IO
 //#define WRENCH_LINUX_FILE_IO
 //#define WRENCH_SPIFFS_FILE_IO
@@ -314,6 +313,19 @@ the io:: lib (see <code>std_io_defs.h</code> and
 <code>std_io.cpp</code> for an overview of the provided functionality.
 This is not fully operational, but the calls will work if you need
 them.
+
+
+
+
+
+<pre><code>//#define WRENCH_HANDLE_MALLOC_FAIL
+</pre></code>
+<p>for embedded systems that need to know if they have run out of memory,
+
+<p>WARNING: This imposes a small if() check on EVERY INSTRUCTION so the
+malloc failure is detected the moment it happens, but guarantees
+graceful exit if g_malloc() ever returns null
+
 
 
 

@@ -504,7 +504,7 @@ class WRValueSerializer
 public:
 	
 	WRValueSerializer() : m_pos(0), m_size(0), m_buf(0) {}
-	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size), m_buf((char *)g_malloc(size))
+	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size)
 	{
 		m_buf = (char*)g_malloc(size);
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
@@ -515,7 +515,9 @@ public:
 		}
 		else
 #endif
-			memcpy(m_buf, data, size);
+		{
+			memcpy( m_buf, data, size );
+		}
 	}
 	
 	~WRValueSerializer() { g_free(m_buf); }
@@ -1132,8 +1134,16 @@ public:
 
 		if ( (m_type = type) == SV_VALUE )
 		{
+			m_Vdata = (WRValue*)g_malloc( size * sizeof(WRValue) );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !m_Vdata )
+			{
+				m_size = 0;
+				g_mallocFailed = true;
+				return;
+			}
+#endif
 			m_size = size;
-			m_Vdata = (WRValue*)g_malloc( m_size * sizeof(WRValue) );
 			if ( clear )
 			{
 				memset( m_SCdata, 0, m_size * sizeof(WRValue) );
@@ -1142,8 +1152,16 @@ public:
 		}
 		else if ( m_type == SV_CHAR )
 		{
+			m_Cdata = (unsigned char*)g_malloc( size + 1 );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !m_Cdata )
+			{
+				m_size = 0;
+				g_mallocFailed = true;
+				return;
+			}
+#endif
 			m_size = size;
-			m_Cdata = (unsigned char*)g_malloc( m_size + 1 );
 			if ( clear )
 			{
 				memset( m_SCdata, 0, m_size + 1 );
@@ -1311,6 +1329,13 @@ tryAgain:
 
 			int total = newMod*sizeof(uint32_t) + newSize*sizeof(WRValue);
 			uint32_t* proposed = (uint32_t*)g_malloc( total );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !proposed )
+			{
+				g_mallocFailed = true;
+				return 0; // congratulations, clobber this one. we're dying it doesn't matter.
+			}
+#endif
 
 			memset( (unsigned char *)proposed, 0, total );
 			for( int n = 0; n<newMod; ++n )
@@ -1488,9 +1513,9 @@ struct WRContext
 	
 	WRContext* imported; // linked list of contexts this one imported
 
-
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
+	
 	WRGCObject* getSVA( int size, WRGCObjectType type, bool init );
 };
 
@@ -3715,6 +3740,8 @@ void wr_ioSeek( WRValue* stackTop, const int argn, WRContext* c );
 void wr_ioFSync( WRValue* stackTop, const int argn, WRContext* c );
 
 void wr_ioPushConstants( WRState* w );
+
+void wr_stdout( const char* data, const int size );
 
 #endif
 /*******************************************************************************
@@ -10212,10 +10239,51 @@ void WRContext::gc( WRValue* stackTop )
 	}
 }
 
+/*  meh..
+//------------------------------------------------------------------------------
+void WRContext::scavenge( WRGCObject* va )
+{
+	// free the sub-array from this object, if the object itself
+	// needs to be cleaned that has to happen in the gc but this
+	// can be done anywhere
+	if ( va->m_type == SV_VOID_HASH_TABLE )
+	{
+		return;
+	}
+
+	g_free( va->m_data );
+	va->m_data = 0;
+
+	if ( va->m_type != SV_CHAR )
+	{
+		if ( va->m_type == SV_HASH_TABLE )
+		{
+			g_free( va->m_hashTable );
+			allocatedMemoryHint -= (va->m_mod * 4);
+		}
+
+		allocatedMemoryHint -= va->m_size * 3;
+		va->m_type = SV_CHAR;
+	}
+
+	allocatedMemoryHint -= va->m_size;
+	va->m_size = 0;
+}
+*/
+
 //------------------------------------------------------------------------------
 WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 {
 	WRGCObject* ret = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !ret )
+	{
+		g_mallocFailed = true;
+		return 0;
+	}
+#endif
+
 	ret->init( size, type, init );
 
 	if ( type == SV_CHAR )
@@ -10309,7 +10377,7 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
   bool g_mallocFailed =false;
-  #define PER_INSTRUCTION {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; return 0; } }
+  #define PER_INSTRUCTION {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; g_mallocFailed = false; return 0; } }
 #else
   #define PER_INSTRUCTION
 #endif
@@ -10843,8 +10911,15 @@ literalZero:
 				pc += 2;
 				
 				context->gc( stackTop );
-				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = context->getSVA( hash, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+				if ( !stackTop->va )
+				{
+					CONTINUE; // don't need to do anything else, this will immediately return
+				}
+#endif
+				stackTop->p2 = INIT_AS_ARRAY;
+
 
 				for ( char* to = (char *)(stackTop++)->va->m_data ; hash ; --hash )
 				{
@@ -10875,6 +10950,7 @@ literalZero:
 				register1 = &(stackTop - 1)->deref();
 				register1->p2 = INIT_AS_ARRAY;
 				register1->va = context->getSVA( register0->ui, SV_VALUE, true );
+				// malloc failing here will immediately be detected
 				CONTINUE;
 			}
 
@@ -11201,6 +11277,12 @@ NewObjectTablePastLoad:
 
 					stackTop->va = context->getSVA( count, SV_VALUE, false );
 					
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+					if ( !stackTop->va )
+					{
+						CONTINUE;
+					}
+#endif
 					stackTop->va->m_ROMHashTable = table + 3;
 					
 					stackTop->va->m_mod = READ_16_FROM_PC(table+1);
@@ -11439,6 +11521,12 @@ hashIndexJump:
 				{
 					register0->p2 = INIT_AS_HASH_TABLE;
 					register0->va = context->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+					if ( !register0->va )
+					{
+						CONTINUE;
+					}
+#endif
 				}
 						
 #ifdef WRENCH_COMPACT
@@ -13286,8 +13374,15 @@ WRValue* WrenchValue::asArrayMember( const int index )
 	if ( !IS_ARRAY(m_value->xtype) ) 
 	{
 		// then make it one!
-		m_value->p2 = INIT_AS_ARRAY;
 		m_value->va = m_context->getSVA( index + 1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !m_value->va )
+		{
+			m_value->p2 = INIT_AS_INT;
+			return m_value;
+		}
+#endif
+		m_value->p2 = INIT_AS_ARRAY;
 	}
 	else if ( index >= (int)m_value->va->m_size )
 	{
@@ -13302,6 +13397,10 @@ WRValue* WrenchValue::asArrayMember( const int index )
 WRState* wr_newState( int stackSize )
 {
 	WRState* w = (WRState *)g_malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !w ) { return 0; }
+#endif
+																		   
 	memset( (unsigned char*)w, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
 
 	w->stackSize = stackSize;
@@ -13390,6 +13489,14 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 				 + (localFuncs * sizeof(WRFunction)); // functions;
 
 	WRContext* C = (WRContext *)g_malloc( needed );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !C )
+	{
+		w->err = WR_ERR_malloc_failed;
+		return 0;
+	}
+#endif
+	
 	memset((char*)C, 0, needed);
 
 	C->numLocalFunctions = localFuncs;
@@ -13764,8 +13871,17 @@ WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bo
 			return 0;
 		}
 
-		V.p2 = INIT_AS_ARRAY;
 		V.va = context->getSVA( index + 1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !V.va )
+		{
+			V.p2 = INIT_AS_INT;
+			return &V;
+		}
+#endif
+
+		V.p2 = INIT_AS_ARRAY;
+
 	}
 
 	if ( index >= V.va->m_size )
@@ -13794,8 +13910,16 @@ WRValue* WRValue::indexHash( WRContext* context, const uint32_t hash, const bool
 			return 0;
 		}
 
-		V.p2 = INIT_AS_HASH_TABLE;
 		V.va = context->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !V.va )
+		{
+			V.p2 = INIT_AS_INT;
+			return &V;
+		}
+#endif
+		
+		V.p2 = INIT_AS_HASH_TABLE;
 	}
 
 	return create ? (WRValue*)V.va->get(hash) : V.va->exists(hash, false);
@@ -14127,8 +14251,15 @@ WRValue& wr_makeFloat( WRValue* val, float f )
 WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, const int len )
 {
 	const int slen = len ? len : strlen(data);
-	val->p2 = INIT_AS_ARRAY;
 	val->va = context->getSVA( slen, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !val->va )
+	{
+		val->p2 = INIT_AS_INT;
+		return *val;
+	}
+#endif
+	val->p2 = INIT_AS_ARRAY;
 	memcpy( (unsigned char *)val->va->m_data, data, slen );
 	return *val;
 }
@@ -14136,15 +14267,27 @@ WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, cons
 //------------------------------------------------------------------------------
 void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 {
-	val->p2 = INIT_AS_HASH_TABLE;
 	val->va = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !val->va )
+	{
+		val->init();
+		return;
+	}
+#endif
 	val->va->init( sizeHint, SV_VOID_HASH_TABLE, false );
 	val->va->m_skipGC = 1;
+	val->p2 = INIT_AS_HASH_TABLE;
 }
 
 //------------------------------------------------------------------------------
 void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value )
 {
+	if ( container->xtype != WR_EX_HASH_TABLE )
+	{
+		return;
+	}
+	
 	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
 	entry->r = value;
 	entry->p2 = INIT_AS_REF;
@@ -14153,7 +14296,10 @@ void wr_addValueToContainer( WRValue* container, const char* name, WRValue* valu
 //------------------------------------------------------------------------------
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size )
 {
-	assert( size <= 0x1FFFFF );
+	if ( container->xtype != WR_EX_HASH_TABLE || size > 0x1FFFFF )
+	{
+		return;
+	}
 
 	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
 	entry->c = array;
@@ -14699,6 +14845,13 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 						case SV_CHAR:
 						{
 							value.va = context->getSVA( temp16, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+							if ( !value.va )
+							{
+								value.p2 = INIT_AS_INT;
+								return false;
+							}
+#endif
 							if ( !serializer.read(value.va->m_SCdata, temp16) )
 							{
 								return false;
@@ -14709,6 +14862,13 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 						case SV_VALUE:
 						{
 							value.va = context->getSVA( temp16, SV_VALUE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+							if ( !value.va )
+							{
+								value.p2 = INIT_AS_INT;
+								return false;
+							}
+#endif
 							for( uint16_t i=0; i<temp16; ++i )
 							{
 								if ( !wr_deserializeEx(value.va->m_Vdata[i], serializer, context) )
@@ -14733,8 +14893,16 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 
 					temp16 = wr_x16( temp16 );
 					
-					value.p2 = INIT_AS_HASH_TABLE;
 					value.va = context->getSVA( temp16 - 1, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+					if ( !value.va )
+					{
+						value.p2 = INIT_AS_INT;
+						return false;
+					}
+#endif
+					value.p2 = INIT_AS_HASH_TABLE;
+
 
 					for( uint16_t i=0; i<temp16; ++i )
 					{
@@ -15829,26 +15997,25 @@ void wr_growValueArray( WRGCObject* va, int newMinIndex )
 
 	// increase size to accomodate new element
 	int size_el = va->m_size * size_of;
-	va->m_size = newMinIndex + 1;
 
 	// create new array to hold the data, and g_free the existing one
-	
-#ifdef WRENCH_COMPACT
-
 	uint8_t* old = va->m_Cdata;
 
 	va->m_Cdata = (uint8_t *)g_malloc( (newMinIndex + 1) * size_of );
 
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !va->m_Cdata )
+	{
+		va->m_Cdata = old;
+		g_mallocFailed = true;
+		return;
+	}
+#endif
+	
 	memcpy( va->m_Cdata, old, size_el );
-
 	g_free( old );
 	
-#else 
-	// this increases the code size because this is the only place
-	// "realloc" is used, so the linker has to link it in
-	va->m_data = realloc( va->m_data, size_of * (newMinIndex+1) );
-
-#endif
+	va->m_size = newMinIndex + 1;
 
 	// clear new entries
 	memset( va->m_Cdata + size_el, 0, (va->m_size * size_of) - size_el );
@@ -16001,7 +16168,15 @@ void wr_valueToArray( const WRValue* array, WRValue* value )
 void wr_addLibraryCleanupFunction( WRState* w, void (*function)(WRState* w, void* param), void* param )
 {
 	WRLibraryCleanup* entry = (WRLibraryCleanup *)g_malloc(sizeof(WRLibraryCleanup));
-
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !entry )
+	{
+		g_mallocFailed = true;
+		w->err = WR_ERR_malloc_failed;
+		return;
+	}
+#endif
+	
 	entry->cleanupFunction = function;
 	entry->param = param;
 	entry->next = w->libCleanupFunctions;
@@ -16054,8 +16229,15 @@ void wr_assignToHashTable( WRContext* c, WRValue* index, WRValue* value, WRValue
 
 	if ( table->xtype != WR_EX_HASH_TABLE )
 	{
-		table->p2 = INIT_AS_HASH_TABLE;
 		table->va = c->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !table->va )
+		{
+			table->p2 = INIT_AS_INT;
+			return;
+		}
+#endif
+		table->p2 = INIT_AS_HASH_TABLE;
 	}
 
 	WRValue *entry = (WRValue *)table->va->get( index->getHash() );
@@ -16257,6 +16439,14 @@ void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 	{
 		char* t = to->va->m_SCdata;
 		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size + 1 );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !to->va->m_SCdata )
+		{
+			to->va->m_SCdata = t;
+			g_mallocFailed = true;
+			return;
+		}
+#endif
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
 		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
 		to->va->m_size = to->va->m_size + from->va->m_size;
@@ -16339,8 +16529,17 @@ void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall 
 			  && IS_ARRAY(from->xtype)
 			  && from->va->m_type == SV_CHAR )
 	{
-		target->p2 = INIT_AS_ARRAY;
 		target->va = from->va->m_creatorContext->getSVA( from->va->m_size + to->va->m_size, SV_CHAR, false );
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !target->va )
+		{
+			target->p2 = INIT_AS_INT;
+			return;
+		}
+#endif
+		target->p2 = INIT_AS_ARRAY;
+
 		memcpy( target->va->m_SCdata, from->va->m_SCdata, from->va->m_size );
 		memcpy( target->va->m_SCdata + from->va->m_size, to->va->m_SCdata, to->va->m_size );
 	}
@@ -16623,6 +16822,14 @@ void wr_AddAssign_E_E( WRValue* to, WRValue* from )
 	{
 		char* t = to->va->m_SCdata;
 		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size + 1 );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !to->va->m_SCdata )
+		{
+			to->va->m_SCdata = t;
+			g_mallocFailed = true;
+			return;
+		}
+#endif
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
 		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
 		to->va->m_size = to->va->m_size + from->va->m_size;
@@ -16742,8 +16949,16 @@ void wr_AdditionBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
 			  && IS_ARRAY(from->xtype)
 			  && from->va->m_type == SV_CHAR )
 	{
-		target->p2 = INIT_AS_ARRAY;
 		target->va = from->va->m_creatorContext->getSVA( from->va->m_size + to->va->m_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !target->va )
+		{
+			target->p2 = INIT_AS_INT;
+			return;
+		}
+#endif
+		target->p2 = INIT_AS_ARRAY;
+
 		memcpy( target->va->m_SCdata, to->va->m_SCdata, to->va->m_size );
 		memcpy( target->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
 	}
@@ -17015,8 +17230,15 @@ void doIndexHash( WRValue* value, WRValue* target, WRValue* index )
 void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
 	// all we know is the value is not an array, so make it one
-	value->p2 = INIT_AS_ARRAY;
 	value->va = c->getSVA( index->ui + 1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !value->va )
+	{
+		value->p2 = INIT_AS_INT;
+		return;
+	}
+#endif
+	value->p2 = INIT_AS_ARRAY;
 	
 	elementToTarget( index->ui, target, value );
 }
@@ -17045,13 +17267,29 @@ void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 
 		if ( I->type == WR_INT )
 		{
-			value->p2 = INIT_AS_ARRAY;
 			value->va = c->getSVA( index->ui+1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !value->va )
+			{
+				value->p2 = INIT_AS_INT;
+				return;
+			}
+#endif
+			value->p2 = INIT_AS_ARRAY;
+
 		}
 		else
 		{
-			value->p2 = INIT_AS_HASH_TABLE;
 			value->va = c->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !value->va )
+			{
+				value->p2 = INIT_AS_INT;
+				return;
+			}
+#endif
+			value->p2 = INIT_AS_HASH_TABLE;
+
 			doIndexHash( value, target, I );
 			return;
 		}
@@ -17085,8 +17323,16 @@ void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 	{
 		if ( !IS_HASH_TABLE(V->xtype) )
 		{
-			V->p2 = INIT_AS_HASH_TABLE;
 			V->va = c->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !V->va )
+			{
+				V->p2 = INIT_AS_INT;
+				return;
+			}
+#endif
+			V->p2 = INIT_AS_HASH_TABLE;
+
 		}
 		doIndexHash( V, target, I );
 	}
@@ -17498,6 +17744,15 @@ SOFTWARE.
 #include <sys/time.h>
 
 //------------------------------------------------------------------------------
+void wr_stdout( const char* data, const int size )
+{
+	if ( write( STDOUT_FILENO, data, size ) > 0 )
+	{
+		fflush( stdout );
+	}
+}
+
+//------------------------------------------------------------------------------
 void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
@@ -17515,8 +17770,14 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 			FILE *infil = fopen( fileName, "rb" );
 			if ( infil )
 			{
-				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = c->getSVA( (int)sbuf.st_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+				if ( !stackTop->va )
+				{
+					return;
+				}
+#endif
+				stackTop->p2 = INIT_AS_ARRAY;
 				if ( fread( stackTop->va->m_Cdata, sbuf.st_size, 1, infil ) != 1 )
 				{
 					stackTop->init();
@@ -17583,8 +17844,14 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 
 		if ( in == EOF || in == '\n' || in == '\r' || pos >= 256 )
 		{ 
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( pos, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
 			memcpy( stackTop->va->m_Cdata, buf, pos );
 			break;
 		}
@@ -17639,6 +17906,13 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	
 	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 		
 	int result = read( args[0].asInt(), stackTop->va->m_Cdata, toRead );
 	stackTop->va->m_size = (result > 0) ? result : 0;
@@ -17764,6 +18038,13 @@ SOFTWARE.
 #include <io.h>
 
 //------------------------------------------------------------------------------
+void wr_stdout( const char* data, const int size )
+{
+	_write( _fileno(stdout), data, size );
+	fflush( stdout );
+}
+
+//------------------------------------------------------------------------------
 void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
@@ -17782,8 +18063,15 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 			FILE *infil = fopen( fileName, "rb" );
 			if ( infil )
 			{
-				stackTop->p2 = INIT_AS_ARRAY;
 				stackTop->va = c->getSVA( (int)sbuf.st_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+				if ( !stackTop->va )
+				{
+					return;
+				}
+#endif
+				stackTop->p2 = INIT_AS_ARRAY;
+
 				if ( fread( stackTop->va->m_Cdata, sbuf.st_size, 1, infil ) != 1 )
 				{
 					stackTop->init();
@@ -17850,8 +18138,15 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 
 		if ( in == EOF || in == '\n' || in == '\r' || pos >= 256 )
 		{ 
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( pos, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
+
 			memcpy( stackTop->va->m_Cdata, buf, pos );
 			break;
 		}
@@ -17908,6 +18203,13 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 	}
 
 	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 
 	int result = _read( args[0].asInt(), stackTop->va->m_Cdata, toRead );
 	stackTop->va->m_size = (result > 0) ? result : 0;
@@ -18040,6 +18342,12 @@ SOFTWARE.
 #endif
 
 //------------------------------------------------------------------------------
+void wr_stdout( const char* data, const int size )
+{
+}
+
+
+//------------------------------------------------------------------------------
 enum WRFSOpenModes
 {
 	LFS_READ   = 0x1,
@@ -18094,8 +18402,15 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 	File file = FILE_OBJ.open( fileName );
 	if ( file && !file.isDirectory() )
 	{
-		stackTop->p2 = INIT_AS_ARRAY;
 		stackTop->va = c->getSVA( file.size(), SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !stackTop->va )
+		{
+			return;
+		}
+#endif
+		stackTop->p2 = INIT_AS_ARRAY;
+
 		if ( file.readBytes( stackTop->va->m_SCdata, file.size() ) != file.size() )
 		{
 			stackTop->init();
@@ -18276,6 +18591,13 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 	}
 		
 	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 
 	int result = fd->file.readBytes( stackTop->va->m_SCdata, toRead );
 	
@@ -18455,13 +18777,29 @@ void wr_strlen( WRValue* stackTop, const int argn, WRContext* c )
 }
 
 //------------------------------------------------------------------------------
-int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn )
+inline void addChar( char* out, char c, unsigned int& pos, const unsigned int max )
+{
+	if ( pos < max )
+	{
+		out[pos] = c;
+	}
+	
+	++pos;
+}
+
+//------------------------------------------------------------------------------
+int wr_sprintfEx( char* outbuf,
+				  const unsigned int outsize,
+				  const char* fmt,
+				  const unsigned int fmtsize,
+				  WRValue* args,
+				  const int argn )
 {
 	if ( !fmt )
 	{
 		return 0;
 	}
-	
+
 	enum
 	{
 		zeroPad         = 1<<0,
@@ -18472,7 +18810,9 @@ int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn )
 		altRep			= 1<<5,
 	};
 
-	char* out = outbuf;
+	unsigned int pos = 0;
+	const char* fmtend = fmt + fmtsize;
+
 	int listPtr = 0;
 
 resetState:
@@ -18483,20 +18823,18 @@ resetState:
 
 	for(;;)
 	{
-		char c = *fmt;
-		fmt++;
-
-		if ( !c )
+		if ( fmt >= fmtend )
 		{
-			*out = 0;
-			break;
+			goto sprintf_end;
 		}
+		
+		char c = *fmt++;
 
 		if ( !(secondPass & flags) )
 		{
 			if ( c != '%' ) // literal
 			{
-				*out++ = c;
+				addChar( outbuf, c, pos, outsize );
 			}
 			else // possibly % format specifier
 			{
@@ -18529,13 +18867,13 @@ resetState:
 		{
 			if ( listPtr < argn )
 			{
-				*out++ = (char)(args[listPtr++].asInt());
+				addChar( outbuf, (char)(args[listPtr++].asInt()), pos, outsize );
 			}
 			goto resetState;
 		}
 		else if ( c == '%' ) // literal %
 		{
-			*out++ = c;
+			addChar( outbuf, c, pos, outsize );
 			goto resetState;
 		}
 		else // string or integer
@@ -18572,38 +18910,38 @@ copyToString:
 				{
 					len++;
 				}
-				
+
 				ptr -= len;
-				
+
 				// Right-justify
 				if ( !(flags & negativeJustify) )
 				{
 					for ( ; columns > len; columns-- )
 					{
-						*out++ = padChar;
+						addChar( outbuf, padChar, pos, outsize );
 					}
 				}
-				
+
 				if ( flags & negativeSign )
 				{
-					*out++ = '-';
+					addChar( outbuf, '-', pos, outsize );
 				}
 
 				if ( flags & altRep || c == 'p' )
 				{
-					*out++ = '0';
-					*out++ = 'x';
+					addChar( outbuf, '0', pos, outsize );
+					addChar( outbuf, 'x', pos, outsize );
 				}
 
 				for (unsigned char l = 0; l < len; ++l )
 				{
-					*out++ = *ptr++;
+					addChar( outbuf, *ptr++, pos, outsize );
 				}
 
 				// Left-justify
 				for ( ; columns > len; columns-- )
 				{
-					*out++ = ' ';
+					addChar( outbuf, ' ', pos, outsize );
 				}
 
 				goto resetState;
@@ -18636,11 +18974,11 @@ copyToString:
 					const int chars = snprintf( buf, 31, floatBuf + i, args[listPtr++].asFloat());
 
 					// your system not have snprintf? the unsafe version is:
-//					const int chars = sprintf( buf, floatBuf + i, args[listPtr++].asFloat());
-					
+					//					const int chars = sprintf( buf, floatBuf + i, args[listPtr++].asFloat());
+
 					for( int j=0; j<chars; ++j )
 					{
-						*out++ = buf[j];
+						addChar( outbuf, buf[j], pos, outsize );
 					}
 					goto resetState;
 				}
@@ -18723,44 +19061,98 @@ convertBase:
 			}
 		}
 	}
-
-	return out - outbuf;
+	
+sprintf_end:
+	
+	return pos;
 }
+
+
+#ifndef WR_FORMAT_TRY_SIZE
+#define WR_FORMAT_TRY_SIZE 80
+#endif
+
+//------------------------------------------------------------------------------
+unsigned int wr_doSprintf( WRValue& to, WRValue& fmt, WRValue* args, const int argn, WRContext* c )
+{
+	unsigned int fmtBufferSize = 0;
+	char* fmtbuffer = (char*)fmt.array( &fmtBufferSize, SV_CHAR );
+	if ( !fmtbuffer )
+	{
+		return 0;
+	}
+
+	unsigned int outbufSize = 0;
+	char* outbuf = (char*)to.array( &outbufSize, SV_CHAR );
+
+	unsigned int size;
+
+	if ( !outbuf ) // going to have to make one then
+	{
+		char tmpbuf[WR_FORMAT_TRY_SIZE + 1]; // start with a temp buf
+		
+		size = wr_sprintfEx( tmpbuf, WR_FORMAT_TRY_SIZE, fmtbuffer, fmtBufferSize, args, argn );
+
+		if ( size > WR_FORMAT_TRY_SIZE )
+		{
+			goto createNewBuffer;
+		}
+
+		to.va = c->getSVA( size, SV_CHAR, false );
+
+		#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !to.va )
+		{
+			to.p2 = WR_INT;
+			return 0;
+		}
+		#endif
+
+		memcpy( to.va->m_Cdata, tmpbuf, size );
+	}
+	else
+	{
+		size = wr_sprintfEx( outbuf, outbufSize, fmtbuffer, fmtBufferSize, args, argn );
+
+		if ( size > outbufSize )
+		{
+createNewBuffer:
+
+			to.va = c->getSVA( size, SV_CHAR, false );
+
+			#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !to.va )
+			{
+				to.p2 = WR_INT;
+				return 0;
+			}
+			#endif
+			wr_sprintfEx( (char *)to.va->m_Cdata, size, fmtbuffer, fmtBufferSize, args, argn );
+		}
+		else
+		{
+			to.va->m_size = size; // just is the new size, TODO- recover memory? seems like not worth the squeeze
+		}
+	}
+
+	to.p2 = INIT_AS_ARRAY;
+
+	return size;
+
+}
+
 
 //------------------------------------------------------------------------------
 void wr_format( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
-	if( argn >= 1 )
+	if( argn > 0 )
 	{
 		WRValue* args = stackTop - argn;
-		char outbuf[512];
-		char inbuf[512];
-		args[0].asString( inbuf, 512 );
-		
-		int size = wr_sprintfEx( outbuf, inbuf, args + 1, argn - 1 );
-
-		stackTop->p2 = INIT_AS_ARRAY;
-		stackTop->va = c->getSVA( size, SV_CHAR, false );
-		memcpy( stackTop->va->m_Cdata, outbuf, size );
+		wr_doSprintf( *stackTop, args->deref(), args + 1, argn - 1, c );
 	}
-}
-
-//------------------------------------------------------------------------------
-void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
-{
-	stackTop->init();
-
-	if( argn >= 1 )
+	else
 	{
-		WRValue* args = stackTop - argn;
-
-		char inbuf[512];
-		char outbuf[512];
-		stackTop->i = wr_sprintfEx( outbuf, args[0].asString(inbuf), args + 1, argn - 1 );
-		
-		printf( "%s", outbuf );
+		stackTop->init();
 	}
 }
 
@@ -18768,24 +19160,29 @@ void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
 void wr_sprintf( WRValue* stackTop, const int argn, WRContext* c )
 {
 	stackTop->init();
-	WRValue* args = stackTop - argn;
-	
-	if ( argn < 2
-		 || args[0].type != WR_REF
-		 || args[1].xtype != WR_EX_ARRAY
-		 || args[1].va->m_type != SV_CHAR )
+
+	if( argn > 1 )
 	{
-		return;
+		WRValue* args = stackTop - argn;
+		stackTop->i = wr_doSprintf( args->deref(), args[1].deref(), args + 2, argn - 2, c );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
+{
+	unsigned int chars = 0;
+	if( argn > 0 )
+	{
+		WRValue* args = stackTop - argn;
+		if ( (chars = wr_doSprintf( *stackTop, args->deref(), args + 1, argn - 1, c )) )
+		{
+			wr_stdout( (const char*)stackTop->va->m_Cdata, stackTop->va->m_size );
+		}
 	}
 
-	char outbuf[512];
-	char inbuf[512];
-	args[1].asString(inbuf);
-	stackTop->i = wr_sprintfEx( outbuf, inbuf, args + 2, argn - 2 );
-
-	args[0].r->p2 = INIT_AS_ARRAY;
-	args[0].r->va = c->getSVA( stackTop->i, SV_CHAR, false );
-	memcpy( args[0].r->va->m_Cdata, outbuf, stackTop->i );
+	stackTop->p2 = WR_INT;
+	stackTop->i = chars;
 }
 
 //------------------------------------------------------------------------------
@@ -18844,7 +19241,6 @@ void wr_mid( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	
 	unsigned int start = args[1].asInt();
-	stackTop->p2 = INIT_AS_ARRAY;
 
 	unsigned int chars = 0;
 	if ( start < len )
@@ -18857,6 +19253,15 @@ void wr_mid( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	
 	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+
+	#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+	#endif
+	
+	stackTop->p2 = INIT_AS_ARRAY;
 	memcpy( stackTop->va->m_Cdata, data + start, chars );
 }
 
@@ -18894,8 +19299,15 @@ void wr_tolower( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue& value = (stackTop - 1)->deref();
 		if ( value.xtype == WR_EX_ARRAY && value.va->m_type == SV_CHAR )
 		{
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( value.va->m_size, SV_CHAR, false );
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
 
 			for( uint32_t i=0; i<value.va->m_size; ++i )
 			{
@@ -18917,8 +19329,14 @@ void wr_toupper( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue& value = (stackTop - 1)->deref();
 		if ( value.xtype == WR_EX_ARRAY && value.va->m_type == SV_CHAR )
 		{
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( value.va->m_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
 
 			for( uint32_t i=0; i<value.va->m_size; ++i )
 			{
@@ -18957,8 +19375,6 @@ void wr_tol( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_concat( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn < 2 )
 	{
 		return;
@@ -18975,8 +19391,14 @@ void wr_concat( WRValue* stackTop, const int argn, WRContext* c )
 		return;
 	}
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( len1 + len2, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 	memcpy( stackTop->va->m_Cdata, data1, len1 );
 	memcpy( stackTop->va->m_Cdata + len1, data2, len2 );
 }
@@ -19000,14 +19422,20 @@ void wr_left( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	unsigned int chars = args[1].asInt();
 
-	stackTop->p2 = INIT_AS_ARRAY;
-	
 	if ( chars > len )
 	{
 		chars = len;
 	}
 	
 	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
+
 	memcpy( stackTop->va->m_Cdata, data, chars );
 }
 
@@ -19035,8 +19463,14 @@ void wr_right( WRValue* stackTop, const int argn, WRContext* c )
 		chars = len;
 	}
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( chars, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 	memcpy( stackTop->va->m_Cdata, data + (len - chars), chars );
 }
 
@@ -19058,8 +19492,15 @@ void wr_trimright( WRValue* stackTop, const int argn, WRContext* c )
 
 	++len;
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( len, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
+
 	memcpy( stackTop->va->m_Cdata, data, len );
 }
 
@@ -19080,8 +19521,15 @@ void wr_trimleft( WRValue* stackTop, const int argn, WRContext* c )
 	unsigned int marker = 0;
 	while( marker < len && isspace(data[marker]) ) { ++marker; }
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( len - marker, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
+
 	memcpy( stackTop->va->m_Cdata, data + marker, len - marker );
 }
 
@@ -19105,8 +19553,15 @@ void wr_trim( WRValue* stackTop, const int argn, WRContext* c )
 
 	++len;
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	stackTop->va = c->getSVA( len - marker, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
+
 	memcpy( stackTop->va->m_Cdata, data + marker, len - marker );
 }
 
@@ -19137,9 +19592,15 @@ void wr_insert( WRValue* stackTop, const int argn, WRContext* c )
 		pos = len1;
 	}
 
-	stackTop->p2 = INIT_AS_ARRAY;
 	unsigned int newlen = len1 + len2;
 	stackTop->va = c->getSVA( newlen, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 
 	memcpy( stackTop->va->m_Cdata, data1, pos );
 	memcpy( stackTop->va->m_Cdata + pos, data2, len2 );
@@ -19164,9 +19625,11 @@ void wr_tprint( WRValue* stackTop, const int argn, WRContext* c )
 void wr_loadStringLib( WRState* w )
 {
 	wr_registerLibraryFunction( w, "str::strlen", wr_strlen );
+
 	wr_registerLibraryFunction( w, "str::sprintf", wr_sprintf );
-	wr_registerLibraryFunction( w, "str::printf", wr_printf );
 	wr_registerLibraryFunction( w, "str::format", wr_format );
+	
+	wr_registerLibraryFunction( w, "str::printf", wr_printf );
 	wr_registerLibraryFunction( w, "str::isspace", wr_isspace );
 	wr_registerLibraryFunction( w, "str::isdigit", wr_isdigit );
 	wr_registerLibraryFunction( w, "str::isalpha", wr_isalpha );
@@ -19763,8 +20226,14 @@ void wr_stdSerialize( WRValue* stackTop, const int argn, WRContext* c )
 		int len;
 		if ( wr_serialize(&buf, &len, *(stackTop - argn) ) )
 		{
-			stackTop->p2 = INIT_AS_ARRAY;
 			stackTop->va = c->getSVA( 0, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
 			free( stackTop->va->m_Cdata );
 			stackTop->va->m_data = buf;
 			stackTop->va->m_size = len;

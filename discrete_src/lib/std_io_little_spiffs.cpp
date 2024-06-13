@@ -39,6 +39,12 @@ SOFTWARE.
 #endif
 
 //------------------------------------------------------------------------------
+void wr_stdout( const char* data, const int size )
+{
+}
+
+
+//------------------------------------------------------------------------------
 enum WRFSOpenModes
 {
 	LFS_READ   = 0x1,
@@ -93,8 +99,15 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 	File file = FILE_OBJ.open( fileName );
 	if ( file && !file.isDirectory() )
 	{
-		stackTop->p2 = INIT_AS_ARRAY;
 		stackTop->va = c->getSVA( file.size(), SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !stackTop->va )
+		{
+			return;
+		}
+#endif
+		stackTop->p2 = INIT_AS_ARRAY;
+
 		if ( file.readBytes( stackTop->va->m_SCdata, file.size() ) != file.size() )
 		{
 			stackTop->init();
@@ -275,6 +288,13 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 	}
 		
 	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
+	stackTop->p2 = INIT_AS_ARRAY;
 
 	int result = fd->file.readBytes( stackTop->va->m_SCdata, toRead );
 	

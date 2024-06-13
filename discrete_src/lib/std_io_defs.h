@@ -45,4 +45,6 @@ void wr_ioFSync( WRValue* stackTop, const int argn, WRContext* c );
 
 void wr_ioPushConstants( WRState* w );
 
+void wr_stdout( const char* data, const int size );
+
 #endif

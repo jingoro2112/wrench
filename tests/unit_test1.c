@@ -1,13 +1,10 @@
 sys::importCompile(io::readFile( "tests/unit_test_lib.c"));
 
-//var s3 = new S;
-var s3 = new S;
-assertNotEqual(s3, s3);//, "S(1, 2, 3) and S(1, 2, 4) Structs are equal");
-return;
 
 var q = {"a" : 1, "b" : 2, "c" : 3};
 var r = {"a" : 1, "b" : 2, "c" : 4};
 assertNotEqual(q, r, "{a: 1, b: 2, c: 3} and {a: 1, b: 2, c: 4} Hash Tables are NOT equal");
+
 
 var a = 1;
 var b = 1;
@@ -110,10 +107,10 @@ struct V {
 	var c;
 };
 
+
 var s3 = new S { 1, 2, 3 };
 var s4 = new S { 1, 2, 4 }; 
 assertNotEqual(s3, s4, "S(1, 2, 3) and S(1, 2, 4) Structs are equal");
-
 
 var s1 = new S { 1, 2, 3 };
 var s2 = new S { 1, 2, 3 };
