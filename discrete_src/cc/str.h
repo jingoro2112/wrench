@@ -82,11 +82,6 @@ public:
 	WRstr& set( const char c ) { clear(); m_str[0]=c; m_str[1]=0; m_len = 1; return *this; }
 
 	bool isMatch( const char* buf ) const { return strcmp(buf, m_str) == 0; }
-#ifdef WIN32
-	bool isMatchCase( const char* buf ) const { return _strnicmp(buf, m_str, m_len) == 0; }
-#else
-	bool isMatchCase( const char* buf ) const { return strncasecmp(buf, m_str, m_len) == 0; }
-#endif
 	static inline bool isWildMatch( const char* pattern, const char* haystack );
 	inline bool isWildMatch( const char* pattern ) const { return isWildMatch( pattern, m_str ); }
 				  

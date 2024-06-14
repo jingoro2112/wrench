@@ -807,7 +807,6 @@ literalZero:
 #endif
 				stackTop->p2 = INIT_AS_ARRAY;
 
-
 				for ( char* to = (char *)(stackTop++)->va->m_data ; hash ; --hash )
 				{
 					*to++ = READ_8_FROM_PC(pc++);
@@ -2584,7 +2583,7 @@ compactCompareGG8:
 			{
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
-				wr_AdditionBinary[(register1->type<<2)|register0->type]( register1, register0, stackTop++ );
+				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
 
@@ -2592,7 +2591,7 @@ compactCompareGG8:
 			{
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++); 
-				wr_AdditionBinary[(register1->type<<2)|register0->type]( register1, register0, stackTop++ );
+				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
 
@@ -2600,7 +2599,7 @@ compactCompareGG8:
 			{
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
-				wr_AdditionBinary[(register1->type<<2)|register0->type]( register1, register0, stackTop++ );
+				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
 
@@ -3112,9 +3111,9 @@ binaryTableOpAndPop:
 				targetFunc = wr_DivideBinary;
 				
 targetFuncStoreGlobalOp:
-				register0 = --stackTop;
 				register1 = --stackTop;
-				targetFunc[(register0->type<<2)|register1->type]( register0, register1, globalSpace + READ_8_FROM_PC(pc++) );
+				register0 = --stackTop;
+				targetFunc[(register1->type<<2)|register0->type]( register1, register0, globalSpace + READ_8_FROM_PC(pc++) );
 				CONTINUE;
 			}
 			

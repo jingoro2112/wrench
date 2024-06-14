@@ -1013,7 +1013,7 @@ inline const char* SimpleArgs::get( int argn, char *argv[], int index, char* par
 		a = argn + a;
 	}
 
-	if ( a >= argn )
+	if ( (unsigned int)a >= (unsigned int)argn )
 	{
 		return 0;
 	}
@@ -2104,11 +2104,6 @@ public:
 	WRstr& set( const char c ) { clear(); m_str[0]=c; m_str[1]=0; m_len = 1; return *this; }
 
 	bool isMatch( const char* buf ) const { return strcmp(buf, m_str) == 0; }
-#ifdef WIN32
-	bool isMatchCase( const char* buf ) const { return _strnicmp(buf, m_str, m_len) == 0; }
-#else
-	bool isMatchCase( const char* buf ) const { return strncasecmp(buf, m_str, m_len) == 0; }
-#endif
 	static inline bool isWildMatch( const char* pattern, const char* haystack );
 	inline bool isWildMatch( const char* pattern ) const { return isWildMatch( pattern, m_str ); }
 				  
@@ -2975,7 +2970,7 @@ const WROperation c_operations[] =
 	{ "~",    3, O_BitwiseNOT,         false,  WR_OPER_PRE, O_LAST },
 	{ "-",    3, O_Negate,             false,  WR_OPER_PRE, O_LAST },
 
-	{ "+",    6, O_BinaryAddition,      true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "+",    6, O_BinaryAddition,      true,  WR_OPER_BINARY, O_LAST },
 	{ "-",    6, O_BinarySubtraction,   true,  WR_OPER_BINARY, O_LAST },
 	{ "*",    5, O_BinaryMultiplication,true,  WR_OPER_BINARY_COMMUTE, O_LAST },
 	{ "/",    5, O_BinaryDivision,      true,  WR_OPER_BINARY, O_LAST },
@@ -10920,7 +10915,6 @@ literalZero:
 #endif
 				stackTop->p2 = INIT_AS_ARRAY;
 
-
 				for ( char* to = (char *)(stackTop++)->va->m_data ; hash ; --hash )
 				{
 					*to++ = READ_8_FROM_PC(pc++);
@@ -12697,7 +12691,7 @@ compactCompareGG8:
 			{
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
-				wr_AdditionBinary[(register1->type<<2)|register0->type]( register1, register0, stackTop++ );
+				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
 
@@ -12705,7 +12699,7 @@ compactCompareGG8:
 			{
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++); 
-				wr_AdditionBinary[(register1->type<<2)|register0->type]( register1, register0, stackTop++ );
+				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
 
@@ -12713,7 +12707,7 @@ compactCompareGG8:
 			{
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
-				wr_AdditionBinary[(register1->type<<2)|register0->type]( register1, register0, stackTop++ );
+				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
 				CONTINUE;
 			}
 
@@ -13225,9 +13219,9 @@ binaryTableOpAndPop:
 				targetFunc = wr_DivideBinary;
 				
 targetFuncStoreGlobalOp:
-				register0 = --stackTop;
 				register1 = --stackTop;
-				targetFunc[(register0->type<<2)|register1->type]( register0, register1, globalSpace + READ_8_FROM_PC(pc++) );
+				register0 = --stackTop;
+				targetFunc[(register1->type<<2)|register0->type]( register1, register0, globalSpace + READ_8_FROM_PC(pc++) );
 				CONTINUE;
 			}
 			
@@ -16540,8 +16534,8 @@ void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall 
 #endif
 		target->p2 = INIT_AS_ARRAY;
 
-		memcpy( target->va->m_SCdata, from->va->m_SCdata, from->va->m_size );
-		memcpy( target->va->m_SCdata + from->va->m_size, to->va->m_SCdata, to->va->m_size );
+		memcpy( target->va->m_SCdata, to->va->m_SCdata, to->va->m_size );
+		memcpy( target->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
 	}
 }
 void FuncBinary_X_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
@@ -16784,8 +16778,6 @@ X_ASSIGN( wr_Divide, / );
 
 
 
-
-
 void wr_AddAssign_E_I( WRValue* to, WRValue* from )
 {
 	WRValue& V = to->singleValue();
@@ -16949,7 +16941,7 @@ void wr_AdditionBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
 			  && IS_ARRAY(from->xtype)
 			  && from->va->m_type == SV_CHAR )
 	{
-		target->va = from->va->m_creatorContext->getSVA( from->va->m_size + to->va->m_size, SV_CHAR, false );
+		target->va = to->va->m_creatorContext->getSVA( to->va->m_size + from->va->m_size, SV_CHAR, false );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 		if ( !target->va )
 		{

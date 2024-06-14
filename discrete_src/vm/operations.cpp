@@ -574,8 +574,8 @@ void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall 
 #endif
 		target->p2 = INIT_AS_ARRAY;
 
-		memcpy( target->va->m_SCdata, from->va->m_SCdata, from->va->m_size );
-		memcpy( target->va->m_SCdata + from->va->m_size, to->va->m_SCdata, to->va->m_size );
+		memcpy( target->va->m_SCdata, to->va->m_SCdata, to->va->m_size );
+		memcpy( target->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
 	}
 }
 void FuncBinary_X_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
@@ -818,8 +818,6 @@ X_ASSIGN( wr_Divide, / );
 
 
 
-
-
 void wr_AddAssign_E_I( WRValue* to, WRValue* from )
 {
 	WRValue& V = to->singleValue();
@@ -983,7 +981,7 @@ void wr_AdditionBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
 			  && IS_ARRAY(from->xtype)
 			  && from->va->m_type == SV_CHAR )
 	{
-		target->va = from->va->m_creatorContext->getSVA( from->va->m_size + to->va->m_size, SV_CHAR, false );
+		target->va = to->va->m_creatorContext->getSVA( to->va->m_size + from->va->m_size, SV_CHAR, false );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 		if ( !target->va )
 		{

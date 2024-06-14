@@ -24,6 +24,8 @@ SOFTWARE.
 #ifndef _WRENCH_H
 #define _WRENCH_H
 /*------------------------------------------------------------------------------*/
+#include <stdint.h>
+#include <stddef.h>
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
@@ -133,17 +135,27 @@ examples are in
 
 
 /************************************************************************
-for embedded systems that need to know if they have run out of memory,
+for systems that need to know if they have run out of memory.
 
 WARNING: This imposes a small if() check on EVERY INSTRUCTION so the
-malloc failure is detected the moment it happens, but guarantees
-graceful exit if g_malloc() ever returns null
+malloc failure is detected on the instruction it happens and guarantees
+graceful exit
 */
 //#define WRENCH_HANDLE_MALLOC_FAIL
 
-   
-#include <stdint.h>
-#include <stddef.h>
+// by default wrench uses malloc/free but if you want to use your own
+// allocator it can be set up here
+// NOTE: this becomes global for all wrench code!
+typedef void* (*WR_ALLOC)(size_t size);
+typedef void (*WR_FREE)(void* ptr);
+void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
+extern WR_ALLOC g_malloc;
+extern WR_FREE g_free;
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+extern bool g_mallocFailed; // used as an internal global flag for when a malloc came back null
+#endif
+
+//------------------------------------------------------------------------------
 
 struct WRState;
 struct WRValue;
@@ -231,13 +243,6 @@ enum WRError
 // create/destroy a WRState object that can run multiple contexts/threads
 WRState* wr_newState( int stackSize =WRENCH_DEFAULT_STACK_SIZE );
 void wr_destroyState( WRState* w );
-
-// by default wrench uses malloc/free but if you want to use your own
-// allocator it can be set up here
-// NOTE: this becomes global for all wrench code!
-typedef void* (*WR_ALLOC)(size_t size);
-typedef void (*WR_FREE)(void* ptr);
-void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
 
 // allocate/free memory with the same allocator wrench is using, this
 // is particularly important for the "takeOwnership" flag below
@@ -611,12 +616,6 @@ The "extended" types are:
                    va-> refers to the hash table object
 
 */
-
-extern WR_ALLOC g_malloc;
-extern WR_FREE g_free;
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-extern bool g_mallocFailed;
-#endif
 
 
 //------------------------------------------------------------------------------

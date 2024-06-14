@@ -86,7 +86,7 @@ const WROperation c_operations[] =
 	{ "~",    3, O_BitwiseNOT,         false,  WR_OPER_PRE, O_LAST },
 	{ "-",    3, O_Negate,             false,  WR_OPER_PRE, O_LAST },
 
-	{ "+",    6, O_BinaryAddition,      true,  WR_OPER_BINARY_COMMUTE, O_LAST },
+	{ "+",    6, O_BinaryAddition,      true,  WR_OPER_BINARY, O_LAST },
 	{ "-",    6, O_BinarySubtraction,   true,  WR_OPER_BINARY, O_LAST },
 	{ "*",    5, O_BinaryMultiplication,true,  WR_OPER_BINARY_COMMUTE, O_LAST },
 	{ "/",    5, O_BinaryDivision,      true,  WR_OPER_BINARY, O_LAST },
