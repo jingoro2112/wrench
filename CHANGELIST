@@ -8,7 +8,7 @@
         graceful exit if g_malloc() ever returns null
 
 - sprintf rework to use much less stack and have effectively unlimited format/result size
-
+- adding FASTCONTINUE that skips the malloc-fail check on opcodes that can't cause it
 
 6.0.0 ----------------------------------------------------------------------------------
 - removed function declaration being an in-line process (which was to facilitate executing

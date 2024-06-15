@@ -25,7 +25,12 @@ SOFTWARE.
 
 #include "wrench.h"
 
-int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn );
+int wr_sprintfEx( char* outbuf,
+				  const unsigned int outsize,
+				  const char* fmt,
+				  const unsigned int fmtsize,
+				  WRValue* args,
+				  const int argn );
 
 //------------------------------------------------------------------------------
 void wr_debugPrintEx( WRValue* stackTop, const int argn, WRContext* c, const char* append )
@@ -39,7 +44,7 @@ void wr_debugPrintEx( WRValue* stackTop, const int argn, WRContext* c, const cha
 
 		WrenchPacket* P = WrenchPacket::alloc( WRD_DebugOut, 520 );
 
-		int size = wr_sprintfEx( (char*)P->payload(), args[0].asString(inbuf), args + 1, argn - 1);
+		int size = wr_sprintfEx( (char*)P->payload(), strlen((char*)P->payload()), args[0].asString(inbuf), strlen(inbuf), args + 1, argn - 1);
 
 		for( int a=0; append && append[a]; ++a )
 		{

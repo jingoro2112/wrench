@@ -10388,9 +10388,11 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
  #define CONTINUE { PER_INSTRUCTION; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
+ #define FASTCONTINUE { goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
  #define CASE(LABEL) LABEL
 #else
  #define CONTINUE { PER_INSTRUCTION; continue; }
+ #define FASTCONTINUE { continue; }
  #define CASE(LABEL) case O_##LABEL
 #endif
 
@@ -10837,7 +10839,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 	if ( context->debugInterface && function )
 	{
-		if ( !function->offset ) // impossible offset, this is a re-entry!
+		if ( !function->functionOffset ) // impossible offset, this is a re-entry!
 		{
 			// pop state
 			pc = context->debugInterface->I->m_pc;
@@ -10869,7 +10871,7 @@ yieldContinue:
 	
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 
-	CONTINUE;
+	FASTCONTINUE;
 	
 #else
 
@@ -10890,7 +10892,7 @@ yieldContinue:
 literalZero:
 				stackTop->p = 0;
 				(stackTop++)->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LiteralFloat):
@@ -10944,14 +10946,13 @@ literalZero:
 				register1 = &(stackTop - 1)->deref();
 				register1->p2 = INIT_AS_ARRAY;
 				register1->va = context->getSVA( register0->ui, SV_VALUE, true );
-				// malloc failing here will immediately be detected
 				CONTINUE;
 			}
 
 			CASE(InitVar):
 			{
 				(stackTop - 1)->deref().init();
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(Yield):
@@ -11175,7 +11176,7 @@ callFunction:
 			CASE(PushIndexFunctionReturnValue):
 			{
 				*(stackTop++) = (++register0)->deref();
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(CallLibFunction):
@@ -11297,7 +11298,7 @@ NewObjectTablePastLoad:
 					goto literalZero;
 				}
 
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(AssignToObjectTableByHash):
@@ -11378,7 +11379,7 @@ NewObjectTablePastLoad:
 
 					--va->m_size;
 				}
-				CONTINUE;	
+				FASTCONTINUE;	
 			}
 
 			CASE(HashEntryExists):
@@ -11389,13 +11390,13 @@ NewObjectTablePastLoad:
 				register1->p2 = INIT_AS_INT;
 				register1->i = ((register2->xtype == WR_EX_HASH_TABLE) && register2->va->exists(register0->getHash(), false)) ? 1 : 0;
 				
-				CONTINUE;	
+				FASTCONTINUE;	
 			}
 
 			CASE(PopOne):
 			{
 				--stackTop;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(ReturnZero):
@@ -11419,7 +11420,7 @@ NewObjectTablePastLoad:
 				}
 #endif
 				
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(ToInt):
@@ -11427,7 +11428,7 @@ NewObjectTablePastLoad:
 				register0 = stackTop - 1;
 				register0->i = register0->asInt();
 				register0->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(ToFloat):
@@ -11435,7 +11436,7 @@ NewObjectTablePastLoad:
 				register0 = stackTop - 1;
 				register0->f = register0->asFloat();
 				register0->p2 = INIT_AS_FLOAT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(GlobalStop):
@@ -11460,7 +11461,7 @@ NewObjectTablePastLoad:
 			{
 				register0 = (stackTop - 1);
 				*register0 = register0->deref();
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(Index):
@@ -11479,7 +11480,7 @@ NewObjectTablePastLoad:
 			{
 				register0 = stackTop - 1;
 				wr_countOfArrayElement( register0, register0 );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(HashOf):
@@ -11487,7 +11488,7 @@ NewObjectTablePastLoad:
 				register0 = stackTop - 1;
 				register0->ui = register0->getHash();
 				register0->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(GlobalIndexHash):
@@ -11545,7 +11546,7 @@ hashIndexJump:
 				register1->r = r;
 				register1->r2 = register2;
 
-				CONTINUE;
+				FASTCONTINUE;
 			} 
 
 			CASE(SwapTwoToTop): // accomplish two (or three when optimized) swaps into one instruction
@@ -11572,60 +11573,60 @@ hashIndexJump:
 				register0->p = p;
 				register0->p2 = t;
 
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LoadFromLocal):
 			{
 				stackTop->p = frameBase + READ_8_FROM_PC(pc++);
 				(stackTop++)->p2 = INIT_AS_REF;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LoadFromGlobal):
 			{
 				stackTop->p = globalSpace + READ_8_FROM_PC(pc++);
  				(stackTop++)->p2 = INIT_AS_REF;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
-			CASE(LLValues): { register0 = frameBase + READ_8_FROM_PC(pc++); register1 = frameBase + READ_8_FROM_PC(pc++); CONTINUE; }
-			CASE(LGValues): { register0 = frameBase + READ_8_FROM_PC(pc++); register1 = globalSpace + READ_8_FROM_PC(pc++); CONTINUE; }
-			CASE(GLValues): { register0 = globalSpace + READ_8_FROM_PC(pc++); register1 = frameBase + READ_8_FROM_PC(pc++); CONTINUE; }
-			CASE(GGValues):	{ register0 = globalSpace + READ_8_FROM_PC(pc++); register1 = globalSpace + READ_8_FROM_PC(pc++); CONTINUE; }
+			CASE(LLValues): { register0 = frameBase + READ_8_FROM_PC(pc++); register1 = frameBase + READ_8_FROM_PC(pc++); FASTCONTINUE; }
+			CASE(LGValues): { register0 = frameBase + READ_8_FROM_PC(pc++); register1 = globalSpace + READ_8_FROM_PC(pc++); FASTCONTINUE; }
+			CASE(GLValues): { register0 = globalSpace + READ_8_FROM_PC(pc++); register1 = frameBase + READ_8_FROM_PC(pc++); FASTCONTINUE; }
+			CASE(GGValues):	{ register0 = globalSpace + READ_8_FROM_PC(pc++); register1 = globalSpace + READ_8_FROM_PC(pc++); FASTCONTINUE; }
 
 			CASE(BitwiseNOT):
 			{
 				register0 = stackTop - 1;
 				register0->ui = wr_bitwiseNot[ register0->type ]( register0 );
 				register0->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(RelativeJump):
 			{
 				pc += READ_16_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(RelativeJump8):
 			{
 				pc += (int8_t)READ_8_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(BZ):
 			{
 				register0 = --stackTop;
 				pc += wr_LogicalNot[register0->type](register0) ? READ_16_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(BZ8):
 			{
 				register0 = --stackTop;
 				pc += wr_LogicalNot[register0->type](register0) ? (int8_t)READ_8_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LogicalNot):
@@ -11633,14 +11634,14 @@ hashIndexJump:
 				register0 = stackTop - 1;
 				register0->i = wr_LogicalNot[ register0->type ]( register0 );
 				register0->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(Negate):
 			{
 				register0 = stackTop - 1;
 				wr_negate[ register0->type ]( register0, register0 );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(IndexLiteral16):
@@ -11767,7 +11768,7 @@ doAssignToLocalAndPop:
 			{
 				stackTop->i = (int32_t)(int8_t)READ_8_FROM_PC(pc++);
 				(stackTop++)->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LiteralInt16):
@@ -11775,7 +11776,7 @@ doAssignToLocalAndPop:
 				stackTop->i = READ_16_FROM_PC(pc);
 				pc += 2;
 				(stackTop++)->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LiteralInt8ToGlobal):
@@ -11783,7 +11784,7 @@ doAssignToLocalAndPop:
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				register0->i = (int32_t)(int8_t)READ_8_FROM_PC(pc++);
 				register0->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LiteralInt16ToGlobal):
@@ -11792,7 +11793,7 @@ doAssignToLocalAndPop:
 				register0->i = READ_16_FROM_PC(pc);
 				register0->p2 = INIT_AS_INT;
 				pc += 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LiteralInt32ToLocal):
@@ -11807,7 +11808,7 @@ doAssignToLocalAndPop:
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				register0->i = (int32_t)(int8_t)READ_8_FROM_PC(pc++);
 				register0->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LiteralInt16ToLocal):
@@ -11816,7 +11817,7 @@ doAssignToLocalAndPop:
 				register0->i = READ_16_FROM_PC(pc);
 				register0->p2 = INIT_AS_INT;
 				pc += 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LiteralFloatToGlobal):
@@ -11847,14 +11848,14 @@ load32ToTemp:
 			{
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_pushIterator[register0->type]( register0, globalSpace + READ_8_FROM_PC(pc++) );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LPushIterator):
 			{
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_pushIterator[register0->type]( register0, globalSpace + READ_8_FROM_PC(pc++) );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(GGNextKeyValueOrJump): { register1 = globalSpace + READ_8_FROM_PC(pc++); register0 = globalSpace + READ_8_FROM_PC(pc++); goto NextIterator; }
@@ -11869,7 +11870,7 @@ load32ToTemp:
 NextIterator:
 				register2 = globalSpace + READ_8_FROM_PC(pc++);
 				pc += wr_getNextValue( register2, register0, register1) ? 2 : READ_16_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(Switch):
@@ -11885,7 +11886,7 @@ NextIterator:
 				hashLoc += 4; // yup, point hashLoc to jump vector
 				
 				pc += READ_16_FROM_PC(hashLoc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(SwitchLinear):
@@ -11901,7 +11902,7 @@ NextIterator:
 				{
 					pc += READ_16_FROM_PC( pc );
 				}
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 //-------------------------------------------------------------------------------------------------------------
@@ -12134,7 +12135,7 @@ compactBLA8PreReg1:
 				register1 = --stackTop;
 compactBLA8:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(BLO):
@@ -12282,7 +12283,7 @@ compactReturnFuncPostLoad:
 				register1 = stackTop - 1;
 				register1->i = (int)wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall );
 				register1->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 											  
 			CASE(CompareNE):
@@ -12296,7 +12297,7 @@ compactReturnFuncInvertedPostLoad:
 				register1 = stackTop - 1;
 				register1->i = (int)!wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall );
 				register1->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(GSCompareEQ): { register0 = globalSpace + READ_8_FROM_PC(pc++); boolIntCall = CompareEQI; boolFloatCall = CompareEQF; goto compactReturnFuncPostLoad; }
@@ -12334,7 +12335,7 @@ compactReturnFuncBInvertedPreReg1:
 				register1 = --stackTop;
 compactReturnFuncBInvertedPostReg1:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? READ_16_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(CompareBLE8): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncBInverted8; }
@@ -12358,7 +12359,7 @@ compactReturnFuncBInverted8PreReg1:
 				register1 = --stackTop;
 compactReturnFuncBInverted8Post:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? (int8_t)READ_8_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(GGCompareLE): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnCompareGGNEPost; }
@@ -12397,7 +12398,7 @@ compactReturnCompareEQ:
 compactReturnCompareEQPost:
 				stackTop->i = (int)wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall );
 				(stackTop++)->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LLCompareGE): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnCompareNE; }
@@ -12412,7 +12413,7 @@ compactReturnCompareNE:
 compactReturnCompareNEPost:
 				stackTop->i = (int)!wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall );
 				(stackTop++)->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			
@@ -12634,7 +12635,7 @@ compactCompareGG8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += wr_LogicalAND[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(BLA8):
@@ -12642,7 +12643,7 @@ compactCompareGG8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += wr_LogicalAND[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(BLO):
@@ -12650,7 +12651,7 @@ compactCompareGG8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += wr_LogicalOR[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(BLO8):
@@ -12658,7 +12659,7 @@ compactCompareGG8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += wr_LogicalOR[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			
@@ -12667,7 +12668,7 @@ compactCompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_MultiplyBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(GLBinaryMultiplication):
@@ -12675,7 +12676,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_MultiplyBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LLBinaryMultiplication):
@@ -12683,7 +12684,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_MultiplyBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			
@@ -12692,7 +12693,7 @@ compactCompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(GLBinaryAddition):
@@ -12700,7 +12701,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++); 
 				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LLBinaryAddition):
@@ -12708,7 +12709,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			
@@ -12717,7 +12718,7 @@ compactCompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_SubtractBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(GLBinarySubtraction):
@@ -12725,7 +12726,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_SubtractBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LGBinarySubtraction):
@@ -12733,7 +12734,7 @@ compactCompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_SubtractBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LLBinarySubtraction):
@@ -12741,7 +12742,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_SubtractBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 
@@ -12750,7 +12751,7 @@ compactCompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(GLBinaryDivision):
@@ -12758,7 +12759,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LGBinaryDivision):
@@ -12766,7 +12767,7 @@ compactCompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LLBinaryDivision):
@@ -12774,7 +12775,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			
@@ -12793,7 +12794,7 @@ returnFuncPostLoad:
 				register1 = stackTop - 1;
 				register1->i = (int)returnFunc[(register0->type<<2)|register1->type]( register0, register1 );
 				register1->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(CompareNE):
@@ -12805,7 +12806,7 @@ returnFuncInvertedPostLoad:
 				register1 = stackTop - 1;
 				register1->i = (int)!returnFunc[(register0->type<<2)|register1->type]( register0, register1 );
 				register1->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(GSCompareEQ): { register0 = globalSpace + READ_8_FROM_PC(pc++); returnFunc = wr_CompareEQ; goto returnFuncPostLoad; }
@@ -12833,7 +12834,7 @@ returnFuncBNormal:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(CompareBNE):
@@ -12843,7 +12844,7 @@ returnFuncBInverted:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? READ_16_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(CompareBLE8): { returnFunc = wr_CompareGT; goto returnFuncBInverted8; }
@@ -12857,7 +12858,7 @@ returnFuncBNormal8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(CompareBNE8):
@@ -12867,7 +12868,7 @@ returnFuncBInverted8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)READ_8_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(GGCompareEQ):
@@ -12925,7 +12926,7 @@ returnCompareEQ:
 returnCompareEQPost:
 				stackTop->i = (int)returnFunc[(register0->type<<2)|register1->type]( register0, register1 );
 				(stackTop++)->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(LLCompareGE): { returnFunc = wr_CompareLT; goto returnCompareNE; }
@@ -12939,7 +12940,7 @@ returnCompareNE:
 returnCompareNEPost:
 				stackTop->i = (int)!returnFunc[(register0->type<<2)|register1->type]( register0, register1 );
 				(stackTop++)->p2 = INIT_AS_INT;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 
@@ -12953,7 +12954,7 @@ CompareGInverted:
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? READ_16_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(GSCompareEQBZ): { returnFunc = wr_CompareEQ; goto CompareGNormal; }
@@ -12965,7 +12966,7 @@ CompareGNormal:
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(LSCompareGEBZ): { returnFunc = wr_CompareLT; goto CompareLInverted; }
@@ -12977,7 +12978,7 @@ CompareLInverted:
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? READ_16_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(LSCompareEQBZ): { returnFunc = wr_CompareEQ; goto CompareLNormal; }
@@ -12989,7 +12990,7 @@ CompareLNormal:
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(GSCompareGEBZ8): { returnFunc = wr_CompareLT; goto CompareG8Inverted; }
@@ -13001,7 +13002,7 @@ CompareG8Inverted:
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)READ_8_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(GSCompareEQBZ8): { returnFunc = wr_CompareEQ; goto CompareG8Normal; }
@@ -13013,7 +13014,7 @@ CompareG8Normal:
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(LSCompareGEBZ8): { returnFunc = wr_CompareLT; goto CompareL8Inverted; }
@@ -13025,7 +13026,7 @@ CompareL8Inverted:
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)READ_8_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			
 			CASE(LSCompareEQBZ8): { returnFunc = wr_CompareEQ; goto CompareL8Normal; }
@@ -13037,7 +13038,7 @@ CompareL8Normal:
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(LLCompareGEBZ): { returnFunc = wr_CompareLT; goto CompareLLInv; }
@@ -13049,7 +13050,7 @@ CompareLLInv:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? READ_16_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			CASE(LLCompareEQBZ): { returnFunc = wr_CompareEQ; goto CompareLL; }
 			CASE(LLCompareGTBZ): { returnFunc = wr_CompareGT; goto CompareLL; }
@@ -13060,7 +13061,7 @@ CompareLL:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			
@@ -13073,7 +13074,7 @@ CompareLL8Inv:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)READ_8_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			CASE(LLCompareEQBZ8): { returnFunc = wr_CompareEQ; goto CompareLL8; }
 			CASE(LLCompareGTBZ8): { returnFunc = wr_CompareGT; goto CompareLL8; }
@@ -13084,7 +13085,7 @@ CompareLL8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			
@@ -13097,7 +13098,7 @@ CompareGGInv:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? READ_16_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			CASE(GGCompareEQBZ): { returnFunc = wr_CompareEQ; goto CompareGG; }
@@ -13109,7 +13110,7 @@ CompareGG:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			
@@ -13122,7 +13123,7 @@ CompareGG8Inv:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)READ_8_FROM_PC(pc) : 2;
-				CONTINUE;
+				FASTCONTINUE;
 			}
 			CASE(GGCompareEQBZ8): { returnFunc = wr_CompareEQ; goto CompareGG8; }
 			CASE(GGCompareGTBZ8): { returnFunc = wr_CompareGT; goto CompareGG8; }
@@ -13133,7 +13134,7 @@ CompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
-				CONTINUE;
+				FASTCONTINUE;
 			}
 
 			
@@ -15763,7 +15764,7 @@ WRDRun:
 			else
 			{
 				WRFunction f;
-				f.offset = 0;
+				f.functionOffset = 0;
 				wr_callFunction( m_context, &f, 0, 0 ); // signal "continue"
 			}
 
@@ -20283,7 +20284,12 @@ SOFTWARE.
 
 #include "wrench.h"
 
-int wr_sprintfEx( char* outbuf, const char* fmt, WRValue* args, const int argn );
+int wr_sprintfEx( char* outbuf,
+				  const unsigned int outsize,
+				  const char* fmt,
+				  const unsigned int fmtsize,
+				  WRValue* args,
+				  const int argn );
 
 //------------------------------------------------------------------------------
 void wr_debugPrintEx( WRValue* stackTop, const int argn, WRContext* c, const char* append )
@@ -20297,7 +20303,7 @@ void wr_debugPrintEx( WRValue* stackTop, const int argn, WRContext* c, const cha
 
 		WrenchPacket* P = WrenchPacket::alloc( WRD_DebugOut, 520 );
 
-		int size = wr_sprintfEx( (char*)P->payload(), args[0].asString(inbuf), args + 1, argn - 1);
+		int size = wr_sprintfEx( (char*)P->payload(), strlen((char*)P->payload()), args[0].asString(inbuf), strlen(inbuf), args + 1, argn - 1);
 
 		for( int a=0; append && append[a]; ++a )
 		{

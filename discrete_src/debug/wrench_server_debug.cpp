@@ -393,7 +393,7 @@ WRDRun:
 			else
 			{
 				WRFunction f;
-				f.offset = 0;
+				f.functionOffset = 0;
 				wr_callFunction( m_context, &f, 0, 0 ); // signal "continue"
 			}
 
