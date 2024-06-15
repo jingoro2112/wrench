@@ -14042,46 +14042,91 @@ int wr_technicalAsStringEx( char* string, const WRValue* value, size_t pos, size
 }
 
 //------------------------------------------------------------------------------
-char* WRValue::technicalAsString( char* string, size_t maxLen, bool valuesInHex ) const
+char* WRValue::technicalAsString( char* string, unsigned int maxLen, bool valuesInHex, unsigned int* strLen ) const
 {
-	string[ wr_technicalAsStringEx(string, this, 0, maxLen, valuesInHex) ] = 0;
+	unsigned int len = wr_technicalAsStringEx( string, this, 0, maxLen, valuesInHex );
+	string[ len ] = 0;
+	if ( strLen )
+	{
+		*strLen = len;
+	}
 	return string;
 }
 
 //------------------------------------------------------------------------------
-char* WRValue::asString( char* string, size_t maxLen ) const
+char* WRValue::asMallocString( unsigned int* strLen ) const
 {
 	if ( type == WR_REF )
 	{
-		return r->asString( string, maxLen );
+		return r->asMallocString( strLen );
 	}
-	else if ( type == WR_FLOAT )
+
+	unsigned int len = 0;
+	char* ret = 0;
+
+	if ( type == WR_FLOAT )
 	{
-		wr_ftoa( f, string, maxLen );
+		ret = (char*)wr_malloc( 10 );
+		len = wr_ftoa( f, ret, 11 );
 	}
 	else if ( type == WR_INT )
 	{
-		wr_itoa( i, string, maxLen );
+		ret = (char*)wr_malloc( 13 );
+		len = wr_itoa( i, ret, 12 );
 	}
 	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
 	{
-		unsigned int s = 0;
-		while( (string[s] = va->m_Cdata[s]) )
-		{
-			if ( (s >= va->m_size) || (maxLen && (s >= maxLen)) )
-			{
-				string[s] = '\0';
-				break;
-			}
-
-			++s;
-		}
+		ret = (char*)wr_malloc( va->m_size + 1);
+		memcpy( ret, va->m_Cdata, va->m_size );
+		ret[va->m_size] = 0;
 	}
 	else
 	{
-		singleValue().asString( string, maxLen ); // never give up, never surrender	
+		return singleValue().asMallocString( strLen );
 	}
 
+	if ( strLen )
+	{
+		*strLen = len;
+	}
+
+	return ret;
+}
+
+//------------------------------------------------------------------------------
+char* WRValue::asString( char* string, unsigned int maxLen, unsigned int* strLen ) const
+{
+	if ( type == WR_REF )
+	{
+		return r->asString( string, maxLen, strLen );
+	}
+
+	unsigned int len = 0;
+	
+	if ( type == WR_FLOAT )
+	{
+		len = wr_ftoa( f, string, maxLen );
+	}
+	else if ( type == WR_INT )
+	{
+		len = wr_itoa( i, string, maxLen );
+	}
+	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
+	{
+		len = maxLen ? (maxLen > va->m_size ? va->m_size : maxLen) : va->m_size;
+		memcpy( string, va->m_Cdata, len );
+		string[len] = 0;
+	}
+	else
+	{
+		return singleValue().asString( string, maxLen, strLen ); // never give up, never surrender	
+	}
+
+	if ( strLen )
+	{
+		*strLen = len;
+	}
+	
 	return string;
 }
 
@@ -17820,8 +17865,9 @@ void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
-		char buf[256];
-		unlink( (stackTop - 1)->asString(buf, 256) );
+		char* name = (stackTop - 1)->asMallocString();
+		unlink( name );
+		wr_free( name );
 	}
 }
 

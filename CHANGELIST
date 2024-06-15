@@ -9,6 +9,8 @@
 
 - sprintf rework to use much less stack and have effectively unlimited format/result size
 - adding FASTCONTINUE that skips the malloc-fail check on opcodes that can't cause it
+- added WRValue::asMallocString() so large stack alocations are unecessary
+- fixed up some debug code implementation, still not ready for use!
 
 6.0.0 ----------------------------------------------------------------------------------
 - removed function declaration being an in-line process (which was to facilitate executing

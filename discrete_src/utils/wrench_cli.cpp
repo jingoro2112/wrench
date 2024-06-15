@@ -882,9 +882,10 @@ static void importln( WRContext* c, const WRValue* argv, const int argn, WRValue
 {
 	for( int i=0; i<argn; ++i )
 	{
-		char outbuf[64000];
-		argv[i].asString( outbuf, 64000 );
-		g_importBuf += outbuf;
+		unsigned int len = 0;
+		char* str = argv[i].asMallocString( &len );
+		g_importBuf += str;
+		wr_free( str );
 	}
 	g_importBuf += "\n";
 }

@@ -32,11 +32,12 @@ static void dbprintln( WRContext* c, const WRValue* argv, const int argn, WRValu
 {
 	for( int i=0; i<argn; ++i )
 	{
-		char outbuf[64000];
-		argv[i].asString( outbuf, 64000 );
-		printf( "%s", outbuf );
+		unsigned int len = 0;
+		char* str = argv[i].asMallocString( &len );
+		wr_stdout( str, len );
+		wr_free( str );
 	}
-	printf( "\n" );
+	wr_stdout( "\n", 1 );
 
 	retVal.i = 20; // for argument-return testing
 }
@@ -46,9 +47,10 @@ static void dbprint( WRContext* c, const WRValue* argv, const int argn, WRValue&
 {
 	for( int i=0; i<argn; ++i )
 	{
-		char outbuf[64000];
-		argv[i].asString( outbuf, 64000 );
-		printf( "%s", outbuf );
+		unsigned int len = 0;
+		char* str = argv[i].asMallocString( &len );
+		wr_stdout( str, len );
+		wr_free( str );
 	}
 }
 

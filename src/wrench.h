@@ -259,8 +259,8 @@ uint32_t wr_hashStr( const char* dat, uint32_t serial=0 );
 /**************************************************************/
 //                        Running Code
 
-// compile source code and return a new'ed block of bytecode ready
-// for wr_run(), this memory must be delete[]'ed
+// compile source code and return a wr_malloc'ed block of bytecode ready
+// for wr_run(), this memory must be manually wr_free'ed
 // return value is a WRError
 // optionally an "errMsg" buffer can be passed which will output a
 //     human-readable string of what went wrong and where.
@@ -293,7 +293,7 @@ WRError wr_compile( const char* source,
 
 // RETURNS:    an allocated WRContext
 //             NOTE: This Context is automatically destroyed when
-//             wr_destroyState() is called, but can be manually deleted
+//             wr_destroyState() is called, but can be manually destroyed
 //             with wr_destroyContext(...) (see below)
 WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership =false );
 
@@ -729,10 +729,11 @@ struct WRValue
 	// string: must point to a buffer long enough to contain at least maxLen bytes.
 	// the "string" pointer will be passed back, if maxLen is 0 (not
 	// reccomended) the string is assumed to be unlimited size
-	char* asString( char* string, size_t maxLen =0 ) const;
+	char* asString( char* string, unsigned int maxLen =0, unsigned int* strLen =0 ) const;
+	char* asMallocString( unsigned int* strLen =0 ) const;
 
 	// same as "asString" but will print it in a more debug-symbol-y
-	char* technicalAsString( char* string, size_t maxLen, bool valuesInHex =false ) const;
+	char* technicalAsString( char* string, unsigned int maxLen, bool valuesInHex =false, unsigned int* strLen =0 ) const;
 
 	// return a raw pointer to the data array if this is one, otherwise null
 	void* array( unsigned int* len =0, char arrayType =SV_CHAR ) const;

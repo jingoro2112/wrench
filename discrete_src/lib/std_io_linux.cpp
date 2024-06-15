@@ -114,8 +114,9 @@ void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
-		char buf[256];
-		unlink( (stackTop - 1)->asString(buf, 256) );
+		char* name = (stackTop - 1)->asMallocString();
+		unlink( name );
+		wr_free( name );
 	}
 }
 
