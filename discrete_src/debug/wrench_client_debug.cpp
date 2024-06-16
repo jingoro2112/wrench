@@ -37,7 +37,10 @@ const unsigned char wr_blankCode[]=
 void WRDebugClientInterface::init()
 {
 	I->m_scratchState = wr_newState();
-	I->m_scratchContext = wr_newContext( I->m_scratchState, wr_blankCode, wr_blankSize );
+	uint8_t* out;
+	int outSize;
+	wr_compile("", 0, &out, &outSize);
+	I->m_scratchContext = wr_newContext(I->m_scratchState, out, outSize, true);
 	I->m_scratchContext->allocatedMemoryHint = 0;
 }
 

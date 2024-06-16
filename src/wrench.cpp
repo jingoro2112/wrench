@@ -549,7 +549,10 @@ public:
 		if ( m_pos + size >= m_size )
 		{
 			m_size += (size*2) + 8;
-			m_buf = (char *)realloc( m_buf, m_size );
+			char* newBuf = (char*)g_malloc( m_size );
+			memcpy( newBuf, m_buf, m_pos );
+			g_free( m_buf );
+			m_buf = newBuf;
 		}
 
 		memcpy( m_buf + m_pos, data, size );
@@ -9538,6 +9541,13 @@ SOFTWARE.
 #ifndef WRENCH_WITHOUT_COMPILER
 
 //------------------------------------------------------------------------------
+int wr_strnlen( const char* s, int len )
+{
+	const char* found = (const char *)memchr( s, '\0', len );
+	return found ? (found - s) : len;
+}
+
+//------------------------------------------------------------------------------
 bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect )
 {
 	WRValue& value = ex.value;
@@ -9575,7 +9585,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 
 		for( ; c_operations[t].token; ++t )
 		{
-			int len = (int)strnlen( c_operations[t].token, 20 );
+			int len = wr_strnlen( c_operations[t].token, 20 );
 			if ( ((offset + len) < m_sourceLen)
 				 && !strncmp(m_source + offset, c_operations[t].token, len) )
 			{
@@ -14066,17 +14076,17 @@ char* WRValue::asMallocString( unsigned int* strLen ) const
 
 	if ( type == WR_FLOAT )
 	{
-		ret = (char*)wr_malloc( 10 );
+		ret = (char*)g_malloc( 10 );
 		len = wr_ftoa( f, ret, 11 );
 	}
 	else if ( type == WR_INT )
 	{
-		ret = (char*)wr_malloc( 13 );
+		ret = (char*)g_malloc( 13 );
 		len = wr_itoa( i, ret, 12 );
 	}
 	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
 	{
-		ret = (char*)wr_malloc( va->m_size + 1);
+		ret = (char*)g_malloc( va->m_size + 1);
 		memcpy( ret, va->m_Cdata, va->m_size );
 		ret[va->m_size] = 0;
 	}
@@ -15037,7 +15047,10 @@ const unsigned char wr_blankCode[]=
 void WRDebugClientInterface::init()
 {
 	I->m_scratchState = wr_newState();
-	I->m_scratchContext = wr_newContext( I->m_scratchState, wr_blankCode, wr_blankSize );
+	uint8_t* out;
+	int outSize;
+	wr_compile("", 0, &out, &outSize);
+	I->m_scratchContext = wr_newContext(I->m_scratchState, out, outSize, true);
 	I->m_scratchContext->allocatedMemoryHint = 0;
 }
 
@@ -15824,7 +15837,8 @@ WRDRun:
 			{
 				if ( m_externalCodeBlockSize < size )
 				{
-					m_externalCodeBlock = (uint8_t*)realloc( m_externalCodeBlock, size );
+					g_free( m_externalCodeBlock );
+					m_externalCodeBlock = (uint8_t*)g_malloc( size );
 					m_externalCodeBlockSize = size;
 				}
 				
@@ -17780,6 +17794,9 @@ SOFTWARE.
 #include <time.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
 
 //------------------------------------------------------------------------------
 void wr_stdout( const char* data, const int size )
@@ -18072,6 +18089,9 @@ SOFTWARE.
 #ifdef WRENCH_WIN32_FILE_IO
 
 #include <windows.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
 
 #include <time.h>
 #include <io.h>
@@ -20349,7 +20369,8 @@ void wr_debugPrintEx( WRValue* stackTop, const int argn, WRContext* c, const cha
 
 		WrenchPacket* P = WrenchPacket::alloc( WRD_DebugOut, 520 );
 
-		int size = wr_sprintfEx( (char*)P->payload(), strlen((char*)P->payload()), args[0].asString(inbuf), strlen(inbuf), args + 1, argn - 1);
+		args[0].asString(inbuf);
+		int size = wr_sprintfEx( (char*)P->payload(), strlen((char*)P->payload()), inbuf, strlen(inbuf), args + 1, argn - 1);
 
 		for( int a=0; append && append[a]; ++a )
 		{

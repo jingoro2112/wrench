@@ -26,6 +26,7 @@ SOFTWARE.
 /*------------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
@@ -1011,15 +1012,6 @@ public:
 #ifndef WRENCH_COMPACT
 #define WRENCH_COMPACT
 #endif
-#endif
-
-#if !defined(ARDUINO) && (__arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__ || __GNUC__)
-#include <memory.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <fcntl.h>
 #endif
 
 #ifndef WRENCH_COMBINED

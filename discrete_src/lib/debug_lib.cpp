@@ -44,7 +44,8 @@ void wr_debugPrintEx( WRValue* stackTop, const int argn, WRContext* c, const cha
 
 		WrenchPacket* P = WrenchPacket::alloc( WRD_DebugOut, 520 );
 
-		int size = wr_sprintfEx( (char*)P->payload(), strlen((char*)P->payload()), args[0].asString(inbuf), strlen(inbuf), args + 1, argn - 1);
+		args[0].asString(inbuf);
+		int size = wr_sprintfEx( (char*)P->payload(), strlen((char*)P->payload()), inbuf, strlen(inbuf), args + 1, argn - 1);
 
 		for( int a=0; append && append[a]; ++a )
 		{

@@ -408,7 +408,8 @@ WRDRun:
 			{
 				if ( m_externalCodeBlockSize < size )
 				{
-					m_externalCodeBlock = (uint8_t*)realloc( m_externalCodeBlock, size );
+					g_free( m_externalCodeBlock );
+					m_externalCodeBlock = (uint8_t*)g_malloc( size );
 					m_externalCodeBlockSize = size;
 				}
 				

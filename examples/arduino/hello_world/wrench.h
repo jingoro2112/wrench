@@ -25,6 +25,8 @@ SOFTWARE.
 #ifndef _WRENCH_H
 #define _WRENCH_H
 /*------------------------------------------------------------------------------*/
+#include <stdint.h>
+#include <stddef.h>
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
@@ -50,8 +52,8 @@ WRENCH_REALLY_COMPACT reduces size further by removing the jumptable
 interpreter in favor of a giant switch(). This savings comes at the cost
 of more speed so only use it if you need to.
 */
-//#define WRENCH_COMPACT           // saves a lot, costs some speed
-//#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
+#define WRENCH_COMPACT           // saves a lot, costs some speed
+#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 
 
 // Default implementations are provided for these architectures, define
@@ -134,17 +136,27 @@ examples are in
 
 
 /************************************************************************
-for embedded systems that need to know if they have run out of memory,
+for systems that need to know if they have run out of memory.
 
 WARNING: This imposes a small if() check on EVERY INSTRUCTION so the
-malloc failure is detected the moment it happens, but guarantees
-graceful exit if g_malloc() ever returns null
+malloc failure is detected on the instruction it happens and guarantees
+graceful exit
 */
 //#define WRENCH_HANDLE_MALLOC_FAIL
 
-   
-#include <stdint.h>
-#include <stddef.h>
+// by default wrench uses malloc/free but if you want to use your own
+// allocator it can be set up here
+// NOTE: this becomes global for all wrench code!
+typedef void* (*WR_ALLOC)(size_t size);
+typedef void (*WR_FREE)(void* ptr);
+void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
+extern WR_ALLOC g_malloc;
+extern WR_FREE g_free;
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+extern bool g_mallocFailed; // used as an internal global flag for when a malloc came back null
+#endif
+
+//------------------------------------------------------------------------------
 
 struct WRState;
 struct WRValue;
@@ -233,13 +245,6 @@ enum WRError
 WRState* wr_newState( int stackSize =WRENCH_DEFAULT_STACK_SIZE );
 void wr_destroyState( WRState* w );
 
-// by default wrench uses malloc/free but if you want to use your own
-// allocator it can be set up here
-// NOTE: this becomes global for all wrench code!
-typedef void* (*WR_ALLOC)(size_t size);
-typedef void (*WR_FREE)(void* ptr);
-void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
-
 // allocate/free memory with the same allocator wrench is using, this
 // is particularly important for the "takeOwnership" flag below
 void* wr_malloc( size_t size );
@@ -254,8 +259,8 @@ uint32_t wr_hashStr( const char* dat, uint32_t serial=0 );
 /**************************************************************/
 //                        Running Code
 
-// compile source code and return a new'ed block of bytecode ready
-// for wr_run(), this memory must be delete[]'ed
+// compile source code and return a wr_malloc'ed block of bytecode ready
+// for wr_run(), this memory must be manually wr_free'ed
 // return value is a WRError
 // optionally an "errMsg" buffer can be passed which will output a
 //     human-readable string of what went wrong and where.
@@ -288,7 +293,7 @@ WRError wr_compile( const char* source,
 
 // RETURNS:    an allocated WRContext
 //             NOTE: This Context is automatically destroyed when
-//             wr_destroyState() is called, but can be manually deleted
+//             wr_destroyState() is called, but can be manually destroyed
 //             with wr_destroyContext(...) (see below)
 WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership =false );
 
@@ -613,12 +618,6 @@ The "extended" types are:
 
 */
 
-extern WR_ALLOC g_malloc;
-extern WR_FREE g_free;
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-extern bool g_mallocFailed;
-#endif
-
 
 //------------------------------------------------------------------------------
 #if __cplusplus <= 199711L
@@ -730,10 +729,11 @@ struct WRValue
 	// string: must point to a buffer long enough to contain at least maxLen bytes.
 	// the "string" pointer will be passed back, if maxLen is 0 (not
 	// reccomended) the string is assumed to be unlimited size
-	char* asString( char* string, size_t maxLen =0 ) const;
+	char* asString( char* string, unsigned int maxLen =0, unsigned int* strLen =0 ) const;
+	char* asMallocString( unsigned int* strLen =0 ) const;
 
 	// same as "asString" but will print it in a more debug-symbol-y
-	char* technicalAsString( char* string, size_t maxLen, bool valuesInHex =false ) const;
+	char* technicalAsString( char* string, unsigned int maxLen, bool valuesInHex =false, unsigned int* strLen =0 ) const;
 
 	// return a raw pointer to the data array if this is one, otherwise null
 	void* array( unsigned int* len =0, char arrayType =SV_CHAR ) const;
@@ -1014,14 +1014,9 @@ public:
 #endif
 #endif
 
-#if !defined(ARDUINO) && (__arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__ || __GNUC__)
-#include <memory.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#endif
+//#if !defined(ARDUINO) && (__arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__ || __GNUC__)
+#include <string.h>
+//#endif
 
 #ifndef WRENCH_COMBINED
 #include "utils/utils.h"

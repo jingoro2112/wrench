@@ -35,7 +35,7 @@ static void dbprintln( WRContext* c, const WRValue* argv, const int argn, WRValu
 		unsigned int len = 0;
 		char* str = argv[i].asMallocString( &len );
 		wr_stdout( str, len );
-		wr_free( str );
+		g_free( str );
 	}
 	wr_stdout( "\n", 1 );
 
@@ -50,7 +50,7 @@ static void dbprint( WRContext* c, const WRValue* argv, const int argn, WRValue&
 		unsigned int len = 0;
 		char* str = argv[i].asMallocString( &len );
 		wr_stdout( str, len );
-		wr_free( str );
+		g_free( str );
 	}
 }
 
@@ -90,7 +90,7 @@ WrenchDebugClient::~WrenchDebugClient()
 		wr_destroyState( m_w );
 	}
 
-	delete[] m_code;
+	g_free( m_code );
 	delete m_server;
 	delete m_client;
 }
@@ -135,7 +135,7 @@ bool WrenchDebugClient::loadSource( const char* name )
 	m_listing.clear();
 	m_breakpoints.clear();
 
-	delete[] m_code;
+	g_free( m_code );
 	m_code = 0;
 		
 	WRstr infile;
@@ -150,7 +150,7 @@ bool WrenchDebugClient::loadSource( const char* name )
 						  &m_code,
 						  &m_codeLen,
 						  0,
-						  WR_EMBED_DEBUG_CODE|WR_INCLUDE_GLOBALS|WR_EMBED_SOURCE_CODE|WR_NON_STRICT_VAR );
+						  WR_EMBED_DEBUG_CODE|WR_INCLUDE_GLOBALS|WR_EMBED_SOURCE_CODE );
 	if ( err )
 	{
 		printf( "compile error [%s]\n", c_errStrings[err] );

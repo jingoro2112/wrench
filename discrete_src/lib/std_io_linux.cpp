@@ -29,6 +29,9 @@ SOFTWARE.
 #include <time.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
 
 //------------------------------------------------------------------------------
 void wr_stdout( const char* data, const int size )

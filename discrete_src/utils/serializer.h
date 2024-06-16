@@ -84,7 +84,10 @@ public:
 		if ( m_pos + size >= m_size )
 		{
 			m_size += (size*2) + 8;
-			m_buf = (char *)realloc( m_buf, m_size );
+			char* newBuf = (char*)g_malloc( m_size );
+			memcpy( newBuf, m_buf, m_pos );
+			g_free( m_buf );
+			m_buf = newBuf;
 		}
 
 		memcpy( m_buf + m_pos, data, size );

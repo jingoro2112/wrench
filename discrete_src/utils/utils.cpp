@@ -809,17 +809,17 @@ char* WRValue::asMallocString( unsigned int* strLen ) const
 
 	if ( type == WR_FLOAT )
 	{
-		ret = (char*)wr_malloc( 10 );
+		ret = (char*)g_malloc( 10 );
 		len = wr_ftoa( f, ret, 11 );
 	}
 	else if ( type == WR_INT )
 	{
-		ret = (char*)wr_malloc( 13 );
+		ret = (char*)g_malloc( 13 );
 		len = wr_itoa( i, ret, 12 );
 	}
 	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
 	{
-		ret = (char*)wr_malloc( va->m_size + 1);
+		ret = (char*)g_malloc( va->m_size + 1);
 		memcpy( ret, va->m_Cdata, va->m_size );
 		ret[va->m_size] = 0;
 	}

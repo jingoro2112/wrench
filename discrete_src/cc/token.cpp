@@ -26,6 +26,13 @@ SOFTWARE.
 #ifndef WRENCH_WITHOUT_COMPILER
 
 //------------------------------------------------------------------------------
+int wr_strnlen( const char* s, int len )
+{
+	const char* found = (const char *)memchr( s, '\0', len );
+	return found ? (found - s) : len;
+}
+
+//------------------------------------------------------------------------------
 bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect )
 {
 	WRValue& value = ex.value;
@@ -63,7 +70,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 
 		for( ; c_operations[t].token; ++t )
 		{
-			int len = (int)strnlen( c_operations[t].token, 20 );
+			int len = wr_strnlen( c_operations[t].token, 20 );
 			if ( ((offset + len) < m_sourceLen)
 				 && !strncmp(m_source + offset, c_operations[t].token, len) )
 			{

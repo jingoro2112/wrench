@@ -11,6 +11,8 @@
 - adding FASTCONTINUE that skips the malloc-fail check on opcodes that can't cause it
 - added WRValue::asMallocString() so large stack alocations are unecessary
 - fixed up some debug code implementation, still not ready for use!
+- removed/relocated includes that were not actually needed globally, increasing compatibility
+  with standard c libs
 
 6.0.0 ----------------------------------------------------------------------------------
 - removed function declaration being an in-line process (which was to facilitate executing
