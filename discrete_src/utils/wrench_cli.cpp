@@ -123,6 +123,7 @@ const char* sourceOrder[]=
 	"/utils/serializer.cpp",
 	"/debug/wrench_client_debug.cpp",
 	"/debug/wrench_server_debug.cpp",
+	"/debug/server_interface_private.cpp",
 	"/vm/operations.cpp",
 	"/vm/index.cpp",
 	"/lib/std.cpp",

@@ -762,7 +762,7 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 			pushData( bytecode, wr_pack32(value.i, data), 4 );
 		}
 	}
-	else if ( value.type == WR_COMPILER_LITERAL_STRING )
+	else if ( (uint8_t)value.type == WR_COMPILER_LITERAL_STRING )
 	{
 		pushOpcode( bytecode, O_LiteralString );
 		int16_t be = context.literalString.size();
@@ -2488,7 +2488,7 @@ uint32_t WRCompilationContext::getSingleValueHash( const char* end )
 		return 0;
 	}
 	
-	uint32_t hash = (value.type == WR_COMPILER_LITERAL_STRING) ? wr_hashStr(token) : value.getHash();
+	uint32_t hash = ((uint8_t)value.type == WR_COMPILER_LITERAL_STRING) ? wr_hashStr(token) : value.getHash();
 
 	if ( !getToken(ex, end) )
 	{

@@ -26,12 +26,6 @@ SOFTWARE.
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 
-const int wr_blankSize=10;
-const unsigned char wr_blankCode[]=
-{
-	0x00, 0x00, 0x01, 0x02, 0xEE, 0x13, 0x25, 0xE1, 0xA4, 0x5A, // 10
-};
-
 //------------------------------------------------------------------------------
 // hide this from the wrench.h header to keep it cleaner
 void WRDebugClientInterface::init()
@@ -81,9 +75,9 @@ void WRDebugClientInterface::load( const char* byteCode, const int size )
 	WrenchPacket* packet = WrenchPacket::alloc( WRD_Load, size );
 	memcpy( packet->payload(), byteCode, size );
 	
-	free( I->transmit(packet) );
+	g_free( I->transmit(packet) );
 
-	delete[] I->m_sourceBlock;
+	g_free( I->m_sourceBlock );
 	I->m_sourceBlock = 0;
 	I->m_functions->clear();
 	I->m_callstackDirty = true;

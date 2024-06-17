@@ -866,7 +866,8 @@ public:
 		bool operator!=( const Iterator& other ) { return m_current != other.m_current; }
 		L& operator* () const { return m_current->item; }
 
-		const Iterator operator++() { if ( m_current ) m_current = m_current->next; return *this; }
+		const Iterator& operator++() { if ( m_current ) m_current = m_current->next; return *this; }
+		Iterator operator++(int) { Iterator ret = *this; this->operator++(); return ret; }
 		void iterate( SimpleLL<L> const& list ) { m_list = &list; m_current = m_list->m_head; }
 
 	private:
@@ -1456,6 +1457,7 @@ SOFTWARE.
 #define _VM_H
 /*------------------------------------------------------------------------------*/
 
+#define WR_FUNCTION_CORE_SIZE 11
 //------------------------------------------------------------------------------
 struct WRFunction
 {
@@ -1633,8 +1635,8 @@ uint32_t wr_hashStr_read8( const char* dat );
 // only when they differ that we need bitshiftiness
 #ifdef WRENCH_LITTLE_ENDIAN
 
- #define wr_x32(P) P
- #define wr_x16(P) P
+ #define wr_x32(P) (P)
+ #define wr_x16(P) (P)
 
 #ifndef READ_32_FROM_PC
   #ifdef WRENCH_UNALIGNED_READS
@@ -4506,7 +4508,7 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 			pushData( bytecode, wr_pack32(value.i, data), 4 );
 		}
 	}
-	else if ( value.type == WR_COMPILER_LITERAL_STRING )
+	else if ( (uint8_t)value.type == WR_COMPILER_LITERAL_STRING )
 	{
 		pushOpcode( bytecode, O_LiteralString );
 		int16_t be = context.literalString.size();
@@ -6232,7 +6234,7 @@ uint32_t WRCompilationContext::getSingleValueHash( const char* end )
 		return 0;
 	}
 	
-	uint32_t hash = (value.type == WR_COMPILER_LITERAL_STRING) ? wr_hashStr(token) : value.getHash();
+	uint32_t hash = ((uint8_t)value.type == WR_COMPILER_LITERAL_STRING) ? wr_hashStr(token) : value.getHash();
 
 	if ( !getToken(ex, end) )
 	{
@@ -7478,7 +7480,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 			// it's a literal
 			expression.context[depth].type = EXTYPE_LITERAL;
-			if ( value.type == WR_COMPILER_LITERAL_STRING )
+			if ( (uint8_t)value.type == WR_COMPILER_LITERAL_STRING )
 			{
 				expression.context[depth].literalString = *(WRstr*)value.p;
 			}
@@ -13518,7 +13520,7 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 	C->bottom = block;
 	C->bottomSize = blockSize;
 
-	C->codeStart = block + 3 + (C->numLocalFunctions * 11);
+	C->codeStart = block + 3 + (C->numLocalFunctions * WR_FUNCTION_CORE_SIZE);
 
 	uint8_t compilerFlags = READ_8_FROM_PC( block + 2 );
 
@@ -14268,7 +14270,7 @@ WRValue* wr_getGlobalRef( WRContext* context, const char* label )
 		match = wr_hashStr( globalLabel );
 	}
 
-	const unsigned char* symbolsBlock = context->bottom + 3 + (context->numLocalFunctions * 11);
+	const unsigned char* symbolsBlock = context->bottom + 3 + (context->numLocalFunctions * WR_FUNCTION_CORE_SIZE);
 	for( unsigned int i=0; i<context->globals; ++i, symbolsBlock += 4 )
 	{
 		uint32_t symbolHash = READ_32_FROM_PC( symbolsBlock );
@@ -15036,12 +15038,6 @@ SOFTWARE.
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 
-const int wr_blankSize=10;
-const unsigned char wr_blankCode[]=
-{
-	0x00, 0x00, 0x01, 0x02, 0xEE, 0x13, 0x25, 0xE1, 0xA4, 0x5A, // 10
-};
-
 //------------------------------------------------------------------------------
 // hide this from the wrench.h header to keep it cleaner
 void WRDebugClientInterface::init()
@@ -15091,9 +15087,9 @@ void WRDebugClientInterface::load( const char* byteCode, const int size )
 	WrenchPacket* packet = WrenchPacket::alloc( WRD_Load, size );
 	memcpy( packet->payload(), byteCode, size );
 	
-	free( I->transmit(packet) );
+	g_free( I->transmit(packet) );
 
-	delete[] I->m_sourceBlock;
+	g_free( I->m_sourceBlock );
 	I->m_sourceBlock = 0;
 	I->m_functions->clear();
 	I->m_callstackDirty = true;
@@ -15541,6 +15537,36 @@ WRDebugServerInterface::~WRDebugServerInterface()
 	delete I;
 }
 
+
+#endif
+/*******************************************************************************
+Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+
 //------------------------------------------------------------------------------
 WRDebugServerInterfacePrivate::WRDebugServerInterfacePrivate( WRDebugServerInterface* parent )
 {
@@ -15656,7 +15682,10 @@ WRContext* WRDebugServerInterface::loadBytes( const uint8_t* bytes, const int le
 	const uint8_t* code = bytes + 2;
 	
 	I->m_compilerFlags = READ_8_FROM_PC( code++ );
-	
+
+	// skip over function signatures
+	code += I->m_context->numLocalFunctions * WR_FUNCTION_CORE_SIZE;
+
 	if ( I->m_compilerFlags & WR_INCLUDE_GLOBALS )
 	{
 		code += ret->globals * sizeof(uint32_t); // these are lazily loaded, just skip over them for now

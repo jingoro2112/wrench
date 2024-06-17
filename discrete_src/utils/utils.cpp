@@ -251,7 +251,7 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 	C->bottom = block;
 	C->bottomSize = blockSize;
 
-	C->codeStart = block + 3 + (C->numLocalFunctions * 11);
+	C->codeStart = block + 3 + (C->numLocalFunctions * WR_FUNCTION_CORE_SIZE);
 
 	uint8_t compilerFlags = READ_8_FROM_PC( block + 2 );
 
@@ -1001,7 +1001,7 @@ WRValue* wr_getGlobalRef( WRContext* context, const char* label )
 		match = wr_hashStr( globalLabel );
 	}
 
-	const unsigned char* symbolsBlock = context->bottom + 3 + (context->numLocalFunctions * 11);
+	const unsigned char* symbolsBlock = context->bottom + 3 + (context->numLocalFunctions * WR_FUNCTION_CORE_SIZE);
 	for( unsigned int i=0; i<context->globals; ++i, symbolsBlock += 4 )
 	{
 		uint32_t symbolHash = READ_32_FROM_PC( symbolsBlock );

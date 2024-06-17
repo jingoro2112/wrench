@@ -33,6 +33,7 @@ OBJS = \
 	$(OBJDIR)/utils.o \
 	$(OBJDIR)/serializer.o \
 	$(OBJDIR)/wrench_server_debug.o \
+	$(OBJDIR)/server_interface_private.o \
 	$(OBJDIR)/wrench_client_debug.o \
 	$(OBJDIR)/std.o \
 	$(OBJDIR)/std_io.o \
@@ -109,6 +110,9 @@ $(OBJDIR)/debug_lib.o: discrete_src/lib/debug_lib.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/wrench_server_debug.o: discrete_src/debug/wrench_server_debug.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/server_interface_private.o: discrete_src/debug/server_interface_private.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/wrench_client_debug.o: discrete_src/debug/wrench_client_debug.cpp

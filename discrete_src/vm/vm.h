@@ -26,6 +26,7 @@ SOFTWARE.
 #define _VM_H
 /*------------------------------------------------------------------------------*/
 
+#define WR_FUNCTION_CORE_SIZE 11
 //------------------------------------------------------------------------------
 struct WRFunction
 {
@@ -203,8 +204,8 @@ uint32_t wr_hashStr_read8( const char* dat );
 // only when they differ that we need bitshiftiness
 #ifdef WRENCH_LITTLE_ENDIAN
 
- #define wr_x32(P) P
- #define wr_x16(P) P
+ #define wr_x32(P) (P)
+ #define wr_x16(P) (P)
 
 #ifndef READ_32_FROM_PC
   #ifdef WRENCH_UNALIGNED_READS

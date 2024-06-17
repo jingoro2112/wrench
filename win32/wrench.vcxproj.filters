@@ -86,6 +86,9 @@
     <ClCompile Include="..\discrete_src\cc\token.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\discrete_src\debug\server_interface_private.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\discrete_src\vm\vm.h">

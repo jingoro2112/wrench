@@ -59,7 +59,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 			// it's a literal
 			expression.context[depth].type = EXTYPE_LITERAL;
-			if ( value.type == WR_COMPILER_LITERAL_STRING )
+			if ( (uint8_t)value.type == WR_COMPILER_LITERAL_STRING )
 			{
 				expression.context[depth].literalString = *(WRstr*)value.p;
 			}

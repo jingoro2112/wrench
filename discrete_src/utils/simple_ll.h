@@ -296,7 +296,8 @@ public:
 		bool operator!=( const Iterator& other ) { return m_current != other.m_current; }
 		L& operator* () const { return m_current->item; }
 
-		const Iterator operator++() { if ( m_current ) m_current = m_current->next; return *this; }
+		const Iterator& operator++() { if ( m_current ) m_current = m_current->next; return *this; }
+		Iterator operator++(int) { Iterator ret = *this; this->operator++(); return ret; }
 		void iterate( SimpleLL<L> const& list ) { m_list = &list; m_current = m_list->m_head; }
 
 	private:
