@@ -38,13 +38,13 @@ struct WRFunction
 	uint8_t arguments;
 	uint8_t frameSpaceNeeded;
 	uint8_t frameBaseAdjustment;
-	uint8_t reserved;
 };
 
 //------------------------------------------------------------------------------
 enum WRContextFlags
 {
 	WRC_OwnsMemory = 1<<0, // if this is true, 'bottom' must be freed upon destruction
+	WRC_ForceYielded = 1<<1, // if this is true, 'bottom' must be freed upon destruction
 };
 
 //------------------------------------------------------------------------------
@@ -60,6 +60,8 @@ struct WRContext
 	const unsigned char* bottom;
 	const unsigned char* codeStart;
 	int32_t bottomSize;
+
+	WRValue* stack;
 	
 	const unsigned char* stopLocation;
 	
@@ -79,11 +81,11 @@ struct WRContext
 	const WRValue* yield_argv;
 	uint8_t yield_argn;
 	uint8_t yieldArgs;
+	uint8_t stackOffset;
 	uint8_t flags;
 
 	WRFunction* localFunctions;
 	uint8_t numLocalFunctions;
-	uint8_t yieldStackOffset;
 	
 	WRContext* imported; // linked list of contexts this one imported
 
@@ -104,10 +106,8 @@ struct WRLibraryCleanup
 //------------------------------------------------------------------------------
 struct WRState
 {
-	uint16_t stackSize;
+	uint16_t stackSize; // how much stack to give each context
 	int8_t err;
-	uint8_t stackOffset;
-	WRValue* stack;
 
 	WRContext* contextList;
 

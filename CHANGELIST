@@ -1,3 +1,11 @@
+6.0.2 ----------------------------------------------------------------------------------
+- adding time-sliced yield with WRENCH_TIME_SLICES
+- adding simple round-robin scheduler
+- adding ability to force yield based on instructions processed. only looping/conditional
+  instructions are "counted" for speed and simplicity
+- stack is now allocated per context instead of per state, to make multi-threading/importing more
+  intuitive and scaleable (original state-wide stack was result of earlier GC implementatioin)
+
 6.0.1 ----------------------------------------------------------------------------------
 - implementated WRENCH_HANDLE_MALLOC_FAIL:
 

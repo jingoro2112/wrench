@@ -37,6 +37,8 @@ void setup();
 void eventMain();
 void testImport();
 void testHalt();
+void testTimeSlices();
+void testScheduler();
 
 //------------------------------------------------------------------------------
 void blobToHeader( WRstr const& blob, WRstr const& variableName, WRstr& header )
@@ -124,6 +126,7 @@ const char* sourceOrder[]=
 	"/debug/wrench_client_debug.cpp",
 	"/debug/wrench_server_debug.cpp",
 	"/debug/server_interface_private.cpp",
+	"/vm/scheduler.cpp",
 	"/vm/operations.cpp",
 	"/vm/index.cpp",
 	"/lib/std.cpp",
@@ -170,6 +173,10 @@ int usage()
 			"                               [name]_bytecodeSize = $xxxx\n"
 */
 			"\n"
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+			"d"
+			"\n"
+#endif
 			"t                              run internal tests\n"
 			"\n"
 			"release [fromdir] [todir]      collect the discrete source files together\n"
@@ -568,6 +575,8 @@ int runTests( int number )
 {
 	int err = 0;
 
+	testScheduler();
+	
 #ifndef WRENCH_WITHOUT_COMPILER
 	WRstr code;
 	WRstr codeName;
@@ -743,8 +752,8 @@ int runTests( int number )
 		fileNumber++;
 	}
 
+	testTimeSlices();
 	testImport();
-
 	testHalt();
 
 	wr_destroyContainer( &container );
@@ -854,16 +863,82 @@ void testGlobalValues( WRState* w )
 	g_free( out );
 }
 
-const char* haltMe = "sys::halt( 101 );";
-const char* haltMe2 = "sys::halt( 1 );";
+//------------------------------------------------------------------------------
+void testScheduler()
+{
+#ifdef WRENCH_TIME_SLICES
+	const char* loop1 = "for(;;) { println(\"1\"); }";
+	const char* loop2 = "for(;;) { println(\"2\"); }";
+	const char* loop3 = "println(\"once\");";
+	const char* loop4 = "for(;;) { println(\"4\"); }";
+	const char* loop5 = "for(;;) { println(\"5\"); }";
+
+	WrenchScheduler scheduler( 8 );
+
+	WRstr logger;
+	wr_registerFunction( scheduler.state(), "println", emitln, &logger );
+
+	uint8_t* out;
+	int outLen;
+
+	wr_compile( loop1, strlen(loop1), &out, &outLen );
+	scheduler.addThread( out, outLen, 10, true );
+	scheduler.tick(10);
+
+	wr_compile( loop2, strlen(loop2), &out, &outLen );
+	scheduler.addThread( out, outLen, 10, true );
+	scheduler.tick(10);
+
+	wr_compile( loop3, strlen(loop3), &out, &outLen );
+	scheduler.addThread( out, outLen, 10, true );
+	scheduler.tick(10);
+
+	wr_compile( loop4, strlen(loop4), &out, &outLen );
+	scheduler.addThread( out, outLen, 10, true );
+	scheduler.tick(10);
+
+	wr_compile( loop5, strlen(loop5), &out, &outLen );
+	scheduler.addThread( out, outLen, 10, true );
+	scheduler.tick(10);
+
+	//printf( "%s\n", logger.c_str() );
+
+#endif
+}
+
+//------------------------------------------------------------------------------
+void testTimeSlices()
+{
+#ifdef WRENCH_TIME_SLICES
+	const char* loop = "for(;;) {}";
+
+	wr_setInstructionsPerSlice( 10 );
+	
+	WRState* w = wr_newState( 16 );
+
+	unsigned char* out;
+	int outlen;
+	wr_compile( loop, strlen(loop), &out, &outlen );
+	WRContext* context = wr_run(w, out, outlen, true);
+	for( int y=0; y<10; ++y )
+	{
+		assert( !wr_continue(context) );
+		assert( wr_getYieldInfo(context) );
+	}
+	
+	wr_destroyState( w );
+#endif
+}
 
 //------------------------------------------------------------------------------
 void testHalt()
 {
+	const char* haltMe = "sys::halt( 101 );";
+	const char* haltMe2 = "sys::halt( 1 );";
+
 	WRState* w = wr_newState( 16 );
 	wr_loadAllLibs(w);
 
-	//	wr_compile( baseMe, strlen(baseMe), &out1, &out1len );
 	unsigned char* out;
 	int outlen;
 	wr_compile( haltMe, strlen(haltMe), &out, &outlen );

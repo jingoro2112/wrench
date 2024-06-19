@@ -79,7 +79,7 @@ void WRContext::gc( WRValue* stackTop )
 	allocatedMemoryHint = 0;
 
 	// mark stack
-	for( WRValue* s=w->stack; s<stackTop; ++s)
+	for( WRValue* s=stack; s<stackTop; ++s)
 	{
 		// an array in the chain?
 		mark( s );
@@ -262,11 +262,55 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	return true;
 }
 
+#ifdef WRENCH_TIME_SLICES
+void wr_setInstructionsPerSlice( int instructions ); // how many instructions each call to the VM executes before yielding
+void wr_forceYield();  // for the VM to yield right NOW, (called from a different thread)
+#endif
+
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
   bool g_mallocFailed =false;
-  #define PER_INSTRUCTION {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; g_mallocFailed = false; return 0; } }
+  #define MALLOC_FAIL_CHECK {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; g_mallocFailed = false; return 0; } }
 #else
-  #define PER_INSTRUCTION
+  #define MALLOC_FAIL_CHECK
+#endif
+
+#ifdef WRENCH_TIME_SLICES
+
+int g_sliceInstructionCountPerCall = 0;
+int g_sliceInstructionCount = 0; // how many instructions were left when the current slice yielded
+int g_yieldEnabled = false;	
+
+//------------------------------------------------------------------------------
+void wr_setInstructionsPerSlice( int instructions )
+{
+	g_sliceInstructionCountPerCall = instructions;
+}
+
+//------------------------------------------------------------------------------
+void wr_forceYield()
+{
+	g_sliceInstructionCount = 1;
+	g_yieldEnabled = true;
+}
+
+
+/*
+inline bool ForceYieldCheck( WRContext* context )
+{
+	if ( !--g_sliceInstructionCount && g_yieldEnabled )
+	{
+		context->yieldArgs = 0;
+		context->flags |= (uint8_t)WRC_ForceYielded;
+		return true;
+	}
+	return false;
+}
+#define CHECK_FORCE_YIELD { if ( ForceYieldCheck(context) ) { goto doYield; } }
+*/
+
+#define CHECK_FORCE_YIELD { if ( !--g_sliceInstructionCount && g_yieldEnabled ) { context->yieldArgs = 0; context->flags |= (uint8_t)WRC_ForceYielded; goto doYield; } }
+#else
+ #define CHECK_FORCE_YIELD
 #endif
 
 #define WRENCH_JUMPTABLE_INTERPRETER
@@ -279,11 +323,11 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 #endif
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
- #define CONTINUE { PER_INSTRUCTION; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
+ #define CONTINUE { MALLOC_FAIL_CHECK; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
  #define FASTCONTINUE { goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
  #define CASE(LABEL) LABEL
 #else
- #define CONTINUE { PER_INSTRUCTION; continue; }
+ #define CONTINUE { MALLOC_FAIL_CHECK; continue; }
  #define FASTCONTINUE { continue; }
  #define CASE(LABEL) case O_##LABEL
 #endif
@@ -340,7 +384,13 @@ int16_t READ_16_FROM_PC_func( const unsigned char* P )
 //------------------------------------------------------------------------------
 WRValue* wr_continue( WRContext* context )
 {
-	return context->yield_pc ? wr_callFunction( context, (WRFunction*)0, context->yield_argv, context->yield_argn ) : 0;
+	if ( !context->yield_pc )
+	{
+		context->w->err = WR_ERR_context_not_yielded;
+		return 0;
+	}
+
+	return wr_callFunction( context, (WRFunction*)0, context->yield_argv, context->yield_argn );
 }
 
 //------------------------------------------------------------------------------
@@ -650,6 +700,18 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	};
 #endif
 
+#ifdef WRENCH_TIME_SLICES
+	if ( g_sliceInstructionCountPerCall == 0 )
+	{
+		g_yieldEnabled = false;
+	}
+	else
+	{
+		g_yieldEnabled = true;
+		g_sliceInstructionCount = g_sliceInstructionCountPerCall;
+	}
+#endif
+
 	const unsigned char* pc;
 
 	union
@@ -700,15 +762,19 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	w->err = WR_ERR_None;
 
-	WRValue* stackBase;
+	WRValue* stackBase = context->stack + context->stackOffset;
 	WRValue* stackTop;
 	if ( context->yield_pc )
 	{
+		if ( function )
+		{
+			w->err = WR_ERR_cannot_call_function_context_yielded;
+			return 0;
+		}
+		
 		pc = context->yield_pc;
 		context->yield_pc = 0;
 
-		w->stackOffset -= context->yieldStackOffset;
-		stackBase = w->stack + w->stackOffset;
 		stackTop = context->yield_stackTop;
 		
 		if ( context->yieldArgs )
@@ -716,7 +782,15 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 			register0 = stackTop;
 			*(stackTop -= context->yieldArgs) = *register0;
 		}
-		++stackTop;
+
+		if ( context->flags & (uint8_t)WRC_ForceYielded )
+		{
+			context->flags &= ~(uint8_t)WRC_ForceYielded;
+		}
+		else
+		{
+			++stackTop; // othgerwise we expect a return value
+		}
 	
 		frameBase = context->yield_frameBase;
 		
@@ -724,7 +798,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	}
 	else
 	{
-		stackBase = w->stack + w->stackOffset;
 		stackTop = stackBase;
 	}
 
@@ -852,13 +925,11 @@ literalZero:
 				// preserve the calling and stack context so the code
 				// can pick up where it left off on continue
 				context->yieldArgs = READ_8_FROM_PC(pc++);
+#ifdef WRENCH_TIME_SLICES
+doYield:
+#endif
 				context->yield_pc = pc;
-
-				context->yieldStackOffset = (stackTop - stackBase) + 1; // mark off the stack that we're using
-				w->stackOffset += context->yieldStackOffset;
-				
-				context->yield_stackTop = stackTop;
-				context->yield_stackTop->init();
+				context->yield_stackTop = stackTop->init();
 				context->yield_frameBase = frameBase;
 				context->yield_argv = argv;
 				context->yield_argn = argn;
@@ -894,9 +965,7 @@ debugContinue:
 				args = READ_8_FROM_PC(pc++);
 
 				// initialize a return value of 'zero'
-				register0 = stackTop;
-				register0->p = 0;
-				register0->p2 = INIT_AS_INT;
+				register0 = stackTop->init();
 
 				uint32_t fhash = READ_32_FROM_PC(pc);
 				pc += 4;
@@ -909,12 +978,9 @@ debugContinue:
 							WRValue* I;
 							if ( (I = import->registry.exists(fhash, false)) )
 							{
-								// fool the caller into thinking it has the base of the stack, and then recurse into it,
-								// this is because the alternate context has all the alternate globals/locals
-								uint8_t offset = (stackTop - stackBase);
-								w->stackOffset += offset;
+								// import shares our stack, tell it where to find it's args
+								import->stackOffset = (stackTop - stackBase);
 								wr_callFunction( import, I->wrf, stackTop - args, args );
-								w->stackOffset -= offset;
 								register0 = stackTop;
 
 								if ( *pc == O_NewObjectTable )
@@ -991,10 +1057,9 @@ CallFunctionByHash_continue:
 						{
 							if ( (register0 = import->registry.exists(fhash, false)) )
 							{
-								uint8_t offset = (stackTop - stackBase);
-								w->stackOffset += offset;
+								// import shares our stack, tell it where to find it's args
+								import->stackOffset = (stackTop - stackBase);
 								wr_callFunction( import, register0->wrf, stackTop - args, args );
-								w->stackOffset -= offset;
 								goto CallFunctionByHashAndPop_continue;
 							}
 
@@ -1059,8 +1124,6 @@ callFunction:
 
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - function->frameBaseAdjustment;
-
-				assert( stackTop < (stackBase + w->stackSize) );
 
 				CONTINUE;
 			}
@@ -1311,7 +1374,6 @@ NewObjectTablePastLoad:
 					goto debugReturn;
 				}
 #endif
-				
 				FASTCONTINUE;
 			}
 
@@ -1498,12 +1560,14 @@ hashIndexJump:
 			CASE(RelativeJump):
 			{
 				pc += READ_16_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
 			CASE(RelativeJump8):
 			{
 				pc += (int8_t)READ_8_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -1511,6 +1575,7 @@ hashIndexJump:
 			{
 				register0 = --stackTop;
 				pc += wr_LogicalNot[register0->type](register0) ? READ_16_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -1518,6 +1583,7 @@ hashIndexJump:
 			{
 				register0 = --stackTop;
 				pc += wr_LogicalNot[register0->type](register0) ? (int8_t)READ_8_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -1762,6 +1828,7 @@ load32ToTemp:
 NextIterator:
 				register2 = globalSpace + READ_8_FROM_PC(pc++);
 				pc += wr_getNextValue( register2, register0, register1) ? 2 : READ_16_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 			
@@ -2014,6 +2081,7 @@ compactBLAPreLoad:
 				register1 = --stackTop;
 compactBLA:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : READ_16_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				CONTINUE;
 			}
 
@@ -2027,6 +2095,7 @@ compactBLA8PreReg1:
 				register1 = --stackTop;
 compactBLA8:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -2227,6 +2296,7 @@ compactReturnFuncBInvertedPreReg1:
 				register1 = --stackTop;
 compactReturnFuncBInvertedPostReg1:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? READ_16_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 			
@@ -2251,6 +2321,7 @@ compactReturnFuncBInverted8PreReg1:
 				register1 = --stackTop;
 compactReturnFuncBInverted8Post:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? (int8_t)READ_8_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -2527,6 +2598,7 @@ compactCompareGG8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += wr_LogicalAND[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -2535,6 +2607,7 @@ compactCompareGG8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += wr_LogicalAND[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -2543,6 +2616,7 @@ compactCompareGG8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += wr_LogicalOR[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -2551,6 +2625,7 @@ compactCompareGG8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += wr_LogicalOR[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -2726,6 +2801,7 @@ returnFuncBNormal:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 			
@@ -2736,6 +2812,7 @@ returnFuncBInverted:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? READ_16_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 			
@@ -2750,6 +2827,7 @@ returnFuncBNormal8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 			
@@ -2760,6 +2838,7 @@ returnFuncBInverted8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)READ_8_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 

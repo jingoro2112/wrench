@@ -36,6 +36,7 @@
     <ClCompile Include="..\discrete_src\utils\wrench_cli.cpp" />
     <ClCompile Include="..\discrete_src\vm\index.cpp" />
     <ClCompile Include="..\discrete_src\vm\operations.cpp" />
+    <ClCompile Include="..\discrete_src\vm\scheduler.cpp" />
     <ClCompile Include="..\discrete_src\vm\vm.cpp" />
   </ItemGroup>
   <ItemGroup>

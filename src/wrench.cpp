@@ -1469,13 +1469,13 @@ struct WRFunction
 	uint8_t arguments;
 	uint8_t frameSpaceNeeded;
 	uint8_t frameBaseAdjustment;
-	uint8_t reserved;
 };
 
 //------------------------------------------------------------------------------
 enum WRContextFlags
 {
 	WRC_OwnsMemory = 1<<0, // if this is true, 'bottom' must be freed upon destruction
+	WRC_ForceYielded = 1<<1, // if this is true, 'bottom' must be freed upon destruction
 };
 
 //------------------------------------------------------------------------------
@@ -1491,6 +1491,8 @@ struct WRContext
 	const unsigned char* bottom;
 	const unsigned char* codeStart;
 	int32_t bottomSize;
+
+	WRValue* stack;
 	
 	const unsigned char* stopLocation;
 	
@@ -1510,11 +1512,11 @@ struct WRContext
 	const WRValue* yield_argv;
 	uint8_t yield_argn;
 	uint8_t yieldArgs;
+	uint8_t stackOffset;
 	uint8_t flags;
 
 	WRFunction* localFunctions;
 	uint8_t numLocalFunctions;
-	uint8_t yieldStackOffset;
 	
 	WRContext* imported; // linked list of contexts this one imported
 
@@ -1535,10 +1537,8 @@ struct WRLibraryCleanup
 //------------------------------------------------------------------------------
 struct WRState
 {
-	uint16_t stackSize;
+	uint16_t stackSize; // how much stack to give each context
 	int8_t err;
-	uint8_t stackOffset;
-	WRValue* stack;
 
 	WRContext* contextList;
 
@@ -10199,7 +10199,7 @@ void WRContext::gc( WRValue* stackTop )
 	allocatedMemoryHint = 0;
 
 	// mark stack
-	for( WRValue* s=w->stack; s<stackTop; ++s)
+	for( WRValue* s=stack; s<stackTop; ++s)
 	{
 		// an array in the chain?
 		mark( s );
@@ -10382,11 +10382,55 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	return true;
 }
 
+#ifdef WRENCH_TIME_SLICES
+void wr_setInstructionsPerSlice( int instructions ); // how many instructions each call to the VM executes before yielding
+void wr_forceYield();  // for the VM to yield right NOW, (called from a different thread)
+#endif
+
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
   bool g_mallocFailed =false;
-  #define PER_INSTRUCTION {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; g_mallocFailed = false; return 0; } }
+  #define MALLOC_FAIL_CHECK {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; g_mallocFailed = false; return 0; } }
 #else
-  #define PER_INSTRUCTION
+  #define MALLOC_FAIL_CHECK
+#endif
+
+#ifdef WRENCH_TIME_SLICES
+
+int g_sliceInstructionCountPerCall = 0;
+int g_sliceInstructionCount = 0; // how many instructions were left when the current slice yielded
+int g_yieldEnabled = false;	
+
+//------------------------------------------------------------------------------
+void wr_setInstructionsPerSlice( int instructions )
+{
+	g_sliceInstructionCountPerCall = instructions;
+}
+
+//------------------------------------------------------------------------------
+void wr_forceYield()
+{
+	g_sliceInstructionCount = 1;
+	g_yieldEnabled = true;
+}
+
+
+/*
+inline bool ForceYieldCheck( WRContext* context )
+{
+	if ( !--g_sliceInstructionCount && g_yieldEnabled )
+	{
+		context->yieldArgs = 0;
+		context->flags |= (uint8_t)WRC_ForceYielded;
+		return true;
+	}
+	return false;
+}
+#define CHECK_FORCE_YIELD { if ( ForceYieldCheck(context) ) { goto doYield; } }
+*/
+
+#define CHECK_FORCE_YIELD { if ( !--g_sliceInstructionCount && g_yieldEnabled ) { context->yieldArgs = 0; context->flags |= (uint8_t)WRC_ForceYielded; goto doYield; } }
+#else
+ #define CHECK_FORCE_YIELD
 #endif
 
 #define WRENCH_JUMPTABLE_INTERPRETER
@@ -10399,11 +10443,11 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 #endif
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
- #define CONTINUE { PER_INSTRUCTION; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
+ #define CONTINUE { MALLOC_FAIL_CHECK; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
  #define FASTCONTINUE { goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
  #define CASE(LABEL) LABEL
 #else
- #define CONTINUE { PER_INSTRUCTION; continue; }
+ #define CONTINUE { MALLOC_FAIL_CHECK; continue; }
  #define FASTCONTINUE { continue; }
  #define CASE(LABEL) case O_##LABEL
 #endif
@@ -10460,7 +10504,13 @@ int16_t READ_16_FROM_PC_func( const unsigned char* P )
 //------------------------------------------------------------------------------
 WRValue* wr_continue( WRContext* context )
 {
-	return context->yield_pc ? wr_callFunction( context, (WRFunction*)0, context->yield_argv, context->yield_argn ) : 0;
+	if ( !context->yield_pc )
+	{
+		context->w->err = WR_ERR_context_not_yielded;
+		return 0;
+	}
+
+	return wr_callFunction( context, (WRFunction*)0, context->yield_argv, context->yield_argn );
 }
 
 //------------------------------------------------------------------------------
@@ -10770,6 +10820,18 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	};
 #endif
 
+#ifdef WRENCH_TIME_SLICES
+	if ( g_sliceInstructionCountPerCall == 0 )
+	{
+		g_yieldEnabled = false;
+	}
+	else
+	{
+		g_yieldEnabled = true;
+		g_sliceInstructionCount = g_sliceInstructionCountPerCall;
+	}
+#endif
+
 	const unsigned char* pc;
 
 	union
@@ -10820,15 +10882,19 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	w->err = WR_ERR_None;
 
-	WRValue* stackBase;
+	WRValue* stackBase = context->stack + context->stackOffset;
 	WRValue* stackTop;
 	if ( context->yield_pc )
 	{
+		if ( function )
+		{
+			w->err = WR_ERR_cannot_call_function_context_yielded;
+			return 0;
+		}
+		
 		pc = context->yield_pc;
 		context->yield_pc = 0;
 
-		w->stackOffset -= context->yieldStackOffset;
-		stackBase = w->stack + w->stackOffset;
 		stackTop = context->yield_stackTop;
 		
 		if ( context->yieldArgs )
@@ -10836,7 +10902,15 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 			register0 = stackTop;
 			*(stackTop -= context->yieldArgs) = *register0;
 		}
-		++stackTop;
+
+		if ( context->flags & (uint8_t)WRC_ForceYielded )
+		{
+			context->flags &= ~(uint8_t)WRC_ForceYielded;
+		}
+		else
+		{
+			++stackTop; // othgerwise we expect a return value
+		}
 	
 		frameBase = context->yield_frameBase;
 		
@@ -10844,7 +10918,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	}
 	else
 	{
-		stackBase = w->stack + w->stackOffset;
 		stackTop = stackBase;
 	}
 
@@ -10972,13 +11045,11 @@ literalZero:
 				// preserve the calling and stack context so the code
 				// can pick up where it left off on continue
 				context->yieldArgs = READ_8_FROM_PC(pc++);
+#ifdef WRENCH_TIME_SLICES
+doYield:
+#endif
 				context->yield_pc = pc;
-
-				context->yieldStackOffset = (stackTop - stackBase) + 1; // mark off the stack that we're using
-				w->stackOffset += context->yieldStackOffset;
-				
-				context->yield_stackTop = stackTop;
-				context->yield_stackTop->init();
+				context->yield_stackTop = stackTop->init();
 				context->yield_frameBase = frameBase;
 				context->yield_argv = argv;
 				context->yield_argn = argn;
@@ -11014,9 +11085,7 @@ debugContinue:
 				args = READ_8_FROM_PC(pc++);
 
 				// initialize a return value of 'zero'
-				register0 = stackTop;
-				register0->p = 0;
-				register0->p2 = INIT_AS_INT;
+				register0 = stackTop->init();
 
 				uint32_t fhash = READ_32_FROM_PC(pc);
 				pc += 4;
@@ -11029,12 +11098,9 @@ debugContinue:
 							WRValue* I;
 							if ( (I = import->registry.exists(fhash, false)) )
 							{
-								// fool the caller into thinking it has the base of the stack, and then recurse into it,
-								// this is because the alternate context has all the alternate globals/locals
-								uint8_t offset = (stackTop - stackBase);
-								w->stackOffset += offset;
+								// import shares our stack, tell it where to find it's args
+								import->stackOffset = (stackTop - stackBase);
 								wr_callFunction( import, I->wrf, stackTop - args, args );
-								w->stackOffset -= offset;
 								register0 = stackTop;
 
 								if ( *pc == O_NewObjectTable )
@@ -11111,10 +11177,9 @@ CallFunctionByHash_continue:
 						{
 							if ( (register0 = import->registry.exists(fhash, false)) )
 							{
-								uint8_t offset = (stackTop - stackBase);
-								w->stackOffset += offset;
+								// import shares our stack, tell it where to find it's args
+								import->stackOffset = (stackTop - stackBase);
 								wr_callFunction( import, register0->wrf, stackTop - args, args );
-								w->stackOffset -= offset;
 								goto CallFunctionByHashAndPop_continue;
 							}
 
@@ -11179,8 +11244,6 @@ callFunction:
 
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - function->frameBaseAdjustment;
-
-				assert( stackTop < (stackBase + w->stackSize) );
 
 				CONTINUE;
 			}
@@ -11431,7 +11494,6 @@ NewObjectTablePastLoad:
 					goto debugReturn;
 				}
 #endif
-				
 				FASTCONTINUE;
 			}
 
@@ -11618,12 +11680,14 @@ hashIndexJump:
 			CASE(RelativeJump):
 			{
 				pc += READ_16_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
 			CASE(RelativeJump8):
 			{
 				pc += (int8_t)READ_8_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -11631,6 +11695,7 @@ hashIndexJump:
 			{
 				register0 = --stackTop;
 				pc += wr_LogicalNot[register0->type](register0) ? READ_16_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -11638,6 +11703,7 @@ hashIndexJump:
 			{
 				register0 = --stackTop;
 				pc += wr_LogicalNot[register0->type](register0) ? (int8_t)READ_8_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -11882,6 +11948,7 @@ load32ToTemp:
 NextIterator:
 				register2 = globalSpace + READ_8_FROM_PC(pc++);
 				pc += wr_getNextValue( register2, register0, register1) ? 2 : READ_16_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 			
@@ -12134,6 +12201,7 @@ compactBLAPreLoad:
 				register1 = --stackTop;
 compactBLA:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : READ_16_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				CONTINUE;
 			}
 
@@ -12147,6 +12215,7 @@ compactBLA8PreReg1:
 				register1 = --stackTop;
 compactBLA8:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -12347,6 +12416,7 @@ compactReturnFuncBInvertedPreReg1:
 				register1 = --stackTop;
 compactReturnFuncBInvertedPostReg1:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? READ_16_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 			
@@ -12371,6 +12441,7 @@ compactReturnFuncBInverted8PreReg1:
 				register1 = --stackTop;
 compactReturnFuncBInverted8Post:
 				pc += wr_Compare[(register0->type<<2)|register1->type]( register0, register1, boolIntCall, boolFloatCall ) ? (int8_t)READ_8_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -12647,6 +12718,7 @@ compactCompareGG8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += wr_LogicalAND[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -12655,6 +12727,7 @@ compactCompareGG8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += wr_LogicalAND[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -12663,6 +12736,7 @@ compactCompareGG8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += wr_LogicalOR[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -12671,6 +12745,7 @@ compactCompareGG8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += wr_LogicalOR[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -12846,6 +12921,7 @@ returnFuncBNormal:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : READ_16_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 			
@@ -12856,6 +12932,7 @@ returnFuncBInverted:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? READ_16_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 			
@@ -12870,6 +12947,7 @@ returnFuncBNormal8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 			
@@ -12880,6 +12958,7 @@ returnFuncBInverted8:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? (int8_t)READ_8_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
 
@@ -13403,15 +13482,15 @@ WRValue* WrenchValue::asArrayMember( const int index )
 //------------------------------------------------------------------------------
 WRState* wr_newState( int stackSize )
 {
-	WRState* w = (WRState *)g_malloc( stackSize*sizeof(WRValue) + sizeof(WRState) );
+	WRState* w = (WRState *)g_malloc( sizeof(WRState) );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 	if ( !w ) { return 0; }
 #endif
 																		   
-	memset( (unsigned char*)w, 0, stackSize*sizeof(WRValue) + sizeof(WRState) );
+	memset( (unsigned char*)w, 0, sizeof(WRState) );
 
 	w->stackSize = stackSize;
-	w->stack = (WRValue *)((unsigned char *)w + sizeof(WRState));
+//	w->stack = (WRValue *)((unsigned char *)w + sizeof(WRState));
 
 	w->globalRegistry.init( 0, SV_VOID_HASH_TABLE, false );
 
@@ -13459,7 +13538,7 @@ bool wr_getYieldInfo( WRContext* context, int* args, WRValue** firstArg, WRValue
 
 	if ( returnValue )
 	{
-		*returnValue = context->yield_stackTop;
+		*returnValue = (context->flags & (uint8_t)WRC_ForceYielded) ? 0 : context->yield_stackTop;
 	}
 
 	return true;
@@ -13478,7 +13557,7 @@ bool wr_executeFunctionZero( WRContext* context )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership )
+WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership, WRValue* stack =0 )
 {
 	// CRC the code block, at least is it what the compiler intended?
 	uint32_t hash = READ_32_FROM_PC(block + (blockSize - 4));
@@ -13493,7 +13572,8 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 	
 	int needed = sizeof(WRContext) // class
 				 + (globals * sizeof(WRValue))  // globals
-				 + (localFuncs * sizeof(WRFunction)); // functions;
+				 + (localFuncs * sizeof(WRFunction) // functions;
+				 + (stack ? 0 : (w->stackSize * sizeof(WRValue)))); // stack
 
 	WRContext* C = (WRContext *)g_malloc( needed );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
@@ -13510,6 +13590,8 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 	C->localFunctions = (WRFunction *)((uint8_t *)(C + 1) + (globals * sizeof(WRValue)));
 
 	C->globals = globals;
+	
+	C->stack = stack ? stack : (WRValue *)(C->localFunctions + localFuncs);
 
 	C->allocatedMemoryLimit = WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT;
 
@@ -13566,13 +13648,13 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 //------------------------------------------------------------------------------
 WRContext* wr_import( WRContext* context, const unsigned char* block, const int blockSize, bool takeOwnership )
 {
-	WRContext* import = wr_createContext( context->w, block, blockSize, takeOwnership );
+	WRContext* import = wr_createContext( context->w, block, blockSize, takeOwnership, context->stack );
 	if ( !import )
 	{
 		return 0;
 	}
 
-	if ( !wr_callFunction(import, (int32_t)0) )
+	if ( !wr_callFunction(import, (WRFunction*)0) )
 	{ 
 		// imported context may not yield
 		wr_destroyContext( context );
@@ -13613,7 +13695,7 @@ WRValue* wr_executeContext( WRContext* context )
 		return 0;
 	}
 	
-	return wr_callFunction( context, (int32_t)0 );
+	return wr_callFunction( context, (WRFunction*)0 );
 }
 
 //------------------------------------------------------------------------------
@@ -13626,7 +13708,7 @@ WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize, 
 		return 0;
 	}
 
-	if ( !wr_callFunction(context, (int32_t)0) )
+	if ( !wr_callFunction(context, (WRFunction*)0) )
 	{
 		if ( !context->yield_pc )
 		{
@@ -14216,20 +14298,19 @@ WRValue* wr_callFunction( WRContext* context, const char* functionName, const WR
 WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
 {
 	WRValue* cF = 0;
-	WRState* w = context->w;
 
 	if ( hash )
 	{
 		if ( context->stopLocation == 0 )
 		{
-			w->err = WR_ERR_run_must_be_called_by_itself_first;
+			context->w->err = WR_ERR_run_must_be_called_by_itself_first;
 			return 0;
 		}
 
 		cF = context->registry.getAsRawValueHashTable( hash );
 		if ( !cF->wrf )
 		{
-			w->err = WR_ERR_wrench_function_not_found;
+			context->w->err = WR_ERR_wrench_function_not_found;
 			return 0;
 		}
 	}
@@ -14238,9 +14319,9 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 }
 
 //------------------------------------------------------------------------------
-WRValue* wr_returnValueFromLastCall( WRState* w )
+WRValue* wr_returnValueFromLastCall( WRContext* context )
 {
-	return w->stack; // this is where it ends up
+	return context->stack; // this is where it ends up
 }
 
 //------------------------------------------------------------------------------
@@ -14681,8 +14762,6 @@ const char* c_errStrings[]=
 {
 	"WR_ERR_None",
 
-	"WR_YIELDED",
-
 	"WR_ERR_compiler_not_loaded",
 	"WR_ERR_function_not_found",
 	"WR_ERR_lib_function_not_found",
@@ -14715,6 +14794,8 @@ const char* c_errStrings[]=
 	"WR_ERR_wrench_function_not_found",
 	"WR_ERR_array_must_be_indexed",
 	"WR_ERR_context_not_found",
+	"WR_ERR_context_not_yielded",
+	"WR_ERR_cannot_call_function_context_yielded",
 
 	"WR_ERR_hash_declaration_in_array",
 	"WR_ERR_array_declaration_in_hash",
@@ -15769,7 +15850,7 @@ bool WRDebugServerInterfacePrivate::codewordEncountered( const uint8_t* pc, uint
 		entry->onLine = -1; // don't know yet!
 		entry->fromUnitIndex = from->thisUnitIndex;
 		entry->thisUnitIndex = codeword & WRD_PayloadMask;
-		entry->stackOffset = stackTop - m_w->stack;
+//		entry->stackOffset = stackTop - m_w->stack;
 
 		WRFunction* func = m_context->localFunctions + (entry->thisUnitIndex - 1); // unit '0' is the global unit
 		entry->arguments = func->arguments;
@@ -15974,7 +16055,7 @@ WRDRun:
 					}
 					else
 					{
-						WRValue* stackFrame = m_w->stack + (frame->stackOffset - frame->arguments);
+						WRValue* stackFrame = m_context->stack + (frame->stackOffset - frame->arguments);
 						
 						wr_serializeEx( serializer, *(stackFrame + index) );
 					}
@@ -16044,6 +16125,141 @@ WRDRun:
 	}
 
 	return reply;
+}
+
+#endif
+/*******************************************************************************
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
+#ifdef WRENCH_TIME_SLICES
+
+//------------------------------------------------------------------------------
+struct WrenchScheduledTask
+{
+	WRContext* context;
+	WrenchScheduledTask* next;
+	int id;
+};
+
+//------------------------------------------------------------------------------
+WrenchScheduler::WrenchScheduler( const int stackSizePerThread )
+{
+	m_w = wr_newState( stackSizePerThread );
+	m_tasks = 0;
+}
+
+//------------------------------------------------------------------------------
+WrenchScheduler::~WrenchScheduler()
+{
+	while( m_tasks )
+	{
+		WrenchScheduledTask* next = m_tasks->next;
+		g_free( m_tasks );
+		m_tasks = next;
+	}
+
+	wr_destroyState( m_w );
+}
+
+//------------------------------------------------------------------------------
+void WrenchScheduler::tick( int instructionsPerSlice )
+{
+	wr_setInstructionsPerSlice( instructionsPerSlice );
+	WrenchScheduledTask* task = m_tasks;
+
+	while( task )
+	{
+		if ( !task->context->yield_pc )
+		{
+			const int id = task->id;
+			task = task->next;
+			removeTask( id );
+		}
+		else
+		{
+			wr_callFunction( task->context, (WRFunction*)0, task->context->yield_argv, task->context->yield_argn );
+			task = task->next;
+		}
+	}
+}
+
+static int wr_idGenerator = 0;
+//------------------------------------------------------------------------------
+int WrenchScheduler::addThread( const uint8_t* byteCode, const int size, const int instructionsThisSlice, const bool takeOwnership )
+{
+	wr_setInstructionsPerSlice( instructionsThisSlice );
+
+	WRContext* context = wr_run( m_w, byteCode, size, takeOwnership );
+	if ( !context )
+	{
+		return -1; // error running task
+	}
+	else if ( !wr_getYieldInfo(context) )
+	{
+		return 0; // task ran to completion there was no need to yield
+	}
+
+	WrenchScheduledTask* task = (WrenchScheduledTask*)g_malloc( sizeof(WrenchScheduledTask) );
+	task->context = context;
+	task->next = m_tasks;
+	task->id = ++wr_idGenerator;
+	m_tasks = task;
+			  	
+	return task->id;
+}
+
+//------------------------------------------------------------------------------
+bool WrenchScheduler::removeTask( const int taskId )
+{
+	WrenchScheduledTask* last = 0;
+	WrenchScheduledTask* task = m_tasks;
+	while( task )
+	{
+		if ( task->id == taskId )
+		{
+			wr_destroyContext( m_tasks->context );
+
+			if ( last )
+			{
+				last->next = task->next;
+			}
+			else
+			{
+				m_tasks = task->next;
+			}
+			
+			g_free( task );
+			return true;
+		}
+
+		last = task;
+		task = task->next;
+	}
+	
+	return false;
 }
 
 #endif

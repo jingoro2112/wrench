@@ -77,6 +77,7 @@ pre code {
                 <span class="menu-title"><a href="#intro">Intro</a></span>
                 <span class="menu-title"><a href="#integration">Integration</a></span>
                 <span class="menu-title"><a href="#language">Language Reference</a></span>
+                <span class="menu-title"><a href="#features">Features</a></span>
                 <span class="menu-title"><a href="#debugger">Debugger</a></span>
                 <span class="menu-title"><a href="#extending">Extending Wrench</a></span>
                 <span class="menu-title"><a href="#library">Lib Reference</a></span>
@@ -129,7 +130,7 @@ pre code {
 
 
 
-<hr><h1><a id="intro"></a>1.0 Introduction</h1></hr>
+<hr><h1><a id="intro"></a>Introduction</h1></hr>
 
 "The difficulty is that things almost always start with some guy
 doing something that at the time looks totally useless" <cr>- <small>James Burke</small>
@@ -177,7 +178,7 @@ needed a wrench. So I built one.
 
 
 
-<hr><h1><a name="integration"></a>2.0 Integration</h1></hr>
+<hr><h1><a name="integration"></a>Integration</h1></hr>
 
 Wrench [the project] is kept current on
 <a href="https://github.com/jingoro2112/wrench">GitHub, download it
@@ -531,7 +532,7 @@ wr_addArrayToContainer( &container, "big", someBigArray, 0x1FFFFF );
 
 
 
-<hr><h1><a name="language"></a>3.0 Language Reference</h1></hr>
+<hr><h1><a name="language"></a>Language Reference</h1></hr>
 
 <h2>Everything is a Unit!</h2>
 <p><b>function?</b> : unit than is called and returns a value!
@@ -928,13 +929,99 @@ divisor = (float)divisor;
 
 
 
-<hr><h1><a name="debugger"></a>3.0 Debugger</h1></hr>
-Yes there is a build-in remote debugger allowing step/inspect with a
-simple command protocol that can function over any link.
+<hr><h1><a name="features"></a>3.0 Features</h1></hr>
+
+<hr><h2>scheduler</h2></hr>
+<p>wrench has a built in time-slicer which will force the VM to yield
+after a certain number of branch/jump instructions are executed. This
+was chosen becuase any program that runs continuously <i>must</i>
+loop, so it is far more efficient to only check them, and not waste
+cycles.
+<p>To enable the time-slicer, define:
+<pre><code>WRENCH_TIME_SLICES
+</code></pre>
+This grants access to
+<pre><code>void wr_setInstructionsPerSlice( int instructions );
+void wr_forceYield();  // for the VM to yield right NOW, (called from a different thread)
+extern int g_sliceInstructionCount; // how many instructions were left when the current slice yielded
+</code></pre>
+wr_setInstructionsPerSlice(...) tells VM how many branch/jumps to
+allow before forcing a yield and returning.
+<p>The return will have 'null' WRValue* with it's context in a yielded
+state such that wr_getYieldInfo(...) will return true but importantly:
+*returnValue will be NULL since a force-yield is <b>not</b> entitled
+to a return value.
+<p>wr_forceYield() allows an external thread to force the VM to yield
+immeditely on its next branch/loop instruction, for a multi-threaded
+system that wants to implement a pre-emptive scheduler.
+
+<p>A simple round-robin scheduler is included:
+<pre><code>class WrenchScheduler
+{
+public:
+    WrenchScheduler( const int stackSizePerThread = WRENCH_DEFAULT_STACK_SIZE );
+    ~WrenchScheduler();
+
+    WRState* state() const { return m_w; }
+
+    void tick( const int instructionsPerSlice =1000 );
+
+    // returns a task ID
+    int addThread( const uint8_t* byteCode, const int size, const int instructionsThisSlice =1000, const bool takeOwnership =false );
+    bool removeTask( const int taskId );
+};
+</code></pre>
+This sample implementation can be found in wrench_cli.cpp:
+<pre><code>    const char* loop1 = "for(;;) { println(\"1\"); }";
+    const char* loop2 = "for(;;) { println(\"2\"); }";
+    const char* loop3 = "println(\"once\");";
+    const char* loop4 = "for(;;) { println(\"4\"); }";
+    const char* loop5 = "for(;;) { println(\"5\"); }";
+
+    WrenchScheduler scheduler( 8 );
+
+    WRstr logger;
+    wr_registerFunction( scheduler.state(), "println", emitln, &logger );
+
+    uint8_t* out;
+    int outLen;
+
+    wr_compile( loop1, strlen(loop1), &out, &outLen );
+    scheduler.addThread( out, outLen, 10, true );
+    scheduler.tick(10);
+
+    wr_compile( loop2, strlen(loop2), &out, &outLen );
+    scheduler.addThread( out, outLen, 10, true );
+    scheduler.tick(10);
+
+    wr_compile( loop3, strlen(loop3), &out, &outLen );
+    scheduler.addThread( out, outLen, 10, true );
+    scheduler.tick(10);
+
+    wr_compile( loop4, strlen(loop4), &out, &outLen );
+    scheduler.addThread( out, outLen, 10, true );
+    scheduler.tick(10);
+
+    wr_compile( loop5, strlen(loop5), &out, &outLen );
+    scheduler.addThread( out, outLen, 10, true );
+    scheduler.tick(10);
+
+    printf( "%s\n", logger.c_str() );
+</code></pre>
+<p>NOTE: all tasks share the same stack, so it must be large enough to
+accomodate all of them. Stack is consumed only for local variables in function calls
+and calculations (temp space), so not a lot should be required, but
+this is a consideration.
 
 
 
-<hr><h1><a name="extending"></a>4.0 Extending Wrench</h1></hr>
+<hr><h1><a name="debugger"></a>Debugger</h1></hr>
+The remote debugger allowing step/inspect is a work in progress,
+coming soon!
+
+
+
+<hr><h1><a name="extending"></a>Extending Wrench</h1></hr>
 
 There are three ways wrench interacts with "native" c/c++ code:
 
@@ -1186,7 +1273,7 @@ if ( V )
 
 
 
-<hr><h1><a name="library"></a>5.0 Library</h1></hr>
+<hr><h1><a name="library"></a>Library</h1></hr>
 library functions are provided as well. These functions are only
 available if loaded, which by default they are <i>not</I>. There is no
 overhead associated with having these calls resident other than a RAM
@@ -1315,7 +1402,7 @@ std::deserialize( string ); // given the string output from
 
 
 
-<hr><h1><a name="limits"></a>6.0 Limits</h1></hr>
+<hr><h1><a name="limits"></a>Limits</h1></hr>
 
 <p>wrench is made to run on extremely limited hardware with an
 absolute minimum of bytecode size, and this comes at the cost of some

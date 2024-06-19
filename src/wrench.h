@@ -31,7 +31,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 1
+#define WRENCH_VERSION_BUILD 2
 
 /************************************************************************
 The compiler is not particularly memory or space efficient, for
@@ -107,6 +107,21 @@ depending on usage. (consumes 8 bytes per stack entry)
 
 
 /************************************************************************
+With this defined the VM gives "slice" instructions before forcing a
+yield, to prevent infinite loops, this adds a small check to each
+instruction
+*/
+//#define WRENCH_TIME_SLICES
+
+#ifdef WRENCH_TIME_SLICES
+// how many instructions each call to the VM executes before yielding,
+// set to '0' for unlimited (default)
+void wr_setInstructionsPerSlice( int instructions );
+void wr_forceYield();  // for the VM to yield right NOW, (called from a different thread)
+extern int g_sliceInstructionCount; // how many instructions were left when the current slice yielded
+#endif
+
+/************************************************************************
 if you WANT full sprintf support for floats (%f/%g) this adds it at
 the cost of using the standard c library for it (stdlib.h), which can incur a
 decent code-size penalty. Without this %f/%g is ignored.
@@ -174,8 +189,6 @@ enum WRError
 {
 	WR_ERR_None = 0,
 
-	WR_YIELDED = 1,
-
 	WR_ERR_compiler_not_loaded,
 	WR_ERR_function_not_found,
 	WR_ERR_lib_function_not_found,
@@ -208,6 +221,8 @@ enum WRError
 	WR_ERR_wrench_function_not_found,
 	WR_ERR_array_must_be_indexed,
 	WR_ERR_context_not_found,
+	WR_ERR_context_not_yielded,
+	WR_ERR_cannot_call_function_context_yielded,
 
 	WR_ERR_hash_declaration_in_array,
 	WR_ERR_array_declaration_in_hash,
@@ -313,7 +328,7 @@ WRContext* wr_import( WRContext* context, const unsigned char* block, const int 
 
 // After wr_run(...) or wr_callFunction(...) has run, there is always a
 // return value (default 0) this function fetches it
-WRValue* wr_returnValueFromLastCall( WRState* w );
+WRValue* wr_returnValueFromLastCall( WRContext* context );
 
 // wr_run actually calls these two functions back-to back. If you want
 // to separate the process you can call them on your own.
@@ -347,10 +362,9 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 // and then called with an absolute minimum of overhead
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
 
-// can continue a yielded context, for example wr_callFunction(...)
-// returns 0 with the error code set to "WR_YIELDED"
-// ( w->err == WR_YIELDED )
-// if the context is not yielded this call immediately fails
+// Continue a yielded context.
+// if context is NOT yielded this will return null will err
+// "WR_ERR_context_not_yielded"
 WRValue* wr_continue( WRContext* context );
 
 // If the function is yielded, this returns true and provides the
@@ -743,7 +757,7 @@ struct WRValue
 //private: // is what this SHOULD be.. but that's impractical since the
 	// VM is not an object that can be friended.
 
-	inline void init() { p = 0; p2 = 0; } // call upon first create or when you're sure no memory is hanging from one
+	inline WRValue* init() { p = 0; p2 = 0; return this; } // call upon first create or when you're sure no memory is hanging from one
 
 	WRValue& singleValue() const; // return a single value for comparison
 	WRValue& deref() const; // if this value is a ARRAY_MEMBER, copy the referred value in
@@ -880,6 +894,32 @@ private:
 	WRContext* m_context;
 	WRValue* m_value;
 };
+
+
+#ifdef WRENCH_TIME_SLICES
+//------------------------------------------------------------------------------
+// Helper class to schedule and run tasks
+struct WrenchScheduledTask;
+
+class WrenchScheduler
+{
+public:
+	WrenchScheduler( const int stackSizePerThread = WRENCH_DEFAULT_STACK_SIZE );
+	~WrenchScheduler();
+
+	WRState* state() const { return m_w; }
+
+	void tick( const int instructionsPerSlice =1000 );
+
+	// returns a task ID
+	int addThread( const uint8_t* byteCode, const int size, const int instructionsThisSlice =1000, const bool takeOwnership =false );
+	bool removeTask( const int taskId );
+
+private:
+	WRState* m_w;
+	WrenchScheduledTask* m_tasks;
+};
+#endif
 
 #define WRENCH_NULL_HASH 0xABABABAB  // -1414812757 / -1.2197928214371934e-12, can't be zero since we use int/floats as their own hash
 

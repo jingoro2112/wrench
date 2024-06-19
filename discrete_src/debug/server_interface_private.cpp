@@ -228,7 +228,7 @@ bool WRDebugServerInterfacePrivate::codewordEncountered( const uint8_t* pc, uint
 		entry->onLine = -1; // don't know yet!
 		entry->fromUnitIndex = from->thisUnitIndex;
 		entry->thisUnitIndex = codeword & WRD_PayloadMask;
-		entry->stackOffset = stackTop - m_w->stack;
+//		entry->stackOffset = stackTop - m_w->stack;
 
 		WRFunction* func = m_context->localFunctions + (entry->thisUnitIndex - 1); // unit '0' is the global unit
 		entry->arguments = func->arguments;
@@ -433,7 +433,7 @@ WRDRun:
 					}
 					else
 					{
-						WRValue* stackFrame = m_w->stack + (frame->stackOffset - frame->arguments);
+						WRValue* stackFrame = m_context->stack + (frame->stackOffset - frame->arguments);
 						
 						wr_serializeEx( serializer, *(stackFrame + index) );
 					}

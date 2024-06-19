@@ -35,6 +35,7 @@ OBJS = \
 	$(OBJDIR)/wrench_server_debug.o \
 	$(OBJDIR)/server_interface_private.o \
 	$(OBJDIR)/wrench_client_debug.o \
+	$(OBJDIR)/scheduler.o \
 	$(OBJDIR)/std.o \
 	$(OBJDIR)/std_io.o \
 	$(OBJDIR)/std_io_linux.o \
@@ -116,6 +117,9 @@ $(OBJDIR)/server_interface_private.o: discrete_src/debug/server_interface_privat
 	$(CC) $@ $<
 
 $(OBJDIR)/wrench_client_debug.o: discrete_src/debug/wrench_client_debug.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/scheduler.o: discrete_src/vm/scheduler.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/std.o: discrete_src/lib/std.cpp
