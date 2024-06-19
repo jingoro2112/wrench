@@ -262,11 +262,6 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	return true;
 }
 
-#ifdef WRENCH_TIME_SLICES
-void wr_setInstructionsPerSlice( int instructions ); // how many instructions each call to the VM executes before yielding
-void wr_forceYield();  // for the VM to yield right NOW, (called from a different thread)
-#endif
-
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
   bool g_mallocFailed =false;
   #define MALLOC_FAIL_CHECK {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; g_mallocFailed = false; return 0; } }
@@ -281,7 +276,7 @@ int g_sliceInstructionCount = 0; // how many instructions were left when the cur
 int g_yieldEnabled = false;	
 
 //------------------------------------------------------------------------------
-void wr_setInstructionsPerSlice( int instructions )
+void wr_setInstructionsPerSlice( const int instructions )
 {
 	g_sliceInstructionCountPerCall = instructions;
 }
@@ -289,8 +284,8 @@ void wr_setInstructionsPerSlice( int instructions )
 //------------------------------------------------------------------------------
 void wr_forceYield()
 {
+	g_yieldEnabled = true; // prevent a race in case the count is decremented before this flag is checked
 	g_sliceInstructionCount = 1;
-	g_yieldEnabled = true;
 }
 
 

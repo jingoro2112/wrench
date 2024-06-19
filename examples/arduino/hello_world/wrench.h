@@ -116,7 +116,7 @@ instruction
 #ifdef WRENCH_TIME_SLICES
 // how many instructions each call to the VM executes before yielding,
 // set to '0' for unlimited (default)
-void wr_setInstructionsPerSlice( int instructions );
+void wr_setInstructionsPerSlice( const int instructions );
 void wr_forceYield();  // for the VM to yield right NOW, (called from a different thread)
 extern int g_sliceInstructionCount; // how many instructions were left when the current slice yielded
 #endif
