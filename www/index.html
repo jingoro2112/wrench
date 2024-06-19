@@ -162,6 +162,8 @@ run/step/inspect your code over a serial port.
 <li><p><b>Extend: </b>the whole idea is safe, low overhead calls to
 and from your main program.
 
+<li><p><b>Cooperative Multi Threaded: </b>Scheduler included.
+
 
 <li><p><b>Tested: </b>A full test-suite must pass
 <a href="https://valgrind.org/">valgrind</a> with zero
@@ -1013,6 +1015,19 @@ accomodate all of them. Stack is consumed only for local variables in function c
 and calculations (temp space), so not a lot should be required, but
 this is a consideration.
 
+
+<hr><h2>stack protection</h2></hr>
+<p>wrench uses the stack sparingly for storing function locals, return
+vectors and temp space for long calculations. Unless the script uses a
+lot of recursion or a lot of locals, a modest stack of even 20 or 30
+entries is more than enough. The default of 64 consumes only 256 bytes
+of RAM.
+<p>For this reason the stack is not normally checked for overflow,
+since it would be a waste of cycles.
+<p>If this protection is desired, a small overhead can be paid
+defining: WRENCH_PROTECT_STACK_FROM_OVERFLOW in wrench.h which will
+keep an eye on the stack and not allow overflow.
+<p>If detected, the vm returns null with err set to: WR_ERR_stack_overflow
 
 
 <hr><h1><a name="debugger"></a>Debugger</h1></hr>

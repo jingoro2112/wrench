@@ -104,6 +104,10 @@ To really reduce RAM footprint this can be lowered considerably
 depending on usage. (consumes 8 bytes per stack entry)
 */
 #define WRENCH_DEFAULT_STACK_SIZE 64
+// this costs a small bit of overhead whenever the stack is used, for
+// most applications it is not necessary, but will protect against
+// things like infinite recursion
+//#define WRENCH_PROTECT_STACK_FROM_OVERFLOW
 
 
 /************************************************************************
@@ -226,6 +230,8 @@ enum WRError
 
 	WR_ERR_hash_declaration_in_array,
 	WR_ERR_array_declaration_in_hash,
+
+	WR_ERR_stack_overflow,
 
 	WR_ERR_bad_goto_label,
 	WR_ERR_bad_goto_location,

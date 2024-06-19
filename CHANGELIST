@@ -5,6 +5,8 @@
   instructions are "counted" for speed and simplicity
 - stack is now allocated per context instead of per state, to make multi-threading/importing more
   intuitive and scaleable (original state-wide stack was result of earlier GC implementatioin)
+- looked into protecting the stack and the overhead is not all that terrible so added the
+  WRENCH_PROTECT_STACK_FROM_OVERFLOW option which will do that
 
 6.0.1 ----------------------------------------------------------------------------------
 - implementated WRENCH_HANDLE_MALLOC_FAIL:

@@ -262,6 +262,14 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	return true;
 }
 
+//------------------------------------------------------------------------------
+#ifdef WRENCH_PROTECT_STACK_FROM_OVERFLOW
+#define CHECK_STACK { if ( stackTop >= stackLimit ) { w->err = WR_ERR_stack_overflow; return 0; } }
+#else
+#define CHECK_STACK
+#endif
+
+//------------------------------------------------------------------------------
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
   bool g_mallocFailed =false;
   #define MALLOC_FAIL_CHECK {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; g_mallocFailed = false; return 0; } }
@@ -269,6 +277,7 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
   #define MALLOC_FAIL_CHECK
 #endif
 
+//------------------------------------------------------------------------------
 #ifdef WRENCH_TIME_SLICES
 
 int g_sliceInstructionCountPerCall = 0;
@@ -288,26 +297,12 @@ void wr_forceYield()
 	g_sliceInstructionCount = 1;
 }
 
-
-/*
-inline bool ForceYieldCheck( WRContext* context )
-{
-	if ( !--g_sliceInstructionCount && g_yieldEnabled )
-	{
-		context->yieldArgs = 0;
-		context->flags |= (uint8_t)WRC_ForceYielded;
-		return true;
-	}
-	return false;
-}
-#define CHECK_FORCE_YIELD { if ( ForceYieldCheck(context) ) { goto doYield; } }
-*/
-
 #define CHECK_FORCE_YIELD { if ( !--g_sliceInstructionCount && g_yieldEnabled ) { context->yieldArgs = 0; context->flags |= (uint8_t)WRC_ForceYielded; goto doYield; } }
 #else
  #define CHECK_FORCE_YIELD
 #endif
 
+//------------------------------------------------------------------------------
 #define WRENCH_JUMPTABLE_INTERPRETER
 #ifdef WRENCH_REALLY_COMPACT
 #undef WRENCH_JUMPTABLE_INTERPRETER
@@ -759,6 +754,10 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	WRValue* stackBase = context->stack + context->stackOffset;
 	WRValue* stackTop;
+#ifdef WRENCH_PROTECT_STACK_FROM_OVERFLOW
+	WRValue* stackLimit = stackBase + (w->stackSize - 2); // one entry buffer, we SHOULD detect on every frame inc
+#endif
+
 	if ( context->yield_pc )
 	{
 		if ( function )
@@ -826,9 +825,11 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	pc = context->codeStart;
 
+
+
 	
 yieldContinue:
-	
+
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 
 	FASTCONTINUE;
@@ -852,6 +853,7 @@ yieldContinue:
 literalZero:
 				stackTop->p = 0;
 				(stackTop++)->p2 = INIT_AS_INT;
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -881,7 +883,8 @@ literalZero:
 				{
 					*to++ = READ_8_FROM_PC(pc++);
 				}
-				
+
+				CHECK_STACK;
 				CONTINUE;
 			}
 
@@ -897,6 +900,7 @@ literalZero:
 				
 				(stackTop++)->p2 &= ~INIT_AS_LIB_CONST;
 				pc += 4;
+				CHECK_STACK;
 				CONTINUE;
 			}
 
@@ -1034,6 +1038,7 @@ CallFunctionByHash_continue:
 				{
 					++stackTop;
 				}
+				CHECK_STACK;
 				CONTINUE;
 			}
 
@@ -1099,10 +1104,19 @@ callFunction:
 						{
 							stackTop->p = 0;
 							(stackTop++)->p2 = INIT_AS_INT;
+							CHECK_STACK;
 						}
 					}
 				}
 
+#ifdef WRENCH_PROTECT_STACK_FROM_OVERFLOW
+				if ( stackTop + function->frameSpaceNeeded + 2 >= stackLimit )
+				{
+					w->err = WR_ERR_stack_overflow;
+					return 0;
+				}
+#endif
+				
 				// initialize locals to int zero
 				for( int l=0; l<function->frameSpaceNeeded; ++l )
 				{
@@ -1120,12 +1134,14 @@ callFunction:
 				// set the new frame base to the base arguments the function is expecting
 				frameBase = stackTop - function->frameBaseAdjustment;
 
+				CHECK_STACK;
 				CONTINUE;
 			}
 
 			CASE(PushIndexFunctionReturnValue):
 			{
 				*(stackTop++) = (++register0)->deref();
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -1167,6 +1183,7 @@ callFunction:
 					return 0;
 				}
 
+				CHECK_STACK;
 				CONTINUE;
 			}
 
@@ -1352,6 +1369,7 @@ NewObjectTablePastLoad:
 			CASE(ReturnZero):
 			{
 				(stackTop++)->init();
+				CHECK_STACK;
 			}
 			CASE(Return):
 			{
@@ -1478,6 +1496,7 @@ hashIndexJump:
 #else
 				stackTop->p2 = INIT_AS_INT;
 				wr_index[(WR_INT << 2) | register0->type](context, stackTop, register0, stackTop - 1);
+				CHECK_STACK;
 				CONTINUE;
 #endif
 			}
@@ -1529,6 +1548,7 @@ hashIndexJump:
 			{
 				stackTop->p = frameBase + READ_8_FROM_PC(pc++);
 				(stackTop++)->p2 = INIT_AS_REF;
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -1536,6 +1556,7 @@ hashIndexJump:
 			{
 				stackTop->p = globalSpace + READ_8_FROM_PC(pc++);
  				(stackTop++)->p2 = INIT_AS_REF;
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -1640,6 +1661,7 @@ indexTempLiteralPostLoad:
 #endif
 				stackTop->p2 = INIT_AS_INT;
 				wr_index[(WR_INT<<2)|register0->type]( context, stackTop, register0, stackTop - 1 );
+				CHECK_STACK;
 				CONTINUE;
 			}
 			
@@ -1653,6 +1675,7 @@ indexTempLiteralPostLoad:
 #else
 				stackTop->p2 = INIT_AS_INT;
 				wr_index[(WR_INT << 2) | register0->type](context, stackTop, register0, stackTop - 1);
+				CHECK_STACK;
 				CONTINUE;
 #endif
 			}
@@ -1666,6 +1689,7 @@ indexTempLiteralPostLoad:
 				(++stackTop)->i = READ_8_FROM_PC(pc++);
 				stackTop->p2 = INIT_AS_INT;
 				wr_index[(WR_INT << 2) | register0->type](context, stackTop, register0, stackTop - 1);
+				CHECK_STACK;
 				CONTINUE;
 #endif
 			}
@@ -1721,6 +1745,7 @@ doAssignToLocalAndPop:
 			{
 				stackTop->i = (int32_t)(int8_t)READ_8_FROM_PC(pc++);
 				(stackTop++)->p2 = INIT_AS_INT;
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -1729,6 +1754,7 @@ doAssignToLocalAndPop:
 				stackTop->i = READ_16_FROM_PC(pc);
 				pc += 2;
 				(stackTop++)->p2 = INIT_AS_INT;
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -1895,6 +1921,7 @@ targetFuncOpSkipLoadAndReg2:
 																	 register2,
 																	 intCall,
 																	 floatCall );
+				CHECK_STACK;
 				CONTINUE;
 			}
 			
@@ -2630,6 +2657,7 @@ compactCompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_MultiplyBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2638,6 +2666,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_MultiplyBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2646,6 +2675,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_MultiplyBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2655,6 +2685,7 @@ compactCompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2663,6 +2694,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++); 
 				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2671,6 +2703,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_AdditionBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2680,6 +2713,7 @@ compactCompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_SubtractBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2688,6 +2722,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_SubtractBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2696,6 +2731,7 @@ compactCompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_SubtractBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2704,6 +2740,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_SubtractBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2713,6 +2750,7 @@ compactCompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2721,6 +2759,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2729,6 +2768,7 @@ compactCompareGG8:
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2737,6 +2777,7 @@ compactCompareGG8:
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -2892,6 +2933,7 @@ returnCompareEQ:
 returnCompareEQPost:
 				stackTop->i = (int)returnFunc[(register0->type<<2)|register1->type]( register0, register1 );
 				(stackTop++)->p2 = INIT_AS_INT;
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 			
@@ -2906,6 +2948,7 @@ returnCompareNE:
 returnCompareNEPost:
 				stackTop->i = (int)!returnFunc[(register0->type<<2)|register1->type]( register0, register1 );
 				(stackTop++)->p2 = INIT_AS_INT;
+				CHECK_STACK;
 				FASTCONTINUE;
 			}
 
@@ -3114,6 +3157,7 @@ CompareGG8:
 				targetFunc = wr_ModBinary;
 targetFuncOpSkipLoad:
 				targetFunc[(register1->type<<2)|register0->type]( register1, register0, stackTop++ );
+				CHECK_STACK;
 				CONTINUE;
 			}
 			

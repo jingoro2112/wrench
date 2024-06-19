@@ -39,6 +39,7 @@ void testImport();
 void testHalt();
 void testTimeSlices();
 void testScheduler();
+void testStackOverflow();
 
 //------------------------------------------------------------------------------
 void blobToHeader( WRstr const& blob, WRstr const& variableName, WRstr& header )
@@ -576,6 +577,8 @@ int runTests( int number )
 	int err = 0;
 
 	testScheduler();
+	testStackOverflow();
+
 	
 #ifndef WRENCH_WITHOUT_COMPILER
 	WRstr code;
@@ -861,6 +864,26 @@ void testGlobalValues( WRState* w )
 	assert( wr_callFunction(gc, "test10") );
 
 	g_free( out );
+}
+
+//------------------------------------------------------------------------------
+void testStackOverflow()
+{
+#ifdef WRENCH_PROTECT_STACK_FROM_OVERFLOW
+	const char* recurse = "function oops() { var a = 100; oops(); }\n"
+						  "oops();\n";
+	
+	WRState* w = wr_newState( 10 );
+	
+	uint8_t* out;
+	int outLen;
+	wr_compile( recurse, strlen(recurse), &out, &outLen );
+
+	assert( wr_run(w, out, outLen, true) == 0 );
+	assert( w->err == WR_ERR_stack_overflow );
+
+	wr_destroyState( w );
+#endif	
 }
 
 //------------------------------------------------------------------------------

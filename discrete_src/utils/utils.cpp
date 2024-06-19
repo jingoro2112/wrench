@@ -224,8 +224,8 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 	
 	int needed = sizeof(WRContext) // class
 				 + (globals * sizeof(WRValue))  // globals
-				 + (localFuncs * sizeof(WRFunction) // functions;
-				 + (stack ? 0 : (w->stackSize * sizeof(WRValue)))); // stack
+				 + (localFuncs * sizeof(WRFunction)) // functions
+				 + (stack ? 0 : (w->stackSize * sizeof(WRValue))); // stack
 
 	WRContext* C = (WRContext *)g_malloc( needed );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
@@ -1451,6 +1451,7 @@ const char* c_errStrings[]=
 
 	"WR_ERR_hash_declaration_in_array",
 	"WR_ERR_array_declaration_in_hash",
+	"WR_ERR_stack_overflow",
 
 	"WR_ERR_bad_goto_label",
 	"WR_ERR_bad_goto_location",
