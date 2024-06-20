@@ -90,7 +90,7 @@ architecture, see vm.h for the current definitions
 
 /***********************************************************************
  **** EXPERIMENTAL **** HAS SOME KNOWN ISSUES DO NOT USE (yet :) */
-#define WRENCH_INCLUDE_DEBUG_CODE
+//#define WRENCH_INCLUDE_DEBUG_CODE
 /***********************************************************************/
 
 
