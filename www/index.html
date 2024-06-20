@@ -144,7 +144,8 @@ retain full power, flexibility, and speed.</h3>
 a ~1k RAM footprint
 <li><p><b>Comprehensible: </b>c-like syntax, weakly typed
 
-<li><p><b>Fast: </b>as a comparison: fast as or faster than lua (non-JIT of course) 
+<li><p><b>Fast: </b>as a comparison: as fast or faster than lua
+(non-JIT of course), much faster than pythgo
 
 <li><p><b>Compact: </b>Bytecode images a small fraction of other
 interpreters
@@ -168,7 +169,7 @@ and from your main program.
 <li><p><b>Tested: </b>A full test-suite must pass
 <a href="https://valgrind.org/">valgrind</a> with zero
 warnings/errors/leaks on multiple architectures (including
-cross-compatibility checks tieh big-endian)
+cross-compatibility checks with big-endian via qemu)
 
 </ul>
 
@@ -288,10 +289,16 @@ code will run just fine but not trigger any functionality.
 
 <pre><code>#define WRENCH_DEFAULT_STACK_SIZE 64
 </pre></code>
-<p>wrench allocates a static stack and does not bounds-check it, this
+<p>by default wrench allocates a static stack and does not bounds-check it, this
 is done for speed an simplicity. The stack is used only for function
 calls and local data so it need not be large, the default should be
 more than enough.
+<p>Stack checking can be compiled in with
+<pre><code>#define WRENCH_PROTECT_STACK_FROM_OVERFLOW
+</code></pre>
+however (see further down)
+
+
 <p>Each stack entry consumes 8 bytes, so embedded devices that have
 very limited ram (like the Uno Mini) might want to reduce this.
 The arduino example provided has a stack of 32, which
@@ -940,7 +947,7 @@ was chosen becuase any program that runs continuously <i>must</i>
 loop, so it is far more efficient to only check them, and not waste
 cycles.
 <p>To enable the time-slicer, define:
-<pre><code>WRENCH_TIME_SLICES
+<pre><code>#define WRENCH_TIME_SLICES
 </code></pre>
 This grants access to
 <pre><code>void wr_setInstructionsPerSlice( int instructions );
@@ -1010,10 +1017,8 @@ This sample implementation can be found in wrench_cli.cpp:
 
     printf( "%s\n", logger.c_str() );
 </code></pre>
-<p>NOTE: all tasks share the same stack, so it must be large enough to
-accomodate all of them. Stack is consumed only for local variables in function calls
-and calculations (temp space), so not a lot should be required, but
-this is a consideration.
+<p>NOTE: each task gets its own stack, defined by the size used to
+create the WRState (default 64)
 
 
 <hr><h2>stack protection</h2></hr>
@@ -1024,8 +1029,10 @@ entries is more than enough. The default of 64 consumes only 256 bytes
 of RAM.
 <p>For this reason the stack is not normally checked for overflow,
 since it would be a waste of cycles.
-<p>If this protection is desired, a small overhead can be paid
-defining: WRENCH_PROTECT_STACK_FROM_OVERFLOW in wrench.h which will
+<p>If this protection is desired, define
+<pre><code>#define WRENCH_PROTECT_STACK_FROM_OVERFLOW
+</code></pre>
+in wrench.h which will
 keep an eye on the stack and not allow overflow.
 <p>If detected, the vm returns null with err set to: WR_ERR_stack_overflow
 
@@ -1209,6 +1216,8 @@ is preserved and can be re-entered using the various forms of
 <pre><code>WRValue* wr_callFunction( WRContext* context, const char* functionName, const WRValue* argv =0, const int argn =0 );
 WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue* argv =0, const int argn =0 );
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
+WRValue* wr_continue( WRContext* context ); // only for yielded contexts, see wr_getYieldInfo()
+bool wr_getYieldInfo( WRContext* context, int* args =0, WRValue** firstArg =0, WRValue** returnValue =0 );
 </pre></code>:
 They all return a WRValue from the called function, this pointer will
 be NULL if the called function was not found.

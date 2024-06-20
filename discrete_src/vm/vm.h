@@ -109,6 +109,12 @@ struct WRState
 	uint16_t stackSize; // how much stack to give each context
 	int8_t err;
 
+#ifdef WRENCH_TIME_SLICES
+	int instructionsPerSlice;
+	int sliceInstructionCount;
+	int yieldEnabled;
+#endif
+	
 	WRContext* contextList;
 
 	WRLibraryCleanup* libCleanupFunctions;

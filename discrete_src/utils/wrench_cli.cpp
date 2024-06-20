@@ -40,6 +40,7 @@ void testHalt();
 void testTimeSlices();
 void testScheduler();
 void testStackOverflow();
+//void testYield2();
 
 //------------------------------------------------------------------------------
 void blobToHeader( WRstr const& blob, WRstr const& variableName, WRstr& header )
@@ -576,10 +577,6 @@ int runTests( int number )
 {
 	int err = 0;
 
-	testScheduler();
-	testStackOverflow();
-
-	
 #ifndef WRENCH_WITHOUT_COMPILER
 	WRstr code;
 	WRstr codeName;
@@ -758,6 +755,8 @@ int runTests( int number )
 	testTimeSlices();
 	testImport();
 	testHalt();
+	testScheduler();
+	testStackOverflow();
 
 	wr_destroyContainer( &container );
 
@@ -935,9 +934,9 @@ void testTimeSlices()
 #ifdef WRENCH_TIME_SLICES
 	const char* loop = "for(;;) {}";
 
-	wr_setInstructionsPerSlice( 10 );
-	
 	WRState* w = wr_newState( 16 );
+
+	wr_setInstructionsPerSlice( w, 10 );
 
 	unsigned char* out;
 	int outlen;
@@ -989,6 +988,87 @@ static void importln( WRContext* c, const WRValue* argv, const int argn, WRValue
 	g_importBuf += "\n";
 }
 
+/*
+const char exampleYield[]=
+" // Example Wrench Script\n"
+" //   All scripts will 'override' a `run` function	\n"
+"													\n"
+"function run( values_hashtable )					\n"
+"{													\n"
+"   for(;;)											\n"
+"   {												\n"
+"      values_hashtable[\"random_number\"] += 1;	\n"
+"   }												\n"
+" }													\n";
+
+#include <time.h>
+//------------------------------------------------------------------------------
+void testYield2()
+{
+	WRState* state = wr_newState(); // create a state (only need to do this once)
+
+	// make sure we only execute 10 instructions at any time
+	wr_setInstructionsPerSlice( state, 10 );
+
+	// compile a script
+	unsigned char* out;
+	int outLen;
+	int err = wr_compile( exampleYield, strlen(exampleYield), &out, &outLen );
+	if ( err )
+	{
+		// oops! something wrong with the code:
+		printf( "err compiling [%s]\n", c_errStrings[err] );
+		wr_destroyState( state );
+		return;
+	}
+
+	// now that the script is compiled into bytecode (stored in
+	// out/outLen) we need to "run" it, this loads it into a context.
+	// for the case of your example, it won't do anything but load the
+	// function signature and return, since nothing actually happens in
+	// the code in global scope.
+	
+	WRContext* context = wr_run( state, out, outLen );
+	if ( !context )
+	{
+		// must have been an error processing the script?
+		printf( "err compiling [%s]\n", c_errStrings[(int)wr_getLastError(state)] );
+		wr_destroyState( state );
+		return;
+	}
+
+	time_t future = time(0) + 5;
+
+	while( time(0) < future ) // run for 5 seconds
+	{
+		// the VM will automatically continue on yield, this can be
+		// called multiple times.. need to make this clear in the docs..
+		WRValue* retval = wr_callFunction( context, "run" ); 
+		
+		if ( retval )
+		{
+			// the function returned, so it completed, do something
+			// with it...
+
+			// and we're out
+			break;
+		}
+		
+		if ( !wr_getYieldInfo(context) )
+		{
+			// something went wrong! this is not yielded
+			printf( "non-yield [%s]\n", c_errStrings[(int)wr_getLastError(state)] );
+			break;
+		}
+		else
+		{
+			printf( "function forced to yield\n" );
+		}
+	}
+
+	wr_destroyState( state );
+}
+*/
 
 const char* importMe = "export function imported(a) \n"
 					   "{                    \n"

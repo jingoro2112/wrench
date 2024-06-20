@@ -7,6 +7,7 @@
   intuitive and scaleable (original state-wide stack was result of earlier GC implementatioin)
 - looked into protecting the stack and the overhead is not all that terrible so added the
   WRENCH_PROTECT_STACK_FROM_OVERFLOW option which will do that
+- changed slicing function signatures, globals? really? what was I thinking.
 
 6.0.1 ----------------------------------------------------------------------------------
 - implementated WRENCH_HANDLE_MALLOC_FAIL:

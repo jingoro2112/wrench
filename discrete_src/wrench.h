@@ -31,6 +31,7 @@ SOFTWARE.
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
 #define WRENCH_VERSION_BUILD 2
+struct WRState;
 
 /************************************************************************
 The compiler is not particularly memory or space efficient, for
@@ -43,7 +44,6 @@ anyway)
 
 
 /***********************************************************************
-
 Cause the interpreter to compile into the smallest program size
 possible at the cost of some speed. This loss is from the removal of
 unrolled loops and inlined functionality, also making use of some goto.
@@ -119,9 +119,8 @@ instruction
 #ifdef WRENCH_TIME_SLICES
 // how many instructions each call to the VM executes before yielding,
 // set to '0' for unlimited (default)
-void wr_setInstructionsPerSlice( const int instructions );
-void wr_forceYield();  // for the VM to yield right NOW, (called from a different thread)
-extern int g_sliceInstructionCount; // how many instructions were left when the current slice yielded
+void wr_setInstructionsPerSlice( WRState* w, const int instructions );
+void wr_forceYield( WRState* w );  // for the VM to yield right NOW, (called from a different thread)
 #endif
 
 /************************************************************************
@@ -177,7 +176,6 @@ extern bool g_mallocFailed; // used as an internal global flag for when a malloc
 
 //------------------------------------------------------------------------------
 
-struct WRState;
 struct WRValue;
 struct WRContext;
 struct WRFunction;

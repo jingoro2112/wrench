@@ -57,7 +57,7 @@ WrenchScheduler::~WrenchScheduler()
 //------------------------------------------------------------------------------
 void WrenchScheduler::tick( int instructionsPerSlice )
 {
-	wr_setInstructionsPerSlice( instructionsPerSlice );
+	wr_setInstructionsPerSlice( m_w, instructionsPerSlice );
 	WrenchScheduledTask* task = m_tasks;
 
 	while( task )
@@ -80,7 +80,7 @@ static int wr_idGenerator = 0;
 //------------------------------------------------------------------------------
 int WrenchScheduler::addThread( const uint8_t* byteCode, const int size, const int instructionsThisSlice, const bool takeOwnership )
 {
-	wr_setInstructionsPerSlice( instructionsThisSlice );
+	wr_setInstructionsPerSlice( m_w, instructionsThisSlice );
 
 	WRContext* context = wr_run( m_w, byteCode, size, takeOwnership );
 	if ( !context )

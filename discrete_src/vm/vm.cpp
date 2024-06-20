@@ -280,24 +280,20 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 //------------------------------------------------------------------------------
 #ifdef WRENCH_TIME_SLICES
 
-int g_sliceInstructionCountPerCall = 0;
-int g_sliceInstructionCount = 0; // how many instructions were left when the current slice yielded
-int g_yieldEnabled = false;	
-
 //------------------------------------------------------------------------------
-void wr_setInstructionsPerSlice( const int instructions )
+void wr_setInstructionsPerSlice( WRState* w, const int instructions )
 {
-	g_sliceInstructionCountPerCall = instructions;
+	w->instructionsPerSlice = instructions;
 }
 
 //------------------------------------------------------------------------------
-void wr_forceYield()
+void wr_forceYield( WRState* w )
 {
-	g_yieldEnabled = true; // prevent a race in case the count is decremented before this flag is checked
-	g_sliceInstructionCount = 1;
+	w->yieldEnabled = true; // prevent a race in case the count is decremented before this flag is checked
+	w->sliceInstructionCount = 1;
 }
 
-#define CHECK_FORCE_YIELD { if ( !--g_sliceInstructionCount && g_yieldEnabled ) { context->yieldArgs = 0; context->flags |= (uint8_t)WRC_ForceYielded; goto doYield; } }
+#define CHECK_FORCE_YIELD { if ( !--w->sliceInstructionCount && w->yieldEnabled ) { context->yieldArgs = 0; context->flags |= (uint8_t)WRC_ForceYielded; goto doYield; } }
 #else
  #define CHECK_FORCE_YIELD
 #endif
@@ -690,19 +686,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	};
 #endif
 
-#ifdef WRENCH_TIME_SLICES
-	if ( g_sliceInstructionCountPerCall == 0 )
-	{
-		g_yieldEnabled = false;
-	}
-	else
-	{
-		g_yieldEnabled = true;
-		g_sliceInstructionCount = g_sliceInstructionCountPerCall;
-	}
-#endif
-
-	const unsigned char* pc;
+	const uint8_t* pc;
 
 	union
 	{
@@ -736,6 +720,18 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		WRReturnFunc* returnFunc;
 		WRTargetFunc* targetFunc;
 	};
+
+#ifdef WRENCH_TIME_SLICES
+	if (w->instructionsPerSlice == 0)
+	{
+		w->yieldEnabled = false;
+	}
+	else
+	{
+		w->yieldEnabled = true;
+		w->sliceInstructionCount = w->instructionsPerSlice;
+	}
+#endif
 
 #ifdef WRENCH_COMPACT
 	union
