@@ -47,6 +47,7 @@ WRDebugClientInterface::WRDebugClientInterface( bool (*receiveFunction)( char* d
 	I->m_receiveFunction = receiveFunction;
 	I->m_sendFunction = sendFunction;
 	I->m_dataAvailableFunction = dataAvailableFunction;
+	I->m_parent = this;
 
 	init();
 }
@@ -56,6 +57,7 @@ WRDebugClientInterface::WRDebugClientInterface( WRDebugServerInterface* localSer
 {
 	I = new WRDebugClientInterfacePrivate;
 	I->m_localServer = localServer;
+	I->m_parent = this;
 	
 	init();
 }
@@ -95,12 +97,12 @@ void WRDebugClientInterfacePrivate::trapRunOutput( WrenchPacket const& packet )
 		if ( reply->_type == WRD_DebugOut )
 		{
 			printf( "%s", (char*)reply->payload() );
-			free( reply );
+			g_free( reply );
 			continue;
 		}
 		else
 		{
-			free( reply );
+			g_free( reply );
 			break;
 		}
 	}
@@ -192,7 +194,6 @@ WRValue* WRDebugClientInterface::getValue( WRValue& value, const int index, cons
 	wr_deserializeEx( value, serializer, I->m_scratchContext );
 
 	return &value;
-
 }
 
 //------------------------------------------------------------------------------
@@ -214,6 +215,20 @@ const char* WRDebugClientInterface::getValueLabel( const int index, const int de
 	}
 
 	return 0;
+}
+
+//------------------------------------------------------------------------------
+bool WRDebugClientInterface::getStackDump( char* out, const unsigned int maxOut )
+{
+	WrenchPacketScoped r( I->transmit(WrenchPacketScoped(WRD_RequestStackDump)) );
+	if ( !r.packet || (r.packet->_type != WRD_ReplyStackDump) )
+	{
+		return false;
+	}
+
+	strncpy( out, (const char*)r.packet->payload(), maxOut < r.packet->payloadSize() ? maxOut : r.packet->payloadSize() );
+	
+	return true;
 }
 
 //------------------------------------------------------------------------------
@@ -275,7 +290,7 @@ void WRDebugClientInterface::setBreakpoint( const int lineNumber )
 {
 	WrenchPacketScoped b(WRD_RequestSetBreakpoint);
 	b.packet->param1 = lineNumber;
-	free( I->transmit(b) );
+	g_free( I->transmit(b) );
 }
 
 //------------------------------------------------------------------------------
@@ -283,7 +298,7 @@ void WRDebugClientInterface::clearBreakpoint( const int lineNumber )
 {
 	WrenchPacketScoped b(WRD_RequestClearBreakpoint);
 	b.packet->param1 = lineNumber;
-	free (I->transmit(b) );
+	g_free (I->transmit(b) );
 }
 
 //------------------------------------------------------------------------------
@@ -362,6 +377,24 @@ WrenchPacket* WRDebugClientInterfacePrivate::transmit( WrenchPacket* packet )
 	}
 
 	return reply;
+}
+
+
+//------------------------------------------------------------------------------
+void WRDebugClientInterfacePrivate::getValues( SimpleLL<WrenchDebugValue>& values, const int depth )
+{
+	values.clear();
+
+	WrenchFunction* g = (*m_functions)[depth];
+	
+
+	for( unsigned int i = 0; i<g->vars->count(); ++i )
+	{
+		WrenchDebugValue* v = values.addTail();
+
+		strncpy( v->name, (*g->vars)[i]->label, 63 );
+		m_parent->getValue( v->value, i, depth );
+	}
 }
 
 //------------------------------------------------------------------------------

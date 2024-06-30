@@ -2035,17 +2035,11 @@ extern const char* c_opcodeName[];
 #define _STR_H
 /* ------------------------------------------------------------------------- */
 
-// note; this is used for miscillaneous convenience in the CLI, but
-// nowhere in the VM, so will not actually be used anywhere in the
-// compiler
-// #ifndef WRENCH_WITHOUT_COMPILER
-
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <assert.h>
 
 #ifdef STR_FILE_OPERATIONS
 #include <sys/stat.h>
@@ -2078,8 +2072,15 @@ public:
 
 	WRstr& clear() { m_len = 0; m_str[0] = 0; return *this; }
 
+#if __cplusplus > 199711L
+	WRstr& format( const char* format, ... ) { va_list arg; va_start( arg, format ); clear(); appendFormatVA( format, arg ); va_end( arg ); return *this; }
+	WRstr& formatVA( const char* format, va_list arg ) { clear(); return appendFormatVA(format, arg); }
+	WRstr& appendFormat( const char* format, ... ) { va_list arg; va_start( arg, format ); appendFormatVA( format, arg ); va_end( arg ); return *this; }
+	inline WRstr& appendFormatVA( const char* format, va_list arg );
+#else
 	inline WRstr& format( const char* format, ... );
 	inline WRstr& appendFormat( const char* format, ... );
+#endif
 
 	inline void release( char** toBuf, unsigned int* len =0 ); // always suceeds and returns dynamic memory
 	inline WRstr& giveOwnership( char* str, const unsigned int len );
@@ -2115,6 +2116,11 @@ public:
 	WRstr& set( const char c ) { clear(); m_str[0]=c; m_str[1]=0; m_len = 1; return *this; }
 
 	bool isMatch( const char* buf ) const { return strcmp(buf, m_str) == 0; }
+#ifdef WIN32
+	bool isMatchCase( const char* buf ) const { return _strnicmp(buf, m_str, m_len) == 0; }
+#else
+	bool isMatchCase( const char* buf ) const { return strncasecmp(buf, m_str, m_len) == 0; }
+#endif
 	static inline bool isWildMatch( const char* pattern, const char* haystack );
 	inline bool isWildMatch( const char* pattern ) const { return isWildMatch( pattern, m_str ); }
 				  
@@ -2162,7 +2168,7 @@ public:
 	friend WRstr operator + ( const char c, const WRstr& str ) { WRstr T(c); T += str; return T; }
 	friend WRstr operator + ( const WRstr& str1, const WRstr& str2 ) { WRstr T(str1); T += str2; return T; }
 
-	~WRstr() { if ( m_str != m_smallbuf ) g_free(m_str); }
+	~WRstr() { if ( m_str != m_smallbuf ) free(m_str); }
 
 protected:
 
@@ -2174,44 +2180,6 @@ protected:
 	unsigned int m_len; // how long the string is in the buffer
 	char m_smallbuf[ c_sizeofBaseString + 1 ]; // small temporary buffer so a malloc/free is not imposed for small strings
 };
-
-//------------------------------------------------------------------------------
-inline const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte =-1 )
-{
-	const unsigned char* data = (char unsigned *)d;
-	str.clear();
-	for( unsigned int i=0; i<len; i++ )
-	{
-		str.appendFormat( "0x%08X: ", i );
-		char dump[24];
-		unsigned int j;
-		for( j=0; j<16 && i<len; j++, i++ )
-		{
-			dump[j] = isgraph((unsigned char)data[i]) ? data[i] : '.';
-			dump[j+1] = 0;
-			if ( i == (unsigned int)markByte )
-			{
-				str.shave(1);
-				str.appendFormat( "[%02X]", (unsigned char)data[i] );
-			}
-			else
-			{
-				str.appendFormat( "%02X ", (unsigned char)data[i] );
-			}
-		}
-
-		for( ; j<16; j++ )
-		{
-			str.appendFormat( "   " );
-		}
-		i--;
-		str += ": ";
-		str += dump;
-		str += "\n";
-	}
-
-	return str;
-}
 
 //------------------------------------------------------------------------------
 unsigned int WRstr::rfind( const char* str, const unsigned int from ) const
@@ -2409,7 +2377,7 @@ WRstr& WRstr::giveOwnership( char* buf, const unsigned int len )
 		clear();
 		return *this;
 	}
-	
+
 	if ( m_str != m_smallbuf )
 	{
 		g_free( m_str );
@@ -2429,6 +2397,7 @@ WRstr& WRstr::giveOwnership( char* buf, const unsigned int len )
 
 	m_len = len;
 	m_buflen = len;
+	m_str[m_len] = 0;
 	
 	return *this;
 }
@@ -2461,14 +2430,8 @@ WRstr& WRstr::trim()
 	}
 
 	m_len = marker + 1;
-
-	if ( m_len >= m_buflen )
-	{
-		alloc( m_len + 1, true );
-		return trim();
-	}
-
 	m_str[m_len] = 0;
+
 	return *this;
 }
 
@@ -2529,11 +2492,8 @@ WRstr& WRstr::shift( const unsigned int from )
 		return clear();
 	}
 
-	if ( from )
-	{
-		m_len -= from;
-		memmove( m_str, m_str + from, m_len + 1 );
-	}
+	m_len -= from;
+	memmove( m_str, m_str + from, m_len + 1 );
 
 	return *this;
 }
@@ -2722,11 +2682,48 @@ WRstr& WRstr::append( const char c )
 	return *this;
 }
 
+#if __cplusplus > 199711L
+
+//------------------------------------------------------------------------------
+WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
+{
+	char buf[ c_formatBaseTrySize + 1 ]; // SOME space, malloc if we need a ton more
+
+	int len = vsnprintf( buf, c_formatBaseTrySize, format, arg );
+
+	if ( len < c_formatBaseTrySize )
+	{
+		insert( buf, len, m_len );
+	}
+	else
+	{
+		char* alloc = (char*)g_malloc( len + 1 );
+
+		va_list vacopy;
+		va_copy( vacopy, arg );
+		len = vsnprintf( alloc, len, format, arg );
+		va_end( vacopy );
+
+		if ( m_len )
+		{
+			insert( alloc, len, m_len );
+			g_free( alloc );
+		}
+		else
+		{
+			giveOwnership( alloc, len );
+		}
+	}
+
+	return *this;
+}
+
+#else
+
 //------------------------------------------------------------------------------
 WRstr& WRstr::format( const char* format, ... )
 {
 	va_list arg;
-
 	char buf[ c_formatBaseTrySize + 1 ]; // SOME space, malloc if we need a ton more
 
 	va_start( arg, format );
@@ -2735,19 +2732,17 @@ WRstr& WRstr::format( const char* format, ... )
 
 	if ( len < c_formatBaseTrySize )
 	{
-		return set( buf, len );
+		set( buf, len );
 	}
 	else
 	{
-		++len;
-		char* alloc = (char*)g_malloc( len + 1 );
+		char* alloc = (char*)g_malloc(len + 1);
 
 		va_start( arg, format );
 		len = vsnprintf( alloc, len, format, arg );
 		va_end( arg );
 
-		set( alloc, len );
-		g_free(alloc);
+		giveOwnership( alloc, len );
 	}
 
 	return *this;
@@ -2757,8 +2752,7 @@ WRstr& WRstr::format( const char* format, ... )
 WRstr& WRstr::appendFormat( const char* format, ... )
 {
 	va_list arg;
-
-	char buf[ c_formatBaseTrySize ]; // SOME space, malloc if we need a ton more
+	char buf[ c_formatBaseTrySize + 1 ]; // SOME space, malloc if we need a ton more
 
 	va_start( arg, format );
 	int len = vsnprintf( buf, c_formatBaseTrySize, format, arg );
@@ -2770,19 +2764,26 @@ WRstr& WRstr::appendFormat( const char* format, ... )
 	}
 	else
 	{
-		++len;
-		char* alloc = (char*)g_malloc( len + 1 );
+		char* alloc = (char*)g_malloc(len + 1);
 
 		va_start( arg, format );
 		len = vsnprintf( alloc, len, format, arg );
 		va_end( arg );
 
-		insert( alloc, len, m_len );
-		g_free(alloc);
+		if ( m_len )
+		{
+			insert( alloc, len, m_len );
+			g_free( alloc );
+		}
+		else
+		{
+			giveOwnership( alloc, len );
+		}
 	}
 
 	return *this;
 }
+#endif
 
 #endif
 /*******************************************************************************
@@ -3413,6 +3414,44 @@ struct ScopeContext
 	int type;
 };
 
+//------------------------------------------------------------------------------
+inline const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte =-1 )
+{
+	const unsigned char* data = (char unsigned *)d;
+	str.clear();
+	for( unsigned int i=0; i<len; i++ )
+	{
+		str.appendFormat( "0x%08X: ", i );
+		char dump[24];
+		unsigned int j;
+		for( j=0; j<16 && i<len; j++, i++ )
+		{
+			dump[j] = isgraph((unsigned char)data[i]) ? data[i] : '.';
+			dump[j+1] = 0;
+			if ( i == (unsigned int)markByte )
+			{
+				str.shave(1);
+				str.appendFormat( "[%02X]", (unsigned char)data[i] );
+			}
+			else
+			{
+				str.appendFormat( "%02X ", (unsigned char)data[i] );
+			}
+		}
+
+		for( ; j<16; j++ )
+		{
+			str.appendFormat( "   " );
+		}
+		i--;
+		str += ": ";
+		str += dump;
+		str += "\n";
+	}
+
+	return str;
+}
+
 #endif // WRENCH_WITHOUT_COMPILER
 
 #endif
@@ -3439,9 +3478,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
-#ifndef _WRENCH_DEBUG_H
-#define _WRENCH_DEBUG_H
+#ifndef _DEBUG_H
+#define _DEBUG_H
 /*------------------------------------------------------------------------------*/
+
+void wr_stackDump( const WRValue* bottom, const WRValue* top, WRstr& out );
 
 //------------------------------------------------------------------------------
 enum WrenchDebugComm
@@ -3454,6 +3495,7 @@ enum WrenchDebugComm
 	WRD_DebugOut,
 
 	WRD_RequestCallstack,
+	WRD_RequestStackDump,
 	WRD_RequestSymbolBlock,
 	WRD_RequestSourceBlock,
 	WRD_RequestSourceHash,
@@ -3464,6 +3506,7 @@ enum WrenchDebugComm
 	WRD_RequestClearBreakpoint,
 
 	WRD_ReplyCallstack,
+	WRD_ReplyStackDump,
 	WRD_ReplySymbolBlock,
 	WRD_ReplySource,
 	WRD_ReplySourceHash,
@@ -3544,12 +3587,15 @@ public:
 
 	WrenchPacket* transmit( WrenchPacket* packet );
 
+	WRDebugClientInterface* m_parent;
+	
 	char* m_sourceBlock;
 	uint32_t m_sourceBlockLen;
 	uint32_t m_sourceBlockHash;
 
 	SimpleLL<WrenchPacket*>* m_packetQ;
 
+	void getValues( SimpleLL<WrenchDebugValue>& values, const int level );
 	void populateSymbols();
 	
 	bool m_symbolsLoaded;
@@ -3650,8 +3696,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
-#ifndef _DEBUG_CLIENT_H
-#define _DEBUG_CLIENT_H
+#ifndef _DEBUGGER_H
+#define _DEBUGGGR_H
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 
@@ -3672,8 +3718,11 @@ private:
 
 	bool printVariable( WRstr& str );
 	WrenchCallStackEntry* getCurrentFrame();
-	void showCurrentCallStack();
-	void showCurrentCodePosition();
+
+	void showGlobals();
+	void showLocals();
+	void showCallStack();
+	void showCodePosition();
 
 	void showBreakpoint( int bp =-1 );
 
@@ -10313,12 +10362,38 @@ WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 	{
 		allocatedMemoryHint += ret->m_size * sizeof(WRValue);
 	}
-	
+
 	ret->m_next = svAllocated;
 	svAllocated = ret;
 
 	return ret;
 }
+
+/*******************************************************************************
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
 
 //------------------------------------------------------------------------------
 inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
@@ -10388,6 +10463,18 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	return true;
 }
 
+
+/*
+static void dumpStack( const WRValue* bottom, const WRValue* top )
+{
+	WRstr out;
+	wr_stackDump( bottom, top, out );
+	printf( "stack:\n%s===================================\n", out.c_str() );
+}
+#define DEBUG_PER_INSTRUCTION { dumpStack(context->stack, stackTop); }
+*/
+#define DEBUG_PER_INSTRUCTION
+
 //------------------------------------------------------------------------------
 #ifdef WRENCH_PROTECT_STACK_FROM_OVERFLOW
 #define CHECK_STACK { if ( stackTop >= stackLimit ) { w->err = WR_ERR_stack_overflow; return 0; } }
@@ -10421,7 +10508,7 @@ void wr_forceYield( WRState* w )
 
 #define CHECK_FORCE_YIELD { if ( !--w->sliceInstructionCount && w->yieldEnabled ) { context->yieldArgs = 0; context->flags |= (uint8_t)WRC_ForceYielded; goto doYield; } }
 #else
- #define CHECK_FORCE_YIELD
+#define CHECK_FORCE_YIELD
 #endif
 
 //------------------------------------------------------------------------------
@@ -10435,12 +10522,12 @@ void wr_forceYield( WRState* w )
 #endif
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
- #define CONTINUE { MALLOC_FAIL_CHECK; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
- #define FASTCONTINUE { goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
+ #define CONTINUE { DEBUG_PER_INSTRUCTION; MALLOC_FAIL_CHECK; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
+ #define FASTCONTINUE { DEBUG_PER_INSTRUCTION; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
  #define CASE(LABEL) LABEL
 #else
- #define CONTINUE { MALLOC_FAIL_CHECK; continue; }
- #define FASTCONTINUE { continue; }
+ #define CONTINUE { DEBUG_PER_INSTRUCTION; MALLOC_FAIL_CHECK; continue; }
+ #define FASTCONTINUE { DEBUG_PER_INSTRUCTION; continue; }
  #define CASE(LABEL) case O_##LABEL
 #endif
 
@@ -10882,12 +10969,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	if ( context->yield_pc )
 	{
-		if ( function )
-		{
-			w->err = WR_ERR_cannot_call_function_context_yielded;
-			return 0;
-		}
-		
 		pc = context->yield_pc;
 		context->yield_pc = 0;
 
@@ -10905,7 +10986,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		}
 		else
 		{
-			++stackTop; // othgerwise we expect a return value
+			++stackTop; // otherwise we expect a return value
 		}
 	
 		frameBase = context->yield_frameBase;
@@ -10916,20 +10997,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	{
 		stackTop = stackBase;
 	}
-
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-	if ( context->debugInterface && function )
-	{
-		if ( !function->functionOffset ) // impossible offset, this is a re-entry!
-		{
-			// pop state
-			pc = context->debugInterface->I->m_pc;
-			frameBase = context->debugInterface->I->m_frameBase;
-			stackTop = context->debugInterface->I->m_stackTop;
-			goto debugContinue;
-		}
-	}
-#endif
 
 	if ( function )
 	{
@@ -10946,9 +11013,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	}
 
 	pc = context->codeStart;
-
-
-
 	
 yieldContinue:
 
@@ -11046,7 +11110,7 @@ literalZero:
 				// preserve the calling and stack context so the code
 				// can pick up where it left off on continue
 				context->yieldArgs = READ_8_FROM_PC(pc++);
-#ifdef WRENCH_TIME_SLICES
+#if defined(WRENCH_TIME_SLICES) || defined(WRENCH_INCLUDE_DEBUG_CODE)
 doYield:
 #endif
 				context->yield_pc = pc;
@@ -11064,20 +11128,15 @@ doYield:
 					 && context->debugInterface->I->codewordEncountered(pc, READ_16_FROM_PC(pc), stackTop) )
 				{
 debugReturn:
-					WRDebugServerInterfacePrivate *I = context->debugInterface->I;
-					// push state
-					I->m_argv = argv;
-					I->m_argn = argn;
-					I->m_pc = pc;
-					I->m_frameBase = frameBase;
-					I->m_stackTop = stackTop;
-					
-					stackTop->p2 = INIT_AS_DEBUG_BREAK;
-					return stackTop;
+					//WRDebugServerInterfacePrivate *I = context->debugInterface->I;
+					//stackTop->p2 = INIT_AS_DEBUG_BREAK;
+					context->yieldArgs = 0;
+					context->flags |= (uint8_t)WRC_ForceYielded;
+					pc += 2;
+					goto doYield;
 				}
-debugContinue:
 #endif
-				pc += 2;
+				pc += 2; // no debug code compiled in, just skip the directive
 				CONTINUE;
 			}
 
@@ -15182,6 +15241,7 @@ WRDebugClientInterface::WRDebugClientInterface( bool (*receiveFunction)( char* d
 	I->m_receiveFunction = receiveFunction;
 	I->m_sendFunction = sendFunction;
 	I->m_dataAvailableFunction = dataAvailableFunction;
+	I->m_parent = this;
 
 	init();
 }
@@ -15191,6 +15251,7 @@ WRDebugClientInterface::WRDebugClientInterface( WRDebugServerInterface* localSer
 {
 	I = new WRDebugClientInterfacePrivate;
 	I->m_localServer = localServer;
+	I->m_parent = this;
 	
 	init();
 }
@@ -15230,12 +15291,12 @@ void WRDebugClientInterfacePrivate::trapRunOutput( WrenchPacket const& packet )
 		if ( reply->_type == WRD_DebugOut )
 		{
 			printf( "%s", (char*)reply->payload() );
-			free( reply );
+			g_free( reply );
 			continue;
 		}
 		else
 		{
-			free( reply );
+			g_free( reply );
 			break;
 		}
 	}
@@ -15327,7 +15388,6 @@ WRValue* WRDebugClientInterface::getValue( WRValue& value, const int index, cons
 	wr_deserializeEx( value, serializer, I->m_scratchContext );
 
 	return &value;
-
 }
 
 //------------------------------------------------------------------------------
@@ -15349,6 +15409,20 @@ const char* WRDebugClientInterface::getValueLabel( const int index, const int de
 	}
 
 	return 0;
+}
+
+//------------------------------------------------------------------------------
+bool WRDebugClientInterface::getStackDump( char* out, const unsigned int maxOut )
+{
+	WrenchPacketScoped r( I->transmit(WrenchPacketScoped(WRD_RequestStackDump)) );
+	if ( !r.packet || (r.packet->_type != WRD_ReplyStackDump) )
+	{
+		return false;
+	}
+
+	strncpy( out, (const char*)r.packet->payload(), maxOut < r.packet->payloadSize() ? maxOut : r.packet->payloadSize() );
+	
+	return true;
 }
 
 //------------------------------------------------------------------------------
@@ -15410,7 +15484,7 @@ void WRDebugClientInterface::setBreakpoint( const int lineNumber )
 {
 	WrenchPacketScoped b(WRD_RequestSetBreakpoint);
 	b.packet->param1 = lineNumber;
-	free( I->transmit(b) );
+	g_free( I->transmit(b) );
 }
 
 //------------------------------------------------------------------------------
@@ -15418,7 +15492,7 @@ void WRDebugClientInterface::clearBreakpoint( const int lineNumber )
 {
 	WrenchPacketScoped b(WRD_RequestClearBreakpoint);
 	b.packet->param1 = lineNumber;
-	free (I->transmit(b) );
+	g_free (I->transmit(b) );
 }
 
 //------------------------------------------------------------------------------
@@ -15499,6 +15573,24 @@ WrenchPacket* WRDebugClientInterfacePrivate::transmit( WrenchPacket* packet )
 	return reply;
 }
 
+
+//------------------------------------------------------------------------------
+void WRDebugClientInterfacePrivate::getValues( SimpleLL<WrenchDebugValue>& values, const int depth )
+{
+	values.clear();
+
+	WrenchFunction* g = (*m_functions)[depth];
+	
+
+	for( unsigned int i = 0; i<g->vars->count(); ++i )
+	{
+		WrenchDebugValue* v = values.addTail();
+
+		strncpy( v->name, (*g->vars)[i]->label, 63 );
+		m_parent->getValue( v->value, i, depth );
+	}
+}
+
 //------------------------------------------------------------------------------
 void WRDebugClientInterfacePrivate::populateSymbols()
 {
@@ -15575,6 +15667,69 @@ SOFTWARE.
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 
 //------------------------------------------------------------------------------
+WRDebugServerInterface::WRDebugServerInterface( WRState* w )
+{
+	memset( this, 0, sizeof(*this) );
+	I = (WRDebugServerInterfacePrivate *)g_malloc( sizeof(WRDebugServerInterfacePrivate) );
+	new (I) WRDebugServerInterfacePrivate( this );
+
+	I->m_w = w;
+}
+
+//------------------------------------------------------------------------------
+WRDebugServerInterface::WRDebugServerInterface( WRState* w,
+												bool (*receiveFunction)( char* data, const int length ),
+												bool (*sendFunction)( const char* data, const int length ),
+												int (*dataAvailableFunction)() )
+{
+	memset( this, 0, sizeof(*this) );
+	I = (WRDebugServerInterfacePrivate *)g_malloc( sizeof(WRDebugServerInterfacePrivate) );
+	new (I) WRDebugServerInterfacePrivate( this );
+
+	I->m_w = w;
+
+	I->m_receiveFunction = receiveFunction;
+	I->m_sendFunction = sendFunction;
+	I->m_dataAvailableFunction = dataAvailableFunction;
+}
+
+//------------------------------------------------------------------------------
+WRDebugServerInterface::~WRDebugServerInterface()
+{
+	I->~WRDebugServerInterfacePrivate();
+	g_free( I );
+}
+
+#endif
+/*******************************************************************************
+Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+
+//------------------------------------------------------------------------------
 WrenchPacket::WrenchPacket( const WrenchDebugComm type, const uint32_t payloadSize )
 {
 	memset( (char*)this, 0, sizeof(WrenchPacket) );
@@ -15593,8 +15748,8 @@ WrenchPacket::WrenchPacket( const int32_t type, const uint32_t payloadSize )
 //------------------------------------------------------------------------------
 WrenchPacket* WrenchPacket::alloc( WrenchPacket const& base )
 {
-	WrenchPacket* packet = (WrenchPacket*)malloc( base.size );
-	
+	WrenchPacket* packet = (WrenchPacket*)g_malloc( base.size );
+
 	memcpy( (char*)packet, (char*)&base, sizeof(WrenchPacket) );
 	return packet;
 }
@@ -15628,38 +15783,8 @@ uint32_t WrenchPacket::xlate()
 //------------------------------------------------------------------------------
 void wr_PacketClearFunc( WrenchPacket*& packet )
 {
-	delete packet;
+	g_free( packet );
 }
-
-//------------------------------------------------------------------------------
-WRDebugServerInterface::WRDebugServerInterface( WRState* w )
-{
-	memset( this, 0, sizeof(*this) );
-	I = new WRDebugServerInterfacePrivate( this );
-	I->m_w = w;
-}
-
-//------------------------------------------------------------------------------
-WRDebugServerInterface::WRDebugServerInterface( WRState* w,
-												bool (*receiveFunction)( char* data, const int length ),
-												bool (*sendFunction)( const char* data, const int length ),
-												int (*dataAvailableFunction)() )
-{
-	memset( this, 0, sizeof(*this) );
-	I = new WRDebugServerInterfacePrivate( this );
-	I->m_w = w;
-	
-	I->m_receiveFunction = receiveFunction;
-	I->m_sendFunction = sendFunction;
-	I->m_dataAvailableFunction = dataAvailableFunction;
-}
-
-//------------------------------------------------------------------------------
-WRDebugServerInterface::~WRDebugServerInterface()
-{
-	delete I;
-}
-
 
 #endif
 /*******************************************************************************
@@ -15695,8 +15820,14 @@ WRDebugServerInterfacePrivate::WRDebugServerInterfacePrivate( WRDebugServerInter
 {
 	memset( (char*)this, 0, sizeof(*this) );
 	m_parent = parent;
-	m_lineBreaks = new SimpleLL<int>();
-	m_callStack = new SimpleLL<WrenchCallStackEntry>();
+
+
+	m_lineBreaks = (SimpleLL<int>*)g_malloc(sizeof(SimpleLL<int>));
+	new (m_lineBreaks)  SimpleLL<int>();
+
+	m_callStack = (SimpleLL<WrenchCallStackEntry>*)g_malloc(sizeof(SimpleLL<WrenchCallStackEntry>));
+	new (m_callStack)  SimpleLL<WrenchCallStackEntry>();
+
 }
 
 //------------------------------------------------------------------------------
@@ -15704,8 +15835,11 @@ WRDebugServerInterfacePrivate::~WRDebugServerInterfacePrivate()
 {
 	free( m_externalCodeBlock ); // MIGHT have been allocated
 
-	delete m_lineBreaks;
-	delete m_callStack;
+	m_lineBreaks->~SimpleLL<int>();
+	g_free( m_lineBreaks );
+
+	m_callStack->~SimpleLL<WrenchCallStackEntry>();
+	g_free( m_callStack );
 }
 
 //------------------------------------------------------------------------------
@@ -15973,9 +16107,7 @@ WRDRun:
 			}
 			else
 			{
-				WRFunction f;
-				f.functionOffset = 0;
-				wr_callFunction( m_context, &f, 0, 0 ); // signal "continue"
+				wr_continue( m_context );
 			}
 
 			reply = WrenchPacket::alloc( WRD_Ok );
@@ -16141,6 +16273,20 @@ WRDRun:
 				}
 			}
 			
+			break;
+		}
+
+		case WRD_RequestStackDump:
+		{
+			WRstr dump( "none\n" );
+			if ( m_context )
+			{
+				wr_stackDump( m_context->stack, m_context->yield_stackTop, dump );
+			}
+				
+			reply = WrenchPacket::alloc( WRD_ReplyStackDump, dump.size() );
+			memcpy( reply->payload(), dump.c_str(), dump.size() );
+
 			break;
 		}
 

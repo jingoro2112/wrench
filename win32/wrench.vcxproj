@@ -16,10 +16,12 @@
     <ClCompile Include="..\discrete_src\cc\link.cpp" />
     <ClCompile Include="..\discrete_src\cc\optimizer.cpp" />
     <ClCompile Include="..\discrete_src\cc\token.cpp" />
+    <ClCompile Include="..\discrete_src\debug\client_debug.cpp" />
     <ClCompile Include="..\discrete_src\debug\create_listing.cpp" />
+    <ClCompile Include="..\discrete_src\debug\debug.cpp" />
+    <ClCompile Include="..\discrete_src\debug\packet.cpp" />
+    <ClCompile Include="..\discrete_src\debug\server_debug.cpp" />
     <ClCompile Include="..\discrete_src\debug\server_interface_private.cpp" />
-    <ClCompile Include="..\discrete_src\debug\wrench_client_debug.cpp" />
-    <ClCompile Include="..\discrete_src\debug\wrench_server_debug.cpp" />
     <ClCompile Include="..\discrete_src\lib\debug_lib.cpp" />
     <ClCompile Include="..\discrete_src\lib\std.cpp" />
     <ClCompile Include="..\discrete_src\lib\std_io.cpp" />
@@ -34,6 +36,7 @@
     <ClCompile Include="..\discrete_src\utils\utils.cpp" />
     <ClCompile Include="..\discrete_src\utils\win32_comm.cpp" />
     <ClCompile Include="..\discrete_src\utils\wrench_cli.cpp" />
+    <ClCompile Include="..\discrete_src\vm\gc.cpp" />
     <ClCompile Include="..\discrete_src\vm\index.cpp" />
     <ClCompile Include="..\discrete_src\vm\operations.cpp" />
     <ClCompile Include="..\discrete_src\vm\scheduler.cpp" />
@@ -43,6 +46,7 @@
     <ClInclude Include="..\discrete_src\cc\cc.h" />
     <ClInclude Include="..\discrete_src\cc\opcode_stream.h" />
     <ClInclude Include="..\discrete_src\cc\str.h" />
+    <ClInclude Include="..\discrete_src\debug\debug.h" />
     <ClInclude Include="..\discrete_src\debug\wrench_debug.h" />
     <ClInclude Include="..\discrete_src\lib\std_io_defs.h" />
     <ClInclude Include="..\discrete_src\utils\debug_client.h" />
@@ -99,7 +103,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>false</SDLCheck>
-      <PreprocessorDefinitions>WRENCH_WIN32_SERIAL;WRENCH_WIN32_FILE_IO;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WRENCH_INCLUDE_DEBUG_CODE;WRENCH_WIN32_SERIAL;WRENCH_WIN32_FILE_IO;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>..\discrete_src;..\discrete_src\cc;..\discrete_src\debug;..\discrete_src\lib;..\discrete_src\utils;..\discrete_src\vm</AdditionalIncludeDirectories>
       <BufferSecurityCheck>false</BufferSecurityCheck>

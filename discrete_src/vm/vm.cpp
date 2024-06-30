@@ -25,176 +25,6 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-void WRContext::mark( WRValue* s )
-{
-	if ( IS_ARRAY_MEMBER(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
-	{
-		// we don't mark this type, but we might mark it's target
-		mark( s->r );
-		return;
-	}
-
-	if ( !IS_EXARRAY_TYPE(s->xtype) || s->va->m_skipGC || (s->va->m_size & 0x40000000) )
-	{
-		return;
-	}
-
-	assert( !IS_RAW_ARRAY(s->xtype) );
-
-	WRGCObject* sva = s->va;
-
-	if ( sva->m_type == SV_VALUE )
-	{
-		WRValue* top = sva->m_Vdata + sva->m_size;
-
-		for( WRValue* V = sva->m_Vdata; V<top; ++V )
-		{
-			mark( V );
-		}
-	}
-	else if ( sva->m_type == SV_HASH_TABLE )
-	{
-		for( uint32_t i=0; i<sva->m_mod; ++i )
-		{
-			if ( sva->m_hashTable[i] != WRENCH_NULL_HASH )
-			{
-				uint32_t item = i<<1;
-				mark( sva->m_Vdata + item++ );
-				mark( sva->m_Vdata + item );
-			}
-		}
-	}
-
-	sva->m_size |= 0x40000000;
-}
-
-//------------------------------------------------------------------------------
-void WRContext::gc( WRValue* stackTop )
-{
-	if ( allocatedMemoryHint < allocatedMemoryLimit )
-	{
-		return;
-	}
-
-	allocatedMemoryHint = 0;
-
-	// mark stack
-	for( WRValue* s=stack; s<stackTop; ++s)
-	{
-		// an array in the chain?
-		mark( s );
-	}
-
-	// mark context's globals
-	WRValue* globalSpace = (WRValue *)(this + 1); // globals are allocated directly after this context
-
-	for( unsigned int i=0; i<globals; ++i, ++globalSpace )
-	{
-		mark( globalSpace );
-	}
-
-	// sweep
-	WRGCObject* current = svAllocated;
-	WRGCObject* prev = 0;
-	while( current )
-	{
-		// if set, clear it
-		if ( current->m_size & 0x40000000 )
-		{
-			current->m_size &= ~0x40000000;
-			prev = current;
-			current = current->m_next;
-		}
-		// otherwise free it as unreferenced
-		else
-		{
-			current->clear();
-
-			if ( prev == 0 )
-			{
-				svAllocated = current->m_next;
-				free( current );
-				current = svAllocated;
-			}
-			else
-			{
-				prev->m_next = current->m_next;
-				free( current );
-				current = prev->m_next;
-			}
-		}
-	}
-}
-
-/*  meh..
-//------------------------------------------------------------------------------
-void WRContext::scavenge( WRGCObject* va )
-{
-	// free the sub-array from this object, if the object itself
-	// needs to be cleaned that has to happen in the gc but this
-	// can be done anywhere
-	if ( va->m_type == SV_VOID_HASH_TABLE )
-	{
-		return;
-	}
-
-	g_free( va->m_data );
-	va->m_data = 0;
-
-	if ( va->m_type != SV_CHAR )
-	{
-		if ( va->m_type == SV_HASH_TABLE )
-		{
-			g_free( va->m_hashTable );
-			allocatedMemoryHint -= (va->m_mod * 4);
-		}
-
-		allocatedMemoryHint -= va->m_size * 3;
-		va->m_type = SV_CHAR;
-	}
-
-	allocatedMemoryHint -= va->m_size;
-	va->m_size = 0;
-}
-*/
-
-//------------------------------------------------------------------------------
-WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
-{
-	WRGCObject* ret = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
-
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-	if ( !ret )
-	{
-		g_mallocFailed = true;
-		return 0;
-	}
-#endif
-
-	ret->init( size, type, init );
-
-	if ( type == SV_CHAR )
-	{
-		ret->m_creatorContext = this;
-		allocatedMemoryHint += size;
-	}
-	else if ( type == SV_VALUE )
-	{
-		ret->m_creatorContext = this;
-		allocatedMemoryHint += size * sizeof(WRValue);
-	}
-	else
-	{
-		allocatedMemoryHint += ret->m_size * sizeof(WRValue);
-	}
-	
-	ret->m_next = svAllocated;
-	svAllocated = ret;
-
-	return ret;
-}
-
-//------------------------------------------------------------------------------
 inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 {
 	if ( !IS_ITERATOR(iterator->xtype) )
@@ -262,6 +92,18 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	return true;
 }
 
+
+/*
+static void dumpStack( const WRValue* bottom, const WRValue* top )
+{
+	WRstr out;
+	wr_stackDump( bottom, top, out );
+	printf( "stack:\n%s===================================\n", out.c_str() );
+}
+#define DEBUG_PER_INSTRUCTION { dumpStack(context->stack, stackTop); }
+*/
+#define DEBUG_PER_INSTRUCTION
+
 //------------------------------------------------------------------------------
 #ifdef WRENCH_PROTECT_STACK_FROM_OVERFLOW
 #define CHECK_STACK { if ( stackTop >= stackLimit ) { w->err = WR_ERR_stack_overflow; return 0; } }
@@ -295,7 +137,7 @@ void wr_forceYield( WRState* w )
 
 #define CHECK_FORCE_YIELD { if ( !--w->sliceInstructionCount && w->yieldEnabled ) { context->yieldArgs = 0; context->flags |= (uint8_t)WRC_ForceYielded; goto doYield; } }
 #else
- #define CHECK_FORCE_YIELD
+#define CHECK_FORCE_YIELD
 #endif
 
 //------------------------------------------------------------------------------
@@ -309,12 +151,12 @@ void wr_forceYield( WRState* w )
 #endif
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
- #define CONTINUE { MALLOC_FAIL_CHECK; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
- #define FASTCONTINUE { goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
+ #define CONTINUE { DEBUG_PER_INSTRUCTION; MALLOC_FAIL_CHECK; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
+ #define FASTCONTINUE { DEBUG_PER_INSTRUCTION; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
  #define CASE(LABEL) LABEL
 #else
- #define CONTINUE { MALLOC_FAIL_CHECK; continue; }
- #define FASTCONTINUE { continue; }
+ #define CONTINUE { DEBUG_PER_INSTRUCTION; MALLOC_FAIL_CHECK; continue; }
+ #define FASTCONTINUE { DEBUG_PER_INSTRUCTION; continue; }
  #define CASE(LABEL) case O_##LABEL
 #endif
 
@@ -756,12 +598,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	if ( context->yield_pc )
 	{
-		if ( function )
-		{
-			w->err = WR_ERR_cannot_call_function_context_yielded;
-			return 0;
-		}
-		
 		pc = context->yield_pc;
 		context->yield_pc = 0;
 
@@ -779,7 +615,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		}
 		else
 		{
-			++stackTop; // othgerwise we expect a return value
+			++stackTop; // otherwise we expect a return value
 		}
 	
 		frameBase = context->yield_frameBase;
@@ -790,20 +626,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	{
 		stackTop = stackBase;
 	}
-
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-	if ( context->debugInterface && function )
-	{
-		if ( !function->functionOffset ) // impossible offset, this is a re-entry!
-		{
-			// pop state
-			pc = context->debugInterface->I->m_pc;
-			frameBase = context->debugInterface->I->m_frameBase;
-			stackTop = context->debugInterface->I->m_stackTop;
-			goto debugContinue;
-		}
-	}
-#endif
 
 	if ( function )
 	{
@@ -820,9 +642,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 	}
 
 	pc = context->codeStart;
-
-
-
 	
 yieldContinue:
 
@@ -920,7 +739,7 @@ literalZero:
 				// preserve the calling and stack context so the code
 				// can pick up where it left off on continue
 				context->yieldArgs = READ_8_FROM_PC(pc++);
-#ifdef WRENCH_TIME_SLICES
+#if defined(WRENCH_TIME_SLICES) || defined(WRENCH_INCLUDE_DEBUG_CODE)
 doYield:
 #endif
 				context->yield_pc = pc;
@@ -938,20 +757,15 @@ doYield:
 					 && context->debugInterface->I->codewordEncountered(pc, READ_16_FROM_PC(pc), stackTop) )
 				{
 debugReturn:
-					WRDebugServerInterfacePrivate *I = context->debugInterface->I;
-					// push state
-					I->m_argv = argv;
-					I->m_argn = argn;
-					I->m_pc = pc;
-					I->m_frameBase = frameBase;
-					I->m_stackTop = stackTop;
-					
-					stackTop->p2 = INIT_AS_DEBUG_BREAK;
-					return stackTop;
+					//WRDebugServerInterfacePrivate *I = context->debugInterface->I;
+					//stackTop->p2 = INIT_AS_DEBUG_BREAK;
+					context->yieldArgs = 0;
+					context->flags |= (uint8_t)WRC_ForceYielded;
+					pc += 2;
+					goto doYield;
 				}
-debugContinue:
 #endif
-				pc += 2;
+				pc += 2; // no debug code compiled in, just skip the directive
 				CONTINUE;
 			}
 

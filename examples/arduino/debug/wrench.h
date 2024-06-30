@@ -90,7 +90,7 @@ architecture, see vm.h for the current definitions
 
 
 /***********************************************************************
- **** EXPERIMENTAL **** HAS SOME KNOWN ISSUES DO NOT USE (yet :) */
+ **** EXPERIMENTAL **** only very basic support is in place */
 //#define WRENCH_INCLUDE_DEBUG_CODE
 /***********************************************************************/
 
@@ -938,6 +938,12 @@ class WRDebugServerInterfacePrivate;
 class WRDebugClientInterfacePrivate;
 template<class> class SimpleLL;
 
+//------------------------------------------------------------------------------
+struct WrenchDebugValue
+{
+	char name[64];
+	WRValue value;
+};
 
 //------------------------------------------------------------------------------
 struct WrenchSymbol
@@ -1001,6 +1007,7 @@ public:
 
 	// 0 is global, 1,2,3... etc are frames
 	SimpleLL<WrenchCallStackEntry>* getCallstack();
+	bool getStackDump( char* out, const unsigned int maxOut );
 	
 	const char* getFunctionLabel( const int index );
 	const char* getValueLabel( const int index, const int depth );
@@ -1068,8 +1075,8 @@ public:
 #include "utils/opcode.h"
 #include "cc/str.h"
 #include "cc/opcode_stream.h"
-#include "debug/wrench_debug.h"
-#include "utils/debug_client.h"
+#include "debug/debug.h"
+#include "utils/debugger.h"
 #include "cc/cc.h"
 #include "lib/std_io_defs.h"
 #endif

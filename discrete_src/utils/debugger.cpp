@@ -91,8 +91,12 @@ WrenchDebugClient::~WrenchDebugClient()
 	}
 
 	g_free( m_code );
-	delete m_server;
-	delete m_client;
+	
+	m_server->~WRDebugServerInterface();
+	g_free( m_server );
+
+	m_client->~WRDebugClientInterface();
+	g_free( m_client );
 }
 
 //------------------------------------------------------------------------------
@@ -103,13 +107,24 @@ bool WrenchDebugClient::init( const char* name, const char* port )
 		return false;
 	}
 
-	delete m_client;
-	delete m_server;
+	if ( m_client )
+	{
+		m_client->~WRDebugClientInterface();
+		g_free( m_client );
+	}
+
+	if ( m_server )
+	{
+		m_server->~WRDebugServerInterface();
+		g_free( m_server );
+	}
 
 	if ( port )
 	{
 		m_server = 0;
-		m_client = new WRDebugClientInterface( wr_serialReceive,
+		
+		m_client = (WRDebugClientInterface*)g_malloc( sizeof(WRDebugClientInterface) );
+		new (m_client) WRDebugClientInterface( wr_serialReceive,
 											   wr_serialSend,
 											   wr_serialBytesAvailable );
 		if ( !wr_serialOpen(port) )
@@ -119,8 +134,11 @@ bool WrenchDebugClient::init( const char* name, const char* port )
 	}
 	else
 	{
-		m_server = new WRDebugServerInterface( m_w );
-		m_client = new WRDebugClientInterface( m_server );
+		m_server = (WRDebugServerInterface*)g_malloc( sizeof(WRDebugServerInterface) );
+		new (m_server) WRDebugServerInterface( m_w );
+		
+		m_client = (WRDebugClientInterface*)g_malloc( sizeof(WRDebugClientInterface) );
+		new (m_client) WRDebugClientInterface( m_server );
 	}
 
 	return loadSource( name );
@@ -203,13 +221,13 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* port )
 		if ( showCodePos )
 		{
 			showCodePos = false;
-			showCurrentCodePosition();
+			showCodePosition();
 		}
-		
+
 		if ( showCallStack )
 		{
 			showCallStack = false;
-			showCurrentCallStack();
+//			showCallStack();
 		}
 		
 		if ( showVars )
@@ -223,6 +241,12 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* port )
 				}
 			}
 		}
+
+/*
+		char stk[64000] = "null";
+		m_client->getStackDump( stk, 64000 );
+		printf( "%s\n\n", stk );
+*/
 		
 		if ( !state )
 		{
@@ -663,7 +687,39 @@ WrenchCallStackEntry* WrenchDebugClient::getCurrentFrame()
 }
 
 //------------------------------------------------------------------------------
-void WrenchDebugClient::showCurrentCallStack()
+void WrenchDebugClient::showLocals()
+{
+	SimpleLL<WrenchCallStackEntry>* stack = m_client->getCallstack();
+	if ( stack->count() == 1 )
+	{
+		return;
+	}
+
+	SimpleLL<WrenchDebugValue> values;
+	m_client->I->getValues( values, stack->count() - 1 );
+	printf("locals:\n");
+	for( WrenchDebugValue* d = values.first(); d; d = values.next() )
+	{
+		char buf[512];
+		printf( "%s : %s\n", d->name, d->value.technicalAsString(buf, 511, m_printInHex) );
+	}	
+}
+
+//------------------------------------------------------------------------------
+void WrenchDebugClient::showGlobals()
+{
+	SimpleLL<WrenchDebugValue> globals;
+	m_client->I->getValues( globals, 0 );
+	printf("globals: \n");
+	for( WrenchDebugValue* d = globals.first(); d; d = globals.next() )
+	{
+		char buf[512];
+		printf( "%s : %s\n", d->name, d->value.technicalAsString(buf, 511, m_printInHex) );
+	}	
+}
+
+//------------------------------------------------------------------------------
+void WrenchDebugClient::showCallStack()
 {
 	SimpleLL<WrenchCallStackEntry>* stack = m_client->getCallstack();
 	WrenchCallStackEntry* frame = getCurrentFrame();
@@ -690,7 +746,7 @@ void WrenchDebugClient::showCurrentCallStack()
 }
 
 //------------------------------------------------------------------------------
-void WrenchDebugClient::showCurrentCodePosition()
+void WrenchDebugClient::showCodePosition()
 {
 	SimpleLL<WrenchCallStackEntry>* stack = m_client->getCallstack();
 	
@@ -756,6 +812,9 @@ void WrenchDebugClient::showCurrentCodePosition()
 							l, line->c_str() );
 				}	
 			}
+
+			showGlobals();
+			showLocals();
 
 			break;
 		}

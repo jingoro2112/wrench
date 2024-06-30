@@ -27,67 +27,12 @@ SOFTWARE.
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 
 //------------------------------------------------------------------------------
-WrenchPacket::WrenchPacket( const WrenchDebugComm type, const uint32_t payloadSize )
-{
-	memset( (char*)this, 0, sizeof(WrenchPacket) );
-	_type = type;
-	setPayloadSize( payloadSize );
-}
-
-//------------------------------------------------------------------------------
-WrenchPacket::WrenchPacket( const int32_t type, const uint32_t payloadSize )
-{
-	memset( (char*)this, 0, sizeof(WrenchPacket) );
-	t = type;
-	setPayloadSize( payloadSize );
-}
-
-//------------------------------------------------------------------------------
-WrenchPacket* WrenchPacket::alloc( WrenchPacket const& base )
-{
-	WrenchPacket* packet = (WrenchPacket*)malloc( base.size );
-	
-	memcpy( (char*)packet, (char*)&base, sizeof(WrenchPacket) );
-	return packet;
-}
-
-//------------------------------------------------------------------------------
-WrenchPacket* WrenchPacket::alloc( const uint32_t type, const uint32_t payloadSize )
-{
-	WrenchPacket* packet = (WrenchPacket*)malloc( sizeof(WrenchPacket) + payloadSize );
-
-	memset( (char*)packet, 0, sizeof(WrenchPacket) );
-
-	packet->t = type;
-	packet->setPayloadSize( payloadSize );
-
-	return packet;
-}
-
-//------------------------------------------------------------------------------
-uint32_t WrenchPacket::xlate()
-{
-	uint32_t s = size;
-
-	size = wr_x32( size );
-	t = wr_x32( t );
-	param1 = wr_x32( param1 );
-	param2 = wr_x32( param2 );
-
-	return s;
-}
-
-//------------------------------------------------------------------------------
-void wr_PacketClearFunc( WrenchPacket*& packet )
-{
-	delete packet;
-}
-
-//------------------------------------------------------------------------------
 WRDebugServerInterface::WRDebugServerInterface( WRState* w )
 {
 	memset( this, 0, sizeof(*this) );
-	I = new WRDebugServerInterfacePrivate( this );
+	I = (WRDebugServerInterfacePrivate *)g_malloc( sizeof(WRDebugServerInterfacePrivate) );
+	new (I) WRDebugServerInterfacePrivate( this );
+
 	I->m_w = w;
 }
 
@@ -98,9 +43,11 @@ WRDebugServerInterface::WRDebugServerInterface( WRState* w,
 												int (*dataAvailableFunction)() )
 {
 	memset( this, 0, sizeof(*this) );
-	I = new WRDebugServerInterfacePrivate( this );
+	I = (WRDebugServerInterfacePrivate *)g_malloc( sizeof(WRDebugServerInterfacePrivate) );
+	new (I) WRDebugServerInterfacePrivate( this );
+
 	I->m_w = w;
-	
+
 	I->m_receiveFunction = receiveFunction;
 	I->m_sendFunction = sendFunction;
 	I->m_dataAvailableFunction = dataAvailableFunction;
@@ -109,8 +56,8 @@ WRDebugServerInterface::WRDebugServerInterface( WRState* w,
 //------------------------------------------------------------------------------
 WRDebugServerInterface::~WRDebugServerInterface()
 {
-	delete I;
+	I->~WRDebugServerInterfacePrivate();
+	g_free( I );
 }
-
 
 #endif

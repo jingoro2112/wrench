@@ -21,9 +21,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
-#ifndef _WRENCH_DEBUG_H
-#define _WRENCH_DEBUG_H
+#ifndef _DEBUG_H
+#define _DEBUG_H
 /*------------------------------------------------------------------------------*/
+
+void wr_stackDump( const WRValue* bottom, const WRValue* top, WRstr& out );
 
 //------------------------------------------------------------------------------
 enum WrenchDebugComm
@@ -36,6 +38,7 @@ enum WrenchDebugComm
 	WRD_DebugOut,
 
 	WRD_RequestCallstack,
+	WRD_RequestStackDump,
 	WRD_RequestSymbolBlock,
 	WRD_RequestSourceBlock,
 	WRD_RequestSourceHash,
@@ -46,6 +49,7 @@ enum WrenchDebugComm
 	WRD_RequestClearBreakpoint,
 
 	WRD_ReplyCallstack,
+	WRD_ReplyStackDump,
 	WRD_ReplySymbolBlock,
 	WRD_ReplySource,
 	WRD_ReplySourceHash,
@@ -126,12 +130,15 @@ public:
 
 	WrenchPacket* transmit( WrenchPacket* packet );
 
+	WRDebugClientInterface* m_parent;
+	
 	char* m_sourceBlock;
 	uint32_t m_sourceBlockLen;
 	uint32_t m_sourceBlockHash;
 
 	SimpleLL<WrenchPacket*>* m_packetQ;
 
+	void getValues( SimpleLL<WrenchDebugValue>& values, const int level );
 	void populateSymbols();
 	
 	bool m_symbolsLoaded;

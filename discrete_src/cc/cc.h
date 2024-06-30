@@ -518,6 +518,44 @@ struct ScopeContext
 	int type;
 };
 
+//------------------------------------------------------------------------------
+inline const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte =-1 )
+{
+	const unsigned char* data = (char unsigned *)d;
+	str.clear();
+	for( unsigned int i=0; i<len; i++ )
+	{
+		str.appendFormat( "0x%08X: ", i );
+		char dump[24];
+		unsigned int j;
+		for( j=0; j<16 && i<len; j++, i++ )
+		{
+			dump[j] = isgraph((unsigned char)data[i]) ? data[i] : '.';
+			dump[j+1] = 0;
+			if ( i == (unsigned int)markByte )
+			{
+				str.shave(1);
+				str.appendFormat( "[%02X]", (unsigned char)data[i] );
+			}
+			else
+			{
+				str.appendFormat( "%02X ", (unsigned char)data[i] );
+			}
+		}
+
+		for( ; j<16; j++ )
+		{
+			str.appendFormat( "   " );
+		}
+		i--;
+		str += ": ";
+		str += dump;
+		str += "\n";
+	}
+
+	return str;
+}
+
 #endif // WRENCH_WITHOUT_COMPILER
 
 #endif

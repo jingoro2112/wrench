@@ -2,17 +2,11 @@
 #define _STR_H
 /* ------------------------------------------------------------------------- */
 
-// note; this is used for miscillaneous convenience in the CLI, but
-// nowhere in the VM, so will not actually be used anywhere in the
-// compiler
-// #ifndef WRENCH_WITHOUT_COMPILER
-
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <assert.h>
 
 #ifdef STR_FILE_OPERATIONS
 #include <sys/stat.h>
@@ -45,8 +39,15 @@ public:
 
 	WRstr& clear() { m_len = 0; m_str[0] = 0; return *this; }
 
+#if __cplusplus > 199711L
+	WRstr& format( const char* format, ... ) { va_list arg; va_start( arg, format ); clear(); appendFormatVA( format, arg ); va_end( arg ); return *this; }
+	WRstr& formatVA( const char* format, va_list arg ) { clear(); return appendFormatVA(format, arg); }
+	WRstr& appendFormat( const char* format, ... ) { va_list arg; va_start( arg, format ); appendFormatVA( format, arg ); va_end( arg ); return *this; }
+	inline WRstr& appendFormatVA( const char* format, va_list arg );
+#else
 	inline WRstr& format( const char* format, ... );
 	inline WRstr& appendFormat( const char* format, ... );
+#endif
 
 	inline void release( char** toBuf, unsigned int* len =0 ); // always suceeds and returns dynamic memory
 	inline WRstr& giveOwnership( char* str, const unsigned int len );
@@ -82,6 +83,11 @@ public:
 	WRstr& set( const char c ) { clear(); m_str[0]=c; m_str[1]=0; m_len = 1; return *this; }
 
 	bool isMatch( const char* buf ) const { return strcmp(buf, m_str) == 0; }
+#ifdef WIN32
+	bool isMatchCase( const char* buf ) const { return _strnicmp(buf, m_str, m_len) == 0; }
+#else
+	bool isMatchCase( const char* buf ) const { return strncasecmp(buf, m_str, m_len) == 0; }
+#endif
 	static inline bool isWildMatch( const char* pattern, const char* haystack );
 	inline bool isWildMatch( const char* pattern ) const { return isWildMatch( pattern, m_str ); }
 				  
@@ -129,7 +135,7 @@ public:
 	friend WRstr operator + ( const char c, const WRstr& str ) { WRstr T(c); T += str; return T; }
 	friend WRstr operator + ( const WRstr& str1, const WRstr& str2 ) { WRstr T(str1); T += str2; return T; }
 
-	~WRstr() { if ( m_str != m_smallbuf ) g_free(m_str); }
+	~WRstr() { if ( m_str != m_smallbuf ) free(m_str); }
 
 protected:
 
@@ -141,44 +147,6 @@ protected:
 	unsigned int m_len; // how long the string is in the buffer
 	char m_smallbuf[ c_sizeofBaseString + 1 ]; // small temporary buffer so a malloc/free is not imposed for small strings
 };
-
-//------------------------------------------------------------------------------
-inline const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, int markByte =-1 )
-{
-	const unsigned char* data = (char unsigned *)d;
-	str.clear();
-	for( unsigned int i=0; i<len; i++ )
-	{
-		str.appendFormat( "0x%08X: ", i );
-		char dump[24];
-		unsigned int j;
-		for( j=0; j<16 && i<len; j++, i++ )
-		{
-			dump[j] = isgraph((unsigned char)data[i]) ? data[i] : '.';
-			dump[j+1] = 0;
-			if ( i == (unsigned int)markByte )
-			{
-				str.shave(1);
-				str.appendFormat( "[%02X]", (unsigned char)data[i] );
-			}
-			else
-			{
-				str.appendFormat( "%02X ", (unsigned char)data[i] );
-			}
-		}
-
-		for( ; j<16; j++ )
-		{
-			str.appendFormat( "   " );
-		}
-		i--;
-		str += ": ";
-		str += dump;
-		str += "\n";
-	}
-
-	return str;
-}
 
 //------------------------------------------------------------------------------
 unsigned int WRstr::rfind( const char* str, const unsigned int from ) const
@@ -376,7 +344,7 @@ WRstr& WRstr::giveOwnership( char* buf, const unsigned int len )
 		clear();
 		return *this;
 	}
-	
+
 	if ( m_str != m_smallbuf )
 	{
 		g_free( m_str );
@@ -396,6 +364,7 @@ WRstr& WRstr::giveOwnership( char* buf, const unsigned int len )
 
 	m_len = len;
 	m_buflen = len;
+	m_str[m_len] = 0;
 	
 	return *this;
 }
@@ -428,14 +397,8 @@ WRstr& WRstr::trim()
 	}
 
 	m_len = marker + 1;
-
-	if ( m_len >= m_buflen )
-	{
-		alloc( m_len + 1, true );
-		return trim();
-	}
-
 	m_str[m_len] = 0;
+
 	return *this;
 }
 
@@ -496,11 +459,8 @@ WRstr& WRstr::shift( const unsigned int from )
 		return clear();
 	}
 
-	if ( from )
-	{
-		m_len -= from;
-		memmove( m_str, m_str + from, m_len + 1 );
-	}
+	m_len -= from;
+	memmove( m_str, m_str + from, m_len + 1 );
 
 	return *this;
 }
@@ -689,11 +649,48 @@ WRstr& WRstr::append( const char c )
 	return *this;
 }
 
+#if __cplusplus > 199711L
+
+//------------------------------------------------------------------------------
+WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
+{
+	char buf[ c_formatBaseTrySize + 1 ]; // SOME space, malloc if we need a ton more
+
+	int len = vsnprintf( buf, c_formatBaseTrySize, format, arg );
+
+	if ( len < c_formatBaseTrySize )
+	{
+		insert( buf, len, m_len );
+	}
+	else
+	{
+		char* alloc = (char*)g_malloc( len + 1 );
+
+		va_list vacopy;
+		va_copy( vacopy, arg );
+		len = vsnprintf( alloc, len, format, arg );
+		va_end( vacopy );
+
+		if ( m_len )
+		{
+			insert( alloc, len, m_len );
+			g_free( alloc );
+		}
+		else
+		{
+			giveOwnership( alloc, len );
+		}
+	}
+
+	return *this;
+}
+
+#else
+
 //------------------------------------------------------------------------------
 WRstr& WRstr::format( const char* format, ... )
 {
 	va_list arg;
-
 	char buf[ c_formatBaseTrySize + 1 ]; // SOME space, malloc if we need a ton more
 
 	va_start( arg, format );
@@ -702,19 +699,17 @@ WRstr& WRstr::format( const char* format, ... )
 
 	if ( len < c_formatBaseTrySize )
 	{
-		return set( buf, len );
+		set( buf, len );
 	}
 	else
 	{
-		++len;
-		char* alloc = (char*)g_malloc( len + 1 );
+		char* alloc = (char*)g_malloc(len + 1);
 
 		va_start( arg, format );
 		len = vsnprintf( alloc, len, format, arg );
 		va_end( arg );
 
-		set( alloc, len );
-		g_free(alloc);
+		giveOwnership( alloc, len );
 	}
 
 	return *this;
@@ -724,8 +719,7 @@ WRstr& WRstr::format( const char* format, ... )
 WRstr& WRstr::appendFormat( const char* format, ... )
 {
 	va_list arg;
-
-	char buf[ c_formatBaseTrySize ]; // SOME space, malloc if we need a ton more
+	char buf[ c_formatBaseTrySize + 1 ]; // SOME space, malloc if we need a ton more
 
 	va_start( arg, format );
 	int len = vsnprintf( buf, c_formatBaseTrySize, format, arg );
@@ -737,18 +731,25 @@ WRstr& WRstr::appendFormat( const char* format, ... )
 	}
 	else
 	{
-		++len;
-		char* alloc = (char*)g_malloc( len + 1 );
+		char* alloc = (char*)g_malloc(len + 1);
 
 		va_start( arg, format );
 		len = vsnprintf( alloc, len, format, arg );
 		va_end( arg );
 
-		insert( alloc, len, m_len );
-		g_free(alloc);
+		if ( m_len )
+		{
+			insert( alloc, len, m_len );
+			g_free( alloc );
+		}
+		else
+		{
+			giveOwnership( alloc, len );
+		}
 	}
 
 	return *this;
 }
+#endif
 
 #endif

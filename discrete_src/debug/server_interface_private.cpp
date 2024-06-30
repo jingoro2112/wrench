@@ -31,8 +31,14 @@ WRDebugServerInterfacePrivate::WRDebugServerInterfacePrivate( WRDebugServerInter
 {
 	memset( (char*)this, 0, sizeof(*this) );
 	m_parent = parent;
-	m_lineBreaks = new SimpleLL<int>();
-	m_callStack = new SimpleLL<WrenchCallStackEntry>();
+
+
+	m_lineBreaks = (SimpleLL<int>*)g_malloc(sizeof(SimpleLL<int>));
+	new (m_lineBreaks)  SimpleLL<int>();
+
+	m_callStack = (SimpleLL<WrenchCallStackEntry>*)g_malloc(sizeof(SimpleLL<WrenchCallStackEntry>));
+	new (m_callStack)  SimpleLL<WrenchCallStackEntry>();
+
 }
 
 //------------------------------------------------------------------------------
@@ -40,8 +46,11 @@ WRDebugServerInterfacePrivate::~WRDebugServerInterfacePrivate()
 {
 	free( m_externalCodeBlock ); // MIGHT have been allocated
 
-	delete m_lineBreaks;
-	delete m_callStack;
+	m_lineBreaks->~SimpleLL<int>();
+	g_free( m_lineBreaks );
+
+	m_callStack->~SimpleLL<WrenchCallStackEntry>();
+	g_free( m_callStack );
 }
 
 //------------------------------------------------------------------------------
@@ -309,9 +318,7 @@ WRDRun:
 			}
 			else
 			{
-				WRFunction f;
-				f.functionOffset = 0;
-				wr_callFunction( m_context, &f, 0, 0 ); // signal "continue"
+				wr_continue( m_context );
 			}
 
 			reply = WrenchPacket::alloc( WRD_Ok );
@@ -477,6 +484,20 @@ WRDRun:
 				}
 			}
 			
+			break;
+		}
+
+		case WRD_RequestStackDump:
+		{
+			WRstr dump( "none\n" );
+			if ( m_context )
+			{
+				wr_stackDump( m_context->stack, m_context->yield_stackTop, dump );
+			}
+				
+			reply = WrenchPacket::alloc( WRD_ReplyStackDump, dump.size() );
+			memcpy( reply->payload(), dump.c_str(), dump.size() );
+
 			break;
 		}
 
