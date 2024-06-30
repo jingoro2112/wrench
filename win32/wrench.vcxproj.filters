@@ -62,9 +62,6 @@
     </ClCompile>
     <ClCompile Include="..\discrete_src\utils\win32_comm.cpp" />
     <ClCompile Include="..\discrete_src\utils\wrench_cli.cpp" />
-    <ClCompile Include="..\discrete_src\utils\debug_client.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\discrete_src\lib\debug_lib.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -99,6 +96,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\discrete_src\debug\debug.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\utils\debugger.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -149,6 +149,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\discrete_src\debug\debug.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\discrete_src\utils\debugger.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -31,7 +31,7 @@
     <ClCompile Include="..\discrete_src\lib\std_serialize.cpp" />
     <ClCompile Include="..\discrete_src\lib\std_string.cpp" />
     <ClCompile Include="..\discrete_src\lib\std_sys.cpp" />
-    <ClCompile Include="..\discrete_src\utils\debug_client.cpp" />
+    <ClCompile Include="..\discrete_src\utils\debugger.cpp" />
     <ClCompile Include="..\discrete_src\utils\serializer.cpp" />
     <ClCompile Include="..\discrete_src\utils\utils.cpp" />
     <ClCompile Include="..\discrete_src\utils\win32_comm.cpp" />
@@ -49,6 +49,7 @@
     <ClInclude Include="..\discrete_src\debug\debug.h" />
     <ClInclude Include="..\discrete_src\debug\wrench_debug.h" />
     <ClInclude Include="..\discrete_src\lib\std_io_defs.h" />
+    <ClInclude Include="..\discrete_src\utils\debugger.h" />
     <ClInclude Include="..\discrete_src\utils\debug_client.h" />
     <ClInclude Include="..\discrete_src\utils\opcode.h" />
     <ClInclude Include="..\discrete_src\utils\serializer.h" />
