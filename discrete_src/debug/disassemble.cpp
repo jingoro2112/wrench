@@ -52,4 +52,3 @@ void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out
 
 	listing.release( out, outLen );
 }
-

@@ -3696,7 +3696,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
 #ifndef _DEBUGGER_H
-#define _DEBUGGGR_H
+#define _DEBUGGER_H
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 
@@ -15754,7 +15754,6 @@ void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out
 
 	listing.release( out, outLen );
 }
-
 /*******************************************************************************
 Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
 

@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
 #ifndef _DEBUGGER_H
-#define _DEBUGGGR_H
+#define _DEBUGGER_H
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 

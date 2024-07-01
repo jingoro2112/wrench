@@ -4,14 +4,15 @@
 - adding ability to force yield based on instructions processed. only looping/conditional
   instructions are "counted" for speed and simplicity
 - stack is now allocated per context instead of per state, to make multi-threading/importing more
-  intuitive and scaleable (original state-wide stack was result of earlier GC implementatioin)
+  intuitive and scaleable (original state-wide stack was result of earlier GC implementation)
 - looked into protecting the stack and the overhead is not all that terrible so added the
   WRENCH_PROTECT_STACK_FROM_OVERFLOW option which will do that
 - changed slicing function signatures, globals? really? what was I thinking.
 - WRENCH_INCLUDE_DEBUG_CODE now works! basically! have not yet tested it thoroughly
   over a serial link that's next.
 - made sure g_free/g_malloc are used everywhere (I had missed a few cases)
-- fixed lead in trapRunOutput() (thank you darksotmoon)
+- fixed leak in trapRunOutput() (thank you darksotmoon)
+- adding to platformIO
 
 6.0.1 ----------------------------------------------------------------------------------
 - implementated WRENCH_HANDLE_MALLOC_FAIL:

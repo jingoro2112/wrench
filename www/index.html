@@ -296,7 +296,8 @@ more than enough.
 <p>Stack checking can be compiled in with
 <pre><code>#define WRENCH_PROTECT_STACK_FROM_OVERFLOW
 </code></pre>
-however (see further down)
+Warning: this adds a small if() check to many opcodes, so there is a
+small overhead to using it.
 
 
 <p>Each stack entry consumes 8 bytes, so embedded devices that have
@@ -330,8 +331,8 @@ them.
 </pre></code>
 <p>for embedded systems that need to know if they have run out of memory,
 
-<p>WARNING: This imposes a small if() check on EVERY INSTRUCTION so the
-malloc failure is detected the moment it happens, but guarantees
+<p>WARNING: This imposes a small if() check on many opcodes, so the
+malloc failure is detected the moment it happens. This guarantees
 graceful exit if g_malloc() ever returns null
 
 

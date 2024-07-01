@@ -263,6 +263,8 @@ int main( int argn, char* argv[] )
 	}
 	else if ( SimpleArgs::get(argn, argv, "p") )
 	{
+		// this is ALPHA and doesn't tell you much yet :)
+		
 		WRstr infile;
 		infile.fileToBuffer( SimpleArgs::get(argn, argv, -1) );
 
