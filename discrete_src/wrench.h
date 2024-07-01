@@ -304,6 +304,9 @@ WRError wr_compile( const char* source,
 					char* errMsg =0,
 					const uint8_t compilerOptionFlags = WR_INCLUDE_GLOBALS );
 
+// disassemble the bytecode and output humanm readable
+void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out, unsigned int* outLen =0 );
+
 // w:          state (see wr_newState)
 // block:      location of bytecode
 // blockSize:  number of bytes in the block

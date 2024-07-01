@@ -135,7 +135,7 @@ public:
 	friend WRstr operator + ( const char c, const WRstr& str ) { WRstr T(c); T += str; return T; }
 	friend WRstr operator + ( const WRstr& str1, const WRstr& str2 ) { WRstr T(str1); T += str2; return T; }
 
-	~WRstr() { if ( m_str != m_smallbuf ) free(m_str); }
+	~WRstr() { if ( m_str != m_smallbuf ) g_free(m_str); }
 
 protected:
 

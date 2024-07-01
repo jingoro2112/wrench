@@ -54,7 +54,7 @@ WrenchPacket* WrenchPacket::alloc( WrenchPacket const& base )
 //------------------------------------------------------------------------------
 WrenchPacket* WrenchPacket::alloc( const uint32_t type, const uint32_t payloadSize )
 {
-	WrenchPacket* packet = (WrenchPacket*)malloc( sizeof(WrenchPacket) + payloadSize );
+	WrenchPacket* packet = (WrenchPacket*)g_malloc( sizeof(WrenchPacket) + payloadSize );
 
 	memset( (char*)packet, 0, sizeof(WrenchPacket) );
 

@@ -10,6 +10,8 @@
 - changed slicing function signatures, globals? really? what was I thinking.
 - WRENCH_INCLUDE_DEBUG_CODE now works! basically! have not yet tested it thoroughly
   over a serial link that's next.
+- made sure g_free/g_malloc are used everywhere (I had missed a few cases)
+- fixed lead in trapRunOutput() (thank you darksotmoon)
 
 6.0.1 ----------------------------------------------------------------------------------
 - implementated WRENCH_HANDLE_MALLOC_FAIL:

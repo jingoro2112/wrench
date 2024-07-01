@@ -23,15 +23,33 @@ SOFTWARE.
 *******************************************************************************/
 
 #include "wrench.h"
-#ifndef WRENCH_WITHOUT_COMPILER
-#include <assert.h>
 
-// someday...
+WRContext* wr_import( WRContext* context, const unsigned char* block, const int blockSize, bool takeOwnership );
 
 //------------------------------------------------------------------------------
-void WRCompilationContext::createListing( const char* bytecode, WRstr& listing )
+void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out, unsigned int* outLen )
 {
+	WRstr listing;
 	
+	WRState* w = wr_newState();
+	
+	WRContext* context = wr_createContext( w, bytecode, len, false );
+	if ( !context )
+	{
+		listing = "err: context failed\n";
+	}
+
+	listing.format( "%d globals\n", context->globals );
+	listing.appendFormat( "%d units\n", context->numLocalFunctions );
+	for( int i=0; i<context->numLocalFunctions; ++i )
+	{
+		listing.appendFormat( "unit %d[0x%08X] offset[0x%04X] arguments[%d]\n",
+							  i,
+							  context->localFunctions[i].hash,
+							  context->localFunctions[i].functionOffset,
+							  context->localFunctions[i].arguments );
+	}
+
+	listing.release( out, outLen );
 }
 
-#endif

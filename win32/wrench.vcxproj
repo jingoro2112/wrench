@@ -17,8 +17,8 @@
     <ClCompile Include="..\discrete_src\cc\optimizer.cpp" />
     <ClCompile Include="..\discrete_src\cc\token.cpp" />
     <ClCompile Include="..\discrete_src\debug\client_debug.cpp" />
-    <ClCompile Include="..\discrete_src\debug\create_listing.cpp" />
     <ClCompile Include="..\discrete_src\debug\debug.cpp" />
+    <ClCompile Include="..\discrete_src\debug\disassemble.cpp" />
     <ClCompile Include="..\discrete_src\debug\packet.cpp" />
     <ClCompile Include="..\discrete_src\debug\server_debug.cpp" />
     <ClCompile Include="..\discrete_src\debug\server_interface_private.cpp" />

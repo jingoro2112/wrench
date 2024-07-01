@@ -113,13 +113,13 @@ void WRContext::gc( WRValue* stackTop )
 			if ( prev == 0 )
 			{
 				svAllocated = current->m_next;
-				free( current );
+				g_free( current );
 				current = svAllocated;
 			}
 			else
 			{
 				prev->m_next = current->m_next;
-				free( current );
+				g_free( current );
 				current = prev->m_next;
 			}
 		}

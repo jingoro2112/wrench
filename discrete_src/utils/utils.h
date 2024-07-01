@@ -72,6 +72,7 @@ const uint16_t c_primeTable[] =
 };
 */
 
+WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership, WRValue* stack =0 );
 
 #ifndef WRENCH_WITHOUT_COMPILER
 

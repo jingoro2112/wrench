@@ -34,6 +34,7 @@ OBJS = \
 	$(OBJDIR)/utils.o \
 	$(OBJDIR)/serializer.o \
 	$(OBJDIR)/debug.o \
+	$(OBJDIR)/disassemble.o \
 	$(OBJDIR)/server_debug.o \
 	$(OBJDIR)/packet.o \
 	$(OBJDIR)/client_debug.o \
@@ -114,6 +115,9 @@ $(OBJDIR)/std_serialize.o: discrete_src/lib/std_serialize.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/debug_lib.o: discrete_src/lib/debug_lib.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/disassemble.o: discrete_src/debug/disassemble.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/debug.o: discrete_src/debug/debug.cpp

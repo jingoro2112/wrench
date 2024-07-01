@@ -116,7 +116,7 @@ public:
 
 	WrenchPacketScoped( WrenchPacket* manage ) : packet(manage) {}
 	WrenchPacketScoped( const uint32_t type, const uint32_t size =0 ) : packet( WrenchPacket::alloc(type, size) ) {}
-	~WrenchPacketScoped() { free( packet ); }
+	~WrenchPacketScoped() { g_free( packet ); }
 };
 
 //------------------------------------------------------------------------------

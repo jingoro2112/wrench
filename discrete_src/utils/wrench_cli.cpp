@@ -128,6 +128,7 @@ const char* sourceOrder[]=
 	"/utils/serializer.cpp",
 	"/debug/client_debug.cpp",
 	"/debug/server_debug.cpp",
+	"/debug/disassemble.cpp",
 	"/debug/packet.cpp",
 	"/debug/server_interface_private.cpp",
 	"/vm/scheduler.cpp",
@@ -169,6 +170,8 @@ int usage()
 			"                               the exported constants will be:\n"
 			"                               const char* [name]_bytecode;\n"
 			"                               const int [name]_bytecodeSize;\n"
+			
+			"p [infile]                     print disassembly of file\n"
 /*
 			"ca [infile] [out file] [name]  compile infile and output as an inc file\n"
 			"                               for assembly of name \"out file\"\n"
@@ -256,8 +259,28 @@ int main( int argn, char* argv[] )
 	if ( SimpleArgs::get(argn, argv, "t") )
 	{
 		runTests( (argn >= 3) ? atoi(argv[2]) : 0 );
-		setup();
 		printf("\n");
+	}
+	else if ( SimpleArgs::get(argn, argv, "p") )
+	{
+		WRstr infile;
+		infile.fileToBuffer( SimpleArgs::get(argn, argv, -1) );
+
+		unsigned char* out;
+		int outLen;
+		int err = wr_compile( infile, infile.size(), &out, &outLen, 0, flags );
+		
+		if ( err )
+		{
+			printf( "compile error [%s]\n", c_errStrings[err] );
+			return -1;
+		}
+
+		char* listing = 0;
+		wr_disassemble( out, outLen, &listing );
+		printf("%s\n", listing );
+		g_free( listing );
+		
 	}
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 	else if ( SimpleArgs::get(argn, argv, "d") )
@@ -759,6 +782,8 @@ int runTests( int number )
 	testHalt();
 	testScheduler();
 	testStackOverflow();
+
+	setup();
 
 	wr_destroyContainer( &container );
 

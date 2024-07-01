@@ -401,8 +401,6 @@ public:
 					 char* erroMsg,
 					 const uint8_t compilerOptionFlags );
 
-	void createListing( const char* bytecode, WRstr& listing );
-	
 private:
 	
 	bool isReserved( const char* token );

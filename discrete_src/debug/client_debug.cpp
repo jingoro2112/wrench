@@ -93,7 +93,7 @@ void WRDebugClientInterfacePrivate::trapRunOutput( WrenchPacket const& packet )
 {
 	for(;;)
 	{
-		WrenchPacket *reply = transmit( WrenchPacket::alloc(packet) );
+		WrenchPacket *reply = transmit( WrenchPacketScoped(WrenchPacket::alloc(packet)) );
 		if ( reply->_type == WRD_DebugOut )
 		{
 			printf( "%s", (char*)reply->payload() );
@@ -132,9 +132,9 @@ bool WRDebugClientInterface::getSourceCode( const char** data, int* len )
 			return false;
 		}
 		
-		delete[] I->m_sourceBlock;
+		g_free( I->m_sourceBlock );
 		I->m_sourceBlockLen = r.packet->payloadSize();
-		I->m_sourceBlock = new char[ r.packet->payloadSize() + 1 ];
+		I->m_sourceBlock = (char*)g_malloc( r.packet->payloadSize() + 1 );
 		
 		memcpy( I->m_sourceBlock, r.packet->payload(), r.packet->payloadSize() );
 		I->m_sourceBlock[ r.packet->payloadSize() ] = 0;
@@ -325,7 +325,7 @@ void WRDebugClientInterfacePrivate::init()
 //------------------------------------------------------------------------------
 WRDebugClientInterfacePrivate::~WRDebugClientInterfacePrivate()
 {
-	delete[] m_sourceBlock;
+	g_free( m_sourceBlock );
 
 	delete m_packetQ;
 	delete m_functions;

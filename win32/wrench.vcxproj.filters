@@ -54,9 +54,6 @@
     <ClCompile Include="..\discrete_src\lib\std_sys.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\discrete_src\debug\create_listing.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\discrete_src\cc\cc.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -99,6 +96,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\discrete_src\utils\debugger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\debug\disassemble.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

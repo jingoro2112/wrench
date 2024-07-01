@@ -44,7 +44,7 @@ WRDebugServerInterfacePrivate::WRDebugServerInterfacePrivate( WRDebugServerInter
 //------------------------------------------------------------------------------
 WRDebugServerInterfacePrivate::~WRDebugServerInterfacePrivate()
 {
-	free( m_externalCodeBlock ); // MIGHT have been allocated
+	g_free( m_externalCodeBlock ); // MIGHT have been allocated
 
 	m_lineBreaks->~SimpleLL<int>();
 	g_free( m_lineBreaks );
@@ -97,7 +97,7 @@ void WRDebugServerInterface::tick()
 				reply = 0;
 			}
 
-			free( p );
+			g_free( p );
 		}
 
 		if ( reply )
@@ -107,7 +107,7 @@ void WRDebugServerInterface::tick()
 			reply->xlate();
 			
 			I->m_sendFunction( (char*)reply, size );
-			free( reply );
+			g_free( reply );
 		}
 	}
 }

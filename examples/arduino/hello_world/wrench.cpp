@@ -73,6 +73,7 @@ const uint16_t c_primeTable[] =
 };
 */
 
+WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership, WRValue* stack =0 );
 
 #ifndef WRENCH_WITHOUT_COMPILER
 
@@ -2168,7 +2169,7 @@ public:
 	friend WRstr operator + ( const char c, const WRstr& str ) { WRstr T(c); T += str; return T; }
 	friend WRstr operator + ( const WRstr& str1, const WRstr& str2 ) { WRstr T(str1); T += str2; return T; }
 
-	~WRstr() { if ( m_str != m_smallbuf ) free(m_str); }
+	~WRstr() { if ( m_str != m_smallbuf ) g_free(m_str); }
 
 protected:
 
@@ -3297,8 +3298,6 @@ public:
 					 char* erroMsg,
 					 const uint8_t compilerOptionFlags );
 
-	void createListing( const char* bytecode, WRstr& listing );
-	
 private:
 	
 	bool isReserved( const char* token );
@@ -3573,7 +3572,7 @@ public:
 
 	WrenchPacketScoped( WrenchPacket* manage ) : packet(manage) {}
 	WrenchPacketScoped( const uint32_t type, const uint32_t size =0 ) : packet( WrenchPacket::alloc(type, size) ) {}
-	~WrenchPacketScoped() { free( packet ); }
+	~WrenchPacketScoped() { g_free( packet ); }
 };
 
 //------------------------------------------------------------------------------
@@ -10288,13 +10287,13 @@ void WRContext::gc( WRValue* stackTop )
 			if ( prev == 0 )
 			{
 				svAllocated = current->m_next;
-				free( current );
+				g_free( current );
 				current = svAllocated;
 			}
 			else
 			{
 				prev->m_next = current->m_next;
-				free( current );
+				g_free( current );
 				current = prev->m_next;
 			}
 		}
@@ -13657,7 +13656,7 @@ bool wr_executeFunctionZero( WRContext* context )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership, WRValue* stack =0 )
+WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership, WRValue* stack )
 {
 	// CRC the code block, at least is it what the compiler intended?
 	uint32_t hash = READ_32_FROM_PC(block + (blockSize - 4));
@@ -15287,7 +15286,7 @@ void WRDebugClientInterfacePrivate::trapRunOutput( WrenchPacket const& packet )
 {
 	for(;;)
 	{
-		WrenchPacket *reply = transmit( WrenchPacket::alloc(packet) );
+		WrenchPacket *reply = transmit( WrenchPacketScoped(WrenchPacket::alloc(packet)) );
 		if ( reply->_type == WRD_DebugOut )
 		{
 			printf( "%s", (char*)reply->payload() );
@@ -15326,9 +15325,9 @@ bool WRDebugClientInterface::getSourceCode( const char** data, int* len )
 			return false;
 		}
 		
-		delete[] I->m_sourceBlock;
+		g_free( I->m_sourceBlock );
 		I->m_sourceBlockLen = r.packet->payloadSize();
-		I->m_sourceBlock = new char[ r.packet->payloadSize() + 1 ];
+		I->m_sourceBlock = (char*)g_malloc( r.packet->payloadSize() + 1 );
 		
 		memcpy( I->m_sourceBlock, r.packet->payload(), r.packet->payloadSize() );
 		I->m_sourceBlock[ r.packet->payloadSize() ] = 0;
@@ -15519,7 +15518,7 @@ void WRDebugClientInterfacePrivate::init()
 //------------------------------------------------------------------------------
 WRDebugClientInterfacePrivate::~WRDebugClientInterfacePrivate()
 {
-	delete[] m_sourceBlock;
+	g_free( m_sourceBlock );
 
 	delete m_packetQ;
 	delete m_functions;
@@ -15702,6 +15701,61 @@ WRDebugServerInterface::~WRDebugServerInterface()
 
 #endif
 /*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
+WRContext* wr_import( WRContext* context, const unsigned char* block, const int blockSize, bool takeOwnership );
+
+//------------------------------------------------------------------------------
+void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out, unsigned int* outLen )
+{
+	WRstr listing;
+	
+	WRState* w = wr_newState();
+	
+	WRContext* context = wr_createContext( w, bytecode, len, false );
+	if ( !context )
+	{
+		listing = "err: context failed\n";
+	}
+
+	listing.format( "%d globals\n", context->globals );
+	listing.appendFormat( "%d units\n", context->numLocalFunctions );
+	for( int i=0; i<context->numLocalFunctions; ++i )
+	{
+		listing.appendFormat( "unit %d[0x%08X] offset[0x%04X] arguments[%d]\n",
+							  i,
+							  context->localFunctions[i].hash,
+							  context->localFunctions[i].functionOffset,
+							  context->localFunctions[i].arguments );
+	}
+
+	listing.release( out, outLen );
+}
+
+/*******************************************************************************
 Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
 
 MIT License
@@ -15757,7 +15811,7 @@ WrenchPacket* WrenchPacket::alloc( WrenchPacket const& base )
 //------------------------------------------------------------------------------
 WrenchPacket* WrenchPacket::alloc( const uint32_t type, const uint32_t payloadSize )
 {
-	WrenchPacket* packet = (WrenchPacket*)malloc( sizeof(WrenchPacket) + payloadSize );
+	WrenchPacket* packet = (WrenchPacket*)g_malloc( sizeof(WrenchPacket) + payloadSize );
 
 	memset( (char*)packet, 0, sizeof(WrenchPacket) );
 
@@ -15833,7 +15887,7 @@ WRDebugServerInterfacePrivate::WRDebugServerInterfacePrivate( WRDebugServerInter
 //------------------------------------------------------------------------------
 WRDebugServerInterfacePrivate::~WRDebugServerInterfacePrivate()
 {
-	free( m_externalCodeBlock ); // MIGHT have been allocated
+	g_free( m_externalCodeBlock ); // MIGHT have been allocated
 
 	m_lineBreaks->~SimpleLL<int>();
 	g_free( m_lineBreaks );
@@ -15886,7 +15940,7 @@ void WRDebugServerInterface::tick()
 				reply = 0;
 			}
 
-			free( p );
+			g_free( p );
 		}
 
 		if ( reply )
@@ -15896,7 +15950,7 @@ void WRDebugServerInterface::tick()
 			reply->xlate();
 			
 			I->m_sendFunction( (char*)reply, size );
-			free( reply );
+			g_free( reply );
 		}
 	}
 }
@@ -18317,7 +18371,7 @@ void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		char* name = (stackTop - 1)->asMallocString();
 		unlink( name );
-		wr_free( name );
+		g_free( name );
 	}
 }
 

@@ -209,7 +209,7 @@ bool wr_executeFunctionZero( WRContext* context )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership, WRValue* stack =0 )
+WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership, WRValue* stack )
 {
 	// CRC the code block, at least is it what the compiler intended?
 	uint32_t hash = READ_32_FROM_PC(block + (blockSize - 4));
