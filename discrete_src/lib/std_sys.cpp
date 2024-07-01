@@ -104,7 +104,7 @@ void wr_halt( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		unsigned int e = (stackTop - argn)->asInt();
 		c->w->err = (e <= (unsigned int)WR_USER || e > (unsigned int)WR_ERR_LAST)
-					? WR_ERR_USER_err_out_of_range : e;
+					? (unsigned int)WR_ERR_USER_err_out_of_range : e;
 	}
 }
 
