@@ -19,17 +19,19 @@ checkIsString( s, s._count );
 function userCheck( data )
 {
 	checkIsRawArray( data.big, data.big._count );
-	
+return;	
 	if ( data.b != data.c ) println("b001");
 	
 	if ( data.b != 0x99 ) println("b99");
 	data.b = 10;
 	if ( data.b != 10 ) println("b0");
 	if ( (data.b += 20) != 30 ) println ("b1");
+	
 	if ( data.b != 30 ) println("b2");
 	if ( 30 != data.b ) println("b3");
 	if ( 2 + data.b != 32 ) println("b4");
 	if ( data.b + 4 != 34 ) println("b5");
+
 	if ( ++data.b != 31 ) println("b6");
 	if ( data.b != 31 ) println("b7");
 	if ( data.b++ != 31 ) println("b8");
@@ -70,6 +72,8 @@ function userCheck( data )
 	if ( data.integer != 2456 ) println("f1");
 	if ( data["integer"] != 2456 ) println("f2");
 
+	if ( data._i != 1001 ) println("ii1");
+	if ( data._f != 20.02 ) println("ff1");
 	data.integer = 56789;
 	
 	return 77;

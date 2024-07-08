@@ -41,6 +41,9 @@ void testTimeSlices();
 void testScheduler();
 void testStackOverflow();
 //void testYield2();
+#ifdef WIN32
+int TESTmain();
+#endif
 
 //------------------------------------------------------------------------------
 void blobToHeader( WRstr const& blob, WRstr const& variableName, WRstr& header )
@@ -244,6 +247,10 @@ int main( int argn, char* argv[] )
 	assert( sizeof(WRValue) == 2*sizeof(void*) );
 	assert( sizeof(float) == 4 );
 	assert( sizeof(unsigned char) == 1 );
+
+#ifdef WIN32
+	//TESTmain();
+#endif
 
 	if ( argn <= 1 )
 	{
@@ -604,6 +611,10 @@ int runTests( int number )
 {
 	int err = 0;
 
+#ifdef WIN32
+	TESTmain();
+#endif
+
 #ifndef WRENCH_WITHOUT_COMPILER
 	WRstr code;
 	WRstr codeName;
@@ -614,6 +625,9 @@ int runTests( int number )
 	WRValue integer;
 	wr_makeInt( &integer, 0 );
 	wr_addValueToContainer( &container, "integer", &integer );
+
+	wr_addIntToContainer( &container, "_i", 1001 );
+	wr_addFloatToContainer( &container, "_i", 20.02f );
 
 	char someArray[10] = "hello";
 	wr_addArrayToContainer( &container, "name", someArray, 10 );
@@ -784,9 +798,8 @@ int runTests( int number )
 	testHalt();
 	testScheduler();
 	testStackOverflow();
-
 	setup();
-
+	
 	wr_destroyContainer( &container );
 
 	testGlobalValues( w );
@@ -1242,3 +1255,78 @@ void loop()
 
 
 
+
+
+
+
+
+
+
+
+
+#ifdef WIN32
+
+#include <iostream>
+#include <map>
+#include <string.h>
+#include "wrench.h"
+
+using namespace std;
+
+
+int TESTmain() {
+	WRState* wr_state = wr_newState(20);
+	wr_registerFunction(wr_state, "print", print);
+
+	std::map<string, int> values;
+	values["temperature"] = 80;
+	values["humidity"] = 11;
+
+	string code = "function wrenchfunction(values){"
+				  "print(\"humidity:\");print( values[\"humidity\"] );"
+				  "print(\"temperature:\");print( values[\"temperature\"] );"
+				  "values[\"humidity\"] += 100;"
+				  "print(\"humidity:\");print( values[\"humidity\"] );"
+				  "print(\"temperature:\");print( values[\"temperature\"] );"
+				  "return values;}";
+
+	//Transform Values
+	WRValue wrench_values;
+	wr_makeContainer(&wrench_values);
+
+	for (const auto& [id, value] : values) {
+		WRValue* wr_value = new WRValue();
+		wr_makeInt(wr_value, value);
+		wr_addValueToContainer(&wrench_values, id.c_str(), wr_value);
+	}
+
+	//Compile and Run
+	unsigned char* outBytes;
+	int outLen;
+
+	const char* wrenchCode = code.c_str();
+
+	wr_compile(wrenchCode, strlen(wrenchCode), &outBytes, &outLen);
+	WRContext* context = wr_run(wr_state, outBytes, outLen);
+
+	wr_callFunction(context, "wrenchfunction", &wrench_values, 1);
+
+	free(outBytes);
+
+	//Update Values and Free Memory
+	for (WRIteratorEntry const& member : wrench_values)
+	{
+		char key[156];
+		values[(member.key->asString(key, 156))] = member.value->asInt();
+		delete member.value;
+	}
+
+	cout << "\nUpdated Values:\n";
+	for (const auto& [key, value] : values) {
+		cout << key << ": " << value << "\n";
+	}
+
+	wr_destroyContainer(&wrench_values);
+	return 0;
+}
+#endif

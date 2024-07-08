@@ -142,6 +142,9 @@ void wr_formatStackEntry( const WRValue* v, WRstr& out )
 
 					break;
 				}
+
+				default:
+					break;
 			}
 		}
 	}

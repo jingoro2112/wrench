@@ -1,3 +1,10 @@
+6.0.4 ----------------------------------------------------------------------------------
+- fixed memory allocation for user data, also changed them to use regular
+  hash tables so the keys can be iterated
+
+6.0.3 ----------------------------------------------------------------------------------
+- version bump for lib
+
 6.0.2 ----------------------------------------------------------------------------------
 - adding time-sliced yield with WRENCH_TIME_SLICES
 - adding simple round-robin scheduler

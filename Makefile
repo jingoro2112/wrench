@@ -3,6 +3,7 @@ OPT ?= -O3
 
 PERF ?=
 
+#C_VER ?= -std=c++17
 #C_VER ?= -std=c++11
 C_VER ?= -std=c++98
 

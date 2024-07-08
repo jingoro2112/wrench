@@ -14270,6 +14270,13 @@ char* WRValue::asMallocString( unsigned int* strLen ) const
 	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
 	{
 		ret = (char*)g_malloc( va->m_size + 1);
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !ret )
+		{
+			g_mallocFailed = true;
+			return 0;
+		}
+#endif
 		memcpy( ret, va->m_Cdata, va->m_size );
 		ret[va->m_size] = 0;
 	}
@@ -14328,8 +14335,8 @@ WRValue::Iterator::Iterator( WRValue const& V ) : m_va(V.va), m_element(0)
 {
 	memset((char*)&m_current, 0, sizeof(WRIteratorEntry) );
 
-	if ( (V.xtype != WR_EX_ARRAY && V.xtype != WR_EX_HASH_TABLE)
-		 || (m_va->m_type == SV_VOID_HASH_TABLE) )
+	if ( (V.xtype != WR_EX_ARRAY && V.xtype != WR_EX_HASH_TABLE) )
+		 //|| (m_va->m_type == SV_VOID_HASH_TABLE) )
 	{
 		m_va = 0;
 		m_current.type = 0;
@@ -14346,19 +14353,23 @@ const WRValue::Iterator WRValue::Iterator::operator++()
 {
 	if ( m_va )
 	{
-		if ( m_current.type == SV_HASH_TABLE )
+		if ( m_current.type == SV_HASH_TABLE || m_current.type == SV_VOID_HASH_TABLE )
 		{
 			int temp = m_element;
 			for( ; temp < m_va->m_mod; ++temp )
 			{
 				if ( m_va->m_hashTable[temp] != WRENCH_NULL_HASH )
 				{
+					m_element = temp + 1;
 					temp <<= 1;
 
 					m_current.value = m_va->m_Vdata + temp++;
-					m_current.key = m_va->m_Vdata + temp;
+					if ( m_current.value->type == WR_REF )
+					{
+						m_current.value = m_current.value->r;
+					}
 
-					m_element = ++temp;
+					m_current.key = m_va->m_Vdata + temp;
 
 					return *this;
 				}
@@ -14507,9 +14518,39 @@ void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 		return;
 	}
 #endif
-	val->va->init( sizeHint, SV_VOID_HASH_TABLE, false );
+	val->va->init( sizeHint, SV_HASH_TABLE, false );
 	val->va->m_skipGC = 1;
 	val->p2 = INIT_AS_HASH_TABLE;
+}
+
+//------------------------------------------------------------------------------
+WRValue* wr_addToContainerEx( const char* name, WRValue* container )
+{
+	const unsigned int len = (const unsigned int)strlen(name);
+
+	// create a 'key' object
+	WRValue key;
+	key.va = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !key.va )
+	{
+		return 0;
+	}
+#endif
+	
+	key.va->init(len, SV_CHAR, false);
+	
+	key.va->m_skipGC = 1;
+	key.p2 = INIT_AS_ARRAY;
+	memcpy( key.va->m_Cdata, name, len );
+
+	key.va->m_next = container->va->m_next;
+	container->va->m_next = key.va;
+
+	WRValue* entry = (WRValue*)container->va->get( key.getHash() );
+	*(entry + 1) = key;
+	
+	return entry;
 }
 
 //------------------------------------------------------------------------------
@@ -14520,9 +14561,45 @@ void wr_addValueToContainer( WRValue* container, const char* name, WRValue* valu
 		return;
 	}
 	
-	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
+	WRValue* entry = wr_addToContainerEx( name, container );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !entry )
+	{
+		return;
+	}
+#endif
 	entry->r = value;
 	entry->p2 = INIT_AS_REF;
+}
+
+//------------------------------------------------------------------------------
+void wr_addFloatToContainer( WRValue* container, const char* name, const float f )
+{
+	WRValue* entry = wr_addToContainerEx( name, container );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !entry )
+	{
+		return;
+	}
+#endif
+
+	entry->p2 = INIT_AS_FLOAT;
+	entry->f = f;
+}
+
+//------------------------------------------------------------------------------
+void wr_addIntToContainer( WRValue* container, const char* name, const int i )
+{
+	WRValue* entry = wr_addToContainerEx( name, container );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !entry )
+	{
+		return;
+	}
+#endif
+
+	entry->p2 = INIT_AS_INT;
+	entry->i = i;
 }
 
 //------------------------------------------------------------------------------
@@ -14533,7 +14610,13 @@ void wr_addArrayToContainer( WRValue* container, const char* name, char* array, 
 		return;
 	}
 
-	WRValue* entry = container->va->getAsRawValueHashTable( wr_hashStr(name) );
+	WRValue* entry = wr_addToContainerEx( name, container );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !entry )
+	{
+		return;
+	}
+#endif
 	entry->c = array;
 	entry->p2 = INIT_AS_RAW_ARRAY | (size<<8);
 }
@@ -14541,14 +14624,19 @@ void wr_addArrayToContainer( WRValue* container, const char* name, char* array, 
 //------------------------------------------------------------------------------
 void wr_destroyContainer( WRValue* val )
 {
-	if ( val->xtype != WR_EX_HASH_TABLE )
+	// clear off the keys
+	WRGCObject* va = val->va->m_next;
+	while( va )
 	{
-		return;
+		WRGCObject* next = va->m_next;
+		g_free( va->m_Cdata );
+		g_free( va );
+		va = next;
 	}
 
+	// clearr the container
 	val->va->clear();
 	g_free( val->va );
-	val->init();
 }
 
 #ifndef WRENCH_WITHOUT_COMPILER

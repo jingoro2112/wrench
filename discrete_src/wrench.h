@@ -30,7 +30,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 3
+#define WRENCH_VERSION_BUILD 4
 struct WRState;
 
 /************************************************************************
@@ -522,10 +522,14 @@ WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, cons
 void wr_makeContainer( WRValue* val, const uint16_t sizeHint =0 );
 void wr_destroyContainer( WRValue* val );
 
+// NOTE: value memory is managed by called and must remain valid for
+// duration of the container!!
 void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value );
-void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value );
-void wr_addFloatToContainer( WRValue* container, const char* name, const float value );
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size );
+
+// memory managed by the container, fire and forget:
+void wr_addFloatToContainer( WRValue* container, const char* name, const float f );
+void wr_addIntToContainer( WRValue* container, const char* name, const int i );
 
 /******************************************************************/
 //                    "standard" functions
@@ -622,7 +626,6 @@ The "extended" types are:
 						SV_CHAR             0x02 array of chars (this
                          						 is how strings are represented)
 						SV_VOID_HASH_TABLE  0x04 hash table of void*
-						                         used for internal structures
 						                         (do not gc)
 						SV_HASH_TABLE       0x03 hash table of WRValues
 						                         (DO descend for gc)
