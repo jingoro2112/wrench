@@ -27,30 +27,15 @@ SOFTWARE.
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 
 //------------------------------------------------------------------------------
-WRDebugServerInterface::WRDebugServerInterface( WRState* w )
-{
-	memset( this, 0, sizeof(*this) );
-	I = (WRDebugServerInterfacePrivate *)g_malloc( sizeof(WRDebugServerInterfacePrivate) );
-	new (I) WRDebugServerInterfacePrivate( this );
-
-	I->m_w = w;
-}
-
-//------------------------------------------------------------------------------
 WRDebugServerInterface::WRDebugServerInterface( WRState* w,
-												bool (*receiveFunction)( char* data, const int length ),
-												bool (*sendFunction)( const char* data, const int length ),
-												int (*dataAvailableFunction)() )
+												WrenchDebugCommInterface* CommInterface )
 {
 	memset( this, 0, sizeof(*this) );
 	I = (WRDebugServerInterfacePrivate *)g_malloc( sizeof(WRDebugServerInterfacePrivate) );
 	new (I) WRDebugServerInterfacePrivate( this );
 
 	I->m_w = w;
-
-	I->m_receiveFunction = receiveFunction;
-	I->m_sendFunction = sendFunction;
-	I->m_dataAvailableFunction = dataAvailableFunction;
+	I->m_comm = CommInterface;
 }
 
 //------------------------------------------------------------------------------

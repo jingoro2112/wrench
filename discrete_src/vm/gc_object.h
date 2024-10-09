@@ -92,7 +92,7 @@ public:
 		}
 		else if ( m_type == SV_CHAR )
 		{
-			m_Cdata = (unsigned char*)g_malloc( size + 1 );
+			m_Cdata = (unsigned char*)g_malloc( size );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 			if ( !m_Cdata )
 			{
@@ -104,12 +104,12 @@ public:
 			m_size = size;
 			if ( clear )
 			{
-				memset( m_SCdata, 0, m_size + 1 );
+				memset( m_SCdata, 0, m_size );
 			}
-			else
-			{
-				m_Cdata[size] = 0;
-			}
+//			else
+//			{
+//				m_Cdata[size] = 0;
+//			}
 		}
 		else
 		{

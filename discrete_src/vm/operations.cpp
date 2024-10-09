@@ -472,7 +472,7 @@ void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 			  && from->va->m_type == SV_CHAR )
 	{
 		char* t = to->va->m_SCdata;
-		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size + 1 );
+		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 		if ( !to->va->m_SCdata )
 		{
@@ -482,7 +482,7 @@ void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 		}
 #endif
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
-		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
+		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
 		to->va->m_size = to->va->m_size + from->va->m_size;
 		g_free( t );
 	}
@@ -814,7 +814,139 @@ WRVoidFunc NAME##Assign[16] = \
 X_ASSIGN( wr_Subtract, - );
 //X_ASSIGN( wr_Add, + ); -- broken out so strings work
 X_ASSIGN( wr_Multiply, * );
-X_ASSIGN( wr_Divide, / );
+//X_ASSIGN( wr_Divide, / ); -- broken out for divide by zero
+
+
+void wr_DivideAssign_E_I( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+
+	wr_DivideAssign[(V.type<<2)|WR_INT]( &V, from );
+
+	wr_valueToArray( to, &V );
+	*from = V;
+}
+void wr_DivideAssign_E_F( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+
+	wr_DivideAssign[(V.type<<2)|WR_FLOAT]( &V, from );
+
+	wr_valueToArray( to, &V );
+	*from = V;
+}
+void wr_DivideAssign_E_E( WRValue* to, WRValue* from ) 
+{
+	WRValue& V = from->singleValue();
+
+	wr_DivideAssign[(WR_EX<<2)|V.type]( to, &V );
+	*from = to->deref();
+}
+void wr_DivideAssign_I_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	wr_DivideAssign[(WR_INT<<2)|V.type](to, &V);
+	*from = *to;
+}
+void wr_DivideAssign_F_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	wr_DivideAssign[(WR_FLOAT<<2)|V.type](to, &V);
+	*from = *to;
+}
+void wr_DivideAssign_E_R( WRValue* to, WRValue* from )
+{
+	wr_DivideAssign[(WR_EX<<2)|from->r->type]( to, from->r );
+}
+void wr_DivideAssign_R_E( WRValue* to, WRValue* from ) { wr_DivideAssign[(to->r->type<<2)|WR_EX](to->r, from); *from = *to->r; } 
+void wr_DivideAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }
+void wr_DivideAssign_R_I( WRValue* to, WRValue* from ) { wr_DivideAssign[(to->r->type<<2)|WR_INT](to->r, from); *from = *to->r; }
+void wr_DivideAssign_R_F( WRValue* to, WRValue* from ) { wr_DivideAssign[(to->r->type<<2)|WR_FLOAT](to->r, from); *from = *to->r; }
+void wr_DivideAssign_I_R( WRValue* to, WRValue* from ) { wr_DivideAssign[(WR_INT<<2)+from->r->type](to, from->r); *from = *to; }
+void wr_DivideAssign_F_R( WRValue* to, WRValue* from ) { wr_DivideAssign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }
+
+void wr_DivideAssign_F_F( WRValue* to, WRValue* from )
+{
+	if ( from->f )
+	{
+		to->f = to->f / from->f;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		to->p2 = INIT_AS_INVALID;
+#else
+		to->i = 0;
+#endif
+	}
+
+}
+void wr_DivideAssign_I_I( WRValue* to, WRValue* from )
+{
+	if ( from->i )
+	{
+		to->i = to->i / from->i;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		to->p2 = INIT_AS_INVALID;
+#else
+		to->i = 0;
+#endif
+	}
+}
+void wr_DivideAssign_I_F( WRValue* to, WRValue* from )
+{
+	to->p2 = INIT_AS_FLOAT;
+	if ( from->f )
+	{
+		to->f = (float)to->i / from->f;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		to->p2 = INIT_AS_INVALID;
+#else
+		to->i = 0;
+#endif
+	}
+}
+void wr_DivideAssign_F_I( WRValue* to, WRValue* from )
+{
+	from->p2 = INIT_AS_FLOAT;
+	if ( from->i )
+	{
+		to->f = to->f / (float)from->i;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		to->p2 = INIT_AS_INVALID;
+#else
+		to->i = 0;
+#endif
+	}
+}
+
+WRVoidFunc wr_DivideAssign[16] = 
+{
+	wr_DivideAssign_I_I,  wr_DivideAssign_I_F,  wr_DivideAssign_I_R,  wr_DivideAssign_I_E,
+	wr_DivideAssign_F_I,  wr_DivideAssign_F_F,  wr_DivideAssign_F_R,  wr_DivideAssign_F_E,
+	wr_DivideAssign_R_I,  wr_DivideAssign_R_F,  wr_DivideAssign_R_R,  wr_DivideAssign_R_E,
+	wr_DivideAssign_E_I,  wr_DivideAssign_E_F,  wr_DivideAssign_E_R,  wr_DivideAssign_E_E,
+};
+
+
+
+
+
+
+
+
+
+
+	
 
 
 
@@ -853,7 +985,7 @@ void wr_AddAssign_E_E( WRValue* to, WRValue* from )
 			  && from->va->m_type == SV_CHAR )
 	{
 		char* t = to->va->m_SCdata;
-		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size + 1 );
+		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 		if ( !to->va->m_SCdata )
 		{
@@ -863,7 +995,7 @@ void wr_AddAssign_E_E( WRValue* to, WRValue* from )
 		}
 #endif
 		memcpy( to->va->m_SCdata, t, to->va->m_size );
-		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size + 1 );
+		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
 		to->va->m_size = to->va->m_size + from->va->m_size;
 		g_free( t );
 	}
@@ -953,7 +1085,115 @@ WRTargetFunc NAME##Binary[16] = \
 //X_BINARY( wr_Addition, + );  -- broken out so strings work
 X_BINARY( wr_Multiply, * );
 X_BINARY( wr_Subtract, - );
-X_BINARY( wr_Divide, / );
+//X_BINARY( wr_Divide, / );
+
+
+void wr_DivideBinary_E_I( WRValue* to, WRValue* from, WRValue* target )
+{
+	WRValue& V = to->singleValue();
+	wr_DivideBinary[(V.type<<2)|WR_INT](&V, from, target);
+}
+void wr_DivideBinary_E_F( WRValue* to, WRValue* from, WRValue* target )
+{
+	WRValue& V = to->singleValue();
+	wr_DivideBinary[(V.type<<2)|WR_FLOAT](&V, from, target);
+}
+void wr_DivideBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
+{
+	WRValue V1 = to->singleValue();
+	WRValue& V2 = from->singleValue();
+	wr_DivideBinary[(V1.type<<2)|V2.type](&V1, &V2, target);
+}
+void wr_DivideBinary_I_E( WRValue* to, WRValue* from, WRValue* target )
+{
+	WRValue& V = from->singleValue();
+	wr_DivideBinary[(WR_INT<<2)|V.type](to, &V, target);
+}
+void wr_DivideBinary_F_E( WRValue* to, WRValue* from, WRValue* target )
+{
+	WRValue& V = from->singleValue();
+	wr_DivideBinary[(WR_FLOAT<<2)|V.type](to, &V, target);
+}
+void wr_DivideBinary_R_E( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(to->r->type<<2)|WR_EX]( to->r, from, target); }
+void wr_DivideBinary_E_R( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(WR_EX<<2)+from->r->type](to, from->r, target); }
+void wr_DivideBinary_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(WR_INT<<2)+from->r->type](to, from->r, target); }
+void wr_DivideBinary_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(to->r->type<<2)|WR_FLOAT](to->r, from, target); }
+void wr_DivideBinary_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }
+void wr_DivideBinary_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(to->r->type<<2)|WR_INT](to->r, from, target); }
+void wr_DivideBinary_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(WR_FLOAT<<2)+from->r->type](to, from->r, target); }
+void wr_DivideBinary_I_I( WRValue* to, WRValue* from, WRValue* target )
+{
+	target->p2 = INIT_AS_INT;
+	if ( from->i )
+	{
+		target->i = to->i / from->i;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		target->p2 = INIT_AS_INVALID;
+#else
+		target->i = 0;
+#endif
+	}
+}
+void wr_DivideBinary_I_F( WRValue* to, WRValue* from, WRValue* target )
+{
+	target->p2 = INIT_AS_FLOAT;
+	if ( from->f )
+	{
+		target->f = (float)to->i / from->f;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		target->p2 = INIT_AS_INVALID;
+#else
+		target->i = 0;
+#endif
+	}
+}
+void wr_DivideBinary_F_I( WRValue* to, WRValue* from, WRValue* target )
+{
+	target->p2 = INIT_AS_FLOAT;
+	if ( from->i )
+	{
+		target->f = to->f / (float)from->i;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		target->p2 = INIT_AS_INVALID;
+#else
+		target->i = 0;
+#endif
+	}
+}
+void wr_DivideBinary_F_F( WRValue* to, WRValue* from, WRValue* target )
+{
+	target->p2 = INIT_AS_FLOAT;
+	if ( from->f )
+	{
+		target->f = to->f / from->f;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		target->p2 = INIT_AS_INVALID;
+#else
+		target->i = 0;
+#endif
+	}
+}
+
+WRTargetFunc wr_DivideBinary[16] = 
+{
+	wr_DivideBinary_I_I,  wr_DivideBinary_I_F,  wr_DivideBinary_I_R,  wr_DivideBinary_I_E,
+	wr_DivideBinary_F_I,  wr_DivideBinary_F_F,  wr_DivideBinary_F_R,  wr_DivideBinary_F_E,
+	wr_DivideBinary_R_I,  wr_DivideBinary_R_F,  wr_DivideBinary_R_R,  wr_DivideBinary_R_E,
+	wr_DivideBinary_E_I,  wr_DivideBinary_E_F,  wr_DivideBinary_E_R,  wr_DivideBinary_E_E,
+};
+
 
 
 
@@ -1023,7 +1263,6 @@ WRTargetFunc wr_AdditionBinary[16] =
 	wr_AdditionBinary_R_I,  wr_AdditionBinary_R_F,  wr_AdditionBinary_R_R,  wr_AdditionBinary_R_E,
 	wr_AdditionBinary_E_I,  wr_AdditionBinary_E_F,  wr_AdditionBinary_E_R,  wr_AdditionBinary_E_E,
 };
-
 
 
 

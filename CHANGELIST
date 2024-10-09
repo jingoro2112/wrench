@@ -1,6 +1,13 @@
+6.0.5 ----------------------------------------------------------------------------------
+- added protection from Divide-By-Zero
+
 6.0.4 ----------------------------------------------------------------------------------
 - fixed memory allocation for user data, also changed them to use regular
   hash tables so the keys can be iterated
+- tightened up string handling, removed extra byte at the end of internal array/strings
+- added MallocStrScoped() to manage malloc'ed strings
+- added TCP/IP functionality for windows/linux esp32 coming next on my radar
+- added tcp/ip debugging in prep for wireless esp32 debugging
 
 6.0.3 ----------------------------------------------------------------------------------
 - version bump for lib

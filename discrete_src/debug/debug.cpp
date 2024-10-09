@@ -24,7 +24,59 @@ SOFTWARE.
 
 #include "wrench.h"
 
-#ifndef WRENCH_WITHOUT_COMPILER
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+
+//------------------------------------------------------------------------------
+bool WrenchDebugCommInterface::send( WrenchPacket* packet )
+{
+	uint32_t size = packet->xlate();
+	bool ret = sendEx( (uint8_t*)packet, size );
+	packet->xlate();
+	return ret;
+}
+
+//------------------------------------------------------------------------------
+WrenchPacket* WrenchDebugCommInterface::receive( const int timeoutMilliseconds )
+{
+	if ( peekEx(timeoutMilliseconds) < sizeof(WrenchPacket) )
+	{
+		return 0;
+	}
+
+	WrenchPacket* packet = (WrenchPacket *)g_malloc( sizeof(WrenchPacket) );
+	if ( !packet )
+	{
+		return 0;
+	}
+
+	if ( !recvEx( (uint8_t*)packet, sizeof(WrenchPacket), timeoutMilliseconds) )
+	{
+		g_free( packet );
+		return 0;
+	}
+
+	packet->xlate();
+
+	if ( packet->payloadSize() )
+	{
+		WrenchPacket* full = (WrenchPacket *)g_malloc( sizeof(WrenchPacket) + packet->payloadSize() );
+		if ( !full )
+		{
+			return 0;
+		}
+		memcpy( full, packet, sizeof(WrenchPacket) );
+		g_free( packet );
+		packet = full;
+
+		if ( !recvEx( (uint8_t*)packet->payload(), packet->payloadSize(), timeoutMilliseconds) )
+		{
+			g_free( packet );
+			return 0;
+		}
+	}
+
+	return packet;
+}
 
 //------------------------------------------------------------------------------
 void wr_formatGCObject( WRGCObject const& obj, WRstr& out )

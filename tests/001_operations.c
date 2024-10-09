@@ -53,50 +53,28 @@ hello world
 10
 1.3
 ~*/
-/*
-var T = 10;
-var I = 0;
 
-function localIntA( F )
-{
-	F = T + F;
-}
+if ( 10 / 0 ) {}
+if ( 10.1 / 0 ) {}
+var zero = 0;
+if( 10 / zero ) {}
+if( 10.1 / zero ) {}
+zero = 0.5;
+zero = 0;
+if( 10 / zero ) {}
+if( 10.1 / zero ) {}
 
-localIntA( 20 );
+if ( 10 /= 0 ){}
+if ( 10.1 /= 0 ){}
+zero = 0;
+if( 10 /= zero ) {}
+if( 10.1 /= zero ) {}
+zero = 0.5;
+zero = 0;
+if( 10 /= zero ) {}
+if( 10.1 /= zero ) {}
 
 
-var head = "head";
-localStringA( "tail" );
-if ( head != "headtail") println( "s4" );
-
-head = "head";
-var tail = "tail";
-head += tail;
-if ( head != "headtail" ) println("s1");
-head = "head";
-head = head + tail;
-if ( head != "headtail" ) println("s2");
-
-head = "head";
-localStringC( "tail" );
-if ( head != "headtail") println( "s3" );
-head = "head";
-
-function localStringC( tail )
-{
-	head += tail;
-}
-
-function localIntA( F )
-{
-	F = T + F;
-}
-
-function localStringA( tail )
-{
-	head = head + tail;
-}
-*/
 var y = "hello";
 y += "hi";
 if ( y != "hellohi" ) print("failconcat");

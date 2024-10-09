@@ -35,18 +35,14 @@ void wr_isFunction( WRValue* stackTop, const int argn, WRContext* c )
 	if ( argn > 0 )
 	{
 		WRValue* arg = stackTop - argn;
-		const char* name = (char *)(arg->array());
-		if ( name )
+		uint32_t hash = arg->getHash();
+		if ( c->w->globalRegistry.exists(hash, false) )
 		{
-			uint32_t hash = wr_hashStr( name );
-			if ( c->w->globalRegistry.exists(hash, false) )
-			{
-				stackTop->i = 1;
-			}
-			else if ( c->registry.exists(hash, false) )
-			{
-				stackTop->i = 2;
-			}
+			stackTop->i = 1;
+		}
+		else if ( c->registry.exists(hash, false) )
+		{
+			stackTop->i = 2;
 		}
 	}
 }

@@ -117,9 +117,14 @@ const char* sourceOrder[]=
 	"/cc/str.h",
 	"/cc/opcode_stream.h",
 	"/cc/cc.h",
+	"/debug/packet.h",
 	"/debug/debug.h",
-	"/utils/debugger.h",
+	"/debug/debugger.h",
+	"/lib/std_serial.h",
+	"/lib/std_tcp.h",
+	"/debug/debug_comm.h",
 	"/lib/std_io_defs.h",
+	"/lib/std_tcp.h",
 	"/cc/cc.cpp",
 	"/cc/link.cpp",
 	"/cc/expression.cpp",
@@ -129,18 +134,21 @@ const char* sourceOrder[]=
 	"/vm/vm.cpp",
 	"/utils/utils.cpp",
 	"/utils/serializer.cpp",
+	"/debug/debug.cpp",
 	"/debug/client_debug.cpp",
 	"/debug/server_debug.cpp",
 	"/debug/disassemble.cpp",
 	"/debug/packet.cpp",
 	"/debug/server_interface_private.cpp",
+	"/debug/client_interface_private.cpp",
+	"/debug/tcp_debug_comm.cpp",
+	"/debug/serial_debug_comm.cpp",
 	"/vm/scheduler.cpp",
 	"/vm/operations.cpp",
 	"/vm/index.cpp",
 	"/lib/std.cpp",
 	"/lib/std_io.cpp",
-	"/lib/std_io_linux.cpp",
-	"/lib/std_io_win32.cpp",
+	"/lib/std_tcp.cpp",
 	"/lib/std_io_little_spiffs.cpp",
 	"/lib/std_string.cpp",
 	"/lib/std_math.cpp",
@@ -151,7 +159,6 @@ const char* sourceOrder[]=
 	"/lib/esp32_lib.cpp",
 	"/lib/arduino_lib.cpp",
 	"/utils/arduino_comm.cpp",
-	"/utils/win32_comm.cpp",
 	"/utils/linux_comm.cpp",
 	""
 };
@@ -249,7 +256,7 @@ int main( int argn, char* argv[] )
 	assert( sizeof(unsigned char) == 1 );
 
 #ifdef WIN32
-	//TESTmain();
+	TESTmain();
 #endif
 
 	if ( argn <= 1 )
@@ -281,7 +288,11 @@ int main( int argn, char* argv[] )
 		
 		if ( err )
 		{
+#ifdef WRENCH_WITHOUT_COMPILER
+			printf( "compile error [#%d]\n", err );
+#else
 			printf( "compile error [%s]\n", c_errStrings[err] );
+#endif
 			return -1;
 		}
 
@@ -295,15 +306,16 @@ int main( int argn, char* argv[] )
 	else if ( SimpleArgs::get(argn, argv, "d") )
 	{
 		WrenchDebugClient client;
-		char port[64];
-		if ( SimpleArgs::get( argn, argv, "-port", port, 64) )
+		int port = 0;
+		char address[64];
+		if (SimpleArgs::get(argn, argv, "-port", address, 64))
 		{
-			client.enter( SimpleArgs::get(argn, argv, -1), port );
+			port = atoi(address);
 		}
-		else
-		{
-			client.enter( SimpleArgs::get(argn, argv, -1) );
-		}
+		address[0] = 0;
+		SimpleArgs::get(argn, argv, "-address", address, 64);
+
+		client.enter( SimpleArgs::get(argn, argv, -1), address, port );
 	}
 #endif
 	else if ( SimpleArgs::get(argn, argv, "r") )
@@ -685,7 +697,11 @@ int runTests( int number )
 				
 				if ( err )
 				{
+#ifdef WRENCH_WITHOUT_COMPILER
+					printf( "compile error [#%d]\n", err );
+#else
 					printf( "compile error [%s]\n", c_errStrings[err] );
+#endif
 					return -1;
 				}
 

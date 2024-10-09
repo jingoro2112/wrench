@@ -27,27 +27,33 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-bool wr_serialOpen( const char* name )
+HANDLE wr_serialOpen( const char* name )
 {
-	return false;
+	return -1;
 }
 
 //------------------------------------------------------------------------------
-bool wr_serialSend( const char* data, const int size )
+int wr_serialSend( HANDLE comm, const char* data, const int size )
 {
-	return false;
+	return -1;
 }
 
 //------------------------------------------------------------------------------
-bool wr_serialReceive( char* data, const int expected )
+int wr_serialReceive( HANDLE comm, char* data, const int expected )
 {
-	return false;
+	return -1;
 }
 
 //------------------------------------------------------------------------------
-int wr_serialBytesAvailable()
+int wr_serialPeek( HANDLE comm )
 {
 	return 0;
+}
+
+//------------------------------------------------------------------------------
+void wr_serialClose( HANDLE comm )
+{
+	close( comm );
 }
 
 #endif

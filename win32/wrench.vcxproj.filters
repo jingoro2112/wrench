@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Source Files\debug">
+      <UniqueIdentifier>{0536dc0b-e5c6-4e86-8ed7-f1e1b11177eb}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\discrete_src\vm\index.cpp">
@@ -36,9 +39,6 @@
     <ClCompile Include="..\discrete_src\lib\std_io.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\discrete_src\lib\std_io_win32.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\discrete_src\lib\std_math.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -59,9 +59,6 @@
     </ClCompile>
     <ClCompile Include="..\discrete_src\utils\win32_comm.cpp" />
     <ClCompile Include="..\discrete_src\utils\wrench_cli.cpp" />
-    <ClCompile Include="..\discrete_src\lib\debug_lib.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\discrete_src\cc\expression.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -74,32 +71,47 @@
     <ClCompile Include="..\discrete_src\cc\token.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\discrete_src\debug\server_interface_private.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\discrete_src\vm\scheduler.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\debug\client_debug.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\discrete_src\debug\packet.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\discrete_src\debug\server_debug.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\discrete_src\vm\gc.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\debug\debug.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\utils\debugger.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\discrete_src\debug\disassemble.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\lib\std_tcp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\debug\client_debug.cpp">
+      <Filter>Source Files\debug</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\debug\client_interface_private.cpp">
+      <Filter>Source Files\debug</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\debug\debug.cpp">
+      <Filter>Source Files\debug</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\lib\debug_lib.cpp">
+      <Filter>Source Files\debug</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\debug\server_debug.cpp">
+      <Filter>Source Files\debug</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\debug\server_interface_private.cpp">
+      <Filter>Source Files\debug</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\debug\debugger.cpp">
+      <Filter>Source Files\debug</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\debug\serial_debug_comm.cpp">
+      <Filter>Source Files\debug</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\debug\tcp_debug_comm.cpp">
+      <Filter>Source Files\debug</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -148,11 +160,23 @@
     <ClInclude Include="..\discrete_src\cc\str.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\discrete_src\debug\debug.h">
+    <ClInclude Include="..\discrete_src\lib\std_tcp.h">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\discrete_src\utils\debugger.h">
+    <ClInclude Include="..\discrete_src\utils\simple_args.h">
       <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\discrete_src\debug\packet.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\discrete_src\debug\debug.h">
+      <Filter>Source Files\debug</Filter>
+    </ClInclude>
+    <ClInclude Include="..\discrete_src\debug\debugger.h">
+      <Filter>Source Files\debug</Filter>
+    </ClInclude>
+    <ClInclude Include="..\discrete_src\debug\debug_comm.h">
+      <Filter>Source Files\debug</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

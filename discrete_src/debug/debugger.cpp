@@ -28,7 +28,7 @@ SOFTWARE.
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 
 //------------------------------------------------------------------------------
-static void dbprintln( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+void dbprintln( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
@@ -43,7 +43,14 @@ static void dbprintln( WRContext* c, const WRValue* argv, const int argn, WRValu
 }
 
 //------------------------------------------------------------------------------
-static void dbprint( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+void debugPrint( const char* text )
+{
+	wr_stdout( text, strlen(text) );
+	wr_stdout( "\n", 1 );
+}
+
+//------------------------------------------------------------------------------
+void dbprint( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
 	{
@@ -78,7 +85,7 @@ WrenchDebugClient::WrenchDebugClient( WRState* w )
 
 	m_server = 0;
 	m_client = 0;
-
+	m_comm = 0;
 	m_code = 0;
 }
 
@@ -92,53 +99,62 @@ WrenchDebugClient::~WrenchDebugClient()
 
 	g_free( m_code );
 	
-	m_server->~WRDebugServerInterface();
-	g_free( m_server );
-
-	m_client->~WRDebugClientInterface();
-	g_free( m_client );
+	delete m_server;
+	delete m_client;
+	delete m_comm;
 }
 
 //------------------------------------------------------------------------------
-bool WrenchDebugClient::init( const char* name, const char* port )
+bool WrenchDebugClient::init( const char* name, const char* address, const int port )
 {
 	if ( !name )
 	{
 		return false;
 	}
 
-	if ( m_client )
-	{
-		m_client->~WRDebugClientInterface();
-		g_free( m_client );
-	}
+	g_free( m_code );
+	m_code = 0;
 
-	if ( m_server )
-	{
-		m_server->~WRDebugServerInterface();
-		g_free( m_server );
-	}
+	delete m_client;
+	delete m_server;
+	delete m_comm;
+	m_client = 0;
+	m_server = 0;
+	m_comm = 0;
 
-	if ( port )
+	if ( address )
 	{
-		m_server = 0;
-		
-		m_client = (WRDebugClientInterface*)g_malloc( sizeof(WRDebugClientInterface) );
-		new (m_client) WRDebugClientInterface( wr_serialReceive,
-											   wr_serialSend,
-											   wr_serialBytesAvailable );
-		if ( !wr_serialOpen(port) )
+		if ( port )
 		{
-			return false;
+			WrenchDebugTcpInterface* tcp = new WrenchDebugTcpInterface();
+			if ( !tcp->connect(address, port) )
+			{
+				delete tcp;
+				return false;
+			}
+
+			m_client = new WRDebugClientInterface( tcp );
+			m_comm = tcp;
+		}
+		else
+		{
+			WrenchDebugSerialInterface* serial = new WrenchDebugSerialInterface();
+			if ( !serial->open(address) )
+			{
+				delete serial;
+				return false;
+			}
+
+			m_client = new WRDebugClientInterface( serial );
+			m_comm = serial;
 		}
 	}
 	else
 	{
-		m_server = (WRDebugServerInterface*)g_malloc( sizeof(WRDebugServerInterface) );
-		new (m_server) WRDebugServerInterface( m_w );
-		
-		m_client = (WRDebugClientInterface*)g_malloc( sizeof(WRDebugClientInterface) );
-		new (m_client) WRDebugClientInterface( m_server );
+		WrenchDebugLoopbackInterface* loop = new WrenchDebugLoopbackInterface();
+		m_client = new WRDebugClientInterface( loop );
+		m_server = new WRDebugServerInterface( m_w, loop );
+		m_comm = loop;
 	}
 
 	return loadSource( name );
@@ -171,7 +187,11 @@ bool WrenchDebugClient::loadSource( const char* name )
 						  WR_EMBED_DEBUG_CODE|WR_INCLUDE_GLOBALS|WR_EMBED_SOURCE_CODE );
 	if ( err )
 	{
+#ifdef WRENCH_WITHOUT_COMPILER
+		printf( "compile error [#%d]\n", err );
+#else
 		printf( "compile error [%s]\n", c_errStrings[err] );
+#endif
 		return false;
 	}
 
@@ -179,7 +199,7 @@ bool WrenchDebugClient::loadSource( const char* name )
 	wr_asciiDump( m_code, m_codeLen, str );
 	printf( "%d:\n%s\n", m_codeLen, str.c_str() );
 
-	m_client->load( (const char*)m_code, m_codeLen );
+	m_client->load( m_code, m_codeLen );
 
 	m_client->getFunctions();
 
@@ -197,11 +217,11 @@ bool WrenchDebugClient::loadSource( const char* name )
 }
 
 //------------------------------------------------------------------------------
-void WrenchDebugClient::enter( const char* sourceFileName, const char* port )
+void WrenchDebugClient::enter( const char* sourceFileName, const char* address, const int port )
 {
 	WRstr currentName = sourceFileName;
 	
-	bool state = init( currentName, port );
+	bool state = init( currentName, address, port );
 
 	bool showCodePos = false;
 	bool showCallStack = false;

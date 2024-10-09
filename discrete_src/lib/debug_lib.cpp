@@ -39,31 +39,23 @@ void wr_debugPrintEx( WRValue* stackTop, const int argn, WRContext* c, const cha
 	if( argn >= 1 && c->debugInterface )
 	{
 		WRValue* args = stackTop - argn;
-
-		char inbuf[512];
-
-		WrenchPacket* P = WrenchPacket::alloc( WRD_DebugOut, 520 );
-
-		args[0].asString(inbuf);
-		int size = wr_sprintfEx( (char*)P->payload(), strlen((char*)P->payload()), inbuf, strlen(inbuf), args + 1, argn - 1);
-
-		for( int a=0; append && append[a]; ++a )
+		unsigned int inlen;
+		char* inbuf = args[0].asMallocString( &inlen );
+		if ( !inbuf )
 		{
-			*(P->payload() + size) = append[a];
-			++size;
+			return;
 		}
 
-		*(P->payload() + size++) = 0;
-		P->setPayloadSize( size );
+		char outbuf[200];
+		int size = wr_sprintfEx( outbuf, 199, inbuf, inlen, args + 1, argn - 1);
+			
+		WrenchPacket* P = WrenchPacket::alloc( WRD_DebugOut, size, (uint8_t*)outbuf );
+			
+		g_free( inbuf );
 
-		if ( c->debugInterface->I->m_sendFunction )
-		{
-			c->debugInterface->I->m_sendFunction( (char *)P, P->xlate() );
-		}
-		else
-		{
-			printf("%s", P->payload() );
-		}
+		c->debugInterface->I->m_comm->send( P );
+
+		g_free( P );
 	}
 #endif
 }

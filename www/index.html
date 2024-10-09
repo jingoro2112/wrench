@@ -428,6 +428,22 @@ WRValue* indexHash( WRContext* context, const uint32_t hash, const bool create )
 // the pointer will be passed back
 char* asString( char* string, size_t maxLen =0 ) const;
 
+// malloc a string of sufficient size and copy/format the contents
+// of this value into it, the string muyst be g_free'ed
+char* asMallocString( unsigned int* strLen =0 ) const;
+class MallocStrScoped // helper class for asMallocString()
+{
+public:
+    operator bool()        const { return m_str != 0; }
+    operator const char*() const { return m_str; }
+    unsigned int size()    const { return m_size; }
+    MallocStrScoped( WRValue const& V ) : m_size(0), m_str(V.asMallocString(&m_size)) {}
+    ~MallocStrScoped() { g_free((char*)m_str); }
+private:
+    unsigned int m_size;
+    const char* m_str;
+};
+
 // same as "asString" but will print it in a more debug-symbol-y
 char* technicalAsString( char* string, size_t maxLen, bool valuesInHex =false ) const;
 

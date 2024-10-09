@@ -1,5 +1,5 @@
-#ifndef _STD_IO_DEFS_H
-#define _STD_IO_DEFS_H
+#ifndef _STD_SERIAL_H
+#define _STD_SERIAL_H
 /*******************************************************************************
 Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
 
@@ -24,24 +24,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
 
-struct WRValue;
-struct WRContext;
-struct WRState;
+#if defined(WRENCH_WIN32_SERIAL) || defined(WRENCH_LINUX_SERIAL) || defined(WRENCH_ARDUINO_SERIAL)
 
-void wr_read_file( WRValue* stackTop, const int argn, WRContext* c );
-void wr_write_file( WRValue* stackTop, const int argn, WRContext* c );
-void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c );
+#ifdef WRENCH_WIN32_SERIAL
+#include <windows.h>
+#include <atlstr.h>
+#define WR_BAD_SOCKET INVALID_HANDLE_VALUE
+#endif
 
-void wr_getline( WRValue* stackTop, const int argn, WRContext* c );
+#ifdef WRENCH_LINUX_SERIAL
+#define HANDLE int
+#define WR_BAD_SOCKET -1
+#endif
 
-void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c );
-void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c );
-void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c );
-void wr_ioWrite( WRValue* stackTop, const int argn, WRContext* c );
-void wr_ioSeek( WRValue* stackTop, const int argn, WRContext* c );
-void wr_ioFSync( WRValue* stackTop, const int argn, WRContext* c );
+#ifdef WRENCH_ARDUINO_SERIAL
+#include <Arduino.h>
+#define HANDLE HardwareSerial&
+#endif
 
-void wr_ioPushConstants( WRState* w );
-void wr_stdout( const char* data, const int size );
+HANDLE wr_serialOpen( const char* name );
+void wr_serialClose( HANDLE name );
+int wr_serialSend( HANDLE comm, const char* data, const int size );
+int wr_serialReceive( HANDLE comm, char* data, const int max );
+int wr_serialPeek( HANDLE comm );
+
+#endif
 
 #endif

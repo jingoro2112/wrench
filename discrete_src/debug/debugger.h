@@ -1,3 +1,5 @@
+#ifndef _DEBUGGER_H
+#define _DEBUGGER_H
 /*******************************************************************************
 Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
@@ -21,24 +23,25 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
-#ifndef _DEBUGGER_H
-#define _DEBUGGER_H
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
+
+class WrenchDebugTcpInterface;
+class WrenchDebugSerialInterface;
 
 //------------------------------------------------------------------------------
 class WrenchDebugClient
 {
 public:
 
-	void enter( const char* sourceFileName, const char* port =0 );
+	void enter( const char* sourceFileName, const char* address, const int port =0 );
 
 	WrenchDebugClient( WRState* w =0 ); // use provided state or make a new one
 	~WrenchDebugClient();
 
 private:
 
-	bool init( const char* name, const char* port =0 );
+	bool init( const char* name, const char* address, const int port =0 );
 	bool loadSource( const char* name );
 
 	bool printVariable( WRstr& str );
@@ -68,8 +71,10 @@ private:
 	unsigned char* m_code;
 	int m_codeLen;
 
-	WRDebugServerInterface* m_server;
 	WRDebugClientInterface* m_client;
+	WRDebugServerInterface* m_server;
+
+	WrenchDebugCommInterface* m_comm;
 };
 
 #endif

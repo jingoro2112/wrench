@@ -86,7 +86,7 @@ int wr_sprintfEx( char* outbuf,
 resetState:
 
 	char padChar = ' ';
-	unsigned char columns = 0;
+	unsigned int columns = 0;
 	char flags = 0;
 
 	for(;;)
@@ -146,16 +146,18 @@ resetState:
 		}
 		else // string or integer
 		{
-			char buf[20]; // buffer for integer
+			const int c_bufSize = 20;
+			char buf[c_bufSize]; // buffer for integer
 
 			const char *ptr; // pointer to first char of integer
+			unsigned int len;
 
 			if ( c == 's' ) // string
 			{
 				buf[0] = 0;
 				if ( listPtr < argn )
 				{
-					ptr = (char *)args[listPtr].array();
+					ptr = (char *)args[listPtr].array(&len);
 					if ( !ptr )
 					{
 						return 0;
@@ -165,6 +167,7 @@ resetState:
 				else
 				{
 					ptr = buf;
+					len = 0;
 				}
 
 				padChar = ' '; // in case some joker uses a 0 in their column spec
@@ -173,13 +176,13 @@ copyToString:
 
 				// get the string length so it can be formatted, don't
 				// copy it, just count it
-				unsigned char len = 0;
-				for ( ; *ptr; ptr++ )
-				{
-					len++;
-				}
-
-				ptr -= len;
+//				unsigned int len = 0;
+//				for ( ; *ptr; ptr++ )
+//				{
+//					len++;
+//				}
+//
+//				ptr -= len;
 
 				// Right-justify
 				if ( !(flags & negativeJustify) )
@@ -201,7 +204,7 @@ copyToString:
 					addChar( outbuf, 'x', pos, outsize );
 				}
 
-				for (unsigned char l = 0; l < len; ++l )
+				for (unsigned int l = 0; l < len; ++l )
 				{
 					addChar( outbuf, *ptr++, pos, outsize );
 				}
@@ -318,8 +321,8 @@ convertBase:
 
 					} while ( p != buf );
 
-					ptr--; // was one past char we want
-
+					--ptr; // was one past char we want
+					len = (buf + width) - ptr;
 					goto copyToString;
 				}
 				else // invalid format specifier
@@ -545,17 +548,21 @@ void wr_strchr( WRValue* stackTop, const int argn, WRContext* c )
 
 	WRValue* args = stackTop - argn;
 
-	const char* str = (const char*)(args[0].array());
+	unsigned int len;
+	const char* str = (const char*)(args[0].array(&len));
 	if ( !str )
 	{
 		return;
 	}
 	
 	char ch = (char)args[1].asInt();
-	const char* found = strchr( str, ch );
-	if ( found )
+	for( unsigned int i=0; i<len; ++i )
 	{
-		stackTop->i = found - str;
+		if ( str[i] == ch )
+		{
+			stackTop->i = i;
+			break;
+		}
 	}
 }
 
@@ -622,21 +629,15 @@ void wr_toupper( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_tol( WRValue* stackTop, const int argn, WRContext* c )
 {
+	char buf[21];
+	stackTop->init();
 	if ( argn == 2 )
 	{
-		const char* str = (const char*)stackTop[-2].array();
-		if ( str )
-		{
-			stackTop->i = (int)strtol( str, 0, stackTop[-1].asInt() );
-		}
+		stackTop->i = (int)strtol( stackTop[-2].asString(buf, 20), 0, stackTop[-1].asInt() );
 	}
 	else if ( argn == 1 )
 	{
-		const char* str = (const char*)stackTop[-1].array();
-		if ( str )
-		{
-			stackTop->i = (int)strtol( str, 0, 10 );
-		}
+		stackTop->i = (int)strtol( stackTop[-1].asString(buf, 20), 0, 10 );
 	}
 }
 

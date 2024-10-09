@@ -1,4 +1,6 @@
 #define WRENCH_COMBINED
+#ifndef _WRENCH_H
+#define _WRENCH_H
 /*******************************************************************************
 Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
@@ -22,16 +24,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
-#ifndef _WRENCH_H
-#define _WRENCH_H
-/*------------------------------------------------------------------------------*/
+
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 4
+#define WRENCH_VERSION_BUILD 5
 struct WRState;
 
 /************************************************************************
@@ -57,18 +57,6 @@ of more speed so only use it if you need to.
 //#define WRENCH_REALLY_COMPACT    // saves a little more, costs more speed
 
 
-// Default implementations are provided for these architectures, define
-// one so the sample_client will compile
-//#define WRENCH_WIN32_SERIAL
-//#define WRENCH_ARDUINO_SERIAL
-//#define WRENCH_LINUX_SERIAL
-bool wr_serialOpen( const char* name );
-void wr_serialClose();
-bool wr_serialSend( const char* data, const int size );
-bool wr_serialReceive( char* data, const int expected );
-int wr_serialBytesAvailable();
-
-
 /***********************************************************************
 Some architectures (mostly embedded) really don't like reading more than
 8 bits on an unaligned memory location and will bus fault! If your architecture
@@ -92,6 +80,13 @@ architecture, see vm.h for the current definitions
 /***********************************************************************
  **** EXPERIMENTAL **** only very basic support is in place */
 //#define WRENCH_INCLUDE_DEBUG_CODE
+
+// the debugger works over a serial link, define the architecure this
+// side is being targetted for
+//#define WRENCH_WIN32_SERIAL
+//#define WRENCH_ARDUINO_SERIAL
+//#define WRENCH_LINUX_SERIAL
+
 /***********************************************************************/
 
 
@@ -150,9 +145,24 @@ examples are in
 //#define WRENCH_LINUX_FILE_IO
 //#define WRENCH_SPIFFS_FILE_IO
 //#define WRENCH_LITTLEFS_FILE_IO
-//#define WRENCH_CUSTOM_FILE_IO    
-/***********************************************************************/
 
+
+/************************************************************************
+basic TCP/IP socket operations, define the architecture you are
+compiling for here, then see wr_loadTCPLib(...)
+*/
+//#define WRENCH_WIN32_TCP
+//#define WRENCH_LINUX_TCP
+
+
+/************************************************************************
+Wrench protects itself against divide-by-zero, but allows the result to
+be '0'. Trapping the error requires a tiny bit of overhead(ie- every
+result has to be checked to see if it was a divide by zero) so by
+default wrench does not bother in favor of speed.
+Define this to received the fatal error:  WR_ERR_division_by_zero
+*/
+//#define WRENCH_TRAP_DIVISION_BY_ZERO
 
 /************************************************************************
 for systems that need to know if they have run out of memory.
@@ -248,6 +258,8 @@ enum WRError
 	WR_ERR_malloc_failed,
 
 	WR_ERR_USER_err_out_of_range,
+
+	WR_ERR_division_by_zero,
 	
 	WR_warning_enums_follow,
 
@@ -493,6 +505,7 @@ void wr_loadStringLib( WRState* w ); // string functions
 void wr_loadMessageLib( WRState* w ); // messaging between contexts
 void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
 void wr_loadDebugLib( WRState* w ); // debuger-interact functions
+void wr_loadTCPLib( WRState* w ); // TCP/IP functions
 
 // arduino-specific functions, be sure to add arduino_lib.cpp to your
 // sketch. much thanks to Koepel for contributing
@@ -664,7 +677,7 @@ enum WRExType
 enum WRExType : uint8_t
 #endif
 {
-	WR_EX_NONE       = 0x00,  // 0000
+	WR_EX_INVALID    = 0x00,  // 0000
 
 	WR_EX_RAW_ARRAY  = 0x20,  // 0010
 
@@ -755,7 +768,22 @@ struct WRValue
 	// the "string" pointer will be passed back, if maxLen is 0 (not
 	// reccomended) the string is assumed to be unlimited size
 	char* asString( char* string, unsigned int maxLen =0, unsigned int* strLen =0 ) const;
+
+	// malloc a string of sufficient size and copy/format the contents
+	// of this value into it, the string muyst be g_free'ed
 	char* asMallocString( unsigned int* strLen =0 ) const;
+	class MallocStrScoped // helper class for asMallocString()
+	{
+	public:
+		operator bool()        const { return m_str != 0; }
+		operator const char*() const { return m_str; }
+		unsigned int size()    const { return m_size; }
+		MallocStrScoped( WRValue const& V ) : m_size(0), m_str(V.asMallocString(&m_size)) {}
+		~MallocStrScoped() { g_free((char*)m_str); }
+	private:
+		unsigned int m_size;
+		const char* m_str;
+	};
 
 	// same as "asString" but will print it in a more debug-symbol-y
 	char* technicalAsString( char* string, unsigned int maxLen, bool valuesInHex =false, unsigned int* strLen =0 ) const;
@@ -772,16 +800,8 @@ struct WRValue
 	WRValue& singleValue() const; // return a single value for comparison
 	WRValue& deref() const; // if this value is a ARRAY_MEMBER, copy the referred value in
 
+	uint32_t getHash() const { return (type <= WR_FLOAT) ? ui : getHashEx(); } // easy cases
 	uint32_t getHashEx() const; // harder
-	uint32_t getHash() const // for easy cases
-	{
-		if ( type <= WR_FLOAT )
-		{
-			return ui;
-		}
-
-		return getHashEx();
-	}
 
 	union // first 4 bytes 
 	{
@@ -942,6 +962,7 @@ struct WrenchPacket;
 class WRDebugServerInterface;
 class WRDebugServerInterfacePrivate;
 class WRDebugClientInterfacePrivate;
+class WrenchDebugCommInterface;
 template<class> class SimpleLL;
 
 //------------------------------------------------------------------------------
@@ -995,16 +1016,11 @@ class WRDebugClientInterface
 {
 public:
 	// server is remote, define these methods to talk to it
-	WRDebugClientInterface( bool (*receiveFunction)( char* data, const int length ),
-							bool (*sendFunction)( const char* data, const int length ),
-							int  (*bytesAvailableFunction)() );
-
-	// used for when the server is local in-core
-	WRDebugClientInterface( WRDebugServerInterface* localServer );
+	WRDebugClientInterface( WrenchDebugCommInterface* CommInterface );
 
 	// load and prepare a program for running
 	// if byteCode/size is null then previoous code is re-loaded
-	void load( const char* byteCode =0, const int size =0 ); 
+	void load( const uint8_t* byteCode =0, const int size =0 ); 
 
 	bool getSourceCode( const char** data, int* len ); // get a new'ed pointer to the source code
 	uint32_t getSourceCodeHash(); // get the crc of the code that was compiled
@@ -1029,6 +1045,8 @@ public:
 
 	WRP_ProcState getProcState();
 
+	void setDebugEmitCallback( void (*print)( const char* debugText ) );
+
 	// "hidden" internals to keep header clean
 	WRDebugClientInterfacePrivate* I;
 	~WRDebugClientInterface();
@@ -1043,17 +1061,9 @@ public:
 class WRDebugServerInterface
 {
 public:
-	// for local, just wait to be talked to directly
-	WRDebugServerInterface( WRState* w );
 
-	// for remote, define these functions to send/receive data AND call
-	// tick() periodically!
-	WRDebugServerInterface( WRState* w,
-							bool (*receiveFunction)( char* data, const int length ),
-							bool (*sendFunction)( const char* data, const int length ),
-							int  (*bytesAvailableFunction)() );
+	WRDebugServerInterface( WRState* w, WrenchDebugCommInterface* CommInterface );
 
-	// needs to be called periodically if this is a remote instance only
 	void tick();
 
 	// NOTE: loadBytes() does NOT make a local copy! bytes must remain valid for the life of this object!
@@ -1081,9 +1091,13 @@ public:
 #include "utils/opcode.h"
 #include "cc/str.h"
 #include "cc/opcode_stream.h"
+#include "debug/packet.h"
 #include "debug/debug.h"
-#include "utils/debugger.h"
+#include "debug/debugger.h"
 #include "cc/cc.h"
+#include "lib/std_tcp.h"
+#include "lib/std_serial.h"
+#include "debug/debug_comm.h"
 #include "lib/std_io_defs.h"
 #endif
 

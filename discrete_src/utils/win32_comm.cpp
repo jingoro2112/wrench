@@ -22,68 +22,57 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
 
-#ifdef WRENCH_WIN32_SERIAL
-
 #include "wrench.h"
-#include <windows.h>
-#include <atlstr.h>
-static HANDLE s_comm = INVALID_HANDLE_VALUE;
 
 //------------------------------------------------------------------------------
-bool wr_serialOpen( const char* name )
+HANDLE wr_serialOpen( const char* name )
 {
-	CloseHandle( s_comm );
-	s_comm = INVALID_HANDLE_VALUE;
-
-	s_comm = CreateFile( CString(name),					 // Specify port device "COMx"
-						 GENERIC_READ | GENERIC_WRITE,   // Specify mode that open device.
-						 0,                              // the devide isn't shared.
-						 NULL,                           // the object gets a default security.
-						 OPEN_EXISTING,                  // Specify which action to take on file. 
-						 0,                              // default.
-						 NULL );
-	
-	return s_comm != INVALID_HANDLE_VALUE;
+	return CreateFile( CString(name),				 // Specify port device "COMx"
+					   GENERIC_READ | GENERIC_WRITE,  // Specify mode that open device.
+					   0,                             // the devide isn't shared.
+					   NULL,                          // the object gets a default security.
+					   OPEN_EXISTING,                 // Specify which action to take on file. 
+					   0,                             // default.
+					   NULL );
 }
 
 //------------------------------------------------------------------------------
-bool wr_serialSend( const char* data, const int size )
+int wr_serialSend( HANDLE comm, const char* data, const int size )
 {
 	DWORD bytes = 0;
-	if ( (WriteFile(s_comm, data, size, &bytes, NULL) == FALSE) || (bytes != size) )
+	if ( WriteFile(comm, data, size, &bytes, NULL) == FALSE )
 	{
-		return false;
+		return -1;
 	}
 
-	return true;
+	return (int)bytes;
 }
 
 //------------------------------------------------------------------------------
-bool wr_serialReceive( char* data, const int expected )
+int wr_serialReceive( HANDLE comm, char* data, const int max )
 {
-	if ( s_comm == INVALID_HANDLE_VALUE )
-	{
-		return false;
-	}
-
 	DWORD bytes = 0;
-	if (!ReadFile(s_comm, data, expected, &bytes, NULL))
+	if ( ReadFile(comm, data, max, &bytes, NULL) == FALSE )
 	{
-		return false;
+		return -1;
 	} 
 	
-	return bytes == expected;
+	return (int)bytes;
 }
 
 //------------------------------------------------------------------------------
-int wr_serialBytesAvailable()
+int wr_serialPeek( HANDLE comm )
 {
 	DWORD avail = 0;
-	if ( s_comm != INVALID_HANDLE_VALUE )
-	{
-		PeekNamedPipe( s_comm, 0, 0, 0, &avail, 0 );
-	}
+	
+	PeekNamedPipe( comm, 0, 0, 0, &avail, 0 );
+
 	return (int)avail;
 }
 
-#endif
+//------------------------------------------------------------------------------
+void wr_serialClose( HANDLE comm )
+{
+	CloseHandle( comm );
+}
+

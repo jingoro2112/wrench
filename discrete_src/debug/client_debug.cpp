@@ -34,31 +34,17 @@ void WRDebugClientInterface::init()
 	uint8_t* out;
 	int outSize;
 	wr_compile("", 0, &out, &outSize);
-	I->m_scratchContext = wr_newContext(I->m_scratchState, out, outSize, true);
+	I->m_scratchContext = wr_newContext( I->m_scratchState, out, outSize, true );
 	I->m_scratchContext->allocatedMemoryHint = 0;
 }
 
 //------------------------------------------------------------------------------
-WRDebugClientInterface::WRDebugClientInterface( bool (*receiveFunction)( char* data, const int length ),
-												bool (*sendFunction)( const char* data, const int length ),
-												int (*dataAvailableFunction)() )
+WRDebugClientInterface::WRDebugClientInterface( WrenchDebugCommInterface* comm )
 {
 	I = new WRDebugClientInterfacePrivate;
-	I->m_receiveFunction = receiveFunction;
-	I->m_sendFunction = sendFunction;
-	I->m_dataAvailableFunction = dataAvailableFunction;
 	I->m_parent = this;
+	I->m_comm = comm;
 
-	init();
-}
-
-//------------------------------------------------------------------------------
-WRDebugClientInterface::WRDebugClientInterface( WRDebugServerInterface* localServer )
-{
-	I = new WRDebugClientInterfacePrivate;
-	I->m_localServer = localServer;
-	I->m_parent = this;
-	
 	init();
 }
 
@@ -70,42 +56,19 @@ WRDebugClientInterface::~WRDebugClientInterface()
 }
 
 //------------------------------------------------------------------------------
-void WRDebugClientInterface::load( const char* byteCode, const int size )
+void WRDebugClientInterface::load( const uint8_t* byteCode, const int size )
 {
 	I->m_scratchContext->gc(0);
 
-	WrenchPacket* packet = WrenchPacket::alloc( WRD_Load, size );
-	memcpy( packet->payload(), byteCode, size );
-	
-	g_free( I->transmit(packet) );
+	I->m_comm->send( WrenchPacketScoped(WRD_Load, size, byteCode) );
 
+	// invalidate source block;
 	g_free( I->m_sourceBlock );
 	I->m_sourceBlock = 0;
 	I->m_functions->clear();
 	I->m_callstackDirty = true;
 	I->m_symbolsLoaded = false;
 	I->populateSymbols();
-}
-
-
-//------------------------------------------------------------------------------
-void WRDebugClientInterfacePrivate::trapRunOutput( WrenchPacket const& packet )
-{
-	for(;;)
-	{
-		WrenchPacket *reply = transmit( WrenchPacketScoped(WrenchPacket::alloc(packet)) );
-		if ( reply->_type == WRD_DebugOut )
-		{
-			printf( "%s", (char*)reply->payload() );
-			g_free( reply );
-			continue;
-		}
-		else
-		{
-			g_free( reply );
-			break;
-		}
-	}
 }
 
 //------------------------------------------------------------------------------
@@ -116,8 +79,9 @@ void WRDebugClientInterface::run( const int toLine )
 
 	WrenchPacket packet( WRD_Run );
 	packet.param1 = toLine;
+	I->m_comm->send( &packet );
 
-	I->trapRunOutput( packet );
+	WrenchPacketScoped r( I->getPacket() );
 }
 
 //------------------------------------------------------------------------------
@@ -125,14 +89,15 @@ bool WRDebugClientInterface::getSourceCode( const char** data, int* len )
 {
 	if ( !I->m_sourceBlock )
 	{
-		WrenchPacketScoped r( I->transmit(WrenchPacketScoped(WRD_RequestSourceBlock)) );
+		I->m_comm->send( WrenchPacket(WRD_RequestSourceBlock) );
+
+		WrenchPacketScoped r( I->getPacket() );
 		
-		if ( !r.packet || r.packet->_type != WRD_ReplySource )
+		if ( !r || r.packet->_type != WRD_ReplySource )
 		{
 			return false;
 		}
 		
-		g_free( I->m_sourceBlock );
 		I->m_sourceBlockLen = r.packet->payloadSize();
 		I->m_sourceBlock = (char*)g_malloc( r.packet->payloadSize() + 1 );
 		
@@ -149,8 +114,10 @@ bool WRDebugClientInterface::getSourceCode( const char** data, int* len )
 //------------------------------------------------------------------------------
 uint32_t WRDebugClientInterface::getSourceCodeHash()
 {
-	WrenchPacketScoped r( I->transmit(WrenchPacketScoped(WRD_RequestSourceHash)) );
-	if ( !r.packet || r.packet->_type != WRD_ReplySourceHash )
+	I->m_comm->send( WrenchPacket(WRD_RequestSourceHash) );
+	WrenchPacketScoped r( I->getPacket() );
+
+	if ( !r || r.packet->_type != WRD_ReplySourceHash )
 	{
 		return 0;
 	}
@@ -178,13 +145,14 @@ WRValue* WRDebugClientInterface::getValue( WRValue& value, const int index, cons
 {
 	value.init();
 
-	WrenchPacketScoped p( WRD_RequestValue );
-	p.packet->param1 = index;
-	p.packet->param2 = depth;
+	WrenchPacket p( WRD_RequestValue );
+	p.param1 = index;
+	p.param2 = depth;
 
-	WrenchPacketScoped r( I->transmit(p.packet) );
+	I->m_comm->send( &p );
+	WrenchPacketScoped r( I->getPacket() );
 
-	if ( !r.packet || r.packet->_type != WRD_ReplyValue )
+	if ( !r || r.packet->_type != WRD_ReplyValue )
 	{
 		return 0;
 	}
@@ -220,8 +188,10 @@ const char* WRDebugClientInterface::getValueLabel( const int index, const int de
 //------------------------------------------------------------------------------
 bool WRDebugClientInterface::getStackDump( char* out, const unsigned int maxOut )
 {
-	WrenchPacketScoped r( I->transmit(WrenchPacketScoped(WRD_RequestStackDump)) );
-	if ( !r.packet || (r.packet->_type != WRD_ReplyStackDump) )
+	I->m_comm->send( WrenchPacket(WRD_RequestStackDump) );
+	WrenchPacketScoped r( I->getPacket() );
+
+	if ( !r || (r.packet->_type != WRD_ReplyStackDump) )
 	{
 		return false;
 	}
@@ -241,8 +211,10 @@ SimpleLL<WrenchCallStackEntry>* WRDebugClientInterface::getCallstack()
 
 	I->m_callStack->clear();
 
-	WrenchPacketScoped r( I->transmit(WrenchPacketScoped(WRD_RequestCallstack)) );
-	if ( !r.packet || (r.packet->_type != WRD_ReplyCallstack) )
+	I->m_comm->send( WrenchPacket(WRD_RequestCallstack) );
+	WrenchPacketScoped r( I->getPacket() );
+
+	if ( !r || (r.packet->_type != WRD_ReplyCallstack) )
 	{
 		return 0;
 	}
@@ -268,7 +240,8 @@ void WRDebugClientInterface::stepInto( const int steps )
 {
 	I->m_callstackDirty = true;
 	WrenchPacket packet( WRD_RequestStepInto );
-	I->trapRunOutput( packet );
+	I->m_comm->send( &packet );
+	WrenchPacketScoped r( I->getPacket() );
 }
 
 //------------------------------------------------------------------------------
@@ -276,7 +249,8 @@ void WRDebugClientInterface::stepOver( const int steps )
 {
 	I->m_callstackDirty = true;
 	WrenchPacket packet( WRD_RequestStepOver );
-	I->trapRunOutput( packet );
+	I->m_comm->send( &packet );
+	WrenchPacketScoped r( I->getPacket() );
 }
 
 //------------------------------------------------------------------------------
@@ -286,161 +260,27 @@ WRP_ProcState WRDebugClientInterface::getProcState()
 }
 
 //------------------------------------------------------------------------------
+void WRDebugClientInterface::setDebugEmitCallback( void (*print)( const char* debugText ) )
+{
+	I->outputDebug = print;
+}
+
+//------------------------------------------------------------------------------
 void WRDebugClientInterface::setBreakpoint( const int lineNumber )
 {
-	WrenchPacketScoped b(WRD_RequestSetBreakpoint);
-	b.packet->param1 = lineNumber;
-	g_free( I->transmit(b) );
+	WrenchPacket packet( WRD_RequestSetBreakpoint );
+	packet.param1 = lineNumber;
+	I->m_comm->send( &packet );
+	WrenchPacketScoped r( I->getPacket() );
 }
 
 //------------------------------------------------------------------------------
 void WRDebugClientInterface::clearBreakpoint( const int lineNumber )
 {
-	WrenchPacketScoped b(WRD_RequestClearBreakpoint);
-	b.packet->param1 = lineNumber;
-	g_free (I->transmit(b) );
-}
-
-//------------------------------------------------------------------------------
-WRDebugClientInterfacePrivate::WRDebugClientInterfacePrivate()
-{
-	init();
-}
-
-//------------------------------------------------------------------------------
-void wr_FunctionClearFunc( WrenchFunction& F )
-{
-	delete F.vars;
-}
-							  
-//------------------------------------------------------------------------------
-void WRDebugClientInterfacePrivate::init()
-{
-	memset( this, 0, sizeof(*this) );
-	m_packetQ = new SimpleLL<WrenchPacket*>( wr_PacketClearFunc );
-	m_functions = new SimpleLL<WrenchFunction>( wr_FunctionClearFunc );
-	m_callStack = new SimpleLL<WrenchCallStackEntry>();
-}
-
-//------------------------------------------------------------------------------
-WRDebugClientInterfacePrivate::~WRDebugClientInterfacePrivate()
-{
-	g_free( m_sourceBlock );
-
-	delete m_packetQ;
-	delete m_functions;
-	delete m_callStack;
-}
-
-//------------------------------------------------------------------------------
-WrenchPacket* WRDebugClientInterfacePrivate::transmit( WrenchPacket* packet )
-{
-	WrenchPacket* reply = 0;
-	if ( m_localServer )
-	{
-		reply = m_localServer->I->processPacket( packet );
-	}
-	else
-	{
-		uint32_t size = packet->xlate();
-		
-		if ( m_sendFunction((char*)packet, size) )
-		{
-			WrenchPacket r;
-			if ( m_receiveFunction( (char*)&r, sizeof(WrenchPacket)) )
-			{
-				r.xlate();
-				reply = (WrenchPacket*)g_malloc( r.size );
-				memcpy( (char*)reply, (char*)&r, sizeof(WrenchPacket) );
-				
-				if ( r.payloadSize() )
-				{
-					if ( !m_receiveFunction((char*)reply->payload(), reply->payloadSize()) )
-					{
-						g_free( reply );
-						reply = 0;
-					}
-				}
-			}
-		}
-
-		if ( reply == 0 )
-		{
-			// there was an error, drain the q
-			while( m_dataAvailableFunction() )
-			{
-				char c;
-				m_receiveFunction( &c, 1 );
-			}
-		}
-
-	}
-
-	return reply;
-}
-
-
-//------------------------------------------------------------------------------
-void WRDebugClientInterfacePrivate::getValues( SimpleLL<WrenchDebugValue>& values, const int depth )
-{
-	values.clear();
-
-	WrenchFunction* g = (*m_functions)[depth];
-	
-
-	for( unsigned int i = 0; i<g->vars->count(); ++i )
-	{
-		WrenchDebugValue* v = values.addTail();
-
-		strncpy( v->name, (*g->vars)[i]->label, 63 );
-		m_parent->getValue( v->value, i, depth );
-	}
-}
-
-//------------------------------------------------------------------------------
-void WRDebugClientInterfacePrivate::populateSymbols()
-{
-	if ( m_symbolsLoaded )
-	{
-		return;
-	}
-	
-	m_functions->clear();
-
-	WrenchPacketScoped r( transmit(WrenchPacketScoped(WRD_RequestSymbolBlock)) );
-
-	if ( !r.packet || r.packet->_type != WRD_ReplySymbolBlock )
-	{
-		return;
-	}
-
-	m_symbolsLoaded = true;
-	
-	const unsigned char *block = (const unsigned char *)r.packet->payload();
-	
-	int functionCount = READ_16_FROM_PC( block );
-	int pos = 2;
-
-	for( int f=0; f<functionCount; ++f )
-	{
-		uint8_t count = READ_8_FROM_PC( block + pos );
-		++pos;
-
-		WrenchFunction* func = m_functions->addTail(); // so first is always "global"
-
-		func->arguments = READ_8_FROM_PC( block + pos++ );
-		sscanf( (const char *)(block + pos), "%63s", func->name );
-
-		while( block[pos++] ); // skip to next null
-
-		func->vars = new SimpleLL<WrenchSymbol>();
-		for( uint8_t v=0; v<count; ++v )
-		{
-			WrenchSymbol* s = func->vars->addTail();
-			sscanf( (const char*)(block + pos), "%63s", s->label );
-			while( block[pos++] );
-		}
-	}
+	WrenchPacket packet( WRD_RequestClearBreakpoint );
+	packet.param1 = lineNumber;
+	I->m_comm->send( &packet );
+	WrenchPacketScoped r( I->getPacket() );
 }
 
 #endif

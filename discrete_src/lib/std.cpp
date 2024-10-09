@@ -274,4 +274,5 @@ void wr_loadAllLibs( WRState* w )
 	wr_loadSysLib( w );
 	wr_loadSerializeLib( w );
 	wr_loadDebugLib( w );
+	wr_loadTCPLib( w );
 }

@@ -46,7 +46,9 @@ if( f2[3]["3"] != "300" ) println( "f2" );
 // BTW encode/decode the most complicated one to make sure it plays well
 // with the file system
 io::writeFile( "_serialize_test.bin", std::serialize(f) );
+
 g = std::deserialize( io::readFile( "_serialize_test.bin" ) );
+
 if( g[1][1] != 10.5 ) println( "g0" );
 if( g[2][0] != "a test string" ) println( "g1" );
 if( g[3]["3"] != "300" ) println( "g2" );

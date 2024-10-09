@@ -757,8 +757,6 @@ doYield:
 					 && context->debugInterface->I->codewordEncountered(pc, READ_16_FROM_PC(pc), stackTop) )
 				{
 debugReturn:
-					//WRDebugServerInterfacePrivate *I = context->debugInterface->I;
-					//stackTop->p2 = INIT_AS_DEBUG_BREAK;
 					context->yieldArgs = 0;
 					context->flags |= (uint8_t)WRC_ForceYielded;
 					pc += 2;
@@ -2559,7 +2557,16 @@ compactCompareGG8:
 			{
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop );
+				if ( IS_INVALID(stackTop++->p2) )
+				{
+					w->err = WR_ERR_division_by_zero;
+					return 0;
+				}
+#else
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+#endif
 				CHECK_STACK;
 				FASTCONTINUE;
 			}
@@ -2568,7 +2575,16 @@ compactCompareGG8:
 			{
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop );
+				if ( IS_INVALID(stackTop++->p2) )
+				{
+					w->err = WR_ERR_division_by_zero;
+					return 0;
+				}
+#else
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+#endif
 				CHECK_STACK;
 				FASTCONTINUE;
 			}
@@ -2577,7 +2593,16 @@ compactCompareGG8:
 			{
 				register1 = globalSpace + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop );
+				if ( IS_INVALID(stackTop++->p2) )
+				{
+					w->err = WR_ERR_division_by_zero;
+					return 0;
+				}
+#else
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+#endif
 				CHECK_STACK;
 				FASTCONTINUE;
 			}
@@ -2586,7 +2611,16 @@ compactCompareGG8:
 			{
 				register1 = frameBase + READ_8_FROM_PC(pc++);
 				register0 = frameBase + READ_8_FROM_PC(pc++);
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop );
+				if ( IS_INVALID(stackTop++->p2) )
+				{
+					w->err = WR_ERR_division_by_zero;
+					return 0;
+				}
+#else
 				wr_DivideBinary[(register0->type<<2)|register1->type]( register0, register1, stackTop++ );
+#endif
 				CHECK_STACK;
 				FASTCONTINUE;
 			}
@@ -2987,6 +3021,13 @@ targetFuncOp:
 				register1 = --stackTop;
 				register0 = stackTop - 1;
 				targetFunc[(register1->type<<2)|register0->type]( register1, register0, register0 );
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+				if ( IS_INVALID(register0->p2) )
+				{
+					w->err = WR_ERR_division_by_zero;
+					return 0;
+				}
+#endif
 				CONTINUE;
 			}
 			
@@ -3007,6 +3048,13 @@ binaryTableOp:
 				register0 = --stackTop;
 				register1 = stackTop - 1;
 				voidFunc[(register0->type<<2)|register1->type]( register0, register1 );
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+				if ( IS_INVALID(register0->p2) )
+				{
+					w->err = WR_ERR_division_by_zero;
+					return 0;
+				}
+#endif
 				CONTINUE;
 			}
 			
@@ -3028,7 +3076,13 @@ binaryTableOpAndPop:
 				register0 = --stackTop;
 				register1 = --stackTop;
 				voidFunc[(register0->type<<2)|register1->type]( register0, register1 );
-				
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+				if ( IS_INVALID(register0->p2) )
+				{
+					w->err = WR_ERR_division_by_zero;
+					return 0;
+				}
+#endif
 				CONTINUE;
 			}
 			
@@ -3042,7 +3096,17 @@ binaryTableOpAndPop:
 targetFuncStoreGlobalOp:
 				register1 = --stackTop;
 				register0 = --stackTop;
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+				WRValue* T = globalSpace + READ_8_FROM_PC(pc++);
+				targetFunc[(register1->type<<2)|register0->type]( register1, register0, T );
+				if ( IS_INVALID(T->p2) )
+				{
+					w->err = WR_ERR_division_by_zero;
+					return 0;
+				}
+#else
 				targetFunc[(register1->type<<2)|register0->type]( register1, register0, globalSpace + READ_8_FROM_PC(pc++) );
+#endif
 				CONTINUE;
 			}
 			
@@ -3054,9 +3118,19 @@ targetFuncStoreGlobalOp:
 				targetFunc = wr_DivideBinary;
 				
 targetFuncStoreLocalOp:
-				register0 = --stackTop;
 				register1 = --stackTop;
-				targetFunc[(register0->type<<2)|register1->type]( register0, register1, frameBase + READ_8_FROM_PC(pc++) );
+				register0 = --stackTop;
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+				WRValue* T = frameBase + READ_8_FROM_PC(pc++);
+				targetFunc[(register1->type<<2)|register0->type]( register1, register0, T );
+				if ( IS_INVALID(T->p2) )
+				{
+					w->err = WR_ERR_division_by_zero;
+					return 0;
+				}
+#else
+				targetFunc[(register1->type<<2)|register0->type]( register1, register0, frameBase + READ_8_FROM_PC(pc++) );
+#endif
 				CONTINUE;
 			}
 

@@ -38,7 +38,6 @@ WRDebugServerInterfacePrivate::WRDebugServerInterfacePrivate( WRDebugServerInter
 
 	m_callStack = (SimpleLL<WrenchCallStackEntry>*)g_malloc(sizeof(SimpleLL<WrenchCallStackEntry>));
 	new (m_callStack)  SimpleLL<WrenchCallStackEntry>();
-
 }
 
 //------------------------------------------------------------------------------
@@ -56,58 +55,18 @@ WRDebugServerInterfacePrivate::~WRDebugServerInterfacePrivate()
 //------------------------------------------------------------------------------
 void WRDebugServerInterface::tick()
 {
-	WrenchPacket* reply = 0;
-	bool err = false;
-	
-	while( I->m_dataAvailableFunction() >= (int)sizeof(WrenchPacket) )
+	for(;;)
 	{
-		if ( err )
+		WrenchPacketScoped p(I->m_comm->receive());
+		if ( !p )
 		{
-			// on err, drain the q and restart
-			while( I->m_dataAvailableFunction() )
-			{
-				I->m_receiveFunction( (char *)&I->m_lastPacket, 1 );
-			}
-			err = false;
-			continue;
-		}
-		
-		if ( !I->m_receiveFunction( (char *)&I->m_lastPacket, sizeof(WrenchPacket)) )
-		{
-			err = true;
-			continue;
+			return;
 		}
 
-		I->m_lastPacket.xlate();
-
-		if ( I->m_lastPacket.payloadSize() == 0 )
+		WrenchPacketScoped r( I->processPacket(p) );
+		if ( r )
 		{
-			reply = I->processPacket( &I->m_lastPacket );
-		}
-		else
-		{
-			WrenchPacket *p = WrenchPacket::alloc( I->m_lastPacket );
-			if ( I->m_receiveFunction( (char*)p->payload(), p->payloadSize() ) )
-			{
-				reply = I->processPacket( p );
-			}
-			else
-			{
-				err = true;
-				reply = 0;
-			}
-
-			g_free( p );
-		}
-
-		if ( reply )
-		{
-			uint32_t size = reply->size;
-			
-			reply->xlate();
-			
-			I->m_sendFunction( (char*)reply, size );
-			g_free( reply );
+			I->m_comm->send( r );
 		}
 	}
 }

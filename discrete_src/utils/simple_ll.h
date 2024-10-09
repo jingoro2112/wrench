@@ -1,3 +1,5 @@
+#ifndef _SIMPLE_LL_H
+#define _SIMPLE_LL_H
 /*******************************************************************************
 Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
@@ -21,10 +23,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
-
-#ifndef SIMPLE_LL_H
-#define SIMPLE_LL_H
-/*------------------------------------------------------------------------------*/
 
 // only used in debug code, but it is used on the target machine so keep it compact!
 

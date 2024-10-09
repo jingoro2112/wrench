@@ -25,30 +25,29 @@ SOFTWARE.
 #ifdef WRENCH_ARDUINO_SERIAL
 
 #include "wrench.h"
-#include <Arduino.h>
 
 //------------------------------------------------------------------------------
-bool wr_serialOpen( const char* name )
+HANDLE wr_serialOpen( const char* name )
 {
-	return false;
+	return Serial;
 }
 
 //------------------------------------------------------------------------------
-bool wr_serialSend( const char* data, const int size )
+int wr_serialSend( HANDLE comm, const char* data, const int size )
 {
-	return Serial.write(data, size) == size;
+	return comm.write( data, size );
 }
 
 //------------------------------------------------------------------------------
-bool wr_serialReceive( char* data, const int expected )
+int wr_serialReceive( HANDLE comm, char* data, const int expected )
 {
-	return Serial.readBytes(data, expected) == expected;
+	return comm.readBytes( data, expected );
 }
 
 //------------------------------------------------------------------------------
-int wr_serialBytesAvailable()
+int wr_serialPeek( HANDLE comm )
 {
-	return Serial.available();
+	return comm.available();
 }
 
 #endif

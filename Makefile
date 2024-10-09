@@ -3,12 +3,14 @@ OPT ?= -O3
 
 PERF ?=
 
+#DEBUG ?= -DWRENCH_INCLUDE_DEBUG_CODE
+
 #C_VER ?= -std=c++17
 #C_VER ?= -std=c++11
 C_VER ?= -std=c++98
 
 #FLAGS ?= $(OPT) $(PERF) $(C_VER)
-FLAGS ?= $(OPT) $(PERF) -Idiscrete_src -I. $(COMPACT) $(C_VER) -MD -DWRENCH_LINUX_FILE_IO -DWRENCH_LINUX_SERIAL
+FLAGS ?= $(OPT) $(PERF) -Idiscrete_src -I. $(COMPACT) $(C_VER) -MD $(DEBUG) -DWRENCH_LINUX_FILE_IO -DWRENCH_LINUX_SERIAL -DWRENCH_LINUX_TCP
 
 #FLAGS = $(OPT) -pg
 #FLAGS = $(OPT) $(PERF)
@@ -40,10 +42,13 @@ OBJS = \
 	$(OBJDIR)/packet.o \
 	$(OBJDIR)/client_debug.o \
 	$(OBJDIR)/server_interface_private.o \
+	$(OBJDIR)/client_interface_private.o \
 	$(OBJDIR)/scheduler.o \
 	$(OBJDIR)/std.o \
+	$(OBJDIR)/std_tcp.o \
+	$(OBJDIR)/tcp_debug_comm.o \
+	$(OBJDIR)/serial_debug_comm.o \
 	$(OBJDIR)/std_io.o \
-	$(OBJDIR)/std_io_linux.o \
 	$(OBJDIR)/std_string.o \
 	$(OBJDIR)/std_math.o \
 	$(OBJDIR)/std_msg.o \
@@ -61,23 +66,23 @@ clean:
 	-@rm -rf src
 	-@mkdir src
 
-valgrind: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/utils/debugger.cpp
-	g++ -o wrench_v $(FLAGS) -Wall -Werror -I. -Idiscrete_src -O3 -ggdb $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/utils/debugger.cpp
+valgrind: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
+	g++ -o wrench_v $(FLAGS) -Wall -Werror -I. -Idiscrete_src -O3 -ggdb $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
 
-test: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/utils/debugger.cpp
-	g++ $(OBJS) -Wall -Werror discrete_src/utils/debugger.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_dev
+test: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
+	g++ $(OBJS) -Wall -Werror discrete_src/debug/debugger.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_dev
 	./wrench_dev t
 
 wrench_dev: dev_wrench
 
-dev_wrench: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/utils/debugger.cpp
-	g++ $(OBJS) -Wall -Werror discrete_src/utils/wrench_cli.cpp discrete_src/utils/debugger.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_dev
+dev_wrench: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
+	g++ $(OBJS) -Wall -Werror discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_dev
 
 wrench: $(OBJS) discrete_src/utils/wrench_cli.cpp
-	g++ $(OBJS) -Wall -Werror discrete_src/utils/debugger.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_dev
+	g++ $(OBJS) -Wall -Werror discrete_src/debug/debugger.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_dev
 	./wrench_dev release discrete_src src/.
 	-@rm wrench_dev
-	g++ -o wrench -Wall -Werror $(FLAGS) -Isrc src/wrench.cpp discrete_src/utils/wrench_cli.cpp discrete_src/utils/debugger.cpp
+	g++ -o wrench -Wall -Werror $(FLAGS) -Isrc src/wrench.cpp discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
 
 $(OBJDIR)/cc.o: discrete_src/cc/cc.cpp
 	$(CC) $@ $<
@@ -133,6 +138,9 @@ $(OBJDIR)/packet.o: discrete_src/debug/packet.cpp
 $(OBJDIR)/server_interface_private.o: discrete_src/debug/server_interface_private.cpp
 	$(CC) $@ $<
 
+$(OBJDIR)/client_interface_private.o: discrete_src/debug/client_interface_private.cpp
+	$(CC) $@ $<
+
 $(OBJDIR)/client_debug.o: discrete_src/debug/client_debug.cpp
 	$(CC) $@ $<
 
@@ -142,10 +150,16 @@ $(OBJDIR)/scheduler.o: discrete_src/vm/scheduler.cpp
 $(OBJDIR)/std.o: discrete_src/lib/std.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/std_io.o: discrete_src/lib/std_io.cpp
+$(OBJDIR)/std_tcp.o: discrete_src/lib/std_tcp.cpp
 	$(CC) $@ $<
 
-$(OBJDIR)/std_io_linux.o: discrete_src/lib/std_io_linux.cpp
+$(OBJDIR)/tcp_debug_comm.o: discrete_src/debug/tcp_debug_comm.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/serial_debug_comm.o: discrete_src/debug/serial_debug_comm.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/std_io.o: discrete_src/lib/std_io.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/std_string.o: discrete_src/lib/std_string.cpp

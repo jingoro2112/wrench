@@ -447,6 +447,7 @@ void wr_growValueArray( WRGCObject* va, int newSize );
 #define INIT_AS_STRUCT       (((uint32_t)WR_EX) | ((uint32_t)WR_EX_STRUCT<<24))
 #define INIT_AS_HASH_TABLE   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_HASH_TABLE<<24))
 #define INIT_AS_ITERATOR     (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ITERATOR<<24))
+#define INIT_AS_INVALID      (((uint32_t)WR_EX) | ((uint32_t)WR_EX_INVALID<<24))
 
 #define INIT_AS_REF      WR_REF
 #define INIT_AS_INT      WR_INT
@@ -459,6 +460,7 @@ void wr_growValueArray( WRGCObject* va, int newSize );
 #define IS_EX_RAW_ARRAY_TYPE(P)   (((P)&0xE0) == WR_EX_RAW_ARRAY)
 #define EX_RAW_ARRAY_SIZE_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define IS_EX_SINGLE_CHAR_RAW_P2(P) ((P) == (((uint32_t)WR_EX) | (((uint32_t)WR_EX_RAW_ARRAY<<24)) | (1<<8)))
+#define IS_INVALID(P) ((P) == INIT_AS_INVALID)
 
 int wr_addI( int a, int b );
 

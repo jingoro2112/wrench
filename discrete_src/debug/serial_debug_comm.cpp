@@ -1,7 +1,7 @@
 /*******************************************************************************
 Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
-MIT License
+MIT Licence
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,63 +24,76 @@ SOFTWARE.
 
 #include "wrench.h"
 
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
+#if (defined(WRENCH_WIN32_SERIAL) || defined(WRENCH_LINUX_SERIAL) || defined(WRENCH_ARDUINO_SERIAL)) && defined(WRENCH_INCLUDE_DEBUG_CODE)
 
-/*
 //------------------------------------------------------------------------------
-WrenchPacket::WrenchPacket( const WrenchDebugComm type, const uint32_t payloadSize )
+WrenchDebugSerialInterface::WrenchDebugSerialInterface()
 {
-	memset( (char*)this, 0, sizeof(WrenchPacket) );
-	_type = type;
-	setPayloadSize( payloadSize );
-}
-*/
-//------------------------------------------------------------------------------
-WrenchPacket::WrenchPacket( const int32_t type )
-{
-	memset( (char*)this, 0, sizeof(WrenchPacket) );
-	t = type;
+#ifndef WRENCH_ARDUINO_SERIAL
+	m_interface = WR_BAD_SOCKET;
+#endif
 }
 
 //------------------------------------------------------------------------------
-WrenchPacket* WrenchPacket::alloc( WrenchPacket const& base )
+bool WrenchDebugSerialInterface::open( const char* name )
 {
-	WrenchPacket* packet = (WrenchPacket*)g_malloc( base.size );
-
-	memcpy( (char*)packet, (char*)&base, sizeof(WrenchPacket) );
-	return packet;
+	m_interface = wr_serialOpen( name );
+	return m_interface != WR_BAD_SOCKET;
 }
 
 //------------------------------------------------------------------------------
-WrenchPacket* WrenchPacket::alloc( const uint32_t type, const uint32_t payloadSize, const uint8_t* payload )
+bool WrenchDebugSerialInterface::sendEx( const uint8_t* data, const int bytes )
 {
-	WrenchPacket* packet = (WrenchPacket*)g_malloc( sizeof(WrenchPacket) + payloadSize );
-	if ( packet )
+	int soFar = 0;
+	while( soFar < bytes )
 	{
-		memset( (char*)packet, 0, sizeof(WrenchPacket) );
-
-		packet->t = type;
-		packet->setPayloadSize( payloadSize );
-		if ( payload )
+		int ret = wr_serialSend( m_interface, (const char*)data + soFar, bytes - soFar );
+		if ( ret == -1 )
 		{
-			memcpy( packet->payload(), payload, payloadSize );
+			wr_serialClose( m_interface );
+			m_interface = WR_BAD_SOCKET;
+			return false;
 		}
+
+		soFar += ret;
 	}
 
-	return packet;
+	return true;
 }
 
 //------------------------------------------------------------------------------
-uint32_t WrenchPacket::xlate()
+bool WrenchDebugSerialInterface::recvEx( uint8_t* data, const int bytes, const int timeoutMilliseconds )
 {
-	uint32_t s = size;
+	int soFar = 0;
 
-	size = wr_x32( size );
-	t = wr_x32( t );
-	param1 = wr_x32( param1 );
-	param2 = wr_x32( param2 );
+	while( soFar < bytes )
+	{
+		int ret = wr_serialReceive( m_interface, (char*)(data + soFar), bytes - soFar );
+		if ( ret == -1 )
+		{
+			wr_serialClose( m_interface );
+			m_interface = WR_BAD_SOCKET;
+			return false;
+		}
 
-	return s;
+		soFar += ret;
+	}
+
+	return true;
+}
+
+//------------------------------------------------------------------------------
+uint32_t WrenchDebugSerialInterface::peekEx( const int timeoutMilliseconds )
+{
+	int ret = wr_serialPeek( m_interface );
+	if ( ret < 0 )
+	{
+		wr_serialClose( m_interface );
+		m_interface = WR_BAD_SOCKET;
+		return 0;
+	}
+
+	return (uint32_t)ret;
 }
 
 #endif

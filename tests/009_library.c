@@ -8,6 +8,9 @@
 -4
 ~*/
 
+//var s;
+//str::sprintf( s, 			"%0d", 1 );if ( s != "1" ) println("bad 017");
+
 if ( io::O_RDWR != io::O_RDWR ) println( "c_err" );
 
 msg::write( "key1", 10 );
@@ -212,8 +215,9 @@ if ( str::toupper('a') != 'A' ) println("toupper 1");
 if ( str::toupper('A') != 'A' ) println("toupper 2");
 
 s = "#()*+,-/:;<=>?@\\^";
-if ( str::chr("#()*+,-/:;<=>?@\\^", '') != 17 ) println("strchr 2");
+if ( str::chr("#()*+,-/:;<=>?@\\^", '') != -1 ) println("strchr 2");
 if ( str::chr(s, '#') != 0 ) println("strchr 1");
+
 if ( str::chr("#()*+,-/:;<=>?@\\^", '\\') != 15 ) println("strchr 3");
 if ( str::chr("#()*+,-/:;<=>?@\\^", '^') != 16 ) println("strchr 4");
 if ( str::chr("#()*+,-/:;<=>?@\\^", 'A') != -1 ) println("strchr 5");

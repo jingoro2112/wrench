@@ -25,9 +25,7 @@ SOFTWARE.
 #include "wrench.h"
 
 #if defined(WRENCH_LITTLEFS_FILE_IO) || defined(WRENCH_SPIFFS_FILE_IO)
-
 #include <FS.h>
-
 #ifdef WRENCH_LITTLEFS_FILE_IO
 #include <LittleFS.h>
 #define FILE_OBJ LittleFS
@@ -37,12 +35,6 @@ SOFTWARE.
 #include <Spiffs.h>
 #define FILE_OBJ Spiffs
 #endif
-
-//------------------------------------------------------------------------------
-void wr_stdout( const char* data, const int size )
-{
-}
-
 
 //------------------------------------------------------------------------------
 enum WRFSOpenModes
@@ -70,6 +62,11 @@ struct WRFSFile
 WRFSFile* g_OpenFiles =0;
 
 //------------------------------------------------------------------------------
+void wr_stdout( const char* data, const int size )
+{
+}
+
+//------------------------------------------------------------------------------
 WRFSFile* wr_safeGetFile( const void* p )
 {
 	for( WRFSFile* safe = g_OpenFiles; safe; safe = safe->next )
@@ -94,7 +91,7 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 	}
 	
 	WRValue* arg = stackTop - 1;
-	const char* fileName = (const char*)arg->array();
+	WRValue::MallocStrScoped fileName( *arg );
 
 	File file = FILE_OBJ.open( fileName );
 	if ( file && !file.isDirectory() )
@@ -127,11 +124,7 @@ void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 		return;
 	}
 
-	const char* fileName = (const char*)(stackTop - 2)->array();
-	if ( !fileName )
-	{
-		return;
-	}
+	WRValue::MallocStrScoped fileName( *arg );
 	
 	unsigned int len;
 	const char* data = (char*)((stackTop - 1)->array(&len));
@@ -156,11 +149,7 @@ void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
-		const char* fileName = (const char*)(stackTop - 1)->array();
-		if ( fileName )
-		{
-			FILE_OBJ.remove( fileName );
-		}
+		FILE_OBJ.remove( WRValue::MallocStrScoped fileName(*arg) );
 	} 
 }
 
@@ -410,7 +399,7 @@ void wr_ioCleanupFunction( WRState* w, void* param )
 void wr_ioPushConstants( WRState* w )
 {
 	WRValue C;
-
+	
 	wr_registerLibraryConstant( w, "io::O_RDONLY", wr_makeInt(&C, LFS_READ) );
 	wr_registerLibraryConstant( w, "io::O_RDWR", wr_makeInt(&C, LFS_RDWR) );
 	wr_registerLibraryConstant( w, "io::O_APPEND", wr_makeInt(&C, LFS_APPEND) );

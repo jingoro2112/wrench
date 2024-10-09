@@ -822,7 +822,7 @@ char* WRValue::asMallocString( unsigned int* strLen ) const
 	}
 	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
 	{
-		ret = (char*)g_malloc( va->m_size + 1);
+		ret = (char*)g_malloc( va->m_size + 1 );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 		if ( !ret )
 		{
@@ -831,7 +831,7 @@ char* WRValue::asMallocString( unsigned int* strLen ) const
 		}
 #endif
 		memcpy( ret, va->m_Cdata, va->m_size );
-		ret[va->m_size] = 0;
+		ret[ va->m_size ] = 0;
 	}
 	else
 	{
@@ -1079,6 +1079,11 @@ void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 //------------------------------------------------------------------------------
 WRValue* wr_addToContainerEx( const char* name, WRValue* container )
 {
+	if (container->xtype != WR_EX_HASH_TABLE)
+	{
+		return 0;
+	}
+
 	const unsigned int len = (const unsigned int)strlen(name);
 
 	// create a 'key' object
@@ -1109,18 +1114,12 @@ WRValue* wr_addToContainerEx( const char* name, WRValue* container )
 //------------------------------------------------------------------------------
 void wr_addValueToContainer( WRValue* container, const char* name, WRValue* value )
 {
-	if ( container->xtype != WR_EX_HASH_TABLE )
-	{
-		return;
-	}
-	
 	WRValue* entry = wr_addToContainerEx( name, container );
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
 	if ( !entry )
 	{
 		return;
 	}
-#endif
+
 	entry->r = value;
 	entry->p2 = INIT_AS_REF;
 }
@@ -1129,12 +1128,10 @@ void wr_addValueToContainer( WRValue* container, const char* name, WRValue* valu
 void wr_addFloatToContainer( WRValue* container, const char* name, const float f )
 {
 	WRValue* entry = wr_addToContainerEx( name, container );
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
 	if ( !entry )
 	{
 		return;
 	}
-#endif
 
 	entry->p2 = INIT_AS_FLOAT;
 	entry->f = f;
@@ -1144,12 +1141,10 @@ void wr_addFloatToContainer( WRValue* container, const char* name, const float f
 void wr_addIntToContainer( WRValue* container, const char* name, const int i )
 {
 	WRValue* entry = wr_addToContainerEx( name, container );
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
 	if ( !entry )
 	{
 		return;
 	}
-#endif
 
 	entry->p2 = INIT_AS_INT;
 	entry->i = i;
@@ -1158,18 +1153,12 @@ void wr_addIntToContainer( WRValue* container, const char* name, const int i )
 //------------------------------------------------------------------------------
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size )
 {
-	if ( container->xtype != WR_EX_HASH_TABLE || size > 0x1FFFFF )
-	{
-		return;
-	}
-
 	WRValue* entry = wr_addToContainerEx( name, container );
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
 	if ( !entry )
 	{
 		return;
 	}
-#endif
+
 	entry->c = array;
 	entry->p2 = INIT_AS_RAW_ARRAY | (size<<8);
 }
@@ -1558,6 +1547,8 @@ const char* c_errStrings[]=
 	"WR_ERR_malloc_failed",
 
 	"WR_ERR_USER_err_out_of_range",
+
+	"WR_ERR_division_by_zero",
 };
 
 
