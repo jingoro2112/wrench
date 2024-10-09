@@ -17550,32 +17550,32 @@ uint32_t WRValue::getHashEx() const
 }
 
 //------------------------------------------------------------------------------
-void wr_valueToArray( const WRValue* array, WRValue* value )
+void wr_valueToArray( const WRValue* ex, WRValue* value )
 {
-	uint32_t s = DECODE_ARRAY_ELEMENT_FROM_P2(array->p2);
+	uint32_t s = DECODE_ARRAY_ELEMENT_FROM_P2(ex->p2);
 
-	if ( IS_RAW_ARRAY(array->r->xtype ) )
+	if ( IS_RAW_ARRAY(ex->r->xtype ) )
 	{
-		if ( s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(array->r->p2)) )
+		if ( s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(ex->r->p2)) )
 		{
-			array->r->c[s] = value->ui;
+			ex->r->c[s] = value->ui;
 		}
 	}
-	else
+	else if ( !IS_HASH_TABLE(ex->xtype) )
 	{
-		if ( s >= array->r->va->m_size )
+		if ( s >= ex->r->va->m_size )
 		{
-			wr_growValueArray( array->r->va, s );
-			array->r->va->m_creatorContext->allocatedMemoryHint += s * ((array->r->va->m_type == SV_CHAR) ? 1 : sizeof(WRValue));
+			wr_growValueArray( ex->r->va, s );
+			ex->r->va->m_creatorContext->allocatedMemoryHint += s * ((ex->r->va->m_type == SV_CHAR) ? 1 : sizeof(WRValue));
 		}
 		
-		if ( array->r->va->m_type == SV_CHAR )
+		if ( ex->r->va->m_type == SV_CHAR )
 		{
-			array->r->va->m_Cdata[s] = value->ui;
+			ex->r->va->m_Cdata[s] = value->ui;
 		}
 		else 
 		{
-			WRValue* V = array->r->va->m_Vdata + s;
+			WRValue* V = ex->r->va->m_Vdata + s;
 			wr_assign[(V->type<<2)+value->type](V, value);
 		}
 	}
@@ -18321,18 +18321,6 @@ WRVoidFunc wr_DivideAssign[16] =
 };
 
 
-
-
-
-
-
-
-
-
-	
-
-
-
 void wr_AddAssign_E_I( WRValue* to, WRValue* from )
 {
 	WRValue& V = to->singleValue();
@@ -18470,7 +18458,6 @@ X_BINARY( wr_Multiply, * );
 X_BINARY( wr_Subtract, - );
 //X_BINARY( wr_Divide, / );
 
-
 void wr_DivideBinary_E_I( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue& V = to->singleValue();
@@ -18578,8 +18565,6 @@ WRTargetFunc wr_DivideBinary[16] =
 };
 
 
-
-
 void wr_AdditionBinary_E_I( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue& V = to->singleValue();
@@ -18648,7 +18633,6 @@ WRTargetFunc wr_AdditionBinary[16] =
 };
 
 
-
 void doTargetFuncBlank( WRValue* to, WRValue* from, WRValue* target ) {}
 
 //------------------------------------------------------------------------------
@@ -18682,7 +18666,6 @@ WRTargetFunc NAME##Binary[16] = \
 	NAME##Binary_R_I, doTargetFuncBlank,   NAME##Binary_R_R,  NAME##Binary_R_E,\
 	NAME##Binary_E_I, doTargetFuncBlank,   NAME##Binary_E_R,  NAME##Binary_E_E,\
 };\
-
 
 X_INT_BINARY( wr_LeftShift, << );
 X_INT_BINARY( wr_RightShift, >> );

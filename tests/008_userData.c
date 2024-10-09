@@ -6,6 +6,12 @@ checkIter( res, "a", 2, 0.3 );
 
 var h = {:};
 checkIsHashTable( h, 0 );
+
+h += 10;
+h /= 10;
+h *= 10;
+h -= 10;
+
 h["one"] = 1;
 h["two"] = 2;
 checkIsHashTable( h, 2 );
