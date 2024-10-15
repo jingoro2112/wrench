@@ -10889,12 +10889,18 @@ void wr_forceYield( WRState* w )
 
 #ifdef WRENCH_COMPACT
 
-static float divisionF( float a, float b ) { return a / b; }
+static float divisionF( float a, float b )
+{
+	return b ? a / b : 0.0f;
+}
 static float addF( float a, float b ) { return a + b; }
 static float subtractionF( float a, float b ) { return a - b; }
 static float multiplicationF( float a, float b ) { return a * b; }
 
-static int divisionI( int a, int b ) { return a / b; }
+static int divisionI( int a, int b )
+{
+	return b ? a / b : 0;
+}
 int wr_addI( int a, int b ) { return a + b; }
 static int subtractionI( int a, int b ) { return a - b; }
 static int multiplicationI( int a, int b ) { return a * b; }
@@ -17492,7 +17498,7 @@ WRValue& WRValue::deref() const
 //------------------------------------------------------------------------------
 uint32_t WRValue::getHashEx() const
 {
-	// QUICKLY return the easy answers, thats why this code looks a bit convoluted
+	// QUICKLY return the easy answers, that's why this code looks a bit convoluted
 	if ( type == WR_REF )
 	{
 		return r->getHash();

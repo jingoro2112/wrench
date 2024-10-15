@@ -162,12 +162,18 @@ void wr_forceYield( WRState* w )
 
 #ifdef WRENCH_COMPACT
 
-static float divisionF( float a, float b ) { return a / b; }
+static float divisionF( float a, float b )
+{
+	return b ? a / b : 0.0f;
+}
 static float addF( float a, float b ) { return a + b; }
 static float subtractionF( float a, float b ) { return a - b; }
 static float multiplicationF( float a, float b ) { return a * b; }
 
-static int divisionI( int a, int b ) { return a / b; }
+static int divisionI( int a, int b )
+{
+	return b ? a / b : 0;
+}
 int wr_addI( int a, int b ) { return a + b; }
 static int subtractionI( int a, int b ) { return a - b; }
 static int multiplicationI( int a, int b ) { return a * b; }

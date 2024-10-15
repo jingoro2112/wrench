@@ -681,13 +681,13 @@ for( var a=0; a<10; ++a )
 <p>wrench also supports "foreach" in two flavors, value only and
 key/value:
 
-<code><pre>somArray[] = {"zero", "one", "two" };
-for( var v : somArray )
+<code><pre>someArray[] = {"zero", "one", "two" };
+for( var v : someArray )
 {
    // this loop will run 3 times, with v taking on "zero", "one" and "two"
 }
 
-for( var k,v : somArray )
+for( var k, var v : someArray )
 {
    // same as above but k will take on the value 0, 1 and 2
 }

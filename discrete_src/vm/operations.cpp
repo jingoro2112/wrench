@@ -109,7 +109,7 @@ WRValue& WRValue::deref() const
 //------------------------------------------------------------------------------
 uint32_t WRValue::getHashEx() const
 {
-	// QUICKLY return the easy answers, thats why this code looks a bit convoluted
+	// QUICKLY return the easy answers, that's why this code looks a bit convoluted
 	if ( type == WR_REF )
 	{
 		return r->getHash();
