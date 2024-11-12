@@ -12,6 +12,10 @@
 #include <sys/stat.h>
 #endif
 
+#if __cplusplus > 199711L
+#define STR_COPY_ARG
+#endif
+
 // same as str.h but for char only so no template overhead, also no
 // new/delete just malloc/free
 
@@ -39,7 +43,7 @@ public:
 
 	WRstr& clear() { m_len = 0; m_str[0] = 0; return *this; }
 
-#if __cplusplus > 199711L
+#ifdef STR_COPY_ARG
 	WRstr& format( const char* format, ... ) { va_list arg; va_start( arg, format ); clear(); appendFormatVA( format, arg ); va_end( arg ); return *this; }
 	WRstr& formatVA( const char* format, va_list arg ) { clear(); return appendFormatVA(format, arg); }
 	WRstr& appendFormat( const char* format, ... ) { va_list arg; va_start( arg, format ); appendFormatVA( format, arg ); va_end( arg ); return *this; }
@@ -649,7 +653,7 @@ WRstr& WRstr::append( const char c )
 	return *this;
 }
 
-#if __cplusplus > 199711L
+#ifdef STR_COPY_ARG
 
 //------------------------------------------------------------------------------
 WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
@@ -664,21 +668,21 @@ WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
 	}
 	else
 	{
-		char* alloc = (char*)g_malloc( len + 1 );
+		char* alloc = (char*)g_malloc( len );
 
 		va_list vacopy;
 		va_copy( vacopy, arg );
-		len = vsnprintf( alloc, len, format, arg );
+		vsnprintf(alloc, len, format, arg);
 		va_end( vacopy );
 
 		if ( m_len )
 		{
-			insert( alloc, len, m_len );
+			insert( alloc, len - 1, m_len );
 			g_free( alloc );
 		}
 		else
 		{
-			giveOwnership( alloc, len );
+			giveOwnership( alloc, len - 1 );
 		}
 	}
 
@@ -703,13 +707,13 @@ WRstr& WRstr::format( const char* format, ... )
 	}
 	else
 	{
-		char* alloc = (char*)g_malloc(len + 1);
+		char* alloc = (char*)g_malloc(len);
 
 		va_start( arg, format );
-		len = vsnprintf( alloc, len, format, arg );
+		vsnprintf( alloc, len, format, arg );
 		va_end( arg );
 
-		giveOwnership( alloc, len );
+		giveOwnership( alloc, len - 1 );
 	}
 
 	return *this;
@@ -731,20 +735,20 @@ WRstr& WRstr::appendFormat( const char* format, ... )
 	}
 	else
 	{
-		char* alloc = (char*)g_malloc(len + 1);
+		char* alloc = (char*)g_malloc(len);
 
 		va_start( arg, format );
-		len = vsnprintf( alloc, len, format, arg );
+		vsnprintf( alloc, len, format, arg );
 		va_end( arg );
 
 		if ( m_len )
 		{
-			insert( alloc, len, m_len );
+			insert( alloc, len - 1, m_len );
 			g_free( alloc );
 		}
 		else
 		{
-			giveOwnership( alloc, len );
+			giveOwnership( alloc, len - 1 );
 		}
 	}
 

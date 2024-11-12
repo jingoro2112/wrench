@@ -25,7 +25,7 @@ checkIsString( s, s._count );
 function userCheck( data )
 {
 	checkIsRawArray( data.big, data.big._count );
-return;	
+
 	if ( data.b != data.c ) println("b001");
 	
 	if ( data.b != 0x99 ) println("b99");

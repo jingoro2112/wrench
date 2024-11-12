@@ -1,3 +1,10 @@
+6.0.7 ----------------------------------------------------------------------------------
+- fixed { if() { return; } } case
+- wired user-data test case back in
+
+6.0.6 ----------------------------------------------------------------------------------
+- added WRValue* wr_getValueFromContainer( WRValue const& container, const char* name )
+
 6.0.5 ----------------------------------------------------------------------------------
 - added protection from Divide-By-Zero
 

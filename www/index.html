@@ -501,6 +501,7 @@ void wr_destroyContainer( WRValue* val );
 void wr_addIntToContainer( WRValue* container, const char* name, const int32_t value );
 void wr_addFloatToContainer( WRValue* container, const char* name, const float value );
 void wr_addArrayToContainer( WRValue* container, const char* name, char* array, const uint32_t size );
+WRValue* wr_getValueFromContainer( WRValue const& container, const char* name );
 </code></pre>
 
 <p>Example (as seen in wrench_cli.cpp test code):
@@ -526,6 +527,14 @@ wr_addArrayToContainer( &container, "b", &byte, 1 );
 wr_addArrayToContainer( &container, "c", &byte2, 1 );
 		
 wr_addArrayToContainer( &container, "big", someBigArray, 0x1FFFFF );
+
+wr_addFloatToContainer( &container, "_f", 20.02f );
+wr_addIntToContainer( &container, "_i", 1001 );
+
+if ( wr_getValueFromContainer(container, "_i")->asInt() == 1001 )
+{
+   // it better :)
+}
 
 // at this point 'container' can be used inside wrench as if it were a
 // struct, refer to tests/008_userData.c for complete usage

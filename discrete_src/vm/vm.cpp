@@ -2712,7 +2712,7 @@ returnFuncBInverted:
 returnFuncBNormal8:
 				register0 = --stackTop;
 				register1 = --stackTop;
-				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
+				pc += returnFunc[(register0->type << 2) | register1->type](register0, register1) ? 2 : (int8_t)READ_8_FROM_PC(pc);
 				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}

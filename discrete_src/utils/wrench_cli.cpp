@@ -256,7 +256,7 @@ int main( int argn, char* argv[] )
 	assert( sizeof(unsigned char) == 1 );
 
 #ifdef WIN32
-	TESTmain();
+	//TESTmain();
 #endif
 
 	if ( argn <= 1 )
@@ -639,7 +639,7 @@ int runTests( int number )
 	wr_addValueToContainer( &container, "integer", &integer );
 
 	wr_addIntToContainer( &container, "_i", 1001 );
-	wr_addFloatToContainer( &container, "_i", 20.02f );
+	wr_addFloatToContainer( &container, "_f", 20.02f );
 
 	char someArray[10] = "hello";
 	wr_addArrayToContainer( &container, "name", someArray, 10 );
@@ -769,6 +769,8 @@ int runTests( int number )
 						assert( V->indexArray(context, 2, false)->asInt() == 0);
 						assert( !V->indexArray(context, 3, false)  );
 						assert( V->indexArray(context, 3, true)->asInt() == 0  );
+
+						assert( wr_getValueFromContainer(container, "_i")->asInt() == 1001 );
 					}
 
 					WRValue s;

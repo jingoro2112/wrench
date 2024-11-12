@@ -2046,6 +2046,10 @@ extern const char* c_opcodeName[];
 #include <sys/stat.h>
 #endif
 
+#if __cplusplus > 199711L
+#define STR_COPY_ARG
+#endif
+
 // same as str.h but for char only so no template overhead, also no
 // new/delete just malloc/free
 
@@ -2073,7 +2077,7 @@ public:
 
 	WRstr& clear() { m_len = 0; m_str[0] = 0; return *this; }
 
-#if __cplusplus > 199711L
+#ifdef STR_COPY_ARG
 	WRstr& format( const char* format, ... ) { va_list arg; va_start( arg, format ); clear(); appendFormatVA( format, arg ); va_end( arg ); return *this; }
 	WRstr& formatVA( const char* format, va_list arg ) { clear(); return appendFormatVA(format, arg); }
 	WRstr& appendFormat( const char* format, ... ) { va_list arg; va_start( arg, format ); appendFormatVA( format, arg ); va_end( arg ); return *this; }
@@ -2683,7 +2687,7 @@ WRstr& WRstr::append( const char c )
 	return *this;
 }
 
-#if __cplusplus > 199711L
+#ifdef STR_COPY_ARG
 
 //------------------------------------------------------------------------------
 WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
@@ -2698,21 +2702,21 @@ WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
 	}
 	else
 	{
-		char* alloc = (char*)g_malloc( len + 1 );
+		char* alloc = (char*)g_malloc( len );
 
 		va_list vacopy;
 		va_copy( vacopy, arg );
-		len = vsnprintf( alloc, len, format, arg );
+		vsnprintf(alloc, len, format, arg);
 		va_end( vacopy );
 
 		if ( m_len )
 		{
-			insert( alloc, len, m_len );
+			insert( alloc, len - 1, m_len );
 			g_free( alloc );
 		}
 		else
 		{
-			giveOwnership( alloc, len );
+			giveOwnership( alloc, len - 1 );
 		}
 	}
 
@@ -2737,13 +2741,13 @@ WRstr& WRstr::format( const char* format, ... )
 	}
 	else
 	{
-		char* alloc = (char*)g_malloc(len + 1);
+		char* alloc = (char*)g_malloc(len);
 
 		va_start( arg, format );
-		len = vsnprintf( alloc, len, format, arg );
+		vsnprintf( alloc, len, format, arg );
 		va_end( arg );
 
-		giveOwnership( alloc, len );
+		giveOwnership( alloc, len - 1 );
 	}
 
 	return *this;
@@ -2765,20 +2769,20 @@ WRstr& WRstr::appendFormat( const char* format, ... )
 	}
 	else
 	{
-		char* alloc = (char*)g_malloc(len + 1);
+		char* alloc = (char*)g_malloc(len);
 
 		va_start( arg, format );
-		len = vsnprintf( alloc, len, format, arg );
+		vsnprintf( alloc, len, format, arg );
 		va_end( arg );
 
 		if ( m_len )
 		{
-			insert( alloc, len, m_len );
+			insert( alloc, len - 1, m_len );
 			g_free( alloc );
 		}
 		else
 		{
-			giveOwnership( alloc, len );
+			giveOwnership( alloc, len - 1 );
 		}
 	}
 
@@ -6013,7 +6017,7 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 		return false;
 	}
 		
-	bool returnCalled;
+	bool returnCalled = false;
 	parseStatement( m_unitTop, '}', returnCalled, O_Return );
 
 	if ( !returnCalled )
@@ -7048,6 +7052,7 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	}
 	else if ( !m_quoted && token == "else" )
 	{
+		returnCalled = false;
 		int conditionTrueMarker = addRelativeJumpTarget( m_units[m_unitTop].bytecode ); // when it hits here it will jump OVER this section
 
 		addRelativeJumpSource( m_units[m_unitTop].bytecode, O_RelativeJump, conditionTrueMarker );
@@ -7063,6 +7068,7 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	}
 	else
 	{
+		returnCalled = false; // in case { if() { return } } case !!
 		m_loadedToken = token;
 		m_loadedValue = value;
 		m_loadedQuoted = m_quoted;
@@ -13439,7 +13445,7 @@ returnFuncBInverted:
 returnFuncBNormal8:
 				register0 = --stackTop;
 				register1 = --stackTop;
-				pc += returnFunc[(register0->type<<2)|register1->type]( register0, register1 ) ? 2 : (int8_t)READ_8_FROM_PC(pc);
+				pc += returnFunc[(register0->type << 2) | register1->type](register0, register1) ? 2 : (int8_t)READ_8_FROM_PC(pc);
 				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
 			}
@@ -14696,7 +14702,7 @@ char* WRValue::asMallocString( unsigned int* strLen ) const
 
 	if ( type == WR_FLOAT )
 	{
-		ret = (char*)g_malloc( 10 );
+		ret = (char*)g_malloc( 12 );
 		len = wr_ftoa( f, ret, 11 );
 	}
 	else if ( type == WR_INT )
@@ -15045,6 +15051,17 @@ void wr_addArrayToContainer( WRValue* container, const char* name, char* array, 
 
 	entry->c = array;
 	entry->p2 = INIT_AS_RAW_ARRAY | (size<<8);
+}
+
+//------------------------------------------------------------------------------
+WRValue* wr_getValueFromContainer( WRValue const& container, const char* name )
+{
+	if (container.xtype != WR_EX_HASH_TABLE)
+	{
+		return 0;
+	}
+
+	return (WRValue*)container.va->get( wr_hash(name, (const unsigned int)strlen(name)) );
 }
 
 //------------------------------------------------------------------------------
@@ -18729,10 +18746,136 @@ WRReturnFunc NAME[16] = \
 };\
 
 X_COMPARE( wr_CompareGT, > );
-X_COMPARE( wr_CompareLT, < );
 X_COMPARE( wr_LogicalAND, && );
 X_COMPARE( wr_LogicalOR, || );
-X_COMPARE( wr_CompareEQ, == );
+
+
+
+
+
+
+
+
+
+
+
+//X_COMPARE( wr_CompareLT, < );
+
+bool wr_CompareLT_E_E( WRValue* to, WRValue* from )
+{
+	WRValue V1 = to->singleValue();
+	WRValue& V2 = from->singleValue();
+	return wr_CompareLT[(V1.type<<2)|V2.type](&V1, &V2);
+}
+bool wr_CompareLT_E_I( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+	return wr_CompareLT[(V.type<<2)|WR_INT](&V, from);
+}
+bool wr_CompareLT_E_F( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+	return wr_CompareLT[(V.type<<2)|WR_FLOAT](&V, from);
+}
+bool wr_CompareLT_I_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	return wr_CompareLT[(WR_INT<<2)|V.type](to, &V);
+}
+bool wr_CompareLT_F_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	return wr_CompareLT[(WR_FLOAT<<2)|V.type](to, &V);
+}
+bool wr_CompareLT_R_E( WRValue* to, WRValue* from ) { return wr_CompareLT[(to->r->type<<2)|WR_EX](to->r, from); }
+bool wr_CompareLT_E_R( WRValue* to, WRValue* from ) { return wr_CompareLT[(WR_EX<<2)|from->r->type](to, from->r); }
+bool wr_CompareLT_R_R( WRValue* to, WRValue* from ) { return wr_CompareLT[(to->r->type<<2)|from->r->type](to->r, from->r); }
+bool wr_CompareLT_R_I( WRValue* to, WRValue* from ) { return wr_CompareLT[(to->r->type<<2)|WR_INT](to->r, from); }
+bool wr_CompareLT_R_F( WRValue* to, WRValue* from ) { return wr_CompareLT[(to->r->type<<2)|WR_FLOAT](to->r, from); }
+bool wr_CompareLT_I_R( WRValue* to, WRValue* from ) { return wr_CompareLT[(WR_INT<<2)+from->r->type](to, from->r); }
+bool wr_CompareLT_F_R( WRValue* to, WRValue* from ) { return wr_CompareLT[(WR_FLOAT<<2)+from->r->type](to, from->r); }
+bool wr_CompareLT_I_I( WRValue* to, WRValue* from ) { return to->i < from->i; }
+bool wr_CompareLT_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; return to->i < from->f; }
+bool wr_CompareLT_F_I( WRValue* to, WRValue* from ) { return to->f < (float)from->i; }
+bool wr_CompareLT_F_F( WRValue* to, WRValue* from ) { return to->f < from->f; }
+WRReturnFunc wr_CompareLT[16] = 
+{
+	wr_CompareLT_I_I, wr_CompareLT_I_F, wr_CompareLT_I_R, wr_CompareLT_I_E,
+	wr_CompareLT_F_I, wr_CompareLT_F_F, wr_CompareLT_F_R, wr_CompareLT_F_E,
+	wr_CompareLT_R_I, wr_CompareLT_R_F, wr_CompareLT_R_R, wr_CompareLT_R_E,
+	wr_CompareLT_E_I, wr_CompareLT_E_F, wr_CompareLT_E_R, wr_CompareLT_E_E,
+};
+
+
+
+
+
+
+
+
+
+
+
+//X_COMPARE( wr_CompareEQ, == );
+
+bool wr_CompareEQ_E_E( WRValue* to, WRValue* from )
+{
+	WRValue V1 = to->singleValue();
+	WRValue& V2 = from->singleValue();
+	return wr_CompareEQ[(V1.type<<2)|V2.type](&V1, &V2);
+}
+bool wr_CompareEQ_E_I( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+	return wr_CompareEQ[(V.type<<2)|WR_INT](&V, from);
+}
+bool wr_CompareEQ_E_F( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+	return wr_CompareEQ[(V.type<<2)|WR_FLOAT](&V, from);
+}
+bool wr_CompareEQ_I_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	return wr_CompareEQ[(WR_INT<<2)|V.type](to, &V);
+}
+bool wr_CompareEQ_F_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	return wr_CompareEQ[(WR_FLOAT<<2)|V.type](to, &V);
+}
+bool wr_CompareEQ_R_E( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|WR_EX](to->r, from); }
+bool wr_CompareEQ_E_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_EX<<2)|from->r->type](to, from->r); }
+bool wr_CompareEQ_R_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|from->r->type](to->r, from->r); }
+bool wr_CompareEQ_R_I( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|WR_INT](to->r, from); }
+bool wr_CompareEQ_R_F( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|WR_FLOAT](to->r, from); }
+bool wr_CompareEQ_I_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_INT<<2)+from->r->type](to, from->r); }
+bool wr_CompareEQ_F_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_FLOAT<<2)+from->r->type](to, from->r); }
+bool wr_CompareEQ_I_I( WRValue* to, WRValue* from ) { return to->i == from->i; }
+bool wr_CompareEQ_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; return to->i == from->f; }
+bool wr_CompareEQ_F_I( WRValue* to, WRValue* from ) { return to->f == (float)from->i; }
+bool wr_CompareEQ_F_F( WRValue* to, WRValue* from ) { return to->f == from->f; }
+WRReturnFunc wr_CompareEQ[16] = 
+{
+	wr_CompareEQ_I_I, wr_CompareEQ_I_F, wr_CompareEQ_I_R, wr_CompareEQ_I_E,
+	wr_CompareEQ_F_I, wr_CompareEQ_F_F, wr_CompareEQ_F_R, wr_CompareEQ_F_E,
+	wr_CompareEQ_R_I, wr_CompareEQ_R_F, wr_CompareEQ_R_R, wr_CompareEQ_R_E,
+	wr_CompareEQ_E_I, wr_CompareEQ_E_F, wr_CompareEQ_E_R, wr_CompareEQ_E_E,
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 //------------------------------------------------------------------------------
 #define X_UNARY_PRE( NAME, OPERATION ) \

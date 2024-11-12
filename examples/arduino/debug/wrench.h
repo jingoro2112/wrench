@@ -31,7 +31,8 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 5
+#define WRENCH_VERSION_BUILD 7
+
 struct WRState;
 
 /************************************************************************
@@ -173,17 +174,16 @@ graceful exit
 */
 //#define WRENCH_HANDLE_MALLOC_FAIL
 
-// by default wrench uses malloc/free but if you want to use your own
-// allocator it can be set up here
-// NOTE: this becomes global for all wrench code!
+/************************************************************************
+Custom allocator:
+by default wrench uses malloc/free but if you want to use your own
+allocator it can be set up here
+NOTE: used for all RETURNED MEMORY AS WELL, such such asMallocString(...)!!!!
+*/
 typedef void* (*WR_ALLOC)(size_t size);
 typedef void (*WR_FREE)(void* ptr);
 void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
-extern WR_ALLOC g_malloc;
-extern WR_FREE g_free;
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-extern bool g_mallocFailed; // used as an internal global flag for when a malloc came back null
-#endif
+
 
 //------------------------------------------------------------------------------
 
@@ -545,6 +545,9 @@ void wr_addArrayToContainer( WRValue* container, const char* name, char* array, 
 void wr_addFloatToContainer( WRValue* container, const char* name, const float f );
 void wr_addIntToContainer( WRValue* container, const char* name, const int i );
 
+// read back the value (if found) from a user-created container
+WRValue* wr_getValueFromContainer( WRValue const& container, const char* name );
+
 /******************************************************************/
 //                    "standard" functions
 
@@ -722,6 +725,12 @@ enum WRGCObjectType
 #else
   #error "Endian-ness not detected! Please contact curt.hartung@gmail.com so it can be added <01>"
 #endif
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+extern bool g_mallocFailed; // used as an internal global flag for when a malloc came back null
+#endif
+extern WR_ALLOC g_malloc;
+extern WR_FREE g_free;
 
 class WRGCObject;
 

@@ -111,7 +111,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>false</SDLCheck>
-      <PreprocessorDefinitions>WRENCH_WIN32_TCP;WRENCH_WIN32_SERIAL;WRENCH_WIN32_FILE_IO;WRENCH_WIN32_TCP;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WRENCH_WIN32_TCP;WRENCH_WIN32_SERIAL;WRENCH_WIN32_FILE_IO;WRENCH_WIN32_TCP;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;WRENCH_REALLY_COMPACT;WRENCH_HANDLE_MALLOC_FAIL%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>..\discrete_src;..\discrete_src\cc;..\discrete_src\debug;..\discrete_src\lib;..\discrete_src\utils;..\discrete_src\vm</AdditionalIncludeDirectories>
       <BufferSecurityCheck>false</BufferSecurityCheck>

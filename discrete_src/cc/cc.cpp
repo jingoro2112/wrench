@@ -1856,7 +1856,7 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 		return false;
 	}
 		
-	bool returnCalled;
+	bool returnCalled = false;
 	parseStatement( m_unitTop, '}', returnCalled, O_Return );
 
 	if ( !returnCalled )
@@ -2891,6 +2891,7 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	}
 	else if ( !m_quoted && token == "else" )
 	{
+		returnCalled = false;
 		int conditionTrueMarker = addRelativeJumpTarget( m_units[m_unitTop].bytecode ); // when it hits here it will jump OVER this section
 
 		addRelativeJumpSource( m_units[m_unitTop].bytecode, O_RelativeJump, conditionTrueMarker );
@@ -2906,6 +2907,7 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	}
 	else
 	{
+		returnCalled = false; // in case { if() { return } } case !!
 		m_loadedToken = token;
 		m_loadedValue = value;
 		m_loadedQuoted = m_quoted;

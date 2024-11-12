@@ -812,7 +812,7 @@ char* WRValue::asMallocString( unsigned int* strLen ) const
 
 	if ( type == WR_FLOAT )
 	{
-		ret = (char*)g_malloc( 10 );
+		ret = (char*)g_malloc( 12 );
 		len = wr_ftoa( f, ret, 11 );
 	}
 	else if ( type == WR_INT )
@@ -1161,6 +1161,17 @@ void wr_addArrayToContainer( WRValue* container, const char* name, char* array, 
 
 	entry->c = array;
 	entry->p2 = INIT_AS_RAW_ARRAY | (size<<8);
+}
+
+//------------------------------------------------------------------------------
+WRValue* wr_getValueFromContainer( WRValue const& container, const char* name )
+{
+	if (container.xtype != WR_EX_HASH_TABLE)
+	{
+		return 0;
+	}
+
+	return (WRValue*)container.va->get( wr_hash(name, (const unsigned int)strlen(name)) );
 }
 
 //------------------------------------------------------------------------------
