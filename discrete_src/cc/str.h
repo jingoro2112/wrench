@@ -668,21 +668,21 @@ WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
 	}
 	else
 	{
-		char* alloc = (char*)g_malloc( len );
+		char* alloc = (char*)g_malloc( ++len );
 
 		va_list vacopy;
 		va_copy( vacopy, arg );
-		vsnprintf(alloc, len, format, arg);
+		len = vsnprintf(alloc, len, format, arg);
 		va_end( vacopy );
 
 		if ( m_len )
 		{
-			insert( alloc, len - 1, m_len );
+			insert( alloc, len, m_len );
 			g_free( alloc );
 		}
 		else
 		{
-			giveOwnership( alloc, len - 1 );
+			giveOwnership( alloc, len );
 		}
 	}
 
@@ -701,19 +701,19 @@ WRstr& WRstr::format( const char* format, ... )
 	int len = vsnprintf( buf, c_formatBaseTrySize, format, arg );
 	va_end( arg );
 
-	if ( len < c_formatBaseTrySize )
+	if ( len < c_formatBaseTrySize+1 )
 	{
 		set( buf, len );
 	}
 	else
 	{
-		char* alloc = (char*)g_malloc(len);
+		char* alloc = (char*)g_malloc(++len);
 
 		va_start( arg, format );
-		vsnprintf( alloc, len, format, arg );
+		len = vsnprintf( alloc, len, format, arg );
 		va_end( arg );
 
-		giveOwnership( alloc, len - 1 );
+		giveOwnership( alloc, len );
 	}
 
 	return *this;
@@ -729,26 +729,26 @@ WRstr& WRstr::appendFormat( const char* format, ... )
 	int len = vsnprintf( buf, c_formatBaseTrySize, format, arg );
 	va_end( arg );
 
-	if ( len < c_formatBaseTrySize )
+	if ( len < c_formatBaseTrySize+1 )
 	{
 		insert( buf, len, m_len );
 	}
 	else
 	{
-		char* alloc = (char*)g_malloc(len);
+		char* alloc = (char*)g_malloc(++len);
 
 		va_start( arg, format );
-		vsnprintf( alloc, len, format, arg );
+		len = vsnprintf( alloc, len, format, arg );
 		va_end( arg );
 
 		if ( m_len )
 		{
-			insert( alloc, len - 1, m_len );
+			insert( alloc, len, m_len );
 			g_free( alloc );
 		}
 		else
 		{
-			giveOwnership( alloc, len - 1 );
+			giveOwnership( alloc, len );
 		}
 	}
 
