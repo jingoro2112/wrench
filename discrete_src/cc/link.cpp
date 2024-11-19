@@ -103,7 +103,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 		code.append( data, 1 );
 
 		// WRFunction.frameSpaceNeeded;
-		data[1] = m_units[u].bytecode.localSpace.count();
+		data[1] = m_units[u].bytecode.localSpace.count() - m_units[u].arguments;
 		code.append( data + 1, 1 );
 
 		// WRFunction.frameBaseAdjustment;

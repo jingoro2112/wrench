@@ -41,7 +41,7 @@ void testTimeSlices();
 void testScheduler();
 void testStackOverflow();
 //void testYield2();
-#ifdef WIN32
+#ifdef WIN32_C17
 int TESTmain();
 #endif
 
@@ -130,6 +130,7 @@ const char* sourceOrder[]=
 	"/cc/expression.cpp",
 	"/cc/optimizer.cpp",
 	"/cc/token.cpp",
+	"/vm/gc_object.cpp",
 	"/vm/gc.cpp",
 	"/vm/vm.cpp",
 	"/utils/utils.cpp",
@@ -255,10 +256,6 @@ int main( int argn, char* argv[] )
 	assert( sizeof(float) == 4 );
 	assert( sizeof(unsigned char) == 1 );
 
-#ifdef WIN32
-	//TESTmain();
-#endif
-
 	if ( argn <= 1 )
 	{
 		return usage();
@@ -348,7 +345,24 @@ int main( int argn, char* argv[] )
 		wr_registerFunction( gw, "println", println );
 		wr_registerFunction( gw, "print", print );
 
+		wr_registerLibraryConstant( gw, "rgb::count", 6 );
+
+
+
 		wr_run( gw, out, outLen );
+/*
+		WRContext* c = wr_run( gw, out, outLen );
+		WRFunction* function = wr_getFunction( c, "tick" );
+		for(;;)
+		{
+			WRValue v;
+			v.setInt( 10 );
+			wr_callFunction( c, function, &v, 1 );
+			Sleep(10);
+			//usleep(10000);
+		}
+*/
+
 
 		g_free( out );
 
@@ -623,7 +637,7 @@ int runTests( int number )
 {
 	int err = 0;
 
-#ifdef WIN32
+#ifdef WIN32_C17
 	TESTmain();
 #endif
 
@@ -633,13 +647,14 @@ int runTests( int number )
 
 	WRValue container;
 	wr_makeContainer( &container );
-
+	
+	wr_addFloatToContainer( &container, "_f", 20.02f );
+	wr_addIntToContainer( &container, "_i", 1001 );
+	wr_addIntToContainer( &container, "_j", 1001 );
+	
 	WRValue integer;
 	wr_makeInt( &integer, 0 );
 	wr_addValueToContainer( &container, "integer", &integer );
-
-	wr_addIntToContainer( &container, "_i", 1001 );
-	wr_addFloatToContainer( &container, "_f", 20.02f );
 
 	char someArray[10] = "hello";
 	wr_addArrayToContainer( &container, "name", someArray, 10 );
@@ -715,10 +730,8 @@ int runTests( int number )
 				wr_registerFunction( w, "checkIsHashTable", checkIsHashTable );
 				wr_registerFunction( w, "checkIter", checkIter );
 
-				wr_destroyContext( 0 ); // test that this works
-
 				WRContext* context = 0;
-				wr_destroyContext( context );
+				wr_destroyContext( context ); // make sure this doesn't crash
 				context = wr_run( w, out, outLen );
 
 				err = wr_getLastError( w );
@@ -761,6 +774,7 @@ int runTests( int number )
 					V = wr_callFunction( context, "arrayCheck" );
 					if ( V )
 					{
+						V->isWrenchArray();
 						assert( V->isWrenchArray() );
 						char someString[256] = { 0 };
 						someString[0] = someString[0]; // kill warning
@@ -817,7 +831,7 @@ int runTests( int number )
 	testScheduler();
 	testStackOverflow();
 	setup();
-	
+
 	wr_destroyContainer( &container );
 
 	testGlobalValues( w );
@@ -1277,12 +1291,7 @@ void loop()
 
 
 
-
-
-
-
-
-#ifdef WIN32
+#ifdef WIN32_C17
 
 #include <iostream>
 #include <map>
@@ -1292,7 +1301,8 @@ void loop()
 using namespace std;
 
 
-int TESTmain() {
+int TESTmain()
+{
 	WRState* wr_state = wr_newState(20);
 	wr_registerFunction(wr_state, "print", print);
 
@@ -1303,7 +1313,7 @@ int TESTmain() {
 	string code = "function wrenchfunction(values){"
 				  "print(\"humidity:\");print( values[\"humidity\"] );"
 				  "print(\"temperature:\");print( values[\"temperature\"] );"
-				  "values[\"humidity\"] += 100;"
+				  "values[\"humidity\"] += 222;"
 				  "print(\"humidity:\");print( values[\"humidity\"] );"
 				  "print(\"temperature:\");print( values[\"temperature\"] );"
 				  "return values;}";
@@ -1339,11 +1349,12 @@ int TESTmain() {
 		delete member.value;
 	}
 
-	cout << "\nUpdated Values:\n";
+	WRstr out;
 	for (const auto& [key, value] : values) {
-		cout << key << ": " << value << "\n";
+		out.appendFormat("%s%d", key.c_str(), value);
 	}
 
+	assert(out == "humidity233temperature80");
 	wr_destroyContainer(&wrench_values);
 	return 0;
 }

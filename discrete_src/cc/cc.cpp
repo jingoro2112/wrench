@@ -82,8 +82,6 @@ WRError WRCompilationContext::compile( const char* source,
 
 	m_units.setCount(1);
 
-	bool returnCalled = false;
-
 	m_loadedValue.p2 = INIT_AS_REF;
 
 	m_addDebugSymbols = compilerOptionFlags & WR_EMBED_DEBUG_CODE;
@@ -105,7 +103,7 @@ WRError WRCompilationContext::compile( const char* source,
 		m_loadedValue = value;
 		m_loadedQuoted = m_quoted;
 		
-		parseStatement( 0, ';', returnCalled, O_GlobalStop );
+		parseStatement( 0, ';', O_GlobalStop );
 
 	} while ( !m_EOF && (m_err == WR_ERR_None) );
 
@@ -139,7 +137,8 @@ WRError WRCompilationContext::compile( const char* source,
 		return m_err;
 	}
 
-	if ( !returnCalled )
+	if ( !m_units[0].bytecode.opcodes.size()
+		 || m_units[0].bytecode.opcodes[m_units[0].bytecode.opcodes.size() - 1] != O_GlobalStop )
 	{
 		// pop final return value
 		pushOpcode( m_units[0].bytecode, O_LiteralZero );
@@ -1248,14 +1247,26 @@ unsigned int WRCompilationContext::resolveExpressionEx( WRExpression& expression
 				// second is on top of the stack, swap with
 				// next level down then swap first up
 
-				WRCompilationContext::pushOpcode( expression.bytecode, O_SwapTwoToTop );
-				unsigned char pos = expression.context[first].stackPosition + 1;
-				WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
-				pos = 2;
-				WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
 
-				expression.swapWithTop( 1, false );
-				expression.swapWithTop( expression.context[first].stackPosition, false );
+				if ( expression.context[first].stackPosition == 1 )
+				{
+					// lucky! a simple single-swap will put them in the
+					// right order (turns out this is common)
+					expression.swapWithTop( 1 );
+				}
+				else
+				{
+					// can still do it in one opcode
+					
+					WRCompilationContext::pushOpcode( expression.bytecode, O_SwapTwoToTop );
+					unsigned char pos = expression.context[first].stackPosition + 1;
+					WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
+					pos = 2;
+					WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
+					
+					expression.swapWithTop( 1, false );
+					expression.swapWithTop( expression.context[first].stackPosition, false );
+				}
 			}
 			else
 			{
@@ -1856,14 +1867,13 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 		return false;
 	}
 		
-	bool returnCalled = false;
-	parseStatement( m_unitTop, '}', returnCalled, O_Return );
+	parseStatement( m_unitTop, '}', O_Return );
 
-	if ( !returnCalled )
+	if ( !m_units[m_unitTop].bytecode.opcodes.size()
+		 || (m_units[m_unitTop].bytecode.opcodes[m_units[m_unitTop].bytecode.opcodes.size() - 1] != O_Return
+			 && m_units[m_unitTop].bytecode.opcodes[m_units[m_unitTop].bytecode.opcodes.size() - 1] != O_ReturnZero) )
 	{
-		pushDebug( WRD_LineNumber, m_units[m_unitTop].bytecode, getSourcePosition() );
-		pushOpcode( m_units[m_unitTop].bytecode, O_LiteralZero );
-		pushOpcode( m_units[m_unitTop].bytecode, O_Return );
+		pushOpcode( m_units[m_unitTop].bytecode, O_ReturnZero );
 	}
 
 	m_unitTop = previousIndex;
@@ -1872,7 +1882,7 @@ bool WRCompilationContext::parseUnit( bool isStruct, int parentUnitIndex )
 }
 
 //------------------------------------------------------------------------------
-bool WRCompilationContext::parseWhile( bool& returnCalled, WROpcode opcodeToReturn )
+bool WRCompilationContext::parseWhile( WROpcode opcodeToReturn )
 {
 	WRExpressionContext ex;
 	WRstr& token = ex.token;
@@ -1912,7 +1922,7 @@ bool WRCompilationContext::parseWhile( bool& returnCalled, WROpcode opcodeToRetu
 
 	addRelativeJumpSource( m_units[m_unitTop].bytecode, O_BZ, *m_breakTargets.tail() );
 
-	if ( !parseStatement(m_unitTop, ';', returnCalled, opcodeToReturn) )
+	if ( !parseStatement(m_unitTop, ';', opcodeToReturn) )
 	{
 		return false;
 	}
@@ -1929,7 +1939,7 @@ bool WRCompilationContext::parseWhile( bool& returnCalled, WROpcode opcodeToRetu
 }
 
 //------------------------------------------------------------------------------
-bool WRCompilationContext::parseDoWhile( bool& returnCalled, WROpcode opcodeToReturn )
+bool WRCompilationContext::parseDoWhile( WROpcode opcodeToReturn )
 {
 	*m_continueTargets.push() = addRelativeJumpTarget( m_units[m_unitTop].bytecode );
 	*m_breakTargets.push() = addRelativeJumpTarget( m_units[m_unitTop].bytecode );
@@ -1937,7 +1947,7 @@ bool WRCompilationContext::parseDoWhile( bool& returnCalled, WROpcode opcodeToRe
 	int jumpToTop = addRelativeJumpTarget( m_units[m_unitTop].bytecode );
 	setRelativeJumpTarget( m_units[m_unitTop].bytecode, jumpToTop );
 	
-	if ( !parseStatement(m_unitTop, ';', returnCalled, opcodeToReturn) )
+	if ( !parseStatement(m_unitTop, ';', opcodeToReturn) )
 	{
 		return false;
 	}
@@ -2001,7 +2011,7 @@ bool WRCompilationContext::parseDoWhile( bool& returnCalled, WROpcode opcodeToRe
 }
 
 //------------------------------------------------------------------------------
-bool WRCompilationContext::parseForLoop( bool& returnCalled, WROpcode opcodeToReturn )
+bool WRCompilationContext::parseForLoop( WROpcode opcodeToReturn )
 {
 	WRExpressionContext ex;
 	WRstr& token = ex.token;
@@ -2231,7 +2241,7 @@ A:
 		m_parsingFor = false;
 
 		// [ code ]
-		if ( !parseStatement(m_unitTop, ';', returnCalled, opcodeToReturn) )
+		if ( !parseStatement(m_unitTop, ';', opcodeToReturn) )
 		{
 			return false;
 		}
@@ -2309,7 +2319,7 @@ A:
 		m_parsingFor = false;
 
 		// [ code ]
-		if ( !parseStatement(m_unitTop, ';', returnCalled, opcodeToReturn) )
+		if ( !parseStatement(m_unitTop, ';', opcodeToReturn) )
 		{
 			return false;
 		}
@@ -2537,7 +2547,7 @@ struct WRSwitchCase
 };
 
 //------------------------------------------------------------------------------
-bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToReturn )
+bool WRCompilationContext::parseSwitch( WROpcode opcodeToReturn )
 {
 	WRExpressionContext ex;
 	WRstr& token = ex.token;
@@ -2648,7 +2658,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 			m_loadedValue = value;
 			m_loadedQuoted = m_quoted;
 
-			if ( !parseStatement(m_unitTop, ';', returnCalled, opcodeToReturn) )
+			if ( !parseStatement(m_unitTop, ';', opcodeToReturn) )
 			{
 				return false;
 			}
@@ -2843,7 +2853,7 @@ bool WRCompilationContext::parseSwitch( bool& returnCalled, WROpcode opcodeToRet
 }
 
 //------------------------------------------------------------------------------
-bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn )
+bool WRCompilationContext::parseIf( WROpcode opcodeToReturn )
 {
 	WRExpressionContext ex;
 	WRstr& token = ex.token;
@@ -2880,7 +2890,7 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	
 	addRelativeJumpSource( m_units[m_unitTop].bytecode, O_BZ, conditionFalseMarker );
 
-	if ( !parseStatement(m_unitTop, ';', returnCalled, opcodeToReturn) )
+	if ( !parseStatement(m_unitTop, ';', opcodeToReturn) )
 	{
 		return false;
 	}
@@ -2891,14 +2901,13 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	}
 	else if ( !m_quoted && token == "else" )
 	{
-		returnCalled = false;
 		int conditionTrueMarker = addRelativeJumpTarget( m_units[m_unitTop].bytecode ); // when it hits here it will jump OVER this section
 
 		addRelativeJumpSource( m_units[m_unitTop].bytecode, O_RelativeJump, conditionTrueMarker );
 		
 		setRelativeJumpTarget( m_units[m_unitTop].bytecode, conditionFalseMarker );
 
-		if ( !parseStatement(m_unitTop, ';', returnCalled, opcodeToReturn) )
+		if ( !parseStatement(m_unitTop, ';', opcodeToReturn) )
 		{
 			return false;
 		}
@@ -2907,7 +2916,6 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 	}
 	else
 	{
-		returnCalled = false; // in case { if() { return } } case !!
 		m_loadedToken = token;
 		m_loadedValue = value;
 		m_loadedQuoted = m_quoted;
@@ -2920,10 +2928,9 @@ bool WRCompilationContext::parseIf( bool& returnCalled, WROpcode opcodeToReturn 
 }
 
 //------------------------------------------------------------------------------
-bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& returnCalled, WROpcode opcodeToReturn )
+bool WRCompilationContext::parseStatement( int unitIndex, char end, WROpcode opcodeToReturn )
 {
 	WRExpressionContext ex;
-	returnCalled = false;
 	bool varSeen = false;
 	m_exportNextUnit = false;
 
@@ -2959,12 +2966,11 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 		
 		if ( !m_quoted && token == "{" )
 		{
-			return parseStatement( unitIndex, '}', returnCalled, opcodeToReturn );
+			return parseStatement( unitIndex, '}', opcodeToReturn );
 		}
 
 		if ( !m_quoted && token == "return" )
 		{
-			returnCalled = true;
 			if ( !getToken(ex) )
 			{
 				m_err = WR_ERR_unexpected_EOF;
@@ -3024,21 +3030,21 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 		}
 		else if ( !m_quoted && token == "if" )
 		{
-			if ( !parseIf(returnCalled, opcodeToReturn) )
+			if ( !parseIf(opcodeToReturn) )
 			{
 				return false;
 			}
 		}
 		else if ( !m_quoted && token == "while" )
 		{
-			if ( !parseWhile(returnCalled, opcodeToReturn) )
+			if ( !parseWhile(opcodeToReturn) )
 			{
 				return false;
 			}
 		}
 		else if ( !m_quoted && token == "for" )
 		{
-			if ( !parseForLoop(returnCalled, opcodeToReturn) )
+			if ( !parseForLoop(opcodeToReturn) )
 			{
 				return false;
 			}
@@ -3057,14 +3063,14 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, bool& return
 		}
 		else if ( !m_quoted && token == "switch" )
 		{
-			if ( !parseSwitch(returnCalled, opcodeToReturn) )
+			if ( !parseSwitch(opcodeToReturn) )
 			{
 				return false;
 			}
 		}
 		else if ( !m_quoted && token == "do" )
 		{
-			if ( !parseDoWhile(returnCalled, opcodeToReturn) )
+			if ( !parseDoWhile(opcodeToReturn) )
 			{
 				return false;
 			}

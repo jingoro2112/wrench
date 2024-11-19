@@ -80,6 +80,7 @@ function userCheck( data )
 
 	if ( data._i != 1001 ) println("ii1");
 	if ( data._f != 20.02 ) println("ff1");
+
 	data.integer = 56789;
 	
 	return 77;

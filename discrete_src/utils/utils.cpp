@@ -46,6 +46,18 @@ void wr_free( void* ptr )
 }
 
 //------------------------------------------------------------------------------
+void wr_freeGCChain( WRGCBase* chain )
+{
+	while( chain )
+	{
+		WRGCBase* next = chain->m_nextGC;
+		chain->clear();
+		g_free( chain );
+		chain = next;
+	}
+}
+
+//------------------------------------------------------------------------------
 unsigned char* wr_pack16( int16_t i, unsigned char* buf )
 {
 	*buf = i & 0xFF;
@@ -140,11 +152,9 @@ WRState* wr_newState( int stackSize )
 #endif
 																		   
 	memset( (unsigned char*)w, 0, sizeof(WRState) );
+	w->globalRegistry.growHash( WRENCH_NULL_HASH, 0 );
 
 	w->stackSize = stackSize;
-//	w->stack = (WRValue *)((unsigned char *)w + sizeof(WRState));
-
-	w->globalRegistry.init( 0, SV_VOID_HASH_TABLE, false );
 
 	return w;
 }
@@ -164,6 +174,8 @@ void wr_destroyState( WRState* w )
 	{
 		wr_destroyContext( w->contextList );
 	}
+
+	wr_freeGCChain( w->globalRegistry.m_nextGC );
 
 	w->globalRegistry.clear();
 
@@ -237,6 +249,7 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 #endif
 	
 	memset((char*)C, 0, needed);
+	C->registry.growHash( WRENCH_NULL_HASH, 0 );
 
 	C->numLocalFunctions = localFuncs;
 	C->localFunctions = (WRFunction *)((uint8_t *)(C + 1) + (globals * sizeof(WRValue)));
@@ -274,7 +287,6 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 		C->codeStart += 4 + READ_32_FROM_PC( C->codeStart );		
 	}
 
-	C->registry.init( 0, SV_VOID_HASH_TABLE, false );
 
 	int pos = 3;
 	for( int i=0; i<C->numLocalFunctions; ++i )
@@ -331,7 +343,7 @@ WRContext* wr_newContext( WRState* w, const unsigned char* block, const int bloc
 	WRContext* C = wr_createContext( w, block, blockSize, takeOwnership );
 	if ( C )
 	{
-		C->registry.m_vNext = w->contextList;
+		C->nextStateContextLink = w->contextList;
 		w->contextList = C;
 	}
 	return C;
@@ -380,6 +392,8 @@ void wr_destroyContextEx( WRContext* context )
 	context->allocatedMemoryHint = context->allocatedMemoryLimit;
 	context->gc( 0 );
 
+	wr_freeGCChain( context->registry.m_nextGC );
+
 	context->registry.clear();
 
 	if ( context->flags & WRC_OwnsMemory )
@@ -401,17 +415,17 @@ void wr_destroyContext( WRContext* context )
 	WRContext* prev = 0;
 
 	// unlink it
-	for( WRContext* c = context->w->contextList; c; c = (WRContext*)c->registry.m_vNext )
+	for( WRContext* c = context->w->contextList; c; c = (WRContext*)c->nextStateContextLink )
 	{
 		if ( c == context )
 		{
 			if ( prev )
 			{
-				prev->registry.m_vNext = c->registry.m_vNext;
+				prev->nextStateContextLink = c->nextStateContextLink;
 			}
 			else
 			{
-				context->w->contextList = (WRContext*)context->w->contextList->registry.m_vNext;
+				context->w->contextList = (WRContext*)context->w->contextList->nextStateContextLink;
 			}
 
 			while( context->imported )
@@ -472,6 +486,8 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 }
 
 //------------------------------------------------------------------------------
+// DEPRECATED
+/*
 void wr_registerLibraryConstant( WRState* w, const char* signature, const WRValue& value )
 {
 	if ( value.p2 == WR_INT || value.p2 == WR_FLOAT )
@@ -480,6 +496,23 @@ void wr_registerLibraryConstant( WRState* w, const char* signature, const WRValu
 		C->p2 = value.p2 | INIT_AS_LIB_CONST;
 		C->p = value.p;
 	}
+}
+*/
+
+//------------------------------------------------------------------------------
+void wr_registerLibraryConstant( WRState* w, const char* signature, const int32_t i )
+{
+	WRValue* C = w->globalRegistry.getAsRawValueHashTable( wr_hashStr(signature) );
+	C->p2 = INIT_AS_INT | INIT_AS_LIB_CONST;
+	C->i = i;
+}
+
+//------------------------------------------------------------------------------
+void wr_registerLibraryConstant( WRState* w, const char* signature, const float f )
+{
+	WRValue* C = w->globalRegistry.getAsRawValueHashTable( wr_hashStr(signature) );
+	C->p2 = INIT_AS_FLOAT | INIT_AS_LIB_CONST;
+	C->f = f;
 }
 
 //------------------------------------------------------------------------------
@@ -870,6 +903,10 @@ char* WRValue::asString( char* string, unsigned int maxLen, unsigned int* strLen
 		memcpy( string, va->m_Cdata, len );
 		string[len] = 0;
 	}
+	else if ( IS_CONTAINER_MEMBER(xtype) )
+	{
+		return deref().asString(string, maxLen, strLen);
+	}
 	else
 	{
 		return singleValue().asString( string, maxLen, strLen ); // never give up, never surrender	
@@ -1071,9 +1108,23 @@ void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 		return;
 	}
 #endif
-	val->va->init( sizeHint, SV_HASH_TABLE, false );
-	val->va->m_skipGC = 1;
+	memset( (unsigned char*)val->va, 0, sizeof(WRGCObject) );
+
+	val->va->init( sizeHint, SV_HASH_TABLE, false);
+	
+	val->va->m_flags |= GCFlag_SkipGC;
 	val->p2 = INIT_AS_HASH_TABLE;
+}
+
+//------------------------------------------------------------------------------
+void wr_destroyContainer( WRValue* val )
+{
+	// clear off the keys
+	wr_freeGCChain( val->vb->m_nextGC );
+
+	// clear the container
+	val->vb->clear();
+	g_free( val->vb );
 }
 
 //------------------------------------------------------------------------------
@@ -1095,19 +1146,20 @@ WRValue* wr_addToContainerEx( const char* name, WRValue* container )
 		return 0;
 	}
 #endif
+	memset( (unsigned char*)key.va, 0, sizeof(WRGCObject) );
+
+	key.va->m_nextGC = container->va->m_nextGC;
+	container->va->m_nextGC = key.va;
 	
-	key.va->init(len, SV_CHAR, false);
-	
-	key.va->m_skipGC = 1;
+	key.va->init( len, SV_CHAR, false);
+
+	key.va->m_flags |= GCFlag_SkipGC;
 	key.p2 = INIT_AS_ARRAY;
-	memcpy( key.va->m_Cdata, name, len );
+	memcpy(key.va->m_Cdata, name, len);
 
-	key.va->m_next = container->va->m_next;
-	container->va->m_next = key.va;
-
-	WRValue* entry = (WRValue*)container->va->get( key.getHash() );
+	WRValue* entry = (WRValue*)container->va->get(key.getHash());
 	*(entry + 1) = key;
-	
+
 	return entry;
 }
 
@@ -1172,24 +1224,6 @@ WRValue* wr_getValueFromContainer( WRValue const& container, const char* name )
 	}
 
 	return (WRValue*)container.va->get( wr_hash(name, (const unsigned int)strlen(name)) );
-}
-
-//------------------------------------------------------------------------------
-void wr_destroyContainer( WRValue* val )
-{
-	// clear off the keys
-	WRGCObject* va = val->va->m_next;
-	while( va )
-	{
-		WRGCObject* next = va->m_next;
-		g_free( va->m_Cdata );
-		g_free( va );
-		va = next;
-	}
-
-	// clearr the container
-	val->va->clear();
-	g_free( val->va );
 }
 
 #ifndef WRENCH_WITHOUT_COMPILER

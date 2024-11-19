@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -65,7 +65,7 @@ struct WRContext
 	
 	const unsigned char* stopLocation;
 	
-	WRGCObject* svAllocated;
+	WRGCBase* svAllocated;
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 	WRDebugServerInterface* debugInterface;
@@ -88,6 +88,8 @@ struct WRContext
 	uint8_t numLocalFunctions;
 	
 	WRContext* imported; // linked list of contexts this one imported
+
+	WRContext* nextStateContextLink;
 
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );

@@ -1,19 +1,19 @@
 /*~ ~*/
 
-hashTest = { 1:10, 2:20, "three":30 };
+var hashTest = { 1:10, 2:20, "three":30 };
 if ( hashTest._exists(1) != 1 ) println("x1");
 if ( hashTest._exists(3) != 0 ) println("x2");
 if ( hashTest._exists("three") != 1 ) println("x3");
-somethingH._remove( 1 );
+var somethingH._remove( 1 );
 if ( somethingH._exists(1) != 0 ) println("x4");
-somethingH._remove( "three" );
+var somethingH._remove( "three" );
 if ( somethingH._exists("three") != 0 ) println("x4");
 
-blue   = { 10:"one", 20:"two", "three":30 };
-green[]  = { 1, 2, blue };
-red[]    = { green, 3 };
+var blue   = { 10:"one", 20:"two", "three":30 };
+var green[]  = { 1, 2, blue };
+var red[]    = { green, 3 };
 
-colors[] = { red, red };
+var colors[] = { red, red };
 
 if ( colors[0][0][1] != 2 ) println("sub 0");
 if ( colors[0][0][1] != 2 ) println("sub 1");
@@ -23,7 +23,7 @@ if ( colors[0][0][2]["three"] != 30 ) println("sub 4");
 if ( colors[0][1][2]["three"] != 0 ) println("sub 5");
 
 
-table =
+var table =
 {
 	"1":1,
 	"2":2,
@@ -38,7 +38,7 @@ if ( table[4] != "4" ) println( "bad 4" );
 if ( table[5] != 0 ) println( "bad 5" );
 
 
-table2 =
+var table2 =
 {
 	"1":1,
 	"2":2,
@@ -92,12 +92,12 @@ if ( table[5] != 0 ) println( "bad 5e" );
 
 if ( table["7"] != "11" ) println( "bad 71" );
 
-aa = {:};
+var aa = {:};
 
-a = { "a" : 2 }; // creating a blank hash table
+var a = { "a" : 2 }; // creating a blank hash table
 
-a = "hello";
-b = "hello";
+var a = "hello";
+var b = "hello";
 if ( a != "hello" ) println("string bad 1");
 if ( "hello" != a ) println("string bad 2");
 if ( b != a ) println("string bad 3");
@@ -115,13 +115,13 @@ a = "hello";
 if ( a._hash != 1335831723 ) println("bad 3");
 
 
-hash1 = { "one":100 };
-hash2 = { "two":10, 1:hash1, "member":hash3 };
+var hash1 = { "one":100 };
+var hash2 = { "two":10, 1:hash1, "member":var hash3 };
 hash3 = { "three":30, 2:hash2 };
 
-array1 = { 1, 2, hash3 };
-array2 = { hash2, array1, 4 };
-array3 = { 50, 60, array2, hash3, hash2 };
+var array1 = { 1, 2, hash3 };
+var array2 = { hash2, array1, 4 };
+var array3 = { 50, 60, array2, hash3, hash2 };
 
 if ( array3[2][0]["two"] != 10 ) println("hsh 0");
 if ( array3[2][0][1]["one"] != 100 ) println("hsh 1");

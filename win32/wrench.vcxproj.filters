@@ -113,6 +113,9 @@
     <ClCompile Include="..\discrete_src\debug\tcp_debug_comm.cpp">
       <Filter>Source Files\debug</Filter>
     </ClCompile>
+    <ClCompile Include="..\discrete_src\vm\gc_object.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\discrete_src\vm\vm.h">

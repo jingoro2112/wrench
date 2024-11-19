@@ -79,7 +79,7 @@ WRValue& WRValue::deref() const
 		return r->deref();
 	}
 
-	if ( !IS_ARRAY_MEMBER(xtype) )
+	if ( !IS_CONTAINER_MEMBER(xtype) )
 	{
 		return const_cast<WRValue&>(*this);
 	}
@@ -90,6 +90,10 @@ WRValue& WRValue::deref() const
 	if ( IS_RAW_ARRAY(r->xtype) )
 	{
 		s_temp2.ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(r->p2))) ? (uint32_t)(unsigned char)(r->c[s]) : 0;
+	}
+	else if ( vb->m_type == SV_HASH_INTERNAL )
+	{
+		return ((WRValue*)(vb + 1))[s].deref();
 	}
 	else if ( s < r->va->m_size )
 	{
@@ -115,7 +119,7 @@ uint32_t WRValue::getHashEx() const
 		return r->getHash();
 	}
 
-	if ( IS_ARRAY_MEMBER(xtype) )
+	if ( IS_CONTAINER_MEMBER(xtype) )
 	{
 		return deref().getHash();
 	}
@@ -167,11 +171,15 @@ uint32_t WRValue::getHashEx() const
 }
 
 //------------------------------------------------------------------------------
-void wr_valueToArray( const WRValue* ex, WRValue* value )
+void wr_valueToContainer( const WRValue* ex, WRValue* value )
 {
 	uint32_t s = DECODE_ARRAY_ELEMENT_FROM_P2(ex->p2);
 
-	if ( IS_RAW_ARRAY(ex->r->xtype ) )
+	if ( ex->vb->m_type == SV_HASH_INTERNAL )
+	{
+		((WRValue *)(ex->vb + 1))[s].deref() = *value;
+	}
+	else if ( IS_RAW_ARRAY(ex->r->xtype ) )
 	{
 		if ( s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(ex->r->p2)) )
 		{
@@ -344,62 +352,57 @@ WRVoidFunc wr_pushIterator[4] =
 };
 
 //------------------------------------------------------------------------------
-void doAssign_X_E( WRValue* to, WRValue* from )
+void doAssign_IF_E( WRValue* to, WRValue* from )
 {
-	if ( IS_ARRAY_MEMBER(from->xtype) )
-	{
-		WRValue& V = from->deref();
-		wr_assign[(WR_EX<<2)+V.type](to, &V);
-	}
-	else
-	{
-		*to = *from;
-	}
+	*to = from->deref();
 }
 
-void doAssign_E_X( WRValue* to, WRValue* from )
+void doAssign_E_IF( WRValue* to, WRValue* from )
 {
-	if ( IS_ARRAY_MEMBER(to->xtype) )
+	if ( IS_RAW_ARRAY(to->r->xtype) )
 	{
-		wr_valueToArray( to, from );
+		uint32_t s = DECODE_ARRAY_ELEMENT_FROM_P2(to->p2);
+
+		if ( s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(to->r->p2)) )
+		{
+			to->r->c[s] = from->ui;
+		}
 	}
 	else
 	{
-		*to = *from;
+		to->deref() = *from;
 	}
 }
 
 void doAssign_E_E( WRValue* to, WRValue* from )
 {
-	if ( IS_ARRAY_MEMBER(from->xtype) )
+	WRValue& V = from->deref();
+	if ( IS_CONTAINER_MEMBER(to->xtype) )
 	{
-		WRValue& V = from->deref();
-		wr_assign[(WR_EX<<2)+V.type](to, &V);
-		return;
+		wr_valueToContainer( to, &V );
 	}
-	else if ( IS_ARRAY_MEMBER(to->xtype)
-			  && IS_EXARRAY_TYPE(to->r->xtype)
-			  && (to->r->va->m_type == SV_VALUE) )
+	else
 	{
-		unsigned int index = DECODE_ARRAY_ELEMENT_FROM_P2(to->p2);
-
-		if ( index > to->r->va->m_size )
-		{
-			if ( to->r->va->m_skipGC )
-			{
-				return;
-			}
-
-			wr_growValueArray( to->r->va, index );	
-		}
-
-		to->r->va->m_Vdata[index] = *from;
-		return;
+		*to = V;
 	}
-
-	*to = *from;
 }
 
+
+void doAssign_R_E( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_EX](to->r, from); }
+void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
+void doAssign_E_R( WRValue* to, WRValue* from ) { wr_assign[(WR_EX<<2)|from->r->type](to, from->r); }
+void doAssign_R_I( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_INT](to->r, from); }
+void doAssign_R_F( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_FLOAT](to->r, from); }
+void doAssign_I_R( WRValue* to, WRValue* from ) { wr_assign[(WR_INT<<2)|from->r->type](to, from->r); }
+void doAssign_F_R( WRValue* to, WRValue* from ) { wr_assign[(WR_FLOAT<<2)|from->r->type](to, from->r); }
+void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
+WRVoidFunc wr_assign[16] = 
+{
+	doAssign_X_X,  doAssign_X_X,  doAssign_I_R,  doAssign_IF_E,
+	doAssign_X_X,  doAssign_X_X,  doAssign_F_R,  doAssign_IF_E,
+	doAssign_R_I,  doAssign_R_F,  doAssign_R_R,  doAssign_R_E,
+	doAssign_E_IF, doAssign_E_IF, doAssign_E_R,  doAssign_E_E,
+};
 
 //==================================================================================
 //==================================================================================
@@ -407,20 +410,6 @@ void doAssign_E_E( WRValue* to, WRValue* from )
 //==================================================================================
 
 #ifdef WRENCH_COMPACT
-
-
-void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
-void doAssign_R_X( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->type](to->r, from); }
-void doAssign_X_R( WRValue* to, WRValue* from ) { wr_assign[(to->type<<2)|from->r->type](to, from->r); }
-void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
-WRVoidFunc wr_assign[16] = 
-{
-	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
-	doAssign_X_X,  doAssign_X_X,  doAssign_X_R,  doAssign_X_E,
-	doAssign_R_X,  doAssign_R_X,  doAssign_R_R,  doAssign_R_X,
-	doAssign_E_X,  doAssign_E_X,  doAssign_X_R,  doAssign_E_E,
-};
-
 
 extern bool CompareEQI( int a, int b );
 extern bool CompareEQF( float a, float b );
@@ -431,7 +420,7 @@ void unaryPost_E( WRValue* value, WRValue* stack, int add )
 	WRValue& V = value->singleValue();
 	WRValue temp;
 	m_unaryPost[ V.type ]( &V, &temp, add );
-	wr_valueToArray( value, &V );
+	wr_valueToContainer( value, &V );
 	*stack = temp;
 }
 void unaryPost_I( WRValue* value, WRValue* stack, int add ) { stack->p2 = INIT_AS_INT; stack->i = value->i; value->i += add; }
@@ -452,12 +441,12 @@ void FuncAssign_E_X( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 	
 	wr_FuncAssign[(V.type<<2)|from->type]( &V, from, intCall, floatCall );
 	
-	wr_valueToArray( to, &V );
+	wr_valueToContainer( to, &V );
 	*from = V;
 }
 void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall ) 
 {
-	if ( IS_ARRAY_MEMBER(from->xtype) )
+	if ( IS_CONTAINER_MEMBER(from->xtype) )
 	{
 		WRValue& V = from->deref();
 
@@ -467,7 +456,7 @@ void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 	else if ( intCall == wr_addI
 			  && IS_ARRAY(to->xtype)
 			  && to->va->m_type == SV_CHAR
-			  && !to->va->m_skipGC
+			  && !(to->va->m_flags & GCFlag_SkipGC)
 			  && IS_ARRAY(from->xtype)
 			  && from->va->m_type == SV_CHAR )
 	{
@@ -550,7 +539,7 @@ void FuncBinary_E_X( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall 
 }
 void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	if ( IS_ARRAY_MEMBER(to->xtype) && IS_ARRAY_MEMBER(from->xtype) )
+	if ( IS_CONTAINER_MEMBER(to->xtype) && IS_CONTAINER_MEMBER(from->xtype) )
 	{
 		WRValue V1 = to->deref();
 		WRValue& V2 = from->deref();
@@ -559,7 +548,7 @@ void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall 
 	else if ( intCall == wr_addI
 			  && IS_ARRAY(to->xtype)
 			  && to->va->m_type == SV_CHAR
-			  && !to->va->m_skipGC
+			  && !(to->va->m_flags & GCFlag_SkipGC)
 			  && IS_ARRAY(from->xtype)
 			  && from->va->m_type == SV_CHAR )
 	{
@@ -679,23 +668,6 @@ WRBoolCallbackReturnFunc wr_Compare[16] =
 
 // NOT COMPACT
 
-void doAssign_R_E( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_EX](to->r, from); }
-void doAssign_R_R( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|from->r->type](to->r, from->r); }
-void doAssign_E_R( WRValue* to, WRValue* from ) { wr_assign[(WR_EX<<2)|from->r->type](to, from->r); }
-void doAssign_R_I( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_INT](to->r, from); }
-void doAssign_R_F( WRValue* to, WRValue* from ) { wr_assign[(to->r->type<<2)|WR_FLOAT](to->r, from); }
-void doAssign_I_R( WRValue* to, WRValue* from ) { wr_assign[(WR_INT<<2)|from->r->type](to, from->r); }
-void doAssign_F_R( WRValue* to, WRValue* from ) { wr_assign[(WR_FLOAT<<2)|from->r->type](to, from->r); }
-void doAssign_X_X( WRValue* to, WRValue* from ) { *to = *from; }
-WRVoidFunc wr_assign[16] = 
-{
-	doAssign_X_X,  doAssign_X_X,  doAssign_I_R,  doAssign_X_E,
-	doAssign_X_X,  doAssign_X_X,  doAssign_F_R,  doAssign_X_E,
-	doAssign_R_I,  doAssign_R_F,  doAssign_R_R,  doAssign_R_E,
-	doAssign_E_X,  doAssign_E_X,  doAssign_E_R,  doAssign_E_E,
-};
-
-
 void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
 
 #define X_INT_ASSIGN( NAME, OPERATION ) \
@@ -713,7 +685,7 @@ void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 	\
 	NAME##Assign[(V.type<<2)|WR_INT]( &V, from );\
 	\
-	wr_valueToArray( to, &V );\
+	wr_valueToContainer( to, &V );\
 	*from = V;\
 }\
 void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
@@ -757,7 +729,7 @@ void NAME##Assign_E_I( WRValue* to, WRValue* from )\
 	\
 	NAME##Assign[(V.type<<2)|WR_INT]( &V, from );\
 	\
-	wr_valueToArray( to, &V );\
+	wr_valueToContainer( to, &V );\
 	*from = V;\
 }\
 void NAME##Assign_E_F( WRValue* to, WRValue* from )\
@@ -766,7 +738,7 @@ void NAME##Assign_E_F( WRValue* to, WRValue* from )\
 	\
 	NAME##Assign[(V.type<<2)|WR_FLOAT]( &V, from );\
 	\
-	wr_valueToArray( to, &V );\
+	wr_valueToContainer( to, &V );\
 	*from = V;\
 }\
 void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
@@ -823,7 +795,7 @@ void wr_DivideAssign_E_I( WRValue* to, WRValue* from )
 
 	wr_DivideAssign[(V.type<<2)|WR_INT]( &V, from );
 
-	wr_valueToArray( to, &V );
+	wr_valueToContainer( to, &V );
 	*from = V;
 }
 void wr_DivideAssign_E_F( WRValue* to, WRValue* from )
@@ -832,7 +804,7 @@ void wr_DivideAssign_E_F( WRValue* to, WRValue* from )
 
 	wr_DivideAssign[(V.type<<2)|WR_FLOAT]( &V, from );
 
-	wr_valueToArray( to, &V );
+	wr_valueToContainer( to, &V );
 	*from = V;
 }
 void wr_DivideAssign_E_E( WRValue* to, WRValue* from ) 
@@ -944,7 +916,7 @@ void wr_AddAssign_E_I( WRValue* to, WRValue* from )
 	
 	wr_AddAssign[(V.type<<2)|WR_INT]( &V, from );
 	
-	wr_valueToArray( to, &V );
+	wr_valueToContainer( to, &V );
 	*from = V;
 }
 
@@ -954,12 +926,12 @@ void wr_AddAssign_E_F( WRValue* to, WRValue* from )
 
 	wr_AddAssign[(V.type<<2)|WR_FLOAT]( &V, from );
 
-	wr_valueToArray( to, &V );
+	wr_valueToContainer( to, &V );
 	*from = V;
 }
 void wr_AddAssign_E_E( WRValue* to, WRValue* from ) 
 {
-	if ( IS_ARRAY_MEMBER(from->xtype) )
+	if ( IS_CONTAINER_MEMBER(from->xtype) )
 	{
 		WRValue& V = from->deref();
 
@@ -968,7 +940,7 @@ void wr_AddAssign_E_E( WRValue* to, WRValue* from )
 	}
 	else if ( IS_ARRAY(to->xtype)
 			  && to->va->m_type == SV_CHAR
-			  && !to->va->m_skipGC
+			  && !(to->va->m_flags & GCFlag_SkipGC)
 			  && IS_ARRAY(from->xtype)
 			  && from->va->m_type == SV_CHAR )
 	{
@@ -1194,7 +1166,7 @@ void wr_AdditionBinary_E_F( WRValue* to, WRValue* from, WRValue* target )
 }
 void wr_AdditionBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
 {
-	if ( IS_ARRAY_MEMBER(to->xtype) && IS_ARRAY_MEMBER(from->xtype) )
+	if ( IS_CONTAINER_MEMBER(to->xtype) && IS_CONTAINER_MEMBER(from->xtype) )
 	{
 		WRValue V1 = to->deref();
 		WRValue& V2 = from->deref();
@@ -1202,7 +1174,7 @@ void wr_AdditionBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
 	}
 	else if ( IS_ARRAY(to->xtype)
 			  && to->va->m_type == SV_CHAR
-			  && !to->va->m_skipGC
+			  && !(to->va->m_flags & GCFlag_SkipGC)
 			  && IS_ARRAY(from->xtype)
 			  && from->va->m_type == SV_CHAR )
 	{
@@ -1477,7 +1449,7 @@ void NAME##_E( WRValue* value )\
 {\
 	WRValue& V = value->singleValue();\
 	NAME [ V.type ]( &V );\
-	wr_valueToArray( value, &V );\
+	wr_valueToContainer( value, &V );\
 }\
 void NAME##_I( WRValue* value ) { OPERATION value->i; }\
 void NAME##_F( WRValue* value ) { OPERATION value->f; }\
@@ -1497,7 +1469,7 @@ void NAME##_E( WRValue* value, WRValue* stack )\
 	WRValue& V = value->singleValue();\
 	WRValue temp; \
 	NAME [ V.type ]( &V, &temp );\
-	wr_valueToArray( value, &V );\
+	wr_valueToContainer( value, &V );\
 	*stack = temp; \
 }\
 void NAME##_I( WRValue* value, WRValue* stack ) { stack->p2 = INIT_AS_INT; stack->i = value->i OPERATION; }\

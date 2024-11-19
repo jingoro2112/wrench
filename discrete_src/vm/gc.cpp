@@ -27,45 +27,54 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
 {
-	if ( IS_ARRAY_MEMBER(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
+	if ( IS_CONTAINER_MEMBER(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
 	{
 		// we don't mark this type, but we might mark it's target
 		mark( s->r );
 		return;
 	}
 
-	if ( !IS_EXARRAY_TYPE(s->xtype) || s->va->m_skipGC || (s->va->m_size & 0x40000000) )
+	if ( !IS_EXARRAY_TYPE(s->xtype) || (s->va->m_flags & GCFlag_Marked) )
 	{
 		return;
 	}
 
 	assert( !IS_RAW_ARRAY(s->xtype) );
 
-	WRGCObject* sva = s->va;
+	WRGCBase* svb = s->vb;
 
-	if ( sva->m_type == SV_VALUE )
+	if ( svb->m_type == SV_VALUE )
 	{
-		WRValue* top = sva->m_Vdata + sva->m_size;
+		WRValue* top = ((WRGCObject*)svb)->m_Vdata + ((WRGCObject*)svb)->m_size;
 
-		for( WRValue* V = sva->m_Vdata; V<top; ++V )
+		for( WRValue* V = ((WRGCObject*)svb)->m_Vdata; V<top; ++V )
 		{
 			mark( V );
 		}
 	}
-	else if ( sva->m_type == SV_HASH_TABLE )
+	else if ( svb->m_type == SV_HASH_TABLE )
 	{
-		for( uint32_t i=0; i<sva->m_mod; ++i )
+		// hash table points one WRGCBase size PAST the actual pointer,
+		// recover it and mark it
+		((WRGCBase*)(((WRGCObject*)svb)->m_Vdata) - 1)->m_flags |= GCFlag_Marked;
+
+		for( uint32_t i=0; i<((WRGCObject*)svb)->m_mod; ++i )
 		{
-			if ( sva->m_hashTable[i] != WRENCH_NULL_HASH )
+			if ( ((WRGCObject*)svb)->m_hashTable[i] != WRENCH_NULL_HASH )
 			{
 				uint32_t item = i<<1;
-				mark( sva->m_Vdata + item++ );
-				mark( sva->m_Vdata + item );
+				mark( ((WRGCObject*)svb)->m_Vdata + item++ );
+				mark( ((WRGCObject*)svb)->m_Vdata + item );
 			}
 		}
 	}
+	else if ( svb->m_type == SV_HASH_ENTRY )
+	{
+		// mark the referenced table so it is not collected
+		((WRGCHashReference*)svb)->m_referencedTable->m_flags |= GCFlag_Marked;
+	}
 
-	sva->m_size |= 0x40000000;
+	svb->m_flags |= GCFlag_Marked;
 }
 
 //------------------------------------------------------------------------------
@@ -94,16 +103,16 @@ void WRContext::gc( WRValue* stackTop )
 	}
 
 	// sweep
-	WRGCObject* current = svAllocated;
-	WRGCObject* prev = 0;
+	WRGCBase* current = svAllocated;
+	WRGCBase* prev = 0;
 	while( current )
 	{
 		// if set, clear it
-		if ( current->m_size & 0x40000000 )
+		if ( current->m_flags & GCFlag_Marked )
 		{
-			current->m_size &= ~0x40000000;
+			current->m_flags &= ~GCFlag_Marked;
 			prev = current;
-			current = current->m_next;
+			current = current->m_nextGC;
 		}
 		// otherwise free it as unreferenced
 		else
@@ -112,21 +121,21 @@ void WRContext::gc( WRValue* stackTop )
 
 			if ( prev == 0 )
 			{
-				svAllocated = current->m_next;
+				svAllocated = current->m_nextGC;
 				g_free( current );
 				current = svAllocated;
 			}
 			else
 			{
-				prev->m_next = current->m_next;
+				prev->m_nextGC = current->m_nextGC;
 				g_free( current );
-				current = prev->m_next;
+				current = prev->m_nextGC;
 			}
 		}
 	}
 }
 
-/*  meh..
+/* .. meh..
 //------------------------------------------------------------------------------
 void WRContext::scavenge( WRGCObject* va )
 {
@@ -171,25 +180,16 @@ WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 	}
 #endif
 
-	ret->init( size, type, init );
-
-	if ( type == SV_CHAR )
-	{
-		ret->m_creatorContext = this;
-		allocatedMemoryHint += size;
-	}
-	else if ( type == SV_VALUE )
-	{
-		ret->m_creatorContext = this;
-		allocatedMemoryHint += size * sizeof(WRValue);
-	}
-	else
-	{
-		allocatedMemoryHint += ret->m_size * sizeof(WRValue);
-	}
-
-	ret->m_next = svAllocated;
+	memset( (unsigned char*)ret, 0, sizeof(WRGCObject) );
+	ret->m_nextGC = svAllocated;
 	svAllocated = ret;
+
+	allocatedMemoryHint += ret->init( size, type, init );
+
+	if ( (int)type >= SV_VALUE )
+	{
+		ret->m_creatorContext = this;
+	}
 
 	return ret;
 }

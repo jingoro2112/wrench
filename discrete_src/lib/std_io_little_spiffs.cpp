@@ -400,14 +400,14 @@ void wr_ioPushConstants( WRState* w )
 {
 	WRValue C;
 	
-	wr_registerLibraryConstant( w, "io::O_RDONLY", wr_makeInt(&C, LFS_READ) );
-	wr_registerLibraryConstant( w, "io::O_RDWR", wr_makeInt(&C, LFS_RDWR) );
-	wr_registerLibraryConstant( w, "io::O_APPEND", wr_makeInt(&C, LFS_APPEND) );
-	wr_registerLibraryConstant( w, "io::O_CREAT", wr_makeInt(&C, LFS_RDWR) );
+	wr_registerLibraryConstant( w, "io::O_RDONLY", (int32_t)LFS_READ );
+	wr_registerLibraryConstant( w, "io::O_RDWR", (int32_t)LFS_RDWR );
+	wr_registerLibraryConstant( w, "io::O_APPEND", (int32_t)LFS_APPEND );
+	wr_registerLibraryConstant( w, "io::O_CREAT", (int32_t)LFS_RDWR );
 
-	wr_registerLibraryConstant( w, "io::SEEK_SET", wr_makeInt(&C, LFS_SET) );
-	wr_registerLibraryConstant( w, "io::SEEK_CUR", wr_makeInt(&C, LFS_CUR) );
-	wr_registerLibraryConstant( w, "io::SEEK_END", wr_makeInt(&C, LFS_END) );
+	wr_registerLibraryConstant( w, "io::SEEK_SET", (int32_t)LFS_SET );
+	wr_registerLibraryConstant( w, "io::SEEK_CUR", (int32_t)LFS_CUR );
+	wr_registerLibraryConstant( w, "io::SEEK_END", (int32_t)LFS_END );
 
 	FILE_OBJ.begin();
 

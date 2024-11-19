@@ -443,7 +443,7 @@ void wr_growValueArray( WRGCObject* va, int newSize );
 #define INIT_AS_ARRAY        (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
 #define INIT_AS_USR          (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
 #define INIT_AS_RAW_ARRAY    (((uint32_t)WR_EX) | ((uint32_t)WR_EX_RAW_ARRAY<<24))
-#define INIT_AS_ARRAY_MEMBER (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY_MEMBER<<24))
+#define INIT_AS_CONTAINER_MEMBER (((uint32_t)WR_EX) | ((uint32_t)WR_EX_CONTAINER_MEMBER<<24))
 #define INIT_AS_STRUCT       (((uint32_t)WR_EX) | ((uint32_t)WR_EX_STRUCT<<24))
 #define INIT_AS_HASH_TABLE   (((uint32_t)WR_EX) | ((uint32_t)WR_EX_HASH_TABLE<<24))
 #define INIT_AS_ITERATOR     (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ITERATOR<<24))

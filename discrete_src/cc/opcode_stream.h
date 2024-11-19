@@ -69,8 +69,9 @@ public:
 			if ( m_len )
 			{
 				memcpy( m_buf, buf, m_len );
-				g_free( buf );
 			}
+
+			g_free( buf );
 		}
 
 		memcpy( m_buf + m_len, data, size );

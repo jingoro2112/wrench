@@ -319,18 +319,16 @@ void wr_ioFSync(WRValue* stackTop, const int argn, WRContext* c)
 //------------------------------------------------------------------------------
 void wr_ioPushConstants( WRState* w )
 {
-	WRValue C;
+	wr_registerLibraryConstant( w, "io::O_RDONLY", (int32_t)O_RDONLY );
+	wr_registerLibraryConstant( w, "io::O_RDWR", (int32_t)O_RDWR );
+	wr_registerLibraryConstant( w, "io::O_APPEND", (int32_t)O_APPEND );
+	wr_registerLibraryConstant( w, "io::O_CREAT", (int32_t)O_CREAT );
+	wr_registerLibraryConstant( w, "io::O_TRUNC", (int32_t)O_TRUNC );
+	wr_registerLibraryConstant( w, "io::O_EXCL", (int32_t)O_EXCL );
 
-	wr_registerLibraryConstant( w, "io::O_RDONLY", wr_makeInt(&C, O_RDONLY) );
-	wr_registerLibraryConstant( w, "io::O_RDWR", wr_makeInt(&C, O_RDWR) );
-	wr_registerLibraryConstant( w, "io::O_APPEND", wr_makeInt(&C, O_APPEND) );
-	wr_registerLibraryConstant( w, "io::O_CREAT", wr_makeInt(&C, O_CREAT) );
-	wr_registerLibraryConstant( w, "io::O_TRUNC", wr_makeInt(&C, O_TRUNC) );
-	wr_registerLibraryConstant( w, "io::O_EXCL", wr_makeInt(&C, O_EXCL) );
-
-	wr_registerLibraryConstant( w, "io::SEEK_SET", wr_makeInt(&C, SEEK_SET) );
-	wr_registerLibraryConstant( w, "io::SEEK_CUR", wr_makeInt(&C, SEEK_CUR) );
-	wr_registerLibraryConstant( w, "io::SEEK_END", wr_makeInt(&C, SEEK_END) );
+	wr_registerLibraryConstant( w, "io::SEEK_SET", (int32_t)SEEK_SET );
+	wr_registerLibraryConstant( w, "io::SEEK_CUR", (int32_t)SEEK_CUR );
+	wr_registerLibraryConstant( w, "io::SEEK_END", (int32_t)SEEK_END );
 }
 
 #endif

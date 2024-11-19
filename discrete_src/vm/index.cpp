@@ -51,7 +51,7 @@ void elementToTarget( const uint32_t index, WRValue* target, WRValue* value )
 	else
 	{
 		target->r = value;
-		target->p2 = INIT_AS_ARRAY_MEMBER | ENCODE_ARRAY_ELEMENT_TO_P2( index );
+		target->p2 = INIT_AS_CONTAINER_MEMBER | ENCODE_ARRAY_ELEMENT_TO_P2( index );
 	}
 }
 
@@ -62,18 +62,20 @@ void doIndexHash( WRValue* value, WRValue* target, WRValue* index )
 	
 	if ( value->xtype == WR_EX_HASH_TABLE ) 
 	{
-		WRValue* entry = (WRValue*)(value->va->get(hash));
+		int element;
+		WRValue* entry = (WRValue*)(value->va->get(hash, &element));
+
 		if ( IS_EX_SINGLE_CHAR_RAW_P2( (target->r = entry)->p2 ) )
 		{
-			target->p2 = INIT_AS_ARRAY_MEMBER;
+			target->p2 = INIT_AS_CONTAINER_MEMBER;
 		}
 		else
 		{
-			if (value->va->m_type == SV_HASH_TABLE)
-			{
-				*(entry + 1) = *index; // store key
-			}
-			target->p2 = INIT_AS_REF; // store value
+			// need to create a hash ref
+			*(entry + 1) = *index; // might be the first time it was registered
+		
+			target->p2 = INIT_AS_CONTAINER_MEMBER | ENCODE_ARRAY_ELEMENT_TO_P2( element );
+			target->vb = (WRGCBase*)(value->va->m_Vdata) - 1;
 		}
 	}
 	else // naming an element of a struct "S.element"
@@ -162,7 +164,7 @@ void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 	}
 	else if ( index->ui >= value->va->m_size )
 	{
-		if ( value->va->m_skipGC )
+		if ( value->va->m_flags & GCFlag_SkipGC )
 		{
 boundsFailed:
 			target->init();
@@ -198,7 +200,6 @@ void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 			}
 #endif
 			V->p2 = INIT_AS_HASH_TABLE;
-
 		}
 		doIndexHash( V, target, I );
 	}
@@ -209,6 +210,24 @@ void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 {
 	wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target);
 }
+
+//------------------------------------------------------------------------------
+void doIndex_E_FI( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	WRValue* V = &value->deref();
+
+	V->va = c->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !V->va )
+	{
+		V->p2 = INIT_AS_INT;
+		return;
+	}
+#endif
+	V->p2 = INIT_AS_HASH_TABLE;
+	doIndexHash( V, target, index );
+}
+
 
 void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) {}
 
@@ -223,7 +242,7 @@ WRStateFunc wr_index[16] =
 	doIndex_I_X,     doIndex_I_X,     doIndex_X_R,     doIndex_I_E,
 	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
 	doIndex_R_X,     doIndex_R_X,     doIndex_R_R,     doIndex_R_X, 
-	doVoidIndexFunc, doVoidIndexFunc, doIndex_X_R,     doIndex_E_E,
+	doIndex_E_FI,    doIndex_E_FI,    doIndex_X_R,     doIndex_E_E,
 };
 
 
@@ -240,7 +259,7 @@ WRStateFunc wr_index[16] =
 	doIndex_I_X,     doIndex_I_X,     doIndex_I_R,     doIndex_I_E,
 	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
 	doIndex_R_I,     doIndex_R_F,     doIndex_R_R,     doIndex_R_E, 
-	doVoidIndexFunc, doVoidIndexFunc, doIndex_E_R,     doIndex_E_E,
+	doIndex_E_FI,    doIndex_E_FI,    doIndex_E_R,     doIndex_E_E,
 };
 
 #endif

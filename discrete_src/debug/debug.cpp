@@ -164,10 +164,10 @@ void wr_formatStackEntry( const WRValue* v, WRstr& out )
 					break;
 				}
 
-				case WR_EX_ARRAY_MEMBER:
+				case WR_EX_CONTAINER_MEMBER:
 				{
 					// todo- decode r
-					out.appendFormat( "EX:ARRAY_MEMBER element[%d] of[%p]\n", DECODE_ARRAY_ELEMENT_FROM_P2(v->p2), v->r );
+//					out.appendFormat( "EX:CONTAINER_MEMBER element[%d] of[%p]\n", DECODE_ARRAY_ELEMENT_FROM_P2(v->p2), v->r );
 					break;
 				}
 				

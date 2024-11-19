@@ -26,7 +26,7 @@ SOFTWARE.
 
 // standard functions that sort of come up a lot
 
-int32_t wr_Seed;
+int32_t wr_Seed = 0xA5EED;
 
 //------------------------------------------------------------------------------
 uint32_t wr_hash_read8( const void *dat, const int len )

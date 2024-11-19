@@ -113,7 +113,7 @@ static void dumpStack( const WRValue* bottom, const WRValue* top )
 
 //------------------------------------------------------------------------------
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
-  bool g_mallocFailed =false;
+  bool g_mallocFailed = false;
   #define MALLOC_FAIL_CHECK {if( g_mallocFailed ) { w->err = WR_ERR_malloc_failed; g_mallocFailed = false; return 0; } }
 #else
   #define MALLOC_FAIL_CHECK
@@ -150,6 +150,8 @@ void wr_forceYield( WRState* w )
 #endif
 #endif
 
+//------------------------------------------------------------------------------
+// FASTCONTINUE for when malloc could not have been called so no need to check
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
  #define CONTINUE { DEBUG_PER_INSTRUCTION; MALLOC_FAIL_CHECK; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
  #define FASTCONTINUE { DEBUG_PER_INSTRUCTION; goto *opcodeJumptable[READ_8_FROM_PC(pc++)];  }
@@ -1310,7 +1312,6 @@ hashIndexJump:
 #else
 				stackTop->p2 = INIT_AS_INT;
 				wr_index[(WR_INT << 2) | register0->type](context, stackTop, register0, stackTop - 1);
-				CHECK_STACK;
 				CONTINUE;
 #endif
 			}

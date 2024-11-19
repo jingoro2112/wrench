@@ -8,11 +8,15 @@
   <link rel="stylesheet" href="./style.css">
 
 </head>
+
+
 <body>
 <!-- partial:index.partial.html -->
 
 
 <style>
+
+
 a:visited {
   color: #007F7F;
   background-color: transparent;
@@ -101,33 +105,7 @@ pre code {
   <div id="overlay" class="overlay"></div>
   <div class="layout">
 
-    <main class="content">
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+<main class="content">
 
 
 <hr><h1><a id="intro"></a>Introduction</h1></hr>
@@ -1342,7 +1320,9 @@ void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
 <pre><code>void wr_loadAllLibs( WRState* w )</code></pre>
 
 
-<code><pre>// SysLib:
+<button type="button" class="collapsible">Sys Lib</button>
+<div class="collapsecontent">
+<pre>
 sys::isFunction( "funcName" ); // return true IFF funcName is a callable
                                // function, ie loaded: wr_registerFunction(...)
 
@@ -1351,8 +1331,13 @@ sys::halt( err ); // halts execution and sets w->err to whatever was passed
 sys::importByteCode( byteCode ); // byteCode as compiled code
 sys::importCompile( sourceCode ); // compiles and imports source code
                                   // IF the compiler was included
+</pre></div><p></p>
 
-</code></pre><pre><code>// MathLib:
+
+
+<button type="button" class="collapsible">Math Lib</button>
+<div class="collapsecontent">
+<pre>
 math::sin( f );
 math::cos( f );
 math::tan( f );
@@ -1377,14 +1362,36 @@ math::abs( f );
 math::ldexp( a, b );
 math::deg2rad( f );
 math::rad2deg( f );
+</pre></div><p></p>
 
-</code></pre><pre><code>// Std:
+
+
+
+
+
+
+
+
+
+
+
+
+<button type="button" class="collapsible">Std Lib</button>
+<div class="collapsecontent">
+<pre>
 std::rand( a [,b] ); // returns a psuedo-random number between a and b OR
                      // 0 to a if only a is provided
 std::srand( seed );  // seed the rand()
 std::time();         // return unix time on systems that support it
+</pre></div><p></p>
 
-</code></pre><pre><code>// Str:
+
+
+
+
+<button type="button" class="collapsible">Str Lib</button>
+<div class="collapsecontent">
+<pre>
 str::strlen( s ); // return the length of s (s._count also works)
 str::sprintf( str, fmt, ... ); // as c sprintf
 str::printf( fmt, ... ); // as c printf
@@ -1407,8 +1414,13 @@ str::trimright( str ); // remove trailing whitespace
 str::trimleft( str ); // remove leading whitespace
 str::trim( str ); // remove leading and trailing whitespace
 str::insert( str1, str2, pos ); // insert str2 into str1 at pos
+</pre></div><p></p>
 
-</code></pre><pre><code>// IO:
+
+
+<button type="button" class="collapsible">IO Lib</button>
+<div class="collapsecontent">
+<pre>
 io::readFile( name ); // returns a WRValue char array representing the file
                       // data, default is binary, and CAN include null's
 io::writeFile( name, data ); // writes 'data' to a file, expecting an array of data to write to "name"
@@ -1432,22 +1444,19 @@ io::sync( fd ); // make sure all data is committed (flush)
 
 
 io::getline(); // return a line of text input with fgetc(stdin)
+</pre></div><p></p>
 
-</code></pre><pre><code>// MessageLib:
-// messages are global to all contexts currently running, this allows
-// inter-context communication.
-msg::read( key, [clear default:false] )  // read a message, optionally clear
-msg::write( key, message )
-msg::clear( key )
-msg::peek( key ) // return true if the key has a message
 
-</code></pre><pre><code>// SerializeLib:
+
+<button type="button" class="collapsible">Serialize Lib</button>
+<div class="collapsecontent">
+<pre>
 std::serialize( value ); // serializes any value type/combination of
                          // int/float/hash/array/string into a
                          // character string suitable for writing to a file
 std::deserialize( string ); // given the string output from
                             // std::serialize(), return the original value, full restored
-</code></pre>
+</pre></div><p></p>
 
 
 
@@ -1510,6 +1519,24 @@ option.
 
 
 
+<script>
+
+var coll = document.getElementsByClassName("collapsible");
+var i;
+
+for (i = 0; i < coll.length; i++) {
+  coll[i].addEventListener("click", function() {
+    this.classList.toggle("active");
+    var content = this.nextElementSibling;
+    if (content.style.maxHeight){
+      content.style.maxHeight = null;
+    } else {
+      content.style.maxHeight = content.scrollHeight + "px";
+    }
+  });
+}
+
+</script>
 
 
 

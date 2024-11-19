@@ -33,6 +33,7 @@ OBJS = \
 	$(OBJDIR)/operations.o \
 	$(OBJDIR)/index.o \
 	$(OBJDIR)/gc.o \
+	$(OBJDIR)/gc_object.o \
 	$(OBJDIR)/vm.o \
 	$(OBJDIR)/utils.o \
 	$(OBJDIR)/serializer.o \
@@ -106,6 +107,9 @@ $(OBJDIR)/index.o: discrete_src/vm/index.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/gc.o: discrete_src/vm/gc.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/gc_object.o: discrete_src/vm/gc_object.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/vm.o: discrete_src/vm/vm.cpp

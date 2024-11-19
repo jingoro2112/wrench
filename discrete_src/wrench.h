@@ -30,7 +30,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 8
+#define WRENCH_VERSION_BUILD 9
 
 struct WRState;
 
@@ -489,7 +489,11 @@ typedef void (*WR_LIB_CALLBACK)( WRValue* stackTop, const int argn, WRContext* c
 //            ex: "math::cos"
 // function:  callback (see typdef above)
 void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLBACK function );
-void wr_registerLibraryConstant( WRState* w, const char* signature, const WRValue& value );
+void wr_registerLibraryConstant( WRState* w, const char* signature, const int32_t i );
+void wr_registerLibraryConstant( WRState* w, const char* signature, const float f );
+
+// DEPRECATED -- only int/float values are valid!
+//void wr_registerLibraryConstant( WRState* w, const char* signature, const WRValue& value );
 
 // you can write your own libraries (look at std.cpp for all the
 // standard ones) but several have been provided:
@@ -530,8 +534,8 @@ WRValue& wr_makeFloat( WRValue* val, float f );
 // a string has to exist in a context so it can be worked with
 WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, const int len =0 );
 
-// turning a value into a container allocates a hash table which must
-// be released with destroy!
+// turning a value into a container,
+// NOTE!! Allocates a hash table which must be released with destroy!!
 void wr_makeContainer( WRValue* val, const uint16_t sizeHint =0 );
 void wr_destroyContainer( WRValue* val );
 
@@ -686,9 +690,9 @@ enum WRExType : uint8_t
 	// EX types have one of the upper two bits set
 	WR_EX_DEBUG_BREAK= 0x40,  // 0100
 	
-	WR_EX_ITERATOR	   = 0x60,  // 0110
-	WR_EX_ARRAY_MEMBER = 0x80,  // 1000
-	WR_EX_ARRAY        = 0xA0,  // 1010
+	WR_EX_ITERATOR	      = 0x60,  // 0110
+	WR_EX_CONTAINER_MEMBER = 0x80,  // 1000
+	WR_EX_ARRAY            = 0xA0,  // 1010
 
 	// see EXPECTS_HASH_INDEX!!
 	WR_EX_STRUCT     = 0xC0,  // 1100
@@ -698,15 +702,18 @@ enum WRExType : uint8_t
 //------------------------------------------------------------------------------
 enum WRGCObjectType
 {
-	SV_VALUE = 0x01,           // 0001
-	SV_CHAR = 0x02,            // 0010
-	SV_HASH_TABLE = 0x03,      // 0011
-	SV_VOID_HASH_TABLE = 0x04, // 0100 // used for wrench internals, not meant for VM to care about
+	SV_VOID_HASH_TABLE = 0x0, // must be zero so memset(0) defaults to it
+	SV_HASH_TABLE = 0x01,
+	SV_HASH_ENTRY = 0x02,
+	SV_HASH_INTERNAL = 0x03,
+	
+	SV_VALUE = 0x04, // !!must ALWAYS be last two so >= works
+	SV_CHAR = 0x05,  // !!
 };
 
 #define EX_TYPE_MASK   0xE0
 #define IS_DEBUG_BREAK(X) ((X)==WR_EX_DEBUG_BREAK)
-#define IS_ARRAY_MEMBER(X) (((X)&EX_TYPE_MASK)==WR_EX_ARRAY_MEMBER)
+#define IS_CONTAINER_MEMBER(X) (((X)&EX_TYPE_MASK)==WR_EX_CONTAINER_MEMBER)
 #define IS_ARRAY(X) ((X)==WR_EX_ARRAY)
 #define IS_ITERATOR(X) ((X)==WR_EX_ITERATOR)
 #define IS_RAW_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_RAW_ARRAY)
@@ -732,6 +739,7 @@ extern WR_ALLOC g_malloc;
 extern WR_FREE g_free;
 
 class WRGCObject;
+class WRGCBase;
 
 //------------------------------------------------------------------------------
 struct WRIteratorEntry
@@ -806,7 +814,7 @@ struct WRValue
 	inline WRValue* init() { p = 0; p2 = 0; return this; } // call upon first create or when you're sure no memory is hanging from one
 
 	WRValue& singleValue() const; // return a single value for comparison
-	WRValue& deref() const; // if this value is a ARRAY_MEMBER, copy the referred value in
+	WRValue& deref() const; // if this value is a CONTAINER_MEMBER, copy the referred value in
 
 	uint32_t getHash() const { return (type <= WR_FLOAT) ? ui : getHashEx(); } // easy cases
 	uint32_t getHashEx() const; // harder
@@ -822,6 +830,7 @@ struct WRValue
 		char* c;
 		WRValue* r;
 		WRGCObject* va;
+		WRGCBase* vb;
 		WR_C_CALLBACK ccb;
 		WR_LIB_CALLBACK lcb;
 		WRFunction* wrf;

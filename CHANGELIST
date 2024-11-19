@@ -1,3 +1,16 @@
+6.0.9 ----------------------------------------------------------------------------------
+- optimized common case of stack-swapping 
+- fixed a bug where argument space was allocated twice
+- found/fixed a funny little bug where, if it happened in a single operation, a
+  loaded hash value might be invalidated by another load requiring the hash table to
+  be expanded. The problem with this is values might be stored for a long time, the way
+  arrays deal with this is "member of array" but not enough information exists in a WRValue
+  to make that work for hashes.. need the full hash AND ref to the table. 
+  I have an idea to fix this.. maybe ref to a ref that gets garbage-collected? hmmm...
+  -- this required a retooling of hash containers and memory, now fixed
+- indexing an array with a string turns it into a hash
+- fixed tiny memory leak in compiler, crazy corner case (thanks valgrind!)
+
 6.0.8 ----------------------------------------------------------------------------------
 - fixed corner case in string formatting memory issue
 

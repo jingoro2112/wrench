@@ -8,7 +8,16 @@ two
 seven
 ~*/
 
-hashTable = { 1:"one", 2:"two", 3:3, "str":6 };
+var s;
+s["key"] = "value";
+if ( s["key"] != "value" ) { println("s0"); }
+var t = s["key"];
+s["2"] = 2;
+s["3"] = 3;
+s["4"] = 4;
+if ( t != "value" ) { println("s1"); }
+
+var hashTable = { 1:"one", 2:"two", 3:3, "str":6 };
 
 if ( hashTable[1] != "one" ) println("h0");
 println( hashTable[1] ); // "one"

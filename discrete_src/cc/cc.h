@@ -455,15 +455,15 @@ private:
 	int parseInitializer( WRExpression& expression, int depth );
 	char parseExpression( WRExpression& expression );
 	bool parseUnit( bool isStruct, int parentUnitIndex );
-	bool parseWhile( bool& returnCalled, WROpcode opcodeToReturn );
-	bool parseDoWhile( bool& returnCalled, WROpcode opcodeToReturn );
-	bool parseForLoop( bool& returnCalled, WROpcode opcodeToReturn );
+	bool parseWhile( WROpcode opcodeToReturn );
+	bool parseDoWhile( WROpcode opcodeToReturn );
+	bool parseForLoop( WROpcode opcodeToReturn );
 	bool lookupConstantValue( WRstr& prefix, WRValue* value =0 );
 	bool parseEnum( int unitIndex );
 	uint32_t getSingleValueHash( const char* end );
-	bool parseSwitch( bool& returnCalled, WROpcode opcodeToReturn );
-	bool parseIf( bool& returnCalled, WROpcode opcodeToReturn );
-	bool parseStatement( int unitIndex, char end, bool& returnCalled, WROpcode opcodeToReturn );
+	bool parseSwitch( WROpcode opcodeToReturn );
+	bool parseIf( WROpcode opcodeToReturn );
+	bool parseStatement( int unitIndex, char end, WROpcode opcodeToReturn );
 
 	void createLocalHashMap( WRUnitContext& unit, unsigned char** buf, int* size );
 	void link( unsigned char** out, int* outLen, const uint8_t compilerOptionFlags );
