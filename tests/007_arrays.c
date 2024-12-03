@@ -6,6 +6,11 @@ sa[sb[0]] = { 1 };
 if(sa[0] != 1 ) println("rese size 3");
 
 
+var bb = 5;
+if ( (sb[0] += bb) != 8 ) println("sb+");
+var sbb = 10;
+if ( (sbb += sb[0]) != 18 ) println( "sbb+" );
+
 var s1000[1000];
 if ( s1000._count != 1000 ) println("size 0");
 var s10[10];

@@ -1169,7 +1169,7 @@ public:
 
 	void* get( const uint32_t l, int* index =0 );
 
-	uint32_t growHash( const uint32_t hash, const uint16_t sizeHint =0 );
+	uint32_t growHash( const uint32_t hash, const uint16_t sizeHint =0, int* sizeAllocated =0 );
 	uint32_t getIndexOfHit( const uint32_t hash, const bool inserting );
 
 private:
@@ -1236,8 +1236,7 @@ struct WRContext
 
 	// how many bytes wrench must allocate before running the gc, default WRENCH_DEFAULT_ALLOCATED_MEMORY_LIMIT
 	uint16_t allocatedMemoryLimit;
-	
-	uint32_t allocatedMemoryHint;
+	uint32_t allocatedMemoryHint; // _approximately_ how much memory has been allocated since last gc
 	
 	const unsigned char* bottom;
 	const unsigned char* codeStart;
@@ -10349,7 +10348,8 @@ int WRGCObject::init( const unsigned int size, const WRGCObjectType type, bool c
 
 	if ( (m_type = type) == SV_VALUE )
 	{
-		m_Vdata = (WRValue*)g_malloc( size * sizeof(WRValue) );
+		ret *= sizeof(WRValue);
+		m_Vdata = (WRValue*)g_malloc( ret );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 		if ( !m_Vdata )
 		{
@@ -10358,7 +10358,7 @@ int WRGCObject::init( const unsigned int size, const WRGCObjectType type, bool c
 			return 0;
 		}
 #endif
-		ret *= sizeof(WRValue);
+		
 		if ( clear )
 		{
 			memset( m_SCdata, 0, ret );
@@ -10382,8 +10382,7 @@ int WRGCObject::init( const unsigned int size, const WRGCObjectType type, bool c
 	}
 	else
 	{
-		growHash( WRENCH_NULL_HASH, size );
-		ret = sizeof(WRGCBase) + (m_size * sizeof(WRValue));
+		growHash( WRENCH_NULL_HASH, size, &ret );
 	}
 
 	return ret;
@@ -10462,17 +10461,6 @@ void* WRGCObject::get( const uint32_t l, int* index )
 		s = getIndexOfHit(l, false) << 1;
 		ret = m_Vdata + s;
 	}
-	else if ( m_type == SV_HASH_ENTRY )
-	{
-
-		
-		printf("WAIT");
-		assert(0);
-		// todo
-
-
-		
-	}
 	else if ( m_type == SV_VOID_HASH_TABLE )
 	{
 		ret = getAsRawValueHashTable( l, index );
@@ -10515,7 +10503,7 @@ uint32_t WRGCObject::getIndexOfHit( const uint32_t hash, const bool inserting )
 }
 
 //------------------------------------------------------------------------------
-uint32_t WRGCObject::growHash( const uint32_t hash, const uint16_t sizeHint )
+uint32_t WRGCObject::growHash( const uint32_t hash, const uint16_t sizeHint, int* sizeAllocated )
 {
 	// there was a collision with the passed hash, grow until the
 	// collision disappears
@@ -10543,6 +10531,10 @@ tryAgain:
 		newSize += sizeof(WRGCBase);
 	
 		int total = newMod*sizeof(uint32_t) + newSize;
+		if ( sizeAllocated )
+		{
+			*sizeAllocated = total;
+		}
 
 		WRGCBase* base = (WRGCBase*)g_malloc( total );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
@@ -10783,38 +10775,6 @@ void WRContext::gc( WRValue* stackTop )
 	}
 }
 
-/* .. meh..
-//------------------------------------------------------------------------------
-void WRContext::scavenge( WRGCObject* va )
-{
-	// free the sub-array from this object, if the object itself
-	// needs to be cleaned that has to happen in the gc but this
-	// can be done anywhere
-	if ( va->m_type == SV_VOID_HASH_TABLE )
-	{
-		return;
-	}
-
-	g_free( va->m_data );
-	va->m_data = 0;
-
-	if ( va->m_type != SV_CHAR )
-	{
-		if ( va->m_type == SV_HASH_TABLE )
-		{
-			g_free( va->m_hashTable );
-			allocatedMemoryHint -= (va->m_mod * 4);
-		}
-
-		allocatedMemoryHint -= va->m_size * 3;
-		va->m_type = SV_CHAR;
-	}
-
-	allocatedMemoryHint -= va->m_size;
-	va->m_size = 0;
-}
-*/
-
 //------------------------------------------------------------------------------
 WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 {
@@ -10944,8 +10904,9 @@ static void dumpStack( const WRValue* bottom, const WRValue* top )
 	wr_stackDump( bottom, top, out );
 	printf( "stack:\n%s===================================\n", out.c_str() );
 }
-#define DEBUG_PER_INSTRUCTION { dumpStack(context->stack, stackTop); }
 */
+//#define DEBUG_PER_INSTRUCTION { printf( "%s\n", c_opcodeName[(int)*pc] ); }
+
 #define DEBUG_PER_INSTRUCTION
 
 //------------------------------------------------------------------------------
@@ -11481,6 +11442,8 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	if ( function )
 	{
+		context->gc( stackTop );
+
 		stackTop->p = 0;
 		(stackTop++)->p2 = INIT_AS_INT;
 
@@ -11490,12 +11453,15 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		}
 		
 		pc = context->stopLocation;
+		
 		goto callFunction;
 	}
 
 	pc = context->codeStart;
-	
+
 yieldContinue:
+
+	context->gc( stackTop );
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 
@@ -11536,7 +11502,6 @@ literalZero:
 				hash = (uint16_t)READ_16_FROM_PC(pc);
 				pc += 2;
 				
-				context->gc( stackTop );
 				stackTop->va = context->getSVA( hash, SV_CHAR, false );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 				if ( !stackTop->va )
@@ -11550,6 +11515,8 @@ literalZero:
 				{
 					*to++ = READ_8_FROM_PC(pc++);
 				}
+
+				context->gc( stackTop );
 
 				CHECK_STACK;
 				CONTINUE;
@@ -11577,6 +11544,7 @@ literalZero:
 				register1 = &(stackTop - 1)->deref();
 				register1->p2 = INIT_AS_ARRAY;
 				register1->va = context->getSVA( register0->ui, SV_VALUE, true );
+				context->gc( stackTop );
 				CONTINUE;
 			}
 
@@ -11975,6 +11943,7 @@ NewObjectTablePastLoad:
 				register0 = --stackTop; // value
 				register1 = --stackTop; // index
 				wr_assignToHashTable( context, register1, register0, stackTop - 1 );
+				context->gc( stackTop );
 				CONTINUE;
 			}
 			
@@ -12150,7 +12119,9 @@ hashIndexJump:
 					}
 #endif
 				}
-						
+
+				context->gc( stackTop );
+
 #ifdef WRENCH_COMPACT
 				goto indexTempLiteralPostLoad;
 #else
@@ -12634,7 +12605,7 @@ binaryTableOp:
 			}
 			
 			CASE(SubtractAssignAndPop): { floatCall = subtractionF; intCall = subtractionI; goto binaryTableOpAndPop; }
-			CASE(AddAssignAndPop): { floatCall = addF; intCall = wr_addI; goto binaryTableOpAndPop; }
+			CASE(AddAssignAndPop): { floatCall = addF; intCall = wr_addI; goto binaryTableOpAndPop;	}
 			CASE(MultiplyAssignAndPop): { floatCall = multiplicationF; intCall = multiplicationI; goto binaryTableOpAndPop; }
 			CASE(DivideAssignAndPop): { floatCall = divisionF; intCall = divisionI; goto binaryTableOpAndPop; }
 			CASE(ModAssignAndPop): { intCall = modI; goto binaryTableOpAndPopBlankF; }
@@ -14486,20 +14457,6 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 {
 	w->globalRegistry.getAsRawValueHashTable(wr_hashStr(signature))->lcb = function;
 }
-
-//------------------------------------------------------------------------------
-// DEPRECATED
-/*
-void wr_registerLibraryConstant( WRState* w, const char* signature, const WRValue& value )
-{
-	if ( value.p2 == WR_INT || value.p2 == WR_FLOAT )
-	{
-		WRValue* C = w->globalRegistry.getAsRawValueHashTable( wr_hashStr(signature) );
-		C->p2 = value.p2 | INIT_AS_LIB_CONST;
-		C->p = value.p;
-	}
-}
-*/
 
 //------------------------------------------------------------------------------
 void wr_registerLibraryConstant( WRState* w, const char* signature, const int32_t i )
@@ -18041,7 +17998,9 @@ void FuncAssign_E_R( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 
 void FuncAssign_R_R( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	WRValue temp = *from->r; wr_FuncAssign[(to->r->type<<2)|temp.type](to->r, &temp, intCall, floatCall); *from = *to->r;
+	WRValue temp = *from->r; 
+	wr_FuncAssign[(to->r->type<<2)|temp.type](to->r, &temp, intCall, floatCall); 
+	*from = *to->r;
 }
 
 void FuncAssign_R_X( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
@@ -18526,7 +18485,7 @@ void wr_AddAssign_F_E( WRValue* to, WRValue* from )
 }
 void wr_AddAssign_E_R( WRValue* to, WRValue* from )
 {
-	wr_AddAssign[(WR_EX<<2)|from->r->type]( to, from );
+	wr_AddAssign[(WR_EX<<2)|from->r->type]( to, from->r );
 }
 void wr_AddAssign_R_E( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_EX](to->r, from); *from = *to->r; }
 void wr_AddAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }
@@ -22417,6 +22376,8 @@ void wr_stdDeserialize( WRValue* stackTop, const int argn, WRContext* c )
 			{
 				stackTop->init();
 			}
+
+			c->gc( stackTop + 1 );
 		}
 	}
 }

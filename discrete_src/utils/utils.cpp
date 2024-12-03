@@ -486,20 +486,6 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 }
 
 //------------------------------------------------------------------------------
-// DEPRECATED
-/*
-void wr_registerLibraryConstant( WRState* w, const char* signature, const WRValue& value )
-{
-	if ( value.p2 == WR_INT || value.p2 == WR_FLOAT )
-	{
-		WRValue* C = w->globalRegistry.getAsRawValueHashTable( wr_hashStr(signature) );
-		C->p2 = value.p2 | INIT_AS_LIB_CONST;
-		C->p = value.p;
-	}
-}
-*/
-
-//------------------------------------------------------------------------------
 void wr_registerLibraryConstant( WRState* w, const char* signature, const int32_t i )
 {
 	WRValue* C = w->globalRegistry.getAsRawValueHashTable( wr_hashStr(signature) );

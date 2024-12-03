@@ -135,38 +135,6 @@ void WRContext::gc( WRValue* stackTop )
 	}
 }
 
-/* .. meh..
-//------------------------------------------------------------------------------
-void WRContext::scavenge( WRGCObject* va )
-{
-	// free the sub-array from this object, if the object itself
-	// needs to be cleaned that has to happen in the gc but this
-	// can be done anywhere
-	if ( va->m_type == SV_VOID_HASH_TABLE )
-	{
-		return;
-	}
-
-	g_free( va->m_data );
-	va->m_data = 0;
-
-	if ( va->m_type != SV_CHAR )
-	{
-		if ( va->m_type == SV_HASH_TABLE )
-		{
-			g_free( va->m_hashTable );
-			allocatedMemoryHint -= (va->m_mod * 4);
-		}
-
-		allocatedMemoryHint -= va->m_size * 3;
-		va->m_type = SV_CHAR;
-	}
-
-	allocatedMemoryHint -= va->m_size;
-	va->m_size = 0;
-}
-*/
-
 //------------------------------------------------------------------------------
 WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 {

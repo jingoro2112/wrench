@@ -54,8 +54,7 @@ struct WRContext
 
 	// how many bytes wrench must allocate before running the gc, default WRENCH_DEFAULT_ALLOCATED_MEMORY_LIMIT
 	uint16_t allocatedMemoryLimit;
-	
-	uint32_t allocatedMemoryHint;
+	uint32_t allocatedMemoryHint; // _approximately_ how much memory has been allocated since last gc
 	
 	const unsigned char* bottom;
 	const unsigned char* codeStart;

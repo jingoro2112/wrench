@@ -40,7 +40,8 @@ void testHalt();
 void testTimeSlices();
 void testScheduler();
 void testStackOverflow();
-//void testYield2();
+void testYield2();
+void testD();
 #ifdef WIN32_C17
 int TESTmain();
 #endif
@@ -637,9 +638,8 @@ int runTests( int number )
 {
 	int err = 0;
 
-#ifdef WIN32_C17
-	TESTmain();
-#endif
+	testD();
+
 
 #ifndef WRENCH_WITHOUT_COMPILER
 	WRstr code;
@@ -673,18 +673,17 @@ int runTests( int number )
 	wr_addArrayToContainer( &container, "big", someBigArray, 0x1FFFFF );
 
 	FILE* tfile = fopen( "test_files.txt", "r" );
+
+	WRState* w = wr_newState( 128 );
+
+	wr_loadAllLibs( w );
+
 	char buf[256];
 	int fileNumber = 0;
 	char errMsg[256];
 
 	unsigned char* out;
 	int outLen;
-
-	WRState* w = wr_newState( 128 );
-
-	wr_loadAllLibs( w );
-
-	
 	while( fgets(buf, 255, tfile) && (err==0) )
 	{
 		if ( !number || (number == fileNumber) )
@@ -825,11 +824,16 @@ int runTests( int number )
 		fileNumber++;
 	}
 
+#ifdef WIN32_C17
+	TESTmain();
+#endif
+
 	testTimeSlices();
 	testImport();
 	testHalt();
 	testScheduler();
 	testStackOverflow();
+	testYield2();
 	setup();
 
 	wr_destroyContainer( &container );
@@ -1062,7 +1066,74 @@ static void importln( WRContext* c, const WRValue* argv, const int argn, WRValue
 	g_importBuf += "\n";
 }
 
-/*
+void set_( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr ) {}
+
+
+//------------------------------------------------------------------------------
+void testD()
+{
+	const char d[] = "function tick( elapsed ){ f(); } function f( state ) { state.a = 0; state.b = 0; state.c = 0; }\n";
+
+	WRState* w = wr_newState();
+	wr_registerFunction( w, "print", print );
+	wr_registerFunction( w, "rgb", set_ );
+	wr_registerFunction( w, "mode", set_ );
+	wr_registerFunction( w, "flame_rgb", set_ );
+	wr_registerFunction( w, "flame_speed", set_ );
+	wr_registerFunction( w, "flame_brightness", set_ );
+	wr_registerLibraryConstant( w, "rgb::count", (int32_t)5 );
+	wr_Seed = 187280232;
+	wr_loadStdLib( w );
+
+
+
+	unsigned char* outBytes;
+	int outLen;
+	WRContext* context = 0;
+	WRFunction* function = 0;
+
+
+	char errorMessage[1024] = "";
+	int err = wr_compile( d, strlen(d), &outBytes, &outLen, errorMessage );
+	if ( err )
+	{
+		printf( "%d:\n%s\n", err, errorMessage );
+	}
+	else
+	{
+		context = wr_run( w, outBytes, outLen ); // load and run the code!
+		if ( !context )
+		{
+			printf( "null context\n" );
+		}
+		else
+		{
+			function = wr_getFunction( context, "tick" );
+			if ( !function )
+			{
+				printf("'tick()' function not found\n" );
+			}
+			else
+			{
+				printf("found tick [%p]\n", function );
+			}
+		}
+	}
+
+
+	if ( function )
+	{
+		for( int i=0; i<10000; ++i )
+		{
+			WRValue v( 2 );
+			wr_callFunction( context, function, &v, 1 );
+		}
+	}
+
+	wr_free( outBytes );
+	wr_destroyState( w );
+}
+
 const char exampleYield[]=
 " // Example Wrench Script\n"
 " //   All scripts will 'override' a `run` function	\n"
@@ -1079,6 +1150,7 @@ const char exampleYield[]=
 //------------------------------------------------------------------------------
 void testYield2()
 {
+#ifdef WRENCH_TIME_SLICES
 	WRState* state = wr_newState(); // create a state (only need to do this once)
 
 	// make sure we only execute 10 instructions at any time
@@ -1111,9 +1183,9 @@ void testYield2()
 		return;
 	}
 
-	time_t future = time(0) + 5;
+	time_t future = time(0) + 2;
 
-	while( time(0) < future ) // run for 5 seconds
+	while( time(0) < future ) // run for 2 seconds
 	{
 		// the VM will automatically continue on yield, this can be
 		// called multiple times.. need to make this clear in the docs..
@@ -1136,13 +1208,15 @@ void testYield2()
 		}
 		else
 		{
-			printf( "function forced to yield\n" );
+//			printf( "function forced to yield\n" );
 		}
 	}
 
+	g_free( out );
 	wr_destroyState( state );
+#endif
 }
-*/
+
 
 const char* importMe = "export function imported(a) \n"
 					   "{                    \n"

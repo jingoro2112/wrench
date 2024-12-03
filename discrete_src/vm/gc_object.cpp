@@ -31,7 +31,8 @@ int WRGCObject::init( const unsigned int size, const WRGCObjectType type, bool c
 
 	if ( (m_type = type) == SV_VALUE )
 	{
-		m_Vdata = (WRValue*)g_malloc( size * sizeof(WRValue) );
+		ret *= sizeof(WRValue);
+		m_Vdata = (WRValue*)g_malloc( ret );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 		if ( !m_Vdata )
 		{
@@ -40,7 +41,7 @@ int WRGCObject::init( const unsigned int size, const WRGCObjectType type, bool c
 			return 0;
 		}
 #endif
-		ret *= sizeof(WRValue);
+		
 		if ( clear )
 		{
 			memset( m_SCdata, 0, ret );
@@ -64,8 +65,7 @@ int WRGCObject::init( const unsigned int size, const WRGCObjectType type, bool c
 	}
 	else
 	{
-		growHash( WRENCH_NULL_HASH, size );
-		ret = sizeof(WRGCBase) + (m_size * sizeof(WRValue));
+		growHash( WRENCH_NULL_HASH, size, &ret );
 	}
 
 	return ret;
@@ -144,17 +144,6 @@ void* WRGCObject::get( const uint32_t l, int* index )
 		s = getIndexOfHit(l, false) << 1;
 		ret = m_Vdata + s;
 	}
-	else if ( m_type == SV_HASH_ENTRY )
-	{
-
-		
-		printf("WAIT");
-		assert(0);
-		// todo
-
-
-		
-	}
 	else if ( m_type == SV_VOID_HASH_TABLE )
 	{
 		ret = getAsRawValueHashTable( l, index );
@@ -197,7 +186,7 @@ uint32_t WRGCObject::getIndexOfHit( const uint32_t hash, const bool inserting )
 }
 
 //------------------------------------------------------------------------------
-uint32_t WRGCObject::growHash( const uint32_t hash, const uint16_t sizeHint )
+uint32_t WRGCObject::growHash( const uint32_t hash, const uint16_t sizeHint, int* sizeAllocated )
 {
 	// there was a collision with the passed hash, grow until the
 	// collision disappears
@@ -225,6 +214,10 @@ tryAgain:
 		newSize += sizeof(WRGCBase);
 	
 		int total = newMod*sizeof(uint32_t) + newSize;
+		if ( sizeAllocated )
+		{
+			*sizeAllocated = total;
+		}
 
 		WRGCBase* base = (WRGCBase*)g_malloc( total );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL

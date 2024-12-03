@@ -489,7 +489,9 @@ void FuncAssign_E_R( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 
 void FuncAssign_R_R( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	WRValue temp = *from->r; wr_FuncAssign[(to->r->type<<2)|temp.type](to->r, &temp, intCall, floatCall); *from = *to->r;
+	WRValue temp = *from->r; 
+	wr_FuncAssign[(to->r->type<<2)|temp.type](to->r, &temp, intCall, floatCall); 
+	*from = *to->r;
 }
 
 void FuncAssign_R_X( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
@@ -974,7 +976,7 @@ void wr_AddAssign_F_E( WRValue* to, WRValue* from )
 }
 void wr_AddAssign_E_R( WRValue* to, WRValue* from )
 {
-	wr_AddAssign[(WR_EX<<2)|from->r->type]( to, from );
+	wr_AddAssign[(WR_EX<<2)|from->r->type]( to, from->r );
 }
 void wr_AddAssign_R_E( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_EX](to->r, from); *from = *to->r; }
 void wr_AddAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }

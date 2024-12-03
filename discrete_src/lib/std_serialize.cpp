@@ -62,6 +62,8 @@ void wr_stdDeserialize( WRValue* stackTop, const int argn, WRContext* c )
 			{
 				stackTop->init();
 			}
+
+			c->gc( stackTop + 1 );
 		}
 	}
 }

@@ -30,7 +30,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 9
+#define WRENCH_VERSION_BUILD 10
 
 struct WRState;
 
@@ -492,9 +492,6 @@ void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLB
 void wr_registerLibraryConstant( WRState* w, const char* signature, const int32_t i );
 void wr_registerLibraryConstant( WRState* w, const char* signature, const float f );
 
-// DEPRECATED -- only int/float values are valid!
-//void wr_registerLibraryConstant( WRState* w, const char* signature, const WRValue& value );
-
 // you can write your own libraries (look at std.cpp for all the
 // standard ones) but several have been provided:
 
@@ -756,6 +753,13 @@ struct WRIteratorEntry
 //------------------------------------------------------------------------------
 struct WRValue
 {
+	WRValue( int val ) { init(val); }
+	WRValue( float val ) { init(val); }
+
+	WRValue* init() { p = 0; p2 = WR_INT; return this; }
+	WRValue* init( int val ) { i = val; p2 = WR_INT; return this; }
+	WRValue* init( float val ) { f = val; p2 = WR_FLOAT; return this; }
+
 	// never reference the data members directly, they are unions and
 	// bad things will happen. Always access them with one of these
 	// methods
@@ -810,8 +814,6 @@ struct WRValue
 
 //private: // is what this SHOULD be.. but that's impractical since the
 	// VM is not an object that can be friended.
-
-	inline WRValue* init() { p = 0; p2 = 0; return this; } // call upon first create or when you're sure no memory is hanging from one
 
 	WRValue& singleValue() const; // return a single value for comparison
 	WRValue& deref() const; // if this value is a CONTAINER_MEMBER, copy the referred value in
@@ -881,7 +883,6 @@ struct WRValue
 	WRValue() {}
 	inline WRValue& operator= (const WRValue& V) { r1 = V.r1; r2 = V.r2; return *this; }
 	inline WRValue(const WRValue& V) { r1 = V.r1; r2 = V.r2; }
-
 
 public:
 

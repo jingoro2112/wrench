@@ -100,8 +100,9 @@ static void dumpStack( const WRValue* bottom, const WRValue* top )
 	wr_stackDump( bottom, top, out );
 	printf( "stack:\n%s===================================\n", out.c_str() );
 }
-#define DEBUG_PER_INSTRUCTION { dumpStack(context->stack, stackTop); }
 */
+//#define DEBUG_PER_INSTRUCTION { printf( "%s\n", c_opcodeName[(int)*pc] ); }
+
 #define DEBUG_PER_INSTRUCTION
 
 //------------------------------------------------------------------------------
@@ -637,6 +638,8 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	if ( function )
 	{
+		context->gc( stackTop );
+
 		stackTop->p = 0;
 		(stackTop++)->p2 = INIT_AS_INT;
 
@@ -646,12 +649,15 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		}
 		
 		pc = context->stopLocation;
+		
 		goto callFunction;
 	}
 
 	pc = context->codeStart;
-	
+
 yieldContinue:
+
+	context->gc( stackTop );
 
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
 
@@ -692,7 +698,6 @@ literalZero:
 				hash = (uint16_t)READ_16_FROM_PC(pc);
 				pc += 2;
 				
-				context->gc( stackTop );
 				stackTop->va = context->getSVA( hash, SV_CHAR, false );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 				if ( !stackTop->va )
@@ -706,6 +711,8 @@ literalZero:
 				{
 					*to++ = READ_8_FROM_PC(pc++);
 				}
+
+				context->gc( stackTop );
 
 				CHECK_STACK;
 				CONTINUE;
@@ -733,6 +740,7 @@ literalZero:
 				register1 = &(stackTop - 1)->deref();
 				register1->p2 = INIT_AS_ARRAY;
 				register1->va = context->getSVA( register0->ui, SV_VALUE, true );
+				context->gc( stackTop );
 				CONTINUE;
 			}
 
@@ -1131,6 +1139,7 @@ NewObjectTablePastLoad:
 				register0 = --stackTop; // value
 				register1 = --stackTop; // index
 				wr_assignToHashTable( context, register1, register0, stackTop - 1 );
+				context->gc( stackTop );
 				CONTINUE;
 			}
 			
@@ -1306,7 +1315,9 @@ hashIndexJump:
 					}
 #endif
 				}
-						
+
+				context->gc( stackTop );
+
 #ifdef WRENCH_COMPACT
 				goto indexTempLiteralPostLoad;
 #else
@@ -1790,7 +1801,7 @@ binaryTableOp:
 			}
 			
 			CASE(SubtractAssignAndPop): { floatCall = subtractionF; intCall = subtractionI; goto binaryTableOpAndPop; }
-			CASE(AddAssignAndPop): { floatCall = addF; intCall = wr_addI; goto binaryTableOpAndPop; }
+			CASE(AddAssignAndPop): { floatCall = addF; intCall = wr_addI; goto binaryTableOpAndPop;	}
 			CASE(MultiplyAssignAndPop): { floatCall = multiplicationF; intCall = multiplicationI; goto binaryTableOpAndPop; }
 			CASE(DivideAssignAndPop): { floatCall = divisionF; intCall = divisionI; goto binaryTableOpAndPop; }
 			CASE(ModAssignAndPop): { intCall = modI; goto binaryTableOpAndPopBlankF; }

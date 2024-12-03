@@ -1,7 +1,4 @@
 /*~
-3.5
-3.5
-3
 13
 13
 3
@@ -42,9 +39,9 @@ a||b
 
 abc();
 
-a = 10;
-b = 5;
-c = 0;
+var a = 10;
+var b = 5;
+var c = 0;
 
 if ( 10 <= a ) { c += 0x1000; }
 if ( 10 >= a ) { c += 0x1000; }
@@ -88,9 +85,9 @@ if ( c != 0x2222 ) { println("err C:"); println(c); }
 
 function abc()
 {
-	aa = 10;
-	ba = 5;
-	ca = 0;
+	var aa = 10;
+	var ba = 5;
+	var ca = 0;
 
 	if ( 10 <= aa ) { ca += 0x1000; }
 	if ( 10 >= aa ) { ca += 0x1000; }
@@ -144,29 +141,29 @@ if ( !(10 >= 10 || 10 >= 10) ) println("E 6");
 
 
 // float <- int
-f = .5;
-i = 3;
-println( f += i ); // 3.5
-println( f );
-println( i );
+var f = .5;
+var i = 3;
+if ( (f += i) != 3.5 ) println("35.1");
+if ( f != 3.5 ) println("35.2");
+if ( i != 3 ) println("35.3");
 
 // int <- int
-i = 10;
-j = 3;
+var i = 10;
+var j = 3;
 println( i += j ); // 13
 println( i );
 println( j );
 
 // int <- float
-i = 10;
-f = .5;
+var i = 10;
+var f = .5;
 println( i += f ); // 10.5
 println( i );
 println( f );
 
 // float <- float
-g = 10.2;
-f = .5;
+var g = 10.2;
+var f = .5;
 println( g += f ); // 10.7
 println( g );
 println( f );
@@ -176,7 +173,7 @@ if ( !1 )
 	println("1");
 }
 
-a = 1;
+var a = 1;
 if ( a )
 {
 	println("T");

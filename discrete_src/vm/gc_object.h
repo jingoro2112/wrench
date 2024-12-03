@@ -104,7 +104,7 @@ public:
 
 	void* get( const uint32_t l, int* index =0 );
 
-	uint32_t growHash( const uint32_t hash, const uint16_t sizeHint =0 );
+	uint32_t growHash( const uint32_t hash, const uint16_t sizeHint =0, int* sizeAllocated =0 );
 	uint32_t getIndexOfHit( const uint32_t hash, const bool inserting );
 
 private:
