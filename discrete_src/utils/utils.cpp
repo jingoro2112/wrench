@@ -104,7 +104,7 @@ int32_t* WrenchValue::Int()
 		m_value->i = m_value->asInt();
 		m_value->p2 = INIT_AS_INT;
 	}
-	return &(m_value->i);
+	return (int32_t*)&(m_value->i);
 }
 
 //------------------------------------------------------------------------------
@@ -363,25 +363,25 @@ WRValue* wr_executeContext( WRContext* context )
 }
 
 //------------------------------------------------------------------------------
-WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership )
+WRContext* wr_run( WRState* w,
+				   const unsigned char* block,
+				   const int blockSize,
+				   const bool takeOwnership,
+				   const bool destroyContext )
 {
-	WRContext* context = wr_newContext( w, block, blockSize, takeOwnership );
+	WRContext* ctx = wr_newContext( w, block, blockSize, takeOwnership );
 
-	if ( !context )
+	if ( ctx )
 	{
-		return 0;
-	}
-
-	if ( !wr_callFunction(context, (WRFunction*)0) )
-	{
-		if ( !context->yield_pc )
+		if ( (!wr_callFunction(ctx, (WRFunction*)0) && !ctx->yield_pc)
+			 || destroyContext )
 		{
-			wr_destroyContext( context );
-			context = 0;
+			wr_destroyContext( ctx );
+			ctx = 0;
 		}
 	}
-		
-	return context;
+
+	return ctx;
 }
 
 //------------------------------------------------------------------------------
@@ -1547,6 +1547,7 @@ const char* c_errStrings[]=
 	"WR_ERR_unexpected_export_keyword",
 	"WR_ERR_new_assign_by_label_or_offset_not_both",
 	"WR_ERR_struct_not_exported",
+	"WR_ERR_empty_parens",
 
 	"WR_ERR_run_must_be_called_by_itself_first",
 	"WR_ERR_hash_table_size_exceeded",

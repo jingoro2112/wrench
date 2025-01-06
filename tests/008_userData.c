@@ -26,9 +26,11 @@ function userCheck( data )
 {
 	checkIsRawArray( data.big, data.big._count );
 
-	if ( data.b != data.c ) println("b001");
+	if ( data.big[data.b[0]] != 0x88 ) println("f91");
+
+	if ( data.b[0] != data.c[0] ) println("b001");
 	
-	if ( data.b != 0x99 ) println("b99");
+	if ( data.b[0] != 0x99 ) println("b99");
 	data.b = 10;
 	if ( data.b != 10 ) println("b0");
 	if ( (data.b += 20) != 30 ) println ("b1");
@@ -74,7 +76,7 @@ function userCheck( data )
 	if ( data.big[0] != 10 ) println("f15");
 
 	data.name[1] = 'c';
-	
+
 	if ( data.integer != 2456 ) println("f1");
 	if ( data["integer"] != 2456 ) println("f2");
 

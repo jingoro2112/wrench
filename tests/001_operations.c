@@ -54,6 +54,8 @@ hello world
 1.3
 ~*/
 
+//if ( () ) println ("");
+
 if ( 10 / 0 ) {}
 if ( 10.1 / 0 ) {}
 var zero = 0;

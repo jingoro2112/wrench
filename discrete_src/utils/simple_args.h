@@ -27,6 +27,7 @@ SOFTWARE.
 
 #include <string.h>
 
+
 //------------------------------------------------------------------------------
 namespace SimpleArgs
 {
@@ -61,7 +62,7 @@ inline const char* SimpleArgs::get( int argn, char *argv[], int index, char* par
 
 	if ( param )
 	{
-		strncpy( param, argv[a], maxParamLen ? maxParamLen : SIZE_MAX );
+		strncpy( param, argv[a], maxParamLen ? maxParamLen : 1024 );
 	}
 
 	return argv[a];
@@ -83,7 +84,7 @@ inline const char* SimpleArgs::get( int argn, char *argv[], const char* opt, cha
 			param[0] = 0;
 			if ( ++a < argn )
 			{
-				strncpy( param, argv[a], maxParamLen ? maxParamLen : SIZE_MAX );
+				strncpy( param, argv[a], maxParamLen ? maxParamLen : 1024 );
 			}
 			else
 			{

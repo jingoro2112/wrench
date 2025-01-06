@@ -335,6 +335,11 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 				m_err = WR_ERR_unexpected_EOF;
 				return 0;
 			}
+			else if (token == ")")
+			{
+				m_err = WR_ERR_empty_parens;
+				return 0;
+			}
 			else if ( token == "int" )
 			{
 				if ( !getToken(expression.context[depth], ")") )

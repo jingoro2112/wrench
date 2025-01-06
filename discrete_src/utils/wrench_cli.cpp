@@ -31,6 +31,10 @@ SOFTWARE.
 #include <assert.h>
 #include <stdlib.h>
 
+#ifdef WRENCH_CLI_DEBUG
+WRContext* g_context = 0;
+#endif
+
 int runTests( int number =0 );
 void testGlobalValues( WRState* w );
 void setup();
@@ -42,9 +46,43 @@ void testScheduler();
 void testStackOverflow();
 void testYield2();
 void testD();
+void LEAKtest();
 #ifdef WIN32_C17
 int TESTmain();
 #endif
+
+struct MemBlock
+{
+	int32_t size;
+};
+
+int g_devMemoryAllocated = 0;
+//------------------------------------------------------------------------------
+void* devAlloc( size_t size )
+{
+	MemBlock* m = (MemBlock *)malloc( size + sizeof(MemBlock) );
+	m->size = (int32_t)size;
+	g_devMemoryAllocated += size;
+
+#ifdef WRENCH_CLI_DEBUG
+//	printf( "%d allocated[%d]\n", (int)size, g_devMemoryAllocated );
+#else
+//	printf( "%d allocated[%d] hint[%d]\n", (int)size, g_devMemoryAllocated, g_context ? g_context->allocatedMemoryHint : 0 );
+#endif
+
+	return m + 1;
+}
+
+//------------------------------------------------------------------------------
+void devFree(void* ptr)
+{
+	if (ptr)
+	{
+		MemBlock* m = (MemBlock*)ptr - 1;
+		g_devMemoryAllocated -= m->size;
+		free(m);
+	}
+}
 
 //------------------------------------------------------------------------------
 void blobToHeader( WRstr const& blob, WRstr const& variableName, WRstr& header )
@@ -253,9 +291,13 @@ uint32_t flags = 0;
 //------------------------------------------------------------------------------
 int main( int argn, char* argv[] )
 {
+//	wr_setGlobalAllocator( devAlloc, devFree );
+	
 	assert( sizeof(WRValue) == 2*sizeof(void*) );
 	assert( sizeof(float) == 4 );
 	assert( sizeof(unsigned char) == 1 );
+
+//	LEAKtest();
 
 	if ( argn <= 1 )
 	{
@@ -297,7 +339,7 @@ int main( int argn, char* argv[] )
 		char* listing = 0;
 		wr_disassemble( out, outLen, &listing );
 		printf("%s\n", listing );
-		g_free( listing );
+		wr_free( listing );
 		
 	}
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
@@ -365,7 +407,7 @@ int main( int argn, char* argv[] )
 */
 
 
-		g_free( out );
+		wr_free( out );
 
 		if ( wr_getLastError(gw) )
 		{
@@ -445,7 +487,7 @@ int main( int argn, char* argv[] )
 
 		printf( "%s -> %s\n", SimpleArgs::get(argn, argv, -2), outname.c_str() );
 
-		g_free( out );
+		wr_free( out );
 #else
 		printf( "compiler not included in this build\n" );
 		return usage();
@@ -495,7 +537,7 @@ int main( int argn, char* argv[] )
 			printf( "%s -> %s as %s\n", SimpleArgs::get(argn, argv, -3), outname.c_str(), SimpleArgs::get(argn, argv, -1) );
 		}
 
-		g_free( out );
+		wr_free( out );
 #else
 		printf( "compiler not included in this build\n" );
 		return usage();
@@ -638,9 +680,6 @@ int runTests( int number )
 {
 	int err = 0;
 
-	testD();
-
-
 #ifndef WRENCH_WITHOUT_COMPILER
 	WRstr code;
 	WRstr codeName;
@@ -649,6 +688,7 @@ int runTests( int number )
 	wr_makeContainer( &container );
 	
 	wr_addFloatToContainer( &container, "_f", 20.02f );
+
 	wr_addIntToContainer( &container, "_i", 1001 );
 	wr_addIntToContainer( &container, "_j", 1001 );
 	
@@ -659,8 +699,9 @@ int runTests( int number )
 	char someArray[10] = "hello";
 	wr_addArrayToContainer( &container, "name", someArray, 10 );
 
-	char* someBigArray = (char *)g_malloc( 0x1FFFFF );
+	char* someBigArray = (char *)wr_malloc( 0x1FFFFF );
 	someBigArray[0] = 10;
+	someBigArray[0x99] = (char)0x88;
 	someBigArray[10000] = 20;
 	someBigArray[100000] = 30;
 	someBigArray[0x1FFFFE] = 40;
@@ -812,7 +853,7 @@ int runTests( int number )
 					printf( "PASS\n" );
 				}
 
-				g_free( out );
+				wr_free( out );
 				wr_destroyContext( context );
 			}
 			else if ( fileNumber != 0 )
@@ -828,6 +869,7 @@ int runTests( int number )
 	TESTmain();
 #endif
 
+	testD();
 	testTimeSlices();
 	testImport();
 	testHalt();
@@ -836,13 +878,14 @@ int runTests( int number )
 	testYield2();
 	setup();
 
-	wr_destroyContainer( &container );
-
 	testGlobalValues( w );
 
 	wr_destroyState( w );
 
-	g_free( someBigArray );
+	wr_free( someBigArray );
+	wr_destroyContainer( &container );
+
+
 	fclose( tfile );
 #endif
 	return err;
@@ -940,7 +983,7 @@ void testGlobalValues( WRState* w )
 	wv4.asArrayMember(32)->setInt( 3200 );
 	assert( wr_callFunction(gc, "test10") );
 
-	g_free( out );
+	wr_free( out );
 }
 
 //------------------------------------------------------------------------------
@@ -1019,7 +1062,7 @@ void testTimeSlices()
 	unsigned char* out;
 	int outlen;
 	wr_compile( loop, strlen(loop), &out, &outlen );
-	WRContext* context = wr_run(w, out, outlen, true);
+	WRContext* context = wr_run( w, out, outlen, true );
 	for( int y=0; y<10; ++y )
 	{
 		assert( !wr_continue(context) );
@@ -1061,7 +1104,7 @@ static void importln( WRContext* c, const WRValue* argv, const int argn, WRValue
 		unsigned int len = 0;
 		char* str = argv[i].asMallocString( &len );
 		g_importBuf += str;
-		g_free( str );
+		wr_free( str );
 	}
 	g_importBuf += "\n";
 }
@@ -1108,15 +1151,7 @@ void testD()
 		}
 		else
 		{
-			function = wr_getFunction( context, "tick" );
-			if ( !function )
-			{
-				printf("'tick()' function not found\n" );
-			}
-			else
-			{
-				printf("found tick [%p]\n", function );
-			}
+			assert( function = wr_getFunction( context, "tick" ) );
 		}
 	}
 
@@ -1212,7 +1247,7 @@ void testYield2()
 		}
 	}
 
-	g_free( out );
+	wr_free( out );
 	wr_destroyState( state );
 #endif
 }
@@ -1270,16 +1305,18 @@ void testImport()
 //	wr_compile( base, base.size(), &out1, &out1len );
 
 //	wr_compile( "export struct S2 { var b = 20; };", strlen("export struct S2 { var b = 20; };"), &out1, &out1len );
-//	g_free( out1 );
+//	wr_free( out1 );
 	
 	wr_compile( baseMe, strlen(baseMe), &out1, &out1len );
 	wr_compile( importMe, strlen(importMe), &out2, &out2len );
 
-	WRContext* context = wr_run( w, out1, out1len, true );
+	WRContext* context = wr_run(w, out1, out1len, true);
+	if ( context )
+	{
+		wr_import( context, out2, out2len, true );
 
-	wr_import( context, out2, out2len, true );
-
-	wr_continue( context );
+		wr_continue( context );
+	}
 
 	assert( w->err == WR_ERR_struct_not_exported );
 
@@ -1348,10 +1385,10 @@ void setup()
 	
 	if ( err == 0 )
 	{
-		wr_run( w, outBytes, outLen, true ); // load and run the code!
+		wr_run( w, outBytes, outLen, true, true ); // load and run the code!
 	}
 
-				assert( wr_run(w, Pbasic_bytecode, Pbasic_bytecodeSize) );
+	assert( wr_run(w, Pbasic_bytecode, Pbasic_bytecodeSize) );
 
 	wr_destroyState( w );
 }
@@ -1362,6 +1399,39 @@ void loop()
 
 
 
+inline void LEAKprint(WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr)
+{
+	char buf[1024];
+	for (int i = 0; i < argn; ++i)
+	{
+		printf( "%s", argv[i].asString(buf, 1024) );
+	}
+}
+
+const char* LEAKwrenchCode = "function leak() { print( \"Hello World!\\n\" ); }";
+
+void LEAKtest()
+{
+	WRState* w = wr_newState();
+
+	wr_registerFunction( w, "print", LEAKprint );
+
+	unsigned char* outBytes = 0;
+	int outLen;
+
+	wr_compile( LEAKwrenchCode, (int)strlen(LEAKwrenchCode), &outBytes, &outLen );
+
+	WRContext* ctx = wr_run( w, outBytes, outLen, true );
+
+	g_devMemoryAllocated = 0;
+	
+	for(;;)
+	{
+		wr_callFunction( ctx, "leak" );
+	}
+
+	wr_destroyState( w );
+}
 
 
 
@@ -1409,11 +1479,9 @@ int TESTmain()
 	const char* wrenchCode = code.c_str();
 
 	wr_compile(wrenchCode, strlen(wrenchCode), &outBytes, &outLen);
-	WRContext* context = wr_run(wr_state, outBytes, outLen);
+	WRContext* context = wr_run(wr_state, outBytes, outLen, true);
 
 	wr_callFunction(context, "wrenchfunction", &wrench_values, 1);
-
-	free(outBytes);
 
 	//Update Values and Free Memory
 	for (WRIteratorEntry const& member : wrench_values)

@@ -86,7 +86,7 @@ void WRContext::gc( WRValue* stackTop )
 	}
 
 	allocatedMemoryHint = 0;
-
+	
 	// mark stack
 	for( WRValue* s=stack; s<stackTop; ++s)
 	{
@@ -152,7 +152,7 @@ WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 	ret->m_nextGC = svAllocated;
 	svAllocated = ret;
 
-	allocatedMemoryHint += ret->init( size, type, init );
+	allocatedMemoryHint += ret->init( size, type, init ) + sizeof(WRGCObject);
 
 	if ( (int)type >= SV_VALUE )
 	{

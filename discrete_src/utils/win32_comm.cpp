@@ -27,13 +27,13 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 HANDLE wr_serialOpen( const char* name )
 {
-	return CreateFile( CString(name),				 // Specify port device "COMx"
-					   GENERIC_READ | GENERIC_WRITE,  // Specify mode that open device.
-					   0,                             // the devide isn't shared.
-					   NULL,                          // the object gets a default security.
-					   OPEN_EXISTING,                 // Specify which action to take on file. 
-					   0,                             // default.
-					   NULL );
+	return CreateFileA( name,				 // Specify port device "COMx"
+					    GENERIC_READ | GENERIC_WRITE,  // Specify mode that open device.
+					    0,                             // the devide isn't shared.
+					    NULL,                          // the object gets a default security.
+					    OPEN_EXISTING,                 // Specify which action to take on file. 
+					    0,                             // default.
+					    NULL );
 }
 
 //------------------------------------------------------------------------------

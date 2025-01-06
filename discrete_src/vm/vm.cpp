@@ -1314,15 +1314,20 @@ hashIndexJump:
 						CONTINUE;
 					}
 #endif
+					context->gc(stackTop);
 				}
-
-				context->gc( stackTop );
 
 #ifdef WRENCH_COMPACT
 				goto indexTempLiteralPostLoad;
 #else
 				stackTop->p2 = INIT_AS_INT;
-				wr_index[(WR_INT << 2) | register0->type](context, stackTop, register0, stackTop - 1);
+
+				
+				doIndexHash( stackTop, register0, stackTop - 1);
+//				wr_index[(WR_INT << 2) | register0->type](context, stackTop, register0, stackTop - 1);
+
+
+
 				CONTINUE;
 #endif
 			}

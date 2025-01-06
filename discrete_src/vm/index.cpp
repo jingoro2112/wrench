@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -25,7 +25,7 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-void elementToTarget( const uint32_t index, WRValue* target, WRValue* value )
+void arrayElementToTarget( const uint32_t index, WRValue* target, WRValue* value )
 {
 	if ( target == value )
 	{
@@ -56,27 +56,20 @@ void elementToTarget( const uint32_t index, WRValue* target, WRValue* value )
 }
 
 //------------------------------------------------------------------------------
-void doIndexHash( WRValue* value, WRValue* target, WRValue* index )
+void doIndexHash( WRValue* index, WRValue* value, WRValue* target )
 {
 	uint32_t hash = index->getHash();
-	
+
 	if ( value->xtype == WR_EX_HASH_TABLE ) 
 	{
 		int element;
 		WRValue* entry = (WRValue*)(value->va->get(hash, &element));
 
-		if ( IS_EX_SINGLE_CHAR_RAW_P2( (target->r = entry)->p2 ) )
-		{
-			target->p2 = INIT_AS_CONTAINER_MEMBER;
-		}
-		else
-		{
-			// need to create a hash ref
-			*(entry + 1) = *index; // might be the first time it was registered
-		
-			target->p2 = INIT_AS_CONTAINER_MEMBER | ENCODE_ARRAY_ELEMENT_TO_P2( element );
-			target->vb = (WRGCBase*)(value->va->m_Vdata) - 1;
-		}
+		// need to create a hash ref
+		*(entry + 1) = *index; // might be the first time it was registered
+
+		target->p2 = INIT_AS_CONTAINER_MEMBER | ENCODE_ARRAY_ELEMENT_TO_P2( element );
+		target->vb = (WRGCBase*)(value->va->m_Vdata) - 1;
 	}
 	else // naming an element of a struct "S.element"
 	{
@@ -84,8 +77,11 @@ void doIndexHash( WRValue* value, WRValue* target, WRValue* index )
 
 		if ( (uint32_t)READ_32_FROM_PC(table) == hash )
 		{
+			int o = READ_8_FROM_PC(table + 4);
+
 			target->p2 = INIT_AS_REF;
-			target->p = ((WRValue*)(value->va->m_data)) + READ_8_FROM_PC(table + 4);
+			target->r = ((WRValue*)(value->va->m_data)) + o;
+
 		}
 		else
 		{
@@ -108,113 +104,94 @@ void doIndex_I_X( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 #endif
 	value->p2 = INIT_AS_ARRAY;
 	
-	elementToTarget( index->ui, target, value );
+	arrayElementToTarget( index->ui, target, value );
 }
 
 //------------------------------------------------------------------------------
 void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
-	value = &value->deref();
-	
-	if (EXPECTS_HASH_INDEX(value->xtype))
+	if ( IS_CONTAINER_MEMBER(value->xtype) && IS_RAW_ARRAY(value->r->xtype) )
 	{
-		doIndexHash( value, target, index );
-		return;
-	}
-	else if ( IS_RAW_ARRAY(value->xtype) )
-	{
-		if ( index->ui >= (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(value->p2)) )
-		{
-			goto boundsFailed;
-		}
-	}
-	else if ( !(value->xtype == WR_EX_ARRAY) )
-	{
-		// nope, make it one of this size and return a ref
-		WRValue* I = &index->deref();
+		unsigned int s = DECODE_ARRAY_ELEMENT_FROM_P2(value->r->p2);
 
-		if ( I->type == WR_INT )
-		{
-			value->va = c->getSVA( index->ui+1, SV_VALUE, true );
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-			if ( !value->va )
-			{
-				value->p2 = INIT_AS_INT;
-				return;
-			}
-#endif
-			value->p2 = INIT_AS_ARRAY;
-
-		}
-		else
-		{
-			value->va = c->getSVA( 0, SV_HASH_TABLE, false );
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-			if ( !value->va )
-			{
-				value->p2 = INIT_AS_INT;
-				return;
-			}
-#endif
-			value->p2 = INIT_AS_HASH_TABLE;
-
-			doIndexHash( value, target, I );
-			return;
-		}
-	}
-	else if ( index->ui >= value->va->m_size )
-	{
-		if ( value->va->m_flags & GCFlag_SkipGC )
-		{
-boundsFailed:
-			target->init();
-			return;
-		}
-
-		wr_growValueArray( value->va, index->ui );
-	}
-
-	elementToTarget( index->ui, target, value );
-}
-
-//------------------------------------------------------------------------------
-void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	WRValue* V = &value->deref();
-
-	WRValue* I = &index->deref();
-	if ( I->type == WR_INT )
-	{
-		wr_index[WR_INT<<2 | V->type](c, I, V, target);
+		target->p2 = INIT_AS_INT;
+		target->ui = (s < (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(value->r->p2))) ? (uint32_t)(unsigned char)(value->r->c[s]) : 0;
 	}
 	else
 	{
-		if ( !IS_HASH_TABLE(V->xtype) )
+		value = &value->deref();
+
+		if (EXPECTS_HASH_INDEX(value->xtype))
 		{
-			V->va = c->getSVA( 0, SV_HASH_TABLE, false );
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-			if ( !V->va )
+			doIndexHash( index, value, target );
+			return;
+		}
+
+		// at this point we assume the value is an array, if it is not it
+		// will be converted into one
+
+		if ( IS_RAW_ARRAY(value->xtype) )
+		{
+			if ( index->ui >= (uint32_t)(EX_RAW_ARRAY_SIZE_FROM_P2(value->p2)) )
 			{
-				V->p2 = INIT_AS_INT;
+				goto boundsFailed;
+			}
+		}
+		else if ( !(value->xtype == WR_EX_ARRAY) )
+		{
+			// nope, make it one of this size and return a ref
+			WRValue* I = &index->deref();
+
+			if ( I->type == WR_INT )
+			{
+				value->va = c->getSVA( index->ui+1, SV_VALUE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+				if ( !value->va )
+				{
+					value->p2 = INIT_AS_INT;
+					return;
+				}
+#endif
+				value->p2 = INIT_AS_ARRAY;
+
+			}
+			else
+			{
+				value->va = c->getSVA( 0, SV_HASH_TABLE, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+				if ( !value->va )
+				{
+					value->p2 = INIT_AS_INT;
+					return;
+				}
+#endif
+				value->p2 = INIT_AS_HASH_TABLE;
+
+				doIndexHash( I, value, target );
 				return;
 			}
-#endif
-			V->p2 = INIT_AS_HASH_TABLE;
 		}
-		doIndexHash( V, target, I );
+		else if ( index->ui >= value->va->m_size )
+		{
+			if ( value->va->m_flags & GCFlag_SkipGC )
+			{
+boundsFailed:
+				target->init();
+				return;
+			}
+
+			wr_growValueArray( value->va, index->ui );
+		}
+
+		arrayElementToTarget( index->ui, target, value );
 	}
 }
 
 //------------------------------------------------------------------------------
-void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+void doIndex_E_I( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
 {
-	wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target);
-}
-
-//------------------------------------------------------------------------------
-void doIndex_E_FI( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
-{
-	WRValue* V = &value->deref();
+	// a float or int is being indexed, make it a hash table and "index" it
+	WRValue* V = &(value->deref());
 
 	V->va = c->getSVA( 0, SV_HASH_TABLE, false );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
@@ -225,12 +202,39 @@ void doIndex_E_FI( WRContext* c, WRValue* index, WRValue* value, WRValue* target
 	}
 #endif
 	V->p2 = INIT_AS_HASH_TABLE;
-	doIndexHash( V, target, index );
+	
+	WRValue* I = &(index->singleValue());
+	doIndex_I_E( c, I, V, target );
+}
+
+//------------------------------------------------------------------------------
+void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target )
+{
+	WRValue* I = &(index->deref());
+
+	if ( I->type > WR_FLOAT )
+	{
+		WRValue* V = &(value->deref());
+		
+		if ( !EXPECTS_HASH_INDEX(V->xtype) )
+		{
+			target->init();
+		}
+		else
+		{
+			doIndexHash( I, V, target );
+		}
+	}
+	else
+	{
+		doIndex_I_E( c, I, value, target );
+	}
 }
 
 
 void doVoidIndexFunc( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) {}
 
+void doIndex_R_R( WRContext* c, WRValue* index, WRValue* value, WRValue* target ) { wr_index[(index->r->type<<2)|value->r->type](c, index->r, value->r, target); }
 
 #ifdef WRENCH_REALLY_COMPACT
 
@@ -242,7 +246,7 @@ WRStateFunc wr_index[16] =
 	doIndex_I_X,     doIndex_I_X,     doIndex_X_R,     doIndex_I_E,
 	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
 	doIndex_R_X,     doIndex_R_X,     doIndex_R_R,     doIndex_R_X, 
-	doIndex_E_FI,    doIndex_E_FI,    doIndex_X_R,     doIndex_E_E,
+	doIndex_E_I,     doIndex_E_I,     doIndex_X_R,     doIndex_E_E,
 };
 
 
@@ -259,7 +263,7 @@ WRStateFunc wr_index[16] =
 	doIndex_I_X,     doIndex_I_X,     doIndex_I_R,     doIndex_I_E,
 	doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc, doVoidIndexFunc,
 	doIndex_R_I,     doIndex_R_F,     doIndex_R_R,     doIndex_R_E, 
-	doIndex_E_FI,    doIndex_E_FI,    doIndex_E_R,     doIndex_E_E,
+	doIndex_E_I,     doIndex_E_I,     doIndex_E_R,     doIndex_E_E,
 };
 
 #endif

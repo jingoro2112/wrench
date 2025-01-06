@@ -1,3 +1,9 @@
+6.0.11 ---------------------------------------------------------------------------------
+- removed #define'd code for code coverage checks to work properly since I'm pretty
+  sure the implementation is stable now
+- reworked arrays and EX/HASH/MEMBER semantics to fix some issues
+- catching "if ()" error in compiler now, empty parenthesis never make sense
+
 6.0.10 ---------------------------------------------------------------------------------
 - soime code coverage and a pointer
 

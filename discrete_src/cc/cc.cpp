@@ -2878,9 +2878,9 @@ bool WRCompilationContext::parseIf( WROpcode opcodeToReturn )
 	m_loadedValue = value;
 	m_loadedQuoted = m_quoted;
 
-	if ( parseExpression(nex) != ')' )
+	if ( parseExpression(nex) != ')' || m_err )
 	{
-		m_err = WR_ERR_unexpected_token;
+		m_err = m_err ? m_err : WR_ERR_unexpected_token;
 		return false;
 	}
 

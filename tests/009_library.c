@@ -295,3 +295,4 @@ if ( sys::isFunction("f2") != 2 ) println("sys3");
 if ( sys::isFunction() != 0 ) println("sys4");
 
 function f2() { }
+

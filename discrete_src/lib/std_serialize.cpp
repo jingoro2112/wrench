@@ -42,7 +42,7 @@ void wr_stdSerialize( WRValue* stackTop, const int argn, WRContext* c )
 			}
 #endif
 			stackTop->p2 = INIT_AS_ARRAY;
-			free( stackTop->va->m_Cdata );
+			g_free( stackTop->va->m_Cdata );
 			stackTop->va->m_data = buf;
 			stackTop->va->m_size = len;
 		}

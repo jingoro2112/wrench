@@ -173,6 +173,7 @@ extern WRTargetFunc wr_ANDBinary[16];
 extern WRTargetFunc wr_ORBinary[16];
 extern WRTargetFunc wr_XORBinary[16];
 
+void doIndexHash( WRValue* index, WRValue* value, WRValue* target );
 typedef void (*WRStateFunc)( WRContext* c, WRValue* to, WRValue* from, WRValue* target );
 extern WRStateFunc wr_index[16];
 extern WRStateFunc wr_assignAsHash[4];

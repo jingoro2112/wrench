@@ -28,7 +28,6 @@ SOFTWARE.
 
 #ifdef WRENCH_WIN32_SERIAL
 #include <windows.h>
-#include <atlstr.h>
 #define WR_BAD_SOCKET INVALID_HANDLE_VALUE
 #endif
 

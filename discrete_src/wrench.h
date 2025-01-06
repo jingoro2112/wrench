@@ -30,7 +30,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 10
+#define WRENCH_VERSION_BUILD 11
 
 struct WRState;
 
@@ -225,6 +225,7 @@ enum WRError
 	WR_ERR_unexpected_export_keyword,
 	WR_ERR_new_assign_by_label_or_offset_not_both,
 	WR_ERR_struct_not_exported,
+	WR_ERR_empty_parens,
 
 	WR_ERR_run_must_be_called_by_itself_first,
 	WR_ERR_hash_table_size_exceeded,
@@ -322,14 +323,19 @@ void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out
 // w:          state (see wr_newState)
 // block:      location of bytecode
 // blockSize:  number of bytes in the block
+// destroyContext: automatically destroy the resulting context, by
+//                 default wr_run will return the allocated context
+//                 this context can be used for callbacks or destroyed
+//                 with wr_destroyContext(), but will be garbage
+//                 collected automatically when wr_destroyState()
+//                 is called on w
 // takeOwnership: assume 'block' was allocated with wr_malloc(), it
 //                will be freed with  wr_free()
-
-// RETURNS:    an allocated WRContext
-//             NOTE: This Context is automatically destroyed when
-//             wr_destroyState() is called, but can be manually destroyed
-//             with wr_destroyContext(...) (see below)
-WRContext* wr_run( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership =false );
+WRContext* wr_run( WRState* w,
+				   const unsigned char* block,
+				   const int blockSize,
+				   const bool takeOwnershipOfBlock =false,
+				   const bool destroyContext =false );
 
 // macro for automatically freeing the WRContext
 #define wr_runOnce( w, block, blockSize ) wr_destroyContext( wr_run((w),(block),(blockSize)) )
@@ -729,9 +735,18 @@ enum WRGCObjectType
   #error "Endian-ness not detected! Please contact curt.hartung@gmail.com so it can be added <01>"
 #endif
 
+#if (INTPTR_MAX == INT64_MAX)
+  #define WRENCH_64
+#elif (INTPTR_MAX == INT32_MAX)
+  #define WRENCH_32
+#else
+  #error "incompatible environment, remove this error to assume 32-bit"
+#endif
+
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 extern bool g_mallocFailed; // used as an internal global flag for when a malloc came back null
 #endif
+
 extern WR_ALLOC g_malloc;
 extern WR_FREE g_free;
 
@@ -754,11 +769,11 @@ struct WRIteratorEntry
 struct WRValue
 {
 	WRValue( int val ) { init(val); }
-	WRValue( float val ) { init(val); }
+	WRValue( float val ) { init((int)val); }
 
 	WRValue* init() { p = 0; p2 = WR_INT; return this; }
 	WRValue* init( int val ) { i = val; p2 = WR_INT; return this; }
-	WRValue* init( float val ) { f = val; p2 = WR_FLOAT; return this; }
+	//WRValue* init( float val ) { f = val; p2 = WR_FLOAT; return this; }
 
 	// never reference the data members directly, they are unions and
 	// bad things will happen. Always access them with one of these
@@ -823,10 +838,14 @@ struct WRValue
 
 	union // first 4 bytes 
 	{
+//		intptr_t i;
+//		uintptr_t ui;
 		int32_t i;
 		uint32_t ui;
-		WRValue* frame;
+
+
 		float f;
+		WRValue* frame;
 		const void* p;
 		void* r1;
 		char* c;
@@ -871,10 +890,11 @@ struct WRValue
 #endif
 		};
 #endif
-		uint32_t p2;
+		uintptr_t p2;
+		
 		union
 		{
-			int returnOffset;
+			intptr_t returnOffset;
 			WRValue* r2;
 			void* usr;
 		};
@@ -930,7 +950,7 @@ public:
 	operator int32_t* () { return Int(); }
 	int32_t* Int();
 	
-	operator float* () { return Float(); }
+	operator float* () { return (float*)Float(); }
 	float* Float();
 
 	// this will convert it to an array if it isn't one
@@ -1098,6 +1118,11 @@ public:
 #ifndef WRENCH_COMPACT
 #define WRENCH_COMPACT
 #endif
+#endif
+
+#define WRENCH_CLI_DEBUG
+#ifdef WRENCH_CLI_DEBUG
+extern WRContext* g_context;
 #endif
 
 #ifndef WRENCH_COMBINED
