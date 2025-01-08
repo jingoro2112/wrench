@@ -3123,31 +3123,6 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, WROpcode opc
 				return false;
 			}
 		}
-/*
-		else if ( !m_quoted && token == "var" )
-		{
-			if ( !getToken(ex) ) // if we run out of tokens that's fine as long as we were not waiting for a }
-			{
-				m_err = WR_ERR_unexpected_EOF;
-				return false;
-			}
-
-			bool isGlobal;
-			WRstr prefix;
-			bool isLibConstant;
-			if ( !isValidLabel(token, isGlobal, prefix, isLibConstant) || isLibConstant )
-			{
-				m_err = WR_ERR_bad_goto_label;
-				return false;
-			}
-			
-			varSeen = true;
-			goto parseAsVar;
-		}
-		else
-		{
-parseAsVar:
-*/
 		else
 		{
 			WRExpression nex( m_units[unitIndex].bytecode.localSpace, m_units[unitIndex].bytecode.isStructSpace );

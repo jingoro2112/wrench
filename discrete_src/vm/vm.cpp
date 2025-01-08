@@ -197,7 +197,7 @@ static bool CompareLTF( float a, float b ) { return a < b; }
 static bool CompareGTF( float a, float b ) { return a > b; }
 
 bool CompareEQI( int a, int b ) { return a == b; }
-bool CompareEQF( float a, float b ) { return a == b; }
+bool CompareEQF( float a, float b ) { return WR_FLOATS_EQUAL( a, b ); }
 
 static bool CompareBlankF( float a, float b ) { return false; }
 static float blankF( float a, float b ) { return 0; }

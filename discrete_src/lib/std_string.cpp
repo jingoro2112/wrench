@@ -245,7 +245,7 @@ copyToString:
 					const int chars = snprintf( buf, 31, floatBuf + i, args[listPtr++].asFloat());
 
 					// your system not have snprintf? the unsafe version is:
-					//					const int chars = sprintf( buf, floatBuf + i, args[listPtr++].asFloat());
+					// const int chars = sprintf( buf, floatBuf + i, args[listPtr++].asFloat());
 
 					for( int j=0; j<chars; ++j )
 					{

@@ -1,3 +1,12 @@
+6.0.12 ---------------------------------------------------------------------------------
+- compacted string concatenation
+- added new test code for strings
+- fixed ->r->va where ->va should have been, how did that pass everything?! examining
+  code coverage next pass.
+- fixed float == float comparison to "close enough epsilon" comparison of floats which 
+  fixes some unfixable rounding errors in double/float/IEEE land
+
+
 6.0.11 ---------------------------------------------------------------------------------
 - removed #define'd code for code coverage checks to work properly since I'm pretty
   sure the implementation is stable now

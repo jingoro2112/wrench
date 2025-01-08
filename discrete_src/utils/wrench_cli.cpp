@@ -1408,7 +1408,7 @@ inline void LEAKprint(WRContext* c, const WRValue* argv, const int argn, WRValue
 	}
 }
 
-const char* LEAKwrenchCode = "function leak() { print( \"Hello World!\\n\" ); }";
+const char* LEAKwrenchCode = "function leak() { print( \"Hello \" + \"World!\\n\" ); }";
 
 void LEAKtest()
 {
@@ -1425,7 +1425,7 @@ void LEAKtest()
 
 	g_devMemoryAllocated = 0;
 	
-	for(;;)
+	for(int i=0;i<10;++i)
 	{
 		wr_callFunction( ctx, "leak" );
 	}

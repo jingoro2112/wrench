@@ -1,22 +1,4 @@
 /*~
-hellohiBBCC
-BBCC
-BBCCCC
-hello world
-0.1
--0.1
--0.2
-0.2
-15
--5
-4000000
-20
-0
-1.2
-18
-7
-1.7
-8
 10
 -10
 26
@@ -77,9 +59,6 @@ if( 10 /= zero ) {}
 if( 10.1 /= zero ) {}
 
 
-var y = "hello";
-y += "hi";
-if ( y != "hellohi" ) print("failconcat");
 
 
 y = "BB";
@@ -90,20 +69,15 @@ if ( y1 != "BBCC" ) print("fail bin1");
 if ( y != "BBCC" ) print("fail bin1");
 
 
-a = "hello";
-a += "hi";
-
-print( a );
 
 a = "BB";
 b = "CC";
 d = a + b;
 a = a + b;
 b = a + b;
-println( d );
-println( a );
-println( b );
-
+if ( d != "BBCC" ) println("op 0");
+if ( a != "BBCC" ) println("op 1");
+if ( b != "BBCCCC" ) println("op 2");
 
 
 two = 0;
@@ -202,25 +176,25 @@ b = a--;
 c = --a;
 if ( a != 90 ) println("err 2");
 
-println( "hello world" );
-
-println( .1 );
-println( -.1 );
-println( -0.2 );
-println( 0.2 );
-println( 0xF );
-println( -5 );
+if ( .1 != 0.1 ) println( "val 0" );
+if ( -.1 != -0.1 ) println( "val 1" );
+if ( -.2 != -0.2 ) println( "val 2" );
+if ( 0xF != 15 ) println( "val 3" );
 
 b = 4000000;
-println( b );
+if ( b != 4000000 ) println( "assign 0" );
+if ( 4000000 != b ) println( "assign 1" );
 b = 20;
-println( b );
+if ( b != 20 ) println( "assign 2" );
+if ( 20 != b ) println( "assign 3" );
 
 b = 0;
-println( b );
+if ( b != 0 ) println( "assign 4" );
+if ( 0 != b ) println( "assign 5" );
 
 b = 1.2;
-println( b );
+if ( b != 1.2 ) println( "assign 6" );
+if ( 1.2000 != b ) println( "assign 7" );
 
 
 b = 10;
@@ -228,15 +202,16 @@ b += 5;
 b /= 3;
 b -= 2;
 b *= 6;
-println( b ); // 18
+if ( b != 18) println( "oper 0" );
 
 a = 10;
 a -= 3;
-println(a); // 7
+if ( a != 7 ) println( "oper 1" );
 b = 10.2;
 b -= .5 + (a += 1);
-println(b); // 7
-println(a); // 1.7
+
+if ( b != 1.7 ) println( "oper 2" );
+if ( a != 8 ) println( "oper 3" );
 
 n = -(-(-(-(-(-10))))); // 10 
 println(n);

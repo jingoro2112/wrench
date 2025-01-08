@@ -25,6 +25,34 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
+bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( !(IS_ARRAY(to->xtype) && to->va->m_type == SV_CHAR && !(to->va->m_flags & GCFlag_SkipGC)
+		   && IS_ARRAY(from->xtype) && from->va->m_type == SV_CHAR) )
+	{
+		return false;
+	}
+	
+	WRGCObject* cat = to->va->m_creatorContext->getSVA(to->va->m_size + from->va->m_size, SV_CHAR, false);
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !cat )
+	{
+		target->p2 = INIT_AS_INT;
+		return false;
+	}
+#endif
+
+	memcpy( cat->m_SCdata, to->va->m_SCdata, to->va->m_size );
+	memcpy( cat->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
+	
+	target->p2 = INIT_AS_ARRAY;
+	target->va = cat;
+
+	return true;
+}
+
+//------------------------------------------------------------------------------
 void wr_growValueArray( WRGCObject* va, int newMinIndex )
 {
 	int size_of = (va->m_type == SV_CHAR) ? 1 : sizeof(WRValue);
@@ -183,19 +211,19 @@ void wr_valueToEx( const WRValue* ex, WRValue* value )
 
 		if ( IS_ARRAY(ex->xtype) )
 		{
-			if ( s >= ex->r->va->m_size )
+			if ( s >= ex->va->m_size )
 			{
-				wr_growValueArray( ex->r->va, s );
-				ex->r->va->m_creatorContext->allocatedMemoryHint += s * ((ex->r->va->m_type == SV_CHAR) ? 1 : sizeof(WRValue));
+				wr_growValueArray( ex->va, s );
+				ex->va->m_creatorContext->allocatedMemoryHint += s * ((ex->va->m_type == SV_CHAR) ? 1 : sizeof(WRValue));
 			}
 
-			if ( ex->r->va->m_type == SV_CHAR )
+			if ( ex->va->m_type == SV_CHAR )
 			{
-				ex->r->va->m_Cdata[s] = value->ui;
+				ex->va->m_Cdata[s] = value->ui;
 			}
 			else 
 			{
-				WRValue* V = ex->r->va->m_Vdata + s;
+				WRValue* V = ex->va->m_Vdata + s;
 				wr_assign[(V->type<<2)+value->type](V, value);
 			}
 		}
@@ -439,27 +467,9 @@ void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 		wr_FuncAssign[(WR_EX<<2)|V.type]( to, &V, intCall, floatCall );
 		*from = to->deref();
 	}
-	else if ( intCall == wr_addI
-			  && IS_ARRAY(to->xtype)
-			  && to->va->m_type == SV_CHAR
-			  && !(to->va->m_flags & GCFlag_SkipGC)
-			  && IS_ARRAY(from->xtype)
-			  && from->va->m_type == SV_CHAR )
+	else if ( wr_concatStringCheck(to, from, to) )
 	{
-		char* t = to->va->m_SCdata;
-		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size );
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-		if ( !to->va->m_SCdata )
-		{
-			to->va->m_SCdata = t;
-			g_mallocFailed = true;
-			return;
-		}
-#endif
-		memcpy( to->va->m_SCdata, t, to->va->m_size );
-		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
-		to->va->m_size = to->va->m_size + from->va->m_size;
-		g_free( t );
+		*from = *to;
 	}
 }
 void FuncAssign_X_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
@@ -527,32 +537,15 @@ void FuncBinary_E_X( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall 
 }
 void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	if ( IS_CONTAINER_MEMBER(to->xtype) && IS_CONTAINER_MEMBER(from->xtype) )
+	if ( IS_CONTAINER_MEMBER(to->xtype) || IS_CONTAINER_MEMBER(from->xtype) )
 	{
 		WRValue V1 = to->deref();
 		WRValue& V2 = from->deref();
 		wr_funcBinary[(V1.type<<2)|V2.type](&V1, &V2, target, intCall, floatCall );
 	}
-	else if ( intCall == wr_addI
-			  && IS_ARRAY(to->xtype)
-			  && to->va->m_type == SV_CHAR
-			  && !(to->va->m_flags & GCFlag_SkipGC)
-			  && IS_ARRAY(from->xtype)
-			  && from->va->m_type == SV_CHAR )
+	else if ( intCall == wr_addI )
 	{
-		target->va = from->va->m_creatorContext->getSVA( from->va->m_size + to->va->m_size, SV_CHAR, false );
-
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-		if ( !target->va )
-		{
-			target->p2 = INIT_AS_INT;
-			return;
-		}
-#endif
-		target->p2 = INIT_AS_ARRAY;
-
-		memcpy( target->va->m_SCdata, to->va->m_SCdata, to->va->m_size );
-		memcpy( target->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
+		wr_concatStringCheck( to, from, target );
 	}
 }
 void FuncBinary_X_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
@@ -973,26 +966,9 @@ void wr_AddAssign_E_E( WRValue* to, WRValue* from )
 		wr_AddAssign[(WR_EX<<2)|V.type]( to, &V );
 		*from = to->deref();
 	}
-	else if ( IS_ARRAY(to->xtype)
-			  && to->va->m_type == SV_CHAR
-			  && !(to->va->m_flags & GCFlag_SkipGC)
-			  && IS_ARRAY(from->xtype)
-			  && from->va->m_type == SV_CHAR )
+	else
 	{
-		char* t = to->va->m_SCdata;
-		to->va->m_SCdata = (char*)g_malloc( to->va->m_size + from->va->m_size );
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-		if ( !to->va->m_SCdata )
-		{
-			to->va->m_SCdata = t;
-			g_mallocFailed = true;
-			return;
-		}
-#endif
-		memcpy( to->va->m_SCdata, t, to->va->m_size );
-		memcpy( to->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
-		to->va->m_size = to->va->m_size + from->va->m_size;
-		g_free( t );
+		wr_concatStringCheck( to, from, to );
 	}
 }
 void wr_AddAssign_I_E( WRValue* to, WRValue* from )
@@ -1080,7 +1056,7 @@ WRTargetFunc NAME##Binary[16] = \
 //X_BINARY( wr_Addition, + );  -- broken out so strings work
 X_BINARY( wr_Multiply, * );
 X_BINARY( wr_Subtract, - );
-//X_BINARY( wr_Divide, / );
+//X_BINARY( wr_Divide, / ); -- broken out for divide-by-zero
 
 void wr_DivideBinary_E_I( WRValue* to, WRValue* from, WRValue* target )
 {
@@ -1201,30 +1177,15 @@ void wr_AdditionBinary_E_F( WRValue* to, WRValue* from, WRValue* target )
 }
 void wr_AdditionBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
 {
-	if ( IS_CONTAINER_MEMBER(to->xtype) && IS_CONTAINER_MEMBER(from->xtype) )
+	if ( IS_CONTAINER_MEMBER(to->xtype) || IS_CONTAINER_MEMBER(from->xtype) )
 	{
 		WRValue V1 = to->deref();
 		WRValue& V2 = from->deref();
 		wr_AdditionBinary[(V1.type<<2)|V2.type](&V1, &V2, target);
 	}
-	else if ( IS_ARRAY(to->xtype)
-			  && to->va->m_type == SV_CHAR
-			  && !(to->va->m_flags & GCFlag_SkipGC)
-			  && IS_ARRAY(from->xtype)
-			  && from->va->m_type == SV_CHAR )
+	else
 	{
-		target->va = to->va->m_creatorContext->getSVA( to->va->m_size + from->va->m_size, SV_CHAR, false );
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-		if ( !target->va )
-		{
-			target->p2 = INIT_AS_INT;
-			return;
-		}
-#endif
-		target->p2 = INIT_AS_ARRAY;
-
-		memcpy( target->va->m_SCdata, to->va->m_SCdata, to->va->m_size );
-		memcpy( target->va->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
+		wr_concatStringCheck( to, from, target );
 	}
 }
 void wr_AdditionBinary_I_E( WRValue* to, WRValue* from, WRValue* target )
@@ -1407,18 +1368,6 @@ WRReturnFunc wr_CompareLT[16] =
 	wr_CompareLT_E_I, wr_CompareLT_E_F, wr_CompareLT_E_R, wr_CompareLT_E_E,
 };
 
-
-
-
-
-
-
-
-
-
-
-//X_COMPARE( wr_CompareEQ, == );
-
 bool wr_CompareEQ_E_E( WRValue* to, WRValue* from )
 {
 	WRValue V1 = to->singleValue();
@@ -1453,9 +1402,18 @@ bool wr_CompareEQ_R_F( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r
 bool wr_CompareEQ_I_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_INT<<2)+from->r->type](to, from->r); }
 bool wr_CompareEQ_F_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_FLOAT<<2)+from->r->type](to, from->r); }
 bool wr_CompareEQ_I_I( WRValue* to, WRValue* from ) { return to->i == from->i; }
-bool wr_CompareEQ_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; return to->i == from->f; }
-bool wr_CompareEQ_F_I( WRValue* to, WRValue* from ) { return to->f == (float)from->i; }
-bool wr_CompareEQ_F_F( WRValue* to, WRValue* from ) { return to->f == from->f; }
+bool wr_CompareEQ_I_F( WRValue* to, WRValue* from )
+{
+	return WR_FLOATS_EQUAL( (float)to->i, from->f );
+}
+bool wr_CompareEQ_F_I( WRValue* to, WRValue* from )
+{
+	return WR_FLOATS_EQUAL( to->f, (float)from->i );
+}
+bool wr_CompareEQ_F_F( WRValue* to, WRValue* from )
+{
+	return WR_FLOATS_EQUAL( to->f, from->f );
+}
 WRReturnFunc wr_CompareEQ[16] = 
 {
 	wr_CompareEQ_I_I, wr_CompareEQ_I_F, wr_CompareEQ_I_R, wr_CompareEQ_I_E,
@@ -1463,20 +1421,6 @@ WRReturnFunc wr_CompareEQ[16] =
 	wr_CompareEQ_R_I, wr_CompareEQ_R_F, wr_CompareEQ_R_R, wr_CompareEQ_R_E,
 	wr_CompareEQ_E_I, wr_CompareEQ_E_F, wr_CompareEQ_E_R, wr_CompareEQ_E_E,
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 //------------------------------------------------------------------------------
 #define X_UNARY_PRE( NAME, OPERATION ) \

@@ -524,7 +524,7 @@ parseAsNumber:
 					if ( decimal )
 					{
 						value.p2 = INIT_AS_FLOAT;
-						value.f = (float)atof( token );
+						value.f = strtof( token, 0 );
 					}
 					else
 					{
