@@ -1,5 +1,17 @@
 /*~ ~*/
 
+var s = "string";
+if ( s + 123 != "string123" ) println( "st_err0" );
+if ( "string" + 123 != "string123" ) println( "st_err1" );
+if ( 123 + "string" != "123string" ) println( "st_err2" );
+if ( 123 + s != "123string" ) println( "st_err3" );
+if ( s != "string" ) println( "st_err4" );
+if ( (s += 123) != "string123" ) println ( "st_err5" );
+var i = 123;
+if ( (i += "string") != "123string" ) println ( "st_err6" );
+if ( (123 + "string" + 34 + "hi") != "123string34hi" ) println ( "st_err7" );
+
+	
 var h = "Hello " + "World";
 if ( h != "Hello World" ) println( "hw_err0" );
 var h1 = "Hello ";

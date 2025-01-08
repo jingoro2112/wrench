@@ -71,7 +71,7 @@ void WRContext::mark( WRValue* s )
 	else if ( svb->m_type == SV_HASH_ENTRY )
 	{
 		// mark the referenced table so it is not collected
-		((WRGCHashReference*)svb)->m_referencedTable->m_flags |= GCFlag_Marked;
+		((WRGCBase*)svb)->m_referencedTable->m_flags |= GCFlag_Marked;
 	}
 
 	svb->m_flags |= GCFlag_Marked;

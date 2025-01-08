@@ -173,7 +173,7 @@ void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 		}
 		else if ( index->ui >= value->va->m_size )
 		{
-			if ( value->va->m_flags & GCFlag_SkipGC )
+			if ( value->va->m_flags & GCFlag_NoContext )
 			{
 boundsFailed:
 				target->init();

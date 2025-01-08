@@ -185,6 +185,8 @@ const char* sourceOrder[]=
 	"/debug/serial_debug_comm.cpp",
 	"/vm/scheduler.cpp",
 	"/vm/operations.cpp",
+	"/vm/operations_compact.cpp",
+	"/vm/operations_non_compact.cpp",
 	"/vm/index.cpp",
 	"/lib/std.cpp",
 	"/lib/std_io.cpp",

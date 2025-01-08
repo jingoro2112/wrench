@@ -1,3 +1,6 @@
+6.0.13 ---------------------------------------------------------------------------------
+- string with a non-string element now converts the non-string element
+
 6.0.12 ---------------------------------------------------------------------------------
 - compacted string concatenation
 - added new test code for strings
@@ -5,7 +8,6 @@
   code coverage next pass.
 - fixed float == float comparison to "close enough epsilon" comparison of floats which 
   fixes some unfixable rounding errors in double/float/IEEE land
-
 
 6.0.11 ---------------------------------------------------------------------------------
 - removed #define'd code for code coverage checks to work properly since I'm pretty

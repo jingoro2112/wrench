@@ -1097,7 +1097,7 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 enum WRGCFlags
 {
-	GCFlag_SkipGC = 1<<0,
+	GCFlag_NoContext = 1<<0,
 	GCFlag_Marked = 1<<1,
 };
 
@@ -1140,12 +1140,6 @@ public:
 			g_free( m_Cdata );
 		}
 	}
-};
-
-//------------------------------------------------------------------------------
-class WRGCHashReference : public WRGCBase
-{
-public:
 };
 
 //------------------------------------------------------------------------------
@@ -1390,6 +1384,9 @@ extern WRReturnFunc wr_CompareEQ[16];
 
 uint32_t wr_hash_read8( const void* dat, const int len );
 uint32_t wr_hashStr_read8( const char* dat );
+
+bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target );
+void wr_valueToEx( const WRValue* ex, WRValue* value );
 
 #define WR_FLOATS_EQUAL(f1,f2) (fabsf((f1) - (f2)) < (fabsf((f1)*.0000005f)));
 
@@ -10694,7 +10691,7 @@ void WRContext::mark( WRValue* s )
 	else if ( svb->m_type == SV_HASH_ENTRY )
 	{
 		// mark the referenced table so it is not collected
-		((WRGCHashReference*)svb)->m_referencedTable->m_flags |= GCFlag_Marked;
+		((WRGCBase*)svb)->m_referencedTable->m_flags |= GCFlag_Marked;
 	}
 
 	svb->m_flags |= GCFlag_Marked;
@@ -15059,7 +15056,7 @@ void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 
 	val->va->init( sizeHint, SV_HASH_TABLE, false);
 	
-	val->va->m_flags |= GCFlag_SkipGC;
+	val->va->m_flags |= GCFlag_NoContext;
 	val->p2 = INIT_AS_HASH_TABLE;
 }
 
@@ -15100,11 +15097,11 @@ WRValue* wr_addToContainerEx( const char* name, WRValue* container )
 	
 	key.va->init( len, SV_CHAR, false);
 
-	key.va->m_flags |= GCFlag_SkipGC;
+	key.va->m_flags |= GCFlag_NoContext;
 	key.p2 = INIT_AS_ARRAY;
 	memcpy(key.va->m_Cdata, name, len);
 
-	WRValue* entry = (WRValue*)container->va->get(key.getHash());
+	WRValue* entry = (WRValue*)container->va->get( key.getHash() );
 	*(entry + 1) = key;
 
 	return entry;
@@ -17525,29 +17522,65 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target )
 {
-	if ( !(IS_ARRAY(to->xtype) && to->va->m_type == SV_CHAR && !(to->va->m_flags & GCFlag_SkipGC)
-		   && IS_ARRAY(from->xtype) && from->va->m_type == SV_CHAR) )
+	char buf[21];
+	char* str = buf;
+	unsigned int len;
+
+	if ( IS_ARRAY(to->xtype) && to->va->m_type == SV_CHAR && !(to->va->m_flags & GCFlag_NoContext) )
 	{
-		return false;
-	}
-	
-	WRGCObject* cat = to->va->m_creatorContext->getSVA(to->va->m_size + from->va->m_size, SV_CHAR, false);
+		if ( IS_ARRAY(from->xtype) && from->va->m_type == SV_CHAR )
+		{
+			str = from->va->m_SCdata;
+			len = from->va->m_size;
+		}
+		else
+		{
+			from->singleValue().asString( buf, 20, &len );
+		}
+
+		WRGCObject* cat = to->va->m_creatorContext->getSVA(to->va->m_size + len, SV_CHAR, false);
 
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
-	if ( !cat )
-	{
-		target->p2 = INIT_AS_INT;
-		return false;
-	}
+		if ( !cat )
+		{
+			target->p2 = INIT_AS_INT;
+			return false;
+		}
 #endif
 
-	memcpy( cat->m_SCdata, to->va->m_SCdata, to->va->m_size );
-	memcpy( cat->m_SCdata + to->va->m_size, from->va->m_SCdata, from->va->m_size );
-	
-	target->p2 = INIT_AS_ARRAY;
-	target->va = cat;
+		memcpy( cat->m_SCdata, to->va->m_SCdata, to->va->m_size );
+		memcpy( cat->m_SCdata + to->va->m_size, str, len );
 
-	return true;
+		target->p2 = INIT_AS_ARRAY;
+		target->va = cat;
+
+		return true;
+
+	}
+	else if ( IS_ARRAY(from->xtype) && from->va->m_type == SV_CHAR && !(from->va->m_flags & GCFlag_NoContext) )
+	{
+		to->singleValue().asString( buf, 20, &len );
+
+		WRGCObject* cat = from->va->m_creatorContext->getSVA(from->va->m_size + len, SV_CHAR, false);
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !cat )
+		{
+			target->p2 = INIT_AS_INT;
+			return false;
+		}
+#endif
+
+		memcpy( cat->m_SCdata, str, len );
+		memcpy( cat->m_SCdata + len, from->va->m_SCdata, from->va->m_size );
+
+		target->p2 = INIT_AS_ARRAY;
+		target->va = cat;
+
+		return true;
+	}
+
+	return false;
 }
 
 //------------------------------------------------------------------------------
@@ -17915,11 +17948,31 @@ WRVoidFunc wr_assign[16] =
 	doAssign_R_I,  doAssign_R_F,  doAssign_R_R,   doAssign_R_E,
 	doAssign_E_X,  doAssign_E_X,  doAssign_E_R,   doAssign_E_X,
 };
+/*******************************************************************************
+Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
 
-//==================================================================================
-//==================================================================================
-//==================================================================================
-//==================================================================================
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
 
 #ifdef WRENCH_COMPACT
 
@@ -17947,15 +18000,6 @@ void FuncAssign_R_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 {
 	wr_FuncAssign[(to->r->type<<2)|WR_EX](to->r, from, intCall, floatCall);
 }
-void FuncAssign_E_X( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
-{
-	WRValue& V = to->singleValue();
-	
-	wr_FuncAssign[(V.type<<2)|from->type]( &V, from, intCall, floatCall );
-	
-	wr_valueToEx( to, &V );
-	*from = V;
-}
 void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall ) 
 {
 	if ( IS_CONTAINER_MEMBER(from->xtype) )
@@ -17970,10 +18014,28 @@ void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 		*from = *to;
 	}
 }
+void FuncAssign_E_X( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
+{
+	if ( wr_concatStringCheck(to, from, to) )
+	{
+		*from = *to;
+	}
+	else
+	{
+		WRValue& V = to->singleValue();
+		wr_FuncAssign[(V.type<<2)|from->type]( &V, from, intCall, floatCall );
+		wr_valueToEx( to, &V );
+		*from = V;
+	}
+}
 void FuncAssign_X_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	WRValue& V = from->singleValue();
-	wr_FuncAssign[(to->type<<2)|V.type](to, &V, intCall, floatCall);
+	if ( !wr_concatStringCheck(to, from, to) )
+	{
+		WRValue& V = from->singleValue();
+		wr_FuncAssign[(to->type<<2)|V.type](to, &V, intCall, floatCall);
+	}
+
 	*from = *to;
 }
 void FuncAssign_E_R( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
@@ -18030,8 +18092,11 @@ WRFuncAssignFunc wr_FuncAssign[16] =
 //------------------------------------------------------------------------------
 void FuncBinary_E_X( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	WRValue& V = to->singleValue();
-	wr_funcBinary[(V.type<<2)|from->type](&V, from, target, intCall, floatCall);
+	if ( intCall != wr_addI || !wr_concatStringCheck(to, from, target) )
+	{
+		WRValue& V = to->singleValue();
+		wr_funcBinary[(V.type<<2)|from->type](&V, from, target, intCall, floatCall);
+	}
 }
 void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
@@ -18048,8 +18113,11 @@ void FuncBinary_E_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall 
 }
 void FuncBinary_X_E( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	WRValue& V = from->singleValue();
-	wr_funcBinary[(to->type<<2)|V.type](to, &V, target, intCall, floatCall);
+	if ( intCall != wr_addI || !wr_concatStringCheck(to, from, target) )
+	{
+		WRValue& V = from->singleValue();
+		wr_funcBinary[(to->type<<2)|V.type](to, &V, target, intCall, floatCall);
+	}
 }
 void FuncBinary_E_R( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
@@ -18139,13 +18207,35 @@ WRBoolCallbackReturnFunc wr_Compare[16] =
 	Compare_E_X, Compare_E_X, Compare_E_R, Compare_E_E,
 };
 
-//==================================================================================
-//==================================================================================
-//==================================================================================
-//==================================================================================
-#else 
 
-// NOT COMPACT
+#endif
+/*******************************************************************************
+Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
+#ifndef WRENCH_COMPACT
 
 void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
 
@@ -18438,22 +18528,28 @@ WRVoidFunc wr_DivideAssign[16] =
 
 void wr_AddAssign_E_I( WRValue* to, WRValue* from )
 {
-	WRValue& V = to->singleValue();
+	if ( !wr_concatStringCheck( to, from, to) )
+	{
+		WRValue& V = to->singleValue();
 	
-	wr_AddAssign[(V.type<<2)|WR_INT]( &V, from );
+		wr_AddAssign[(V.type<<2)|WR_INT]( &V, from );
 	
-	wr_valueToEx( to, &V );
-	*from = V;
+		wr_valueToEx( to, &V );
+		*from = V;
+	}
 }
 
 void wr_AddAssign_E_F( WRValue* to, WRValue* from )
 {
-	WRValue& V = to->singleValue();
+	if ( !wr_concatStringCheck( to, from, to) )
+	{
+		WRValue& V = to->singleValue();
 
-	wr_AddAssign[(V.type<<2)|WR_FLOAT]( &V, from );
-
-	wr_valueToEx( to, &V );
-	*from = V;
+		wr_AddAssign[(V.type<<2)|WR_FLOAT]( &V, from );
+		
+		wr_valueToEx( to, &V );
+		*from = V;
+	}
 }
 void wr_AddAssign_E_E( WRValue* to, WRValue* from ) 
 {
@@ -18471,15 +18567,21 @@ void wr_AddAssign_E_E( WRValue* to, WRValue* from )
 }
 void wr_AddAssign_I_E( WRValue* to, WRValue* from )
 {
-	WRValue& V = from->singleValue();
-	wr_AddAssign[(WR_INT<<2)|V.type](to, &V);
-	*from = *to;
+	if ( !wr_concatStringCheck( to, from, to) )
+	{
+		WRValue& V = from->singleValue();
+		wr_AddAssign[(WR_INT<<2)|V.type](to, &V);
+		*from = *to;
+	}
 }
 void wr_AddAssign_F_E( WRValue* to, WRValue* from )
 {
-	WRValue& V = from->singleValue();
-	wr_AddAssign[(WR_FLOAT<<2)|V.type](to, &V);
-	*from = *to;
+	if ( !wr_concatStringCheck( to, from, to) )
+	{
+		WRValue& V = from->singleValue();
+		wr_AddAssign[(WR_FLOAT<<2)|V.type](to, &V);
+		*from = *to;
+	}
 }
 void wr_AddAssign_E_R( WRValue* to, WRValue* from )
 {
@@ -18665,9 +18767,22 @@ WRTargetFunc wr_DivideBinary[16] =
 
 void wr_AdditionBinary_E_I( WRValue* to, WRValue* from, WRValue* target )
 {
-	WRValue& V = to->singleValue();
-	wr_AdditionBinary[(V.type<<2)|WR_INT](&V, from, target);
+	if ( !wr_concatStringCheck(to, from, target) )
+	{
+		WRValue& V = to->singleValue();
+		wr_AdditionBinary[(V.type<<2)|WR_INT](&V, from, target);
+	}
 }
+
+void wr_AdditionBinary_I_E(WRValue* to, WRValue* from, WRValue* target)
+{
+	if ( !wr_concatStringCheck(to, from, target) )
+	{
+		WRValue& V = from->singleValue();
+		wr_AdditionBinary[(WR_INT << 2) | V.type](to, &V, target);
+	}
+}
+
 void wr_AdditionBinary_E_F( WRValue* to, WRValue* from, WRValue* target )
 {
 	WRValue& V = to->singleValue();
@@ -18685,11 +18800,6 @@ void wr_AdditionBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
 	{
 		wr_concatStringCheck( to, from, target );
 	}
-}
-void wr_AdditionBinary_I_E( WRValue* to, WRValue* from, WRValue* target )
-{
-	WRValue& V = from->singleValue();
-	wr_AdditionBinary[(WR_INT<<2)|V.type](to, &V, target);
 }
 void wr_AdditionBinary_F_E( WRValue* to, WRValue* from, WRValue* target )
 {
@@ -19136,7 +19246,7 @@ void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 		}
 		else if ( index->ui >= value->va->m_size )
 		{
-			if ( value->va->m_flags & GCFlag_SkipGC )
+			if ( value->va->m_flags & GCFlag_NoContext )
 			{
 boundsFailed:
 				target->init();

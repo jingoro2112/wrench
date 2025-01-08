@@ -31,6 +31,8 @@ OBJS = \
 	$(OBJDIR)/optimizer.o \
 	$(OBJDIR)/token.o \
 	$(OBJDIR)/operations.o \
+	$(OBJDIR)/operations_compact.o \
+	$(OBJDIR)/operations_non_compact.o \
 	$(OBJDIR)/index.o \
 	$(OBJDIR)/gc.o \
 	$(OBJDIR)/gc_object.o \
@@ -101,6 +103,12 @@ $(OBJDIR)/link.o: discrete_src/cc/link.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/operations.o: discrete_src/vm/operations.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/operations_compact.o: discrete_src/vm/operations_compact.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/operations_non_compact.o: discrete_src/vm/operations_non_compact.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/index.o: discrete_src/vm/index.cpp

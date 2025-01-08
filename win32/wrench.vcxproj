@@ -43,6 +43,8 @@
     <ClCompile Include="..\discrete_src\vm\gc_object.cpp" />
     <ClCompile Include="..\discrete_src\vm\index.cpp" />
     <ClCompile Include="..\discrete_src\vm\operations.cpp" />
+    <ClCompile Include="..\discrete_src\vm\operations_compact.cpp" />
+    <ClCompile Include="..\discrete_src\vm\operations_non_compact.cpp" />
     <ClCompile Include="..\discrete_src\vm\scheduler.cpp" />
     <ClCompile Include="..\discrete_src\vm\vm.cpp" />
   </ItemGroup>

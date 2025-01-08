@@ -1098,7 +1098,7 @@ void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 
 	val->va->init( sizeHint, SV_HASH_TABLE, false);
 	
-	val->va->m_flags |= GCFlag_SkipGC;
+	val->va->m_flags |= GCFlag_NoContext;
 	val->p2 = INIT_AS_HASH_TABLE;
 }
 
@@ -1139,11 +1139,11 @@ WRValue* wr_addToContainerEx( const char* name, WRValue* container )
 	
 	key.va->init( len, SV_CHAR, false);
 
-	key.va->m_flags |= GCFlag_SkipGC;
+	key.va->m_flags |= GCFlag_NoContext;
 	key.p2 = INIT_AS_ARRAY;
 	memcpy(key.va->m_Cdata, name, len);
 
-	WRValue* entry = (WRValue*)container->va->get(key.getHash());
+	WRValue* entry = (WRValue*)container->va->get( key.getHash() );
 	*(entry + 1) = key;
 
 	return entry;

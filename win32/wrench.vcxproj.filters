@@ -116,6 +116,12 @@
     <ClCompile Include="..\discrete_src\vm\gc_object.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\discrete_src\vm\operations_compact.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\vm\operations_non_compact.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\discrete_src\vm\vm.h">
