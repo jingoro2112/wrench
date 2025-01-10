@@ -27,7 +27,8 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target )
 {
-	char buf[21];
+	const int c_bufSize = 20;
+	char buf[c_bufSize + 1];
 	char* str = buf;
 	unsigned int len;
 
@@ -40,7 +41,7 @@ bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target )
 		}
 		else
 		{
-			from->singleValue().asString( buf, 20, &len );
+			from->asString( buf, c_bufSize, &len );
 		}
 
 		WRGCObject* cat = to->va->m_creatorContext->getSVA(to->va->m_size + len, SV_CHAR, false);
@@ -58,13 +59,10 @@ bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target )
 
 		target->p2 = INIT_AS_ARRAY;
 		target->va = cat;
-
-		return true;
-
 	}
 	else if ( IS_ARRAY(from->xtype) && from->va->m_type == SV_CHAR && !(from->va->m_flags & GCFlag_NoContext) )
 	{
-		to->singleValue().asString( buf, 20, &len );
+		to->asString( buf, c_bufSize, &len );
 
 		WRGCObject* cat = from->va->m_creatorContext->getSVA(from->va->m_size + len, SV_CHAR, false);
 
@@ -81,11 +79,13 @@ bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target )
 
 		target->p2 = INIT_AS_ARRAY;
 		target->va = cat;
-
-		return true;
+	}
+	else
+	{
+		return false;
 	}
 
-	return false;
+	return true;
 }
 
 //------------------------------------------------------------------------------

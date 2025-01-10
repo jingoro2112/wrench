@@ -45,8 +45,6 @@ void wr_mboxRead( WRValue* stackTop, const int argn, WRContext* c )
 		}
 
 	}
-
-	stackTop->init();
 }
 
 //------------------------------------------------------------------------------
@@ -83,8 +81,6 @@ void wr_mboxClear( WRValue* stackTop, const int argn, WRContext* c )
 // return : true/false
 void wr_mboxPeek( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn > 0
 		 && c->w->globalRegistry.exists((stackTop - argn)->getHash(), false) )
 	{

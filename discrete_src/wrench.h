@@ -422,7 +422,7 @@ void wr_destroyContext( WRContext* context );
 // set here, can be adjusted at runtime with the
 // wr_setAllocatedMemoryGCHint()
 #define WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT 4000
-void wr_setAllocatedMemoryGCHint( WRContext* context, const uint16_t bytes );
+void wr_setAllocatedMemoryGCHint( WRState* w, const uint16_t bytes );
 
 /***************************************************************/
 /***************************************************************/
@@ -513,6 +513,7 @@ void wr_loadMessageLib( WRState* w ); // messaging between contexts
 void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
 void wr_loadDebugLib( WRState* w ); // debuger-interact functions
 void wr_loadTCPLib( WRState* w ); // TCP/IP functions
+void wr_loadContainerLib( WRState* w ); // array/hash/queue/stack/list
 
 // arduino-specific functions, be sure to add arduino_lib.cpp to your
 // sketch. much thanks to Koepel for contributing
@@ -736,14 +737,6 @@ enum WRGCObjectType
   #error "Endian-ness not detected! Please contact curt.hartung@gmail.com so it can be added <01>"
 #endif
 
-#if (INTPTR_MAX == INT64_MAX)
-  #define WRENCH_64
-#elif (INTPTR_MAX == INT32_MAX)
-  #define WRENCH_32
-#else
-  #error "incompatible environment, remove this error to assume 32-bit"
-#endif
-
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 extern bool g_mallocFailed; // used as an internal global flag for when a malloc came back null
 #endif
@@ -839,12 +832,8 @@ struct WRValue
 
 	union // first 4 bytes 
 	{
-//		intptr_t i;
-//		uintptr_t ui;
 		int32_t i;
 		uint32_t ui;
-
-
 		float f;
 		WRValue* frame;
 		const void* p;
@@ -942,7 +931,7 @@ class WrenchValue
 public:
 		
 	WrenchValue( WRContext* context, const char* label ) : m_context(context), m_value( wr_getGlobalRef(context, label) ) {}
-	WrenchValue( WRContext* context, WRValue* value ) : m_context(context), m_value(value) {}
+	WrenchValue( WRContext* context, WRValue* value ) : m_context(context), m_value(&(value->deref())) {}
 
 	bool isValid() const { return m_value ? true : false; }
 

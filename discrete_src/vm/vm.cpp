@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -638,8 +638,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	if ( function )
 	{
-		context->gc( stackTop );
-
 		stackTop->p = 0;
 		(stackTop++)->p2 = INIT_AS_INT;
 
@@ -649,7 +647,9 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		}
 		
 		pc = context->stopLocation;
-		
+
+		context->gc( stackTop + 1 );
+
 		goto callFunction;
 	}
 
@@ -1321,13 +1321,7 @@ hashIndexJump:
 				goto indexTempLiteralPostLoad;
 #else
 				stackTop->p2 = INIT_AS_INT;
-
-				
-				doIndexHash( stackTop, register0, stackTop - 1);
-//				wr_index[(WR_INT << 2) | register0->type](context, stackTop, register0, stackTop - 1);
-
-
-
+				wr_doIndexHash( stackTop, register0, stackTop - 1);
 				CONTINUE;
 #endif
 			}

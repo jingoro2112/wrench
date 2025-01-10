@@ -1,5 +1,5 @@
-OPT ?= -O3
-#OPT ?= -O0 -ggdb
+#OPT ?= -O3
+OPT ?= -O0 -ggdb
 
 PERF ?=
 
@@ -57,6 +57,7 @@ OBJS = \
 	$(OBJDIR)/std_msg.o \
 	$(OBJDIR)/std_sys.o \
 	$(OBJDIR)/std_serialize.o \
+	$(OBJDIR)/std_container.o \
 	$(OBJDIR)/debug_lib.o \
 	$(OBJDIR)/linux_comm.o \
 
@@ -130,6 +131,9 @@ $(OBJDIR)/serializer.o: discrete_src/utils/serializer.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/std_serialize.o: discrete_src/lib/std_serialize.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/std_container.o: discrete_src/lib/std_container.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/debug_lib.o: discrete_src/lib/debug_lib.cpp

@@ -1314,7 +1314,8 @@ void wr_loadStdLib( WRState* w ); // standard functions like sprintf/rand/
 void wr_loadIOLib( WRState* w ); // IO funcs (time/file/io)
 void wr_loadStringLib( WRState* w ); // string functions
 void wr_loadMessageLib( WRState* w ); // messaging between contexts
-void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
+void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and
+void wr_loadContainerLib( WRState* w ); // data container manipulation
 </pre></code>
 
 <p>note: If space is not a concern then blast them all in with:
@@ -1458,6 +1459,77 @@ std::serialize( value ); // serializes any value type/combination of
 std::deserialize( string ); // given the string output from
                             // std::serialize(), return the original value, full restored
 </pre></div><p></p>
+
+
+
+
+
+<button type="button" class="collapsible">Container Lib</button>
+<div class="collapsecontent">
+Internally wrench uses hash tables and arrays. For convenience the
+following library interface is provided but keep in mind for list,
+queue and stack the functionality is being simulated with an array.
+<pre>
+array::clear( array, [size] );          // clear/create an array the specified size (default 0)
+                                        // returns: the array
+array::count( array );                  // returns: elements
+array::remove( array, where, [count] ); // remove count items (default 1)
+                                        // from where (items shifted down)
+                                        // returns: the array
+array::insert( array, where, [count] ); // add count blank items (default 1)
+                                        // at where (items shifted up)
+                                        // returns: the array
+array::truncate( array, size ); // chop off this array at the given size
+                                // returns: the array
+
+hash::clear( hash );          // clear/create a hash table
+                              // returns: the table
+hash::count( hash );          // number of items in the hash table
+                              // return: number
+hash::add( hash, item, key ); // add item as location key,
+                              // clobbering/creating as necessary
+                              // returns: the item
+hash::remove( hash, key );    // remove this key from the hash table
+                              // returns: 1 if the key was found,
+                              //          otherwise 0
+hash::exists( hash, key );    // return 1 if this key is found otherwise 0
+
+list::clear( list );            // clear/create a list
+                                // returns: the list
+list::count( list );            // returns: elements
+list::peek( list );             // return the first element of the list without
+                                // changing it
+list::pop( list );              // return and remove the first element of the list
+list::pop_front( list );        // return and remove the first element of the list
+list::pop_back( list );         // return and remove the last element of the list
+list::push( list, item );       // push item to front of the list
+list::push_front( list, item ); // push item to front of list
+list::push_back( list, item );  // push item to back(end) of list
+
+queue::clear( queue );      // clear/create a queue (filo)
+queue::count( queue );      // returns: elements
+queue::push( queue, item ); // push item onto the queue
+queue::pop( queue );        // pop an item off the queue
+queue::peek( queue );       // return the first element of the queue without
+                            // changing it
+
+stack::clear( stack );      // clear/create a stack (fifo)
+stack::count( stack );      // return: elements
+stack::push( stack, item ); // push item onto the stack
+stack::pop( stack );        // pop an item off the stack
+stack::peek( stack );       // return the first element of the stack without
+                            // changing it
+</pre></div><p></p>
+
+
+
+
+
+
+
+
+
+
 
 
 

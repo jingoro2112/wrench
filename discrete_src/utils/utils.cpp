@@ -155,6 +155,7 @@ WRState* wr_newState( int stackSize )
 	w->globalRegistry.growHash( WRENCH_NULL_HASH, 0 );
 
 	w->stackSize = stackSize;
+	w->allocatedMemoryLimit = WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT;
 
 	return w;
 }
@@ -257,8 +258,6 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 	C->globals = globals;
 	
 	C->stack = stack ? stack : (WRValue *)(C->localFunctions + localFuncs);
-
-	C->allocatedMemoryLimit = WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT;
 
 	C->flags |= takeOwnership ? WRC_OwnsMemory : 0;
 	
@@ -389,7 +388,7 @@ void wr_destroyContextEx( WRContext* context )
 {
 	// g_free all memory allocations by forcing the gc to collect everything
 	context->globals = 0;
-	context->allocatedMemoryHint = context->allocatedMemoryLimit;
+	context->allocatedMemoryHint = (uint16_t)-1;
 	context->gc( 0 );
 
 	wr_freeGCChain( context->registry.m_nextGC );
@@ -463,9 +462,9 @@ bool wr_runCommand( WRState* w, const char* sourceCode, const int size )
 }
 
 //------------------------------------------------------------------------------
-void wr_setAllocatedMemoryGCHint( WRContext* context, const uint16_t bytes )
+void wr_setAllocatedMemoryGCHint( WRState* state, const uint16_t bytes )
 {
-	context->allocatedMemoryLimit = bytes;
+	state->allocatedMemoryLimit = bytes;
 }
 
 //------------------------------------------------------------------------------
@@ -1079,7 +1078,7 @@ WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, cons
 	}
 #endif
 	val->p2 = INIT_AS_ARRAY;
-	memcpy( (unsigned char *)val->va->m_data, data, slen );
+	memcpy( val->va->m_SCdata, data, slen );
 	return *val;
 }
 

@@ -16,6 +16,9 @@
     <Filter Include="Source Files\debug">
       <UniqueIdentifier>{0536dc0b-e5c6-4e86-8ed7-f1e1b11177eb}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\lib">
+      <UniqueIdentifier>{3b81456a-dfc1-47a5-8dcb-ac800d12f250}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\discrete_src\vm\index.cpp">
@@ -31,27 +34,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\discrete_src\utils\utils.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\lib\std.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\lib\std_io.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\lib\std_math.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\lib\std_msg.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\lib\std_serialize.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\lib\std_string.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\lib\std_sys.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\discrete_src\cc\cc.cpp">
@@ -81,9 +63,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\discrete_src\debug\disassemble.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\lib\std_tcp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\discrete_src\debug\client_debug.cpp">
@@ -121,6 +100,33 @@
     </ClCompile>
     <ClCompile Include="..\discrete_src\vm\operations_non_compact.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\lib\std.cpp">
+      <Filter>Source Files\lib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\lib\std_io.cpp">
+      <Filter>Source Files\lib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\lib\std_math.cpp">
+      <Filter>Source Files\lib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\lib\std_msg.cpp">
+      <Filter>Source Files\lib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\lib\std_serialize.cpp">
+      <Filter>Source Files\lib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\lib\std_string.cpp">
+      <Filter>Source Files\lib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\lib\std_sys.cpp">
+      <Filter>Source Files\lib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\lib\std_tcp.cpp">
+      <Filter>Source Files\lib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\lib\std_container.cpp">
+      <Filter>Source Files\lib</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -169,9 +175,6 @@
     <ClInclude Include="..\discrete_src\cc\str.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\discrete_src\lib\std_tcp.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\discrete_src\utils\simple_args.h">
       <Filter>Source Files</Filter>
     </ClInclude>
@@ -186,6 +189,9 @@
     </ClInclude>
     <ClInclude Include="..\discrete_src\debug\debug_comm.h">
       <Filter>Source Files\debug</Filter>
+    </ClInclude>
+    <ClInclude Include="..\discrete_src\lib\std_tcp.h">
+      <Filter>Source Files\lib</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

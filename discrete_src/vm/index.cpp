@@ -56,7 +56,7 @@ void arrayElementToTarget( const uint32_t index, WRValue* target, WRValue* value
 }
 
 //------------------------------------------------------------------------------
-void doIndexHash( WRValue* index, WRValue* value, WRValue* target )
+void wr_doIndexHash( WRValue* index, WRValue* value, WRValue* target )
 {
 	uint32_t hash = index->getHash();
 
@@ -123,7 +123,7 @@ void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 
 		if (EXPECTS_HASH_INDEX(value->xtype))
 		{
-			doIndexHash( index, value, target );
+			wr_doIndexHash( index, value, target );
 			return;
 		}
 
@@ -167,7 +167,7 @@ void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 #endif
 				value->p2 = INIT_AS_HASH_TABLE;
 
-				doIndexHash( I, value, target );
+				wr_doIndexHash( I, value, target );
 				return;
 			}
 		}
@@ -222,7 +222,7 @@ void doIndex_E_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 		}
 		else
 		{
-			doIndexHash( I, V, target );
+			wr_doIndexHash( I, V, target );
 		}
 	}
 	else

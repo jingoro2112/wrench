@@ -1,5 +1,60 @@
 6.0.13 ---------------------------------------------------------------------------------
 - string with a non-string element now converts the non-string element
+- gc hint now global to a state rather than the context so it can be set before
+  the first run
+- fixed gc error where it could possibly clean up user args before using them
+- added a container lib with the following functionality:
+
+array::clear( array, [size] );          // clear/create an array the specified size (default 0)
+                                        // returns: the array
+array::count( array );                  // returns: elements
+array::remove( array, where, [count] ); // remove count items (default 1)
+                                        // from where (items shifted down)
+                                        // returns: the array
+array::insert( array, where, [count] ); // add count blank items (default 1)
+                                        // at where (items shifted up)
+                                        // returns: the array
+array::truncate( array, size ); // chop off this array at the given size
+                                // returns: the array
+
+hash::clear( hash );          // clear/create a hash table
+                              // returns: the table
+hash::count( hash );          // number of items in the hash table
+                              // return: number
+hash::add( hash, item, key ); // add item as location key,
+                              // clobbering/creating as necessary
+                              // returns: the item
+hash::remove( hash, key );    // remove this key from the hash table
+                              // returns: 1 if the key was found,
+                              //          otherwise 0
+hash::exists( hash, key );    // return 1 if this key is found otherwise 0
+
+list::clear( list );            // clear/create a list
+                                // returns: the list
+list::count( list );            // returns: elements
+list::peek( list );             // return the first element of the list without
+                                // changing it
+list::pop( list );              // return and remove the first element of the list
+list::pop_front( list );        // return and remove the first element of the list
+list::pop_back( list );         // return and remove the last element of the list
+list::push( list, item );       // push item to front of the list
+list::push_front( list, item ); // push item to front of list
+list::push_back( list, item );  // push item to back(end) of list
+
+queue::clear( queue );      // clear/create a queue (filo)
+queue::count( queue );      // returns: elements
+queue::push( queue, item ); // push item onto the queue
+queue::pop( queue );        // pop an item off the queue
+queue::peek( queue );       // return the first element of the queue without
+                            // changing it
+
+stack::clear( stack );      // clear/create a stack (fifo)
+stack::count( stack );      // return: elements
+stack::push( stack, item ); // push item onto the stack
+stack::pop( stack );        // pop an item off the stack
+stack::peek( stack );       // return the first element of the stack without
+                            // changing it
+
 
 6.0.12 ---------------------------------------------------------------------------------
 - compacted string concatenation

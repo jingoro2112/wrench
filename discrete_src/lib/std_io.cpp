@@ -77,7 +77,6 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 				stackTop->p2 = INIT_AS_ARRAY;
 				if ( fread(stackTop->va->m_Cdata, sbuf.st_size, 1, infil) != 1 )
 				{
-					stackTop->init();
 					return;
 				}
 			}

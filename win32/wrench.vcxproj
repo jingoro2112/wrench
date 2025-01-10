@@ -28,6 +28,7 @@
     <ClCompile Include="..\discrete_src\debug\tcp_debug_comm.cpp" />
     <ClCompile Include="..\discrete_src\lib\debug_lib.cpp" />
     <ClCompile Include="..\discrete_src\lib\std.cpp" />
+    <ClCompile Include="..\discrete_src\lib\std_container.cpp" />
     <ClCompile Include="..\discrete_src\lib\std_io.cpp" />
     <ClCompile Include="..\discrete_src\lib\std_math.cpp" />
     <ClCompile Include="..\discrete_src\lib\std_msg.cpp" />

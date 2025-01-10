@@ -30,8 +30,6 @@ SOFTWARE.
 //         : 2 - function is in wrench (was in source code)
 void wr_isFunction( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn > 0 )
 	{
 		WRValue* arg = stackTop - argn;
@@ -50,8 +48,6 @@ void wr_isFunction( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_importByteCode( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn > 0 )
 	{
 		unsigned int len;
@@ -75,8 +71,6 @@ void wr_importByteCode( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_importCompile( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn > 0 )
 	{
 		unsigned int len;

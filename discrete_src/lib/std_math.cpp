@@ -264,7 +264,6 @@ void wr_math_deg2rad( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_intScale(WRValue* stackTop, const int argn, WRContext* c)
 {
-	stackTop->init();
 	int32_t res = 0;
 
 	if (argn > 2)

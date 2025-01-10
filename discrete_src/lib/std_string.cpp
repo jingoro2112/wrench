@@ -421,17 +421,11 @@ void wr_format( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue* args = stackTop - argn;
 		wr_doSprintf( *stackTop, args->deref(), args + 1, argn - 1, c );
 	}
-	else
-	{
-		stackTop->init();
-	}
 }
 
 //------------------------------------------------------------------------------
 void wr_sprintf( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if( argn > 1 )
 	{
 		WRValue* args = stackTop - argn;
@@ -495,8 +489,6 @@ void wr_isalnum( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_mid( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-	
 	if ( argn < 2 )
 	{
 		return;
@@ -630,7 +622,6 @@ void wr_toupper( WRValue* stackTop, const int argn, WRContext* c )
 void wr_tol( WRValue* stackTop, const int argn, WRContext* c )
 {
 	char buf[21];
-	stackTop->init();
 	if ( argn == 2 )
 	{
 		stackTop->i = (int)strtol( stackTop[-2].asString(buf, 20), 0, stackTop[-1].asInt() );
@@ -675,8 +666,6 @@ void wr_concat( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_left( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn < 2 )
 	{
 		return;
@@ -711,8 +700,6 @@ void wr_left( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_right( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-	
 	if ( argn < 2 )
 	{
 		return;
@@ -746,8 +733,6 @@ void wr_right( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_trimright( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	WRValue* args = stackTop - argn;
 	const char* data;
 	int len = 0;
@@ -776,8 +761,6 @@ void wr_trimright( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_trimleft( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	WRValue* args = stackTop - argn;
 	const char* data;
 	unsigned int len = 0;
@@ -805,8 +788,6 @@ void wr_trimleft( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_trim( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	WRValue* args = stackTop - argn;
 	const char* data;
 	int len = 0;
@@ -837,8 +818,6 @@ void wr_trim( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_insert( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn < 3 )
 	{
 		return;

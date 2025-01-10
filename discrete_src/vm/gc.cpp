@@ -80,7 +80,7 @@ void WRContext::mark( WRValue* s )
 //------------------------------------------------------------------------------
 void WRContext::gc( WRValue* stackTop )
 {
-	if ( allocatedMemoryHint < allocatedMemoryLimit )
+	if ( allocatedMemoryHint < w->allocatedMemoryLimit )
 	{
 		return;
 	}

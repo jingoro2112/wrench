@@ -21,3 +21,4 @@ tests/019_serialize.c
 tests/020_yield.c
 tests/021_hashes.c
 tests/022_strings.c
+tests/023_container.c

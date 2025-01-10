@@ -27,7 +27,6 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 void wr_stdSerialize( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
 	if ( argn )
 	{
 		char* buf;
@@ -52,7 +51,6 @@ void wr_stdSerialize( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_stdDeserialize( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
 	if ( argn )
 	{
 		WRValue& V = (stackTop - argn)->deref();

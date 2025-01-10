@@ -176,8 +176,6 @@ int wr_ftoa( float f, char* string, size_t len )
 //------------------------------------------------------------------------------
 void wr_std_rand( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn > 0 )
 	{
 		WRValue* args = stackTop - argn;
@@ -225,7 +223,6 @@ void wr_std_time( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_std_time( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
 }
 #endif
 
@@ -275,4 +272,5 @@ void wr_loadAllLibs( WRState* w )
 	wr_loadSerializeLib( w );
 	wr_loadDebugLib( w );
 	wr_loadTCPLib( w );
+	wr_loadContainerLib( w );
 }

@@ -197,6 +197,7 @@ const char* sourceOrder[]=
 	"/lib/std_msg.cpp",
 	"/lib/std_sys.cpp",
 	"/lib/std_serialize.cpp",
+	"/lib/std_container.cpp",
 	"/lib/debug_lib.cpp",
 	"/lib/esp32_lib.cpp",
 	"/lib/arduino_lib.cpp",
@@ -720,6 +721,7 @@ int runTests( int number )
 	WRState* w = wr_newState( 128 );
 
 	wr_loadAllLibs( w );
+	wr_setAllocatedMemoryGCHint( w, 0 );
 
 	char buf[256];
 	int fileNumber = 0;

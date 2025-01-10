@@ -52,8 +52,6 @@ struct WRContext
 {
 	uint16_t globals;
 
-	// how many bytes wrench must allocate before running the gc, default WRENCH_DEFAULT_ALLOCATED_MEMORY_LIMIT
-	uint16_t allocatedMemoryLimit;
 	uint32_t allocatedMemoryHint; // _approximately_ how much memory has been allocated since last gc
 	
 	const unsigned char* bottom;
@@ -107,9 +105,6 @@ struct WRLibraryCleanup
 //------------------------------------------------------------------------------
 struct WRState
 {
-	uint16_t stackSize; // how much stack to give each context
-	int8_t err;
-
 #ifdef WRENCH_TIME_SLICES
 	int instructionsPerSlice;
 	int sliceInstructionCount;
@@ -121,6 +116,11 @@ struct WRState
 	WRLibraryCleanup* libCleanupFunctions;
 	
 	WRGCObject globalRegistry;
+
+	uint16_t allocatedMemoryLimit; // WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT by default
+	uint16_t stackSize; // how much stack to give each context
+	int8_t err;
+
 };
 
 void wr_addLibraryCleanupFunction( WRState* w, void(*function)(WRState *w, void* param), void* param );
@@ -173,7 +173,7 @@ extern WRTargetFunc wr_ANDBinary[16];
 extern WRTargetFunc wr_ORBinary[16];
 extern WRTargetFunc wr_XORBinary[16];
 
-void doIndexHash( WRValue* index, WRValue* value, WRValue* target );
+void wr_doIndexHash( WRValue* index, WRValue* value, WRValue* target );
 typedef void (*WRStateFunc)( WRContext* c, WRValue* to, WRValue* from, WRValue* target );
 extern WRStateFunc wr_index[16];
 extern WRStateFunc wr_assignAsHash[4];

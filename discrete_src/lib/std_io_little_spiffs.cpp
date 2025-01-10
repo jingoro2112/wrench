@@ -83,8 +83,6 @@ WRFSFile* wr_safeGetFile( const void* p )
 //------------------------------------------------------------------------------
 void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn != 1 )
 	{
 		return;
@@ -117,8 +115,6 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn != 2 )
 	{
 		return;
@@ -161,8 +157,6 @@ void wr_getline( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( !argn )
 	{
 		return;
@@ -224,8 +218,6 @@ void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 		return;
 	}
 
-	stackTop->init();
-
 	WRFSFile* prev = 0;
 	WRFSFile* cur = g_OpenFiles;
 	while( cur )
@@ -255,8 +247,6 @@ void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn != 2 )
 	{
 		return;
@@ -293,8 +283,6 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_ioWrite( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn != 2 )
 	{
 		return;
@@ -341,8 +329,6 @@ void wr_ioWrite( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_ioSeek( WRValue* stackTop, const int argn, WRContext* c )
 {
-	stackTop->init();
-
 	if ( argn > 1 )
 	{
 		WRValue* args = stackTop - argn;
