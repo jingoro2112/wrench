@@ -1,3 +1,7 @@
+6.0.14 ---------------------------------------------------------------------------------
+- platformIO push
+- fixed build options
+
 6.0.13 ---------------------------------------------------------------------------------
 - string with a non-string element now converts the non-string element
 - gc hint now global to a state rather than the context so it can be set before
