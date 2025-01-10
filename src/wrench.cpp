@@ -22529,17 +22529,18 @@ void wr_arrayRemoveEx( WRValue* A, const unsigned int where, const int count, WR
 {
 	if ( where < A->va->m_size )
 	{
-		unsigned int end = where + count;
-
-		if ( end >= A->va->m_size )
+		unsigned int from = where + count;
+		if ( from >= A->va->m_size )
 		{
 			A->va->m_size = where; // simple truncation
 		}
 		else
 		{
+			unsigned int elements = A->va->m_size - from;
+
 			memmove( (char*)(A->va->m_Vdata + where), // to here
-					 (char*)(A->va->m_Vdata + end),   // from here
-					 (A->va->m_size - where) * sizeof(WRValue) ); // this many
+					 (char*)(A->va->m_Vdata + from),   // from here
+					 elements * sizeof(WRValue) ); // this many
 
 			A->va->m_size -= count;
 		}
