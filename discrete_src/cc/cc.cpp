@@ -2425,12 +2425,24 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 			return false;
 		}
 
+		bool negative = false;
+
 		if ( !m_quoted && token == "=" )
 		{
 			if ( !getToken(ex) )
 			{
 				m_err = WR_ERR_bad_label;
 				return false;
+			}
+
+			if ( token == '-' )
+			{
+				negative = true;
+				if ( !getToken(ex) )
+				{
+					m_err = WR_ERR_bad_label;
+					return false;
+				}
 			}
 
 			if ( value.type == WR_REF )
@@ -2450,9 +2462,21 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 
 		if ( value.type == WR_INT )
 		{
-			index = value.ui + 1;
+			if ( negative )
+			{
+				value.i = -value.i;
+			}
+			
+			index = value.i + 1;
 		}
-		else if ( value.type != WR_FLOAT )
+		else if (value.type == WR_FLOAT)
+		{
+			if ( negative )
+			{
+				value.f = -value.f;
+			}
+		}
+		else
 		{
 			m_err = WR_ERR_bad_label;
 			return false;

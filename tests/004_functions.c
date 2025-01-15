@@ -61,6 +61,11 @@ argtest
 ~*/
 
 
+var x = -2;
+if ( x != -2 ) println( "xfail1");
+incGlob(y)-1;
+
+
 a = 10;
 a = println("argtest");
 if ( a != 20 ) { println("afail1"); }

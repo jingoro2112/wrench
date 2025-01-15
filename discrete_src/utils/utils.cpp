@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 

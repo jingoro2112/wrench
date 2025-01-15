@@ -58,3 +58,4 @@ if ( r[1] != 40 ) println("array13" + r[1] );
 if ( r[2] != 50 ) println("array14" + r[2] );
 array::remove( r, 0, 100 ); // remove it all
 if ( array::count(r) != 0 ) println("array15" + array::count(r) );
+

@@ -2,7 +2,7 @@
 #ifndef _WRENCH_H
 #define _WRENCH_H
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -32,7 +32,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 15
+#define WRENCH_VERSION_BUILD 16
 
 struct WRState;
 
@@ -693,10 +693,9 @@ enum WRExType : uint8_t
 
 	WR_EX_RAW_ARRAY  = 0x20,  // 0010
 
-	// EX types have one of the upper two bits set
-	WR_EX_DEBUG_BREAK= 0x40,  // 0100
+	WR_EX_LL_POINTER = 0x40,  // 0100  [experimental]
 	
-	WR_EX_ITERATOR	      = 0x60,  // 0110
+	WR_EX_ITERATOR	       = 0x60,  // 0110
 	WR_EX_CONTAINER_MEMBER = 0x80,  // 1000
 	WR_EX_ARRAY            = 0xA0,  // 1010
 
@@ -716,15 +715,6 @@ enum WRGCObjectType
 	SV_VALUE = 0x04, // !!must ALWAYS be last two so >= works
 	SV_CHAR = 0x05,  // !!
 };
-
-#define EX_TYPE_MASK   0xE0
-#define IS_DEBUG_BREAK(X) ((X)==WR_EX_DEBUG_BREAK)
-#define IS_CONTAINER_MEMBER(X) (((X)&EX_TYPE_MASK)==WR_EX_CONTAINER_MEMBER)
-#define IS_ARRAY(X) ((X)==WR_EX_ARRAY)
-#define IS_ITERATOR(X) ((X)==WR_EX_ITERATOR)
-#define IS_RAW_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_RAW_ARRAY)
-#define IS_HASH_TABLE(X) ((X)==WR_EX_HASH_TABLE)
-#define EXPECTS_HASH_INDEX(X) ( ((X)==WR_EX_STRUCT) || ((X)==WR_EX_HASH_TABLE) )
 
 #ifdef ARDUINO
 #include <Arduino.h>

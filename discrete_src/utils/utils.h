@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -244,6 +244,7 @@ public:
 	//------------------------------------------------------------------------------
 	WRarray( const WRarray& A )
 	{
+		m_list = 0;
 		clear();
 		m_list = newArray( A.m_elementsAllocated );
 		m_elementsNewed = A.m_elementsNewed;
@@ -439,7 +440,6 @@ void wr_growValueArray( WRGCObject* va, int newSize );
 #define IS_SVA_VALUE_TYPE(V) ((V)->m_type & 0x1)
 
 #define INIT_AS_LIB_CONST    0xFFFFFFFC
-#define INIT_AS_DEBUG_BREAK  (((uint32_t)WR_EX) | ((uint32_t)WR_EX_DEBUG_BREAK<<24))
 #define INIT_AS_ARRAY        (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
 #define INIT_AS_USR          (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
 #define INIT_AS_RAW_ARRAY    (((uint32_t)WR_EX) | ((uint32_t)WR_EX_RAW_ARRAY<<24))
@@ -461,6 +461,15 @@ void wr_growValueArray( WRGCObject* va, int newSize );
 #define EX_RAW_ARRAY_SIZE_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define IS_EX_SINGLE_CHAR_RAW_P2(P) ((P) == (((uint32_t)WR_EX) | (((uint32_t)WR_EX_RAW_ARRAY<<24)) | (1<<8)))
 #define IS_INVALID(P) ((P) == INIT_AS_INVALID)
+
+#define EX_TYPE_MASK   0xE0
+#define IS_LL_POINTER(X) ((X)==WR_EX_LL_POINTER)
+#define IS_CONTAINER_MEMBER(X) (((X)&EX_TYPE_MASK)==WR_EX_CONTAINER_MEMBER)
+#define IS_ARRAY(X) ((X)==WR_EX_ARRAY)
+#define IS_ITERATOR(X) ((X)==WR_EX_ITERATOR)
+#define IS_RAW_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_RAW_ARRAY)
+#define IS_HASH_TABLE(X) ((X)==WR_EX_HASH_TABLE)
+#define EXPECTS_HASH_INDEX(X) ( ((X)==WR_EX_STRUCT) || ((X)==WR_EX_HASH_TABLE) )
 
 int wr_addI( int a, int b );
 

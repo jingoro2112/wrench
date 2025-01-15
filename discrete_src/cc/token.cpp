@@ -125,11 +125,12 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 		{
 			if ( m_pos < m_sourceLen )
 			{
+				/*
 				if ( (isdigit(m_source[m_pos]) && !m_LastParsedLabel) || m_source[m_pos] == '.' )
 				{
 					goto parseAsNumber;
 				}
-				else if ( m_source[m_pos] == '-' )
+				else*/ if ( m_source[m_pos] == '-' )
 				{
 					token += '-';
 					++m_pos;
@@ -412,7 +413,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 					return false;
 				}
 
-parseAsNumber:
+//parseAsNumber:
 
 				m_LastParsedLabel = true;
 
@@ -524,7 +525,7 @@ parseAsNumber:
 					if ( decimal )
 					{
 						value.p2 = INIT_AS_FLOAT;
-						value.f = strtof( token, 0 );
+						value.f = (float)atof( token );
 					}
 					else
 					{

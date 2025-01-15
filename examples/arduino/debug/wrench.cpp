@@ -1,6 +1,6 @@
 #include "wrench.h"
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -245,6 +245,7 @@ public:
 	//------------------------------------------------------------------------------
 	WRarray( const WRarray& A )
 	{
+		m_list = 0;
 		clear();
 		m_list = newArray( A.m_elementsAllocated );
 		m_elementsNewed = A.m_elementsNewed;
@@ -440,7 +441,6 @@ void wr_growValueArray( WRGCObject* va, int newSize );
 #define IS_SVA_VALUE_TYPE(V) ((V)->m_type & 0x1)
 
 #define INIT_AS_LIB_CONST    0xFFFFFFFC
-#define INIT_AS_DEBUG_BREAK  (((uint32_t)WR_EX) | ((uint32_t)WR_EX_DEBUG_BREAK<<24))
 #define INIT_AS_ARRAY        (((uint32_t)WR_EX) | ((uint32_t)WR_EX_ARRAY<<24))
 #define INIT_AS_USR          (((uint32_t)WR_EX) | ((uint32_t)WR_EX_USR<<24))
 #define INIT_AS_RAW_ARRAY    (((uint32_t)WR_EX) | ((uint32_t)WR_EX_RAW_ARRAY<<24))
@@ -462,6 +462,15 @@ void wr_growValueArray( WRGCObject* va, int newSize );
 #define EX_RAW_ARRAY_SIZE_FROM_P2(P) (((P)&0x1FFFFF00) >> 8)
 #define IS_EX_SINGLE_CHAR_RAW_P2(P) ((P) == (((uint32_t)WR_EX) | (((uint32_t)WR_EX_RAW_ARRAY<<24)) | (1<<8)))
 #define IS_INVALID(P) ((P) == INIT_AS_INVALID)
+
+#define EX_TYPE_MASK   0xE0
+#define IS_LL_POINTER(X) ((X)==WR_EX_LL_POINTER)
+#define IS_CONTAINER_MEMBER(X) (((X)&EX_TYPE_MASK)==WR_EX_CONTAINER_MEMBER)
+#define IS_ARRAY(X) ((X)==WR_EX_ARRAY)
+#define IS_ITERATOR(X) ((X)==WR_EX_ITERATOR)
+#define IS_RAW_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_RAW_ARRAY)
+#define IS_HASH_TABLE(X) ((X)==WR_EX_HASH_TABLE)
+#define EXPECTS_HASH_INDEX(X) ( ((X)==WR_EX_STRUCT) || ((X)==WR_EX_HASH_TABLE) )
 
 int wr_addI( int a, int b );
 
@@ -1388,7 +1397,7 @@ uint32_t wr_hashStr_read8( const char* dat );
 bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target );
 void wr_valueToEx( const WRValue* ex, WRValue* value );
 
-#define WR_FLOATS_EQUAL(f1,f2) (fabsf((f1) - (f2)) < (fabsf((f1)*.0000005f)));
+#define WR_FLOATS_EQUAL(f1,f2) (fabsf((f1) - (f2)) <= (fabsf((f1)*.0000005f)));
 
 // if the current + native match then great it's a simple read, it's
 // only when they differ that we need bitshiftiness
@@ -6360,12 +6369,24 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 			return false;
 		}
 
+		bool negative = false;
+
 		if ( !m_quoted && token == "=" )
 		{
 			if ( !getToken(ex) )
 			{
 				m_err = WR_ERR_bad_label;
 				return false;
+			}
+
+			if ( token == '-' )
+			{
+				negative = true;
+				if ( !getToken(ex) )
+				{
+					m_err = WR_ERR_bad_label;
+					return false;
+				}
 			}
 
 			if ( value.type == WR_REF )
@@ -6385,9 +6406,21 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 
 		if ( value.type == WR_INT )
 		{
-			index = value.ui + 1;
+			if ( negative )
+			{
+				value.i = -value.i;
+			}
+			
+			index = value.i + 1;
 		}
-		else if ( value.type != WR_FLOAT )
+		else if (value.type == WR_FLOAT)
+		{
+			if ( negative )
+			{
+				value.f = -value.f;
+			}
+		}
+		else
 		{
 			m_err = WR_ERR_bad_label;
 			return false;
@@ -9819,11 +9852,12 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 		{
 			if ( m_pos < m_sourceLen )
 			{
+				/*
 				if ( (isdigit(m_source[m_pos]) && !m_LastParsedLabel) || m_source[m_pos] == '.' )
 				{
 					goto parseAsNumber;
 				}
-				else if ( m_source[m_pos] == '-' )
+				else*/ if ( m_source[m_pos] == '-' )
 				{
 					token += '-';
 					++m_pos;
@@ -10106,7 +10140,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 					return false;
 				}
 
-parseAsNumber:
+//parseAsNumber:
 
 				m_LastParsedLabel = true;
 
@@ -10218,7 +10252,7 @@ parseAsNumber:
 					if ( decimal )
 					{
 						value.p2 = INIT_AS_FLOAT;
-						value.f = strtof( token, 0 );
+						value.f = (float)atof( token );
 					}
 					else
 					{
@@ -13951,7 +13985,7 @@ targetFuncStoreLocalOp:
 }
 
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 

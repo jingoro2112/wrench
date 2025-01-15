@@ -1,14 +1,4 @@
-/*~
-6
-32000
--32000
-500000
--500000
-32001
--32001
-500001
--500001
-~*/
+/*~ ~*/
 
 U();
 
@@ -20,10 +10,7 @@ function U()
 		value3 = 6.5,
 	};
 
-	if ( value3 != 6.5 )
-	{
-		println("float");
-	}
+	if ( value3 != 6.5 ) { println("f1"); }
 	
 	enum
 	{
@@ -31,13 +18,18 @@ function U()
 		a162 = -32000,
 		a32 = 500000,
 		a322 = -500000,
+		f1 = 1.213,
+		f2 = -2.345,
 	}
 
-	println( value2 );
-	println( a16 );
-	println( a162 );
-	println( a32 );
-	println( a322 );
+	if ( value2 != 6 ) { println("f2 " + value2 ); }
+	if ( a16 != 32000 ) { println("f3 " + a16 ); }
+	if ( a162 != -32000 ) { println("f4 " + a162 ); }
+	if ( a32 != 500000 ) { println("f5 " + a32 ); }
+	if ( a322 != -500000 ) { println("f6 " + a322); }
+	if ( f1 != 1.213 ) { println("fl0 " + f1); }
+	if ( f2 != -2.345 ) { println("fl1 " + f2); }
+
 }
 
 enum
@@ -117,7 +109,8 @@ if( name12 != 7 ) { println("bad f"); }
 if( name13 != 8 ) { println("bad g"); }
 if( name14 != -1 ) { println("bad h"); }
 if( name15 != 0 ) { println("bad i"); }
-println( a16 );
-println( a162 );
-println( a32 );
-println( a322 );
+if ( a16 != 32001 ) { println("f7 " + a16 ); }
+if ( a162 != -32001 ) { println("f8 " + a162 ); }
+if ( a32 != 500001 ) { println("f9 " + a32 ); }
+if ( a322 != -500001 ) { println("f10 " + a322); }
+

@@ -211,7 +211,7 @@ uint32_t wr_hashStr_read8( const char* dat );
 bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target );
 void wr_valueToEx( const WRValue* ex, WRValue* value );
 
-#define WR_FLOATS_EQUAL(f1,f2) (fabsf((f1) - (f2)) < (fabsf((f1)*.0000005f)));
+#define WR_FLOATS_EQUAL(f1,f2) (fabsf((f1) - (f2)) <= (fabsf((f1)*.0000005f)));
 
 // if the current + native match then great it's a simple read, it's
 // only when they differ that we need bitshiftiness

@@ -36,7 +36,11 @@
 1.3
 ~*/
 
-//if ( () ) println ("");
+var z1 = -.0;
+if ( z1 != -.0 ) { println( "z1 ",  z1 ); }
+var z = -0;
+if ( z != 0 ) println("z0 " + z );
+
 
 if ( 10 / 0 ) {}
 if ( 10.1 / 0 ) {}
@@ -57,7 +61,6 @@ zero = 0.5;
 zero = 0;
 if( 10 /= zero ) {}
 if( 10.1 /= zero ) {}
-
 
 
 
