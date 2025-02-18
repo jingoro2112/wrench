@@ -19,6 +19,9 @@
     <Filter Include="Source Files\lib">
       <UniqueIdentifier>{3b81456a-dfc1-47a5-8dcb-ac800d12f250}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\cc">
+      <UniqueIdentifier>{18e0968b-fb8c-4b01-9ca1-198131a1b7a7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\discrete_src\vm\index.cpp">
@@ -36,23 +39,8 @@
     <ClCompile Include="..\discrete_src\utils\utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\discrete_src\cc\cc.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\discrete_src\utils\win32_comm.cpp" />
     <ClCompile Include="..\discrete_src\utils\wrench_cli.cpp" />
-    <ClCompile Include="..\discrete_src\cc\expression.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\cc\link.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\cc\optimizer.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\cc\token.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\discrete_src\vm\scheduler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -60,9 +48,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\discrete_src\vm\gc.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\discrete_src\debug\disassemble.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\discrete_src\debug\client_debug.cpp">
@@ -127,6 +112,24 @@
     </ClCompile>
     <ClCompile Include="..\discrete_src\lib\std_container.cpp">
       <Filter>Source Files\lib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\cc\cc.cpp">
+      <Filter>Source Files\cc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\debug\disassemble.cpp">
+      <Filter>Source Files\cc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\cc\expression.cpp">
+      <Filter>Source Files\cc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\cc\token.cpp">
+      <Filter>Source Files\cc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\cc\optimizer.cpp">
+      <Filter>Source Files\cc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\discrete_src\cc\link.cpp">
+      <Filter>Source Files\cc</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

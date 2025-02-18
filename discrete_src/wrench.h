@@ -31,7 +31,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 16
+#define WRENCH_VERSION_BUILD 17
 
 struct WRState;
 
@@ -774,15 +774,19 @@ struct WRValue
 	bool isWrenchArray( int* len =0 ) const;
 	bool isRawArray( int* len =0 ) const;
 	bool isHashTable( int* members=0 ) const;
+	bool isStruct() const;
 
 	// if this value is an array, return 'index'-th element
 	// if create is true and this value is NOT an array, it will be converted into one
-	WRValue* indexArray( WRContext* context, const uint32_t index, const bool create );
+	WRValue* indexArray( WRContext* context, const uint32_t index, const bool create ) const;
 	
 	// if this value is a hash table, return [or create] the 'index' hash item
 	// if create is true and this value is NOT a hash, it will be converted into one
-	WRValue* indexHash( WRContext* context, const uint32_t hash, const bool create );
-	
+	WRValue* indexHash( WRContext* context, const uint32_t hash, const bool create ) const;
+
+	// if this value is a struct return the element, otherwise null
+	WRValue* indexStruct( const char* label ) const;
+
 	// string: must point to a buffer long enough to contain at least maxLen bytes.
 	// the "string" pointer will be passed back, if maxLen is 0 (not
 	// reccomended) the string is assumed to be unlimited size

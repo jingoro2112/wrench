@@ -437,6 +437,7 @@ private:
 #endif
 
 void wr_growValueArray( WRGCObject* va, int newSize );
+WRValue* wr_valueFromConfirmedStruct( WRValue* value, uint32_t hash );
 
 #define IS_SVA_VALUE_TYPE(V) ((V)->m_type & 0x1)
 
@@ -471,6 +472,7 @@ void wr_growValueArray( WRGCObject* va, int newSize );
 #define IS_RAW_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_RAW_ARRAY)
 #define IS_HASH_TABLE(X) ((X)==WR_EX_HASH_TABLE)
 #define EXPECTS_HASH_INDEX(X) ( ((X)==WR_EX_STRUCT) || ((X)==WR_EX_HASH_TABLE) )
+#define IS_STRUCT(X) ((X) == WR_EX_STRUCT)
 
 int wr_addI( int a, int b );
 
@@ -8461,8 +8463,65 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 
 		--o;
 		unsigned int a = bytecode.all.size() - 1;
-		if ( opcode == O_Return
-			 && bytecode.opcodes[o] == O_LiteralZero )
+
+		if ( opcode == O_Negate )
+		{
+			if ( bytecode.opcodes[o] == O_LiteralInt8 )
+			{
+				bytecode.all[ a ] = -bytecode.all[ a ];
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LiteralInt16 && (a > 1) )
+			{
+				int16_t be = ((int16_t)bytecode.all[ a - 1 ])
+							 | ((int16_t)bytecode.all[ a ] << 8);
+				be = -be;
+
+				bytecode.all[ a - 1 ] = (uint8_t)(be & 0xFF);
+				bytecode.all[ a ] = (uint8_t)(be >> 8);
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LiteralInt32 )
+			{
+				int32_t be = ((int32_t)bytecode.all[ a - 3 ])
+							 | ((int32_t)bytecode.all[ a - 2 ] << 8)
+							 | ((int32_t)bytecode.all[ a - 1 ] << 16)
+							 | ((int32_t)bytecode.all[ a ] << 24);
+				be = -be;
+
+				bytecode.all[ a - 3 ] = (uint8_t)(be & 0xFF);
+				bytecode.all[ a - 2 ] = (uint8_t)(be >> 8);
+				bytecode.all[ a - 1 ] = (uint8_t)(be >> 16);
+				bytecode.all[ a ] = (uint8_t)(be >> 24);
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LiteralFloat )
+			{
+				struct BE
+				{
+					union
+					{
+						int32_t i;
+						float f;
+					};
+				};
+
+				BE be;
+				be.i = (((int32_t)bytecode.all[ a - 3 ])
+						   | ((int32_t)bytecode.all[ a - 2 ] << 8)
+						   | ((int32_t)bytecode.all[ a - 1 ] << 16)
+						   | ((int32_t)bytecode.all[ a ] << 24));
+				be.f = -be.f;
+
+				bytecode.all[ a - 3 ] = (uint8_t)(be.i & 0xFF);
+				bytecode.all[ a - 2 ] = (uint8_t)(be.i >> 8);
+				bytecode.all[ a - 1 ] = (uint8_t)(be.i >> 16);
+				bytecode.all[ a ] = (uint8_t)(be.i >> 24);
+				return;
+			}
+		}
+		else if ( opcode == O_Return
+				  && bytecode.opcodes[o] == O_LiteralZero )
 		{
 			bytecode.all[a] = O_ReturnZero;
 			bytecode.opcodes[o] = O_ReturnZero;
@@ -14604,8 +14663,14 @@ bool WRValue::isHashTable( int* len ) const
 	return false;
 }
 
+bool WRValue::isStruct() const
+{
+	return IS_STRUCT( deref().xtype );
+}
+
+
 //------------------------------------------------------------------------------
-WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bool create )
+WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bool create ) const
 {
 	WRValue& V = deref();
 	
@@ -14644,10 +14709,17 @@ WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bo
 }
 
 //------------------------------------------------------------------------------
-WRValue* WRValue::indexHash( WRContext* context, const uint32_t hash, const bool create )
+WRValue* WRValue::indexStruct( const char* label ) const
 {
 	WRValue& V = deref();
-	
+
+	return IS_STRUCT(V.xtype) ?	wr_valueFromConfirmedStruct( &V, wr_hashStr(label) ) : 0;
+}
+
+//------------------------------------------------------------------------------
+WRValue* WRValue::indexHash( WRContext* context, const uint32_t hash, const bool create ) const
+{
+	WRValue& V = deref();
 	if ( !IS_HASH_TABLE(V.xtype) )
 	{
 		if ( !create )
@@ -19156,6 +19228,14 @@ void arrayElementToTarget( const uint32_t index, WRValue* target, WRValue* value
 }
 
 //------------------------------------------------------------------------------
+WRValue* wr_valueFromConfirmedStruct( WRValue* value, uint32_t hash )
+{
+	const unsigned char* table = value->va->m_ROMHashTable + ((hash % value->va->m_mod) * 5);
+
+	return ((uint32_t)READ_32_FROM_PC(table) == hash) ? ((WRValue*)(value->va->m_data) + READ_8_FROM_PC(table + 4)) : 0;
+}
+
+//------------------------------------------------------------------------------
 void wr_doIndexHash( WRValue* index, WRValue* value, WRValue* target )
 {
 	uint32_t hash = index->getHash();
@@ -19173,19 +19253,13 @@ void wr_doIndexHash( WRValue* index, WRValue* value, WRValue* target )
 	}
 	else // naming an element of a struct "S.element"
 	{
-		const unsigned char* table = value->va->m_ROMHashTable + ((hash % value->va->m_mod) * 5);
-
-		if ( (uint32_t)READ_32_FROM_PC(table) == hash )
+		if ( (target->r = wr_valueFromConfirmedStruct( value, hash )) )
 		{
-			int o = READ_8_FROM_PC(table + 4);
-
 			target->p2 = INIT_AS_REF;
-			target->r = ((WRValue*)(value->va->m_data)) + o;
-
 		}
 		else
 		{
-			target->init();
+			target->p2 = INIT_AS_INT;
 		}
 	}
 }

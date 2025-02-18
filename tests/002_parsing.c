@@ -1,5 +1,8 @@
 /*~
-);}0
+)
+;
+}
+0
 1
 10
 100
@@ -10,31 +13,11 @@ hello
 hello
 ~*/
 
+println(")");
+println(";");
+println("}");
 
-
-print(")");
-print(";");
-print("}");
-
-a = {};
-
-a = 0xFFFFFFFF;
-b = 4294967295;
-if ( a != b ) println("r1");
-a++;
-b++;
-if ( a != b ) println("r2");
-a = -2147483648;
-b = 0x80000000;
-if ( a != b ) println("r3");
-a++;
-b++;
-if ( a != b ) println("r4");
-
-if ( 0b010 != 2 ) println( "err bin" );
-if ( 0b != 0 ) println( "err bin2" );
-
-if ( 10f != 10.f ) { println("f1"); }
+var a = {};
 
 // test floating/integer point string converter
 println( 0.0 );

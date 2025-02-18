@@ -676,6 +676,14 @@ void checkIter( WRContext* c, const WRValue* argv, const int argn, WRValue& retV
 	}
 }
 
+//------------------------------------------------------------------------------
+void checkStruct( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	WRValue* V = argv->indexStruct("Id");
+	assert( V );
+	assert( V->i == 20 );
+}
+
 #endif
 
 //------------------------------------------------------------------------------
@@ -773,6 +781,7 @@ int runTests( int number )
 				wr_registerFunction( w, "checkIsString", checkIsString );
 				wr_registerFunction( w, "checkIsHashTable", checkIsHashTable );
 				wr_registerFunction( w, "checkIter", checkIter );
+				wr_registerFunction( w, "checkStruct", checkStruct );
 
 				WRContext* context = 0;
 				wr_destroyContext( context ); // make sure this doesn't crash

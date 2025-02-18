@@ -56,6 +56,14 @@ void arrayElementToTarget( const uint32_t index, WRValue* target, WRValue* value
 }
 
 //------------------------------------------------------------------------------
+WRValue* wr_valueFromConfirmedStruct( WRValue* value, uint32_t hash )
+{
+	const unsigned char* table = value->va->m_ROMHashTable + ((hash % value->va->m_mod) * 5);
+
+	return ((uint32_t)READ_32_FROM_PC(table) == hash) ? ((WRValue*)(value->va->m_data) + READ_8_FROM_PC(table + 4)) : 0;
+}
+
+//------------------------------------------------------------------------------
 void wr_doIndexHash( WRValue* index, WRValue* value, WRValue* target )
 {
 	uint32_t hash = index->getHash();
@@ -73,19 +81,13 @@ void wr_doIndexHash( WRValue* index, WRValue* value, WRValue* target )
 	}
 	else // naming an element of a struct "S.element"
 	{
-		const unsigned char* table = value->va->m_ROMHashTable + ((hash % value->va->m_mod) * 5);
-
-		if ( (uint32_t)READ_32_FROM_PC(table) == hash )
+		if ( (target->r = wr_valueFromConfirmedStruct( value, hash )) )
 		{
-			int o = READ_8_FROM_PC(table + 4);
-
 			target->p2 = INIT_AS_REF;
-			target->r = ((WRValue*)(value->va->m_data)) + o;
-
 		}
 		else
 		{
-			target->init();
+			target->p2 = INIT_AS_INT;
 		}
 	}
 }

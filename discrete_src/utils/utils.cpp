@@ -618,8 +618,14 @@ bool WRValue::isHashTable( int* len ) const
 	return false;
 }
 
+bool WRValue::isStruct() const
+{
+	return IS_STRUCT( deref().xtype );
+}
+
+
 //------------------------------------------------------------------------------
-WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bool create )
+WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bool create ) const
 {
 	WRValue& V = deref();
 	
@@ -658,10 +664,17 @@ WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bo
 }
 
 //------------------------------------------------------------------------------
-WRValue* WRValue::indexHash( WRContext* context, const uint32_t hash, const bool create )
+WRValue* WRValue::indexStruct( const char* label ) const
 {
 	WRValue& V = deref();
-	
+
+	return IS_STRUCT(V.xtype) ?	wr_valueFromConfirmedStruct( &V, wr_hashStr(label) ) : 0;
+}
+
+//------------------------------------------------------------------------------
+WRValue* WRValue::indexHash( WRContext* context, const uint32_t hash, const bool create ) const
+{
+	WRValue& V = deref();
 	if ( !IS_HASH_TABLE(V.xtype) )
 	{
 		if ( !create )

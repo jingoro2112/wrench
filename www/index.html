@@ -393,6 +393,8 @@ bool isString( int* len =0 ) const;
 bool isWrenchArray( int* len =0 ) const;
 bool isRawArray( int* len =0 ) const;
 bool isHashTable( int* members=0 ) const;
+bool isStruct() const;
+
 
 // if this value is an array, return [or create] the 'index'-th element
 // if create is true and this value is NOT an array, it will be converted into one
@@ -401,6 +403,10 @@ WRValue* indexArray( WRContext* context, const uint32_t index, const bool create
 // if this value is a hash table, return [or create] the 'index' hash item
 // if create is true and this value is NOT a hash, it will be converted into one
 WRValue* indexHash( WRContext* context, const uint32_t hash, const bool create );
+
+// if this value is a struct, return the element, or null if the
+// element is not found
+WRValue* indexStruct( const char* name );
 	
 // string: must point to a buffer long enough to contain at least len bytes.
 // the pointer will be passed back

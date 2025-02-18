@@ -436,6 +436,7 @@ private:
 #endif
 
 void wr_growValueArray( WRGCObject* va, int newSize );
+WRValue* wr_valueFromConfirmedStruct( WRValue* value, uint32_t hash );
 
 #define IS_SVA_VALUE_TYPE(V) ((V)->m_type & 0x1)
 
@@ -470,6 +471,7 @@ void wr_growValueArray( WRGCObject* va, int newSize );
 #define IS_RAW_ARRAY(X) (((X)&EX_TYPE_MASK)==WR_EX_RAW_ARRAY)
 #define IS_HASH_TABLE(X) ((X)==WR_EX_HASH_TABLE)
 #define EXPECTS_HASH_INDEX(X) ( ((X)==WR_EX_STRUCT) || ((X)==WR_EX_HASH_TABLE) )
+#define IS_STRUCT(X) ((X) == WR_EX_STRUCT)
 
 int wr_addI( int a, int b );
 

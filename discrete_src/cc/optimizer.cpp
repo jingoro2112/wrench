@@ -264,8 +264,65 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 
 		--o;
 		unsigned int a = bytecode.all.size() - 1;
-		if ( opcode == O_Return
-			 && bytecode.opcodes[o] == O_LiteralZero )
+
+		if ( opcode == O_Negate )
+		{
+			if ( bytecode.opcodes[o] == O_LiteralInt8 )
+			{
+				bytecode.all[ a ] = -bytecode.all[ a ];
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LiteralInt16 && (a > 1) )
+			{
+				int16_t be = ((int16_t)bytecode.all[ a - 1 ])
+							 | ((int16_t)bytecode.all[ a ] << 8);
+				be = -be;
+
+				bytecode.all[ a - 1 ] = (uint8_t)(be & 0xFF);
+				bytecode.all[ a ] = (uint8_t)(be >> 8);
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LiteralInt32 )
+			{
+				int32_t be = ((int32_t)bytecode.all[ a - 3 ])
+							 | ((int32_t)bytecode.all[ a - 2 ] << 8)
+							 | ((int32_t)bytecode.all[ a - 1 ] << 16)
+							 | ((int32_t)bytecode.all[ a ] << 24);
+				be = -be;
+
+				bytecode.all[ a - 3 ] = (uint8_t)(be & 0xFF);
+				bytecode.all[ a - 2 ] = (uint8_t)(be >> 8);
+				bytecode.all[ a - 1 ] = (uint8_t)(be >> 16);
+				bytecode.all[ a ] = (uint8_t)(be >> 24);
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LiteralFloat )
+			{
+				struct BE
+				{
+					union
+					{
+						int32_t i;
+						float f;
+					};
+				};
+
+				BE be;
+				be.i = (((int32_t)bytecode.all[ a - 3 ])
+						   | ((int32_t)bytecode.all[ a - 2 ] << 8)
+						   | ((int32_t)bytecode.all[ a - 1 ] << 16)
+						   | ((int32_t)bytecode.all[ a ] << 24));
+				be.f = -be.f;
+
+				bytecode.all[ a - 3 ] = (uint8_t)(be.i & 0xFF);
+				bytecode.all[ a - 2 ] = (uint8_t)(be.i >> 8);
+				bytecode.all[ a - 1 ] = (uint8_t)(be.i >> 16);
+				bytecode.all[ a ] = (uint8_t)(be.i >> 24);
+				return;
+			}
+		}
+		else if ( opcode == O_Return
+				  && bytecode.opcodes[o] == O_LiteralZero )
 		{
 			bytecode.all[a] = O_ReturnZero;
 			bytecode.opcodes[o] = O_ReturnZero;

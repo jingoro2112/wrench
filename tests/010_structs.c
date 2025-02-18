@@ -2,6 +2,20 @@
 
 // these should both be legal, null list length but legal
 
+struct Frame
+{
+	var Channel;
+	var Id;
+	var Length;
+}
+var frame = new Frame ();
+
+frame.Channel = 10;
+frame.Id = 20;
+frame.Length = 30;
+
+checkStruct( frame );
+
 z = 1;
 
 struct EMPTY

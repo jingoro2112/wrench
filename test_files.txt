@@ -22,3 +22,4 @@ tests/020_yield.c
 tests/021_hashes.c
 tests/022_strings.c
 tests/023_container.c
+tests/024_numbers.c

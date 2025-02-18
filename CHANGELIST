@@ -1,6 +1,13 @@
+6.0.17 ---------------------------------------------------------------------------------
+- optimized constant-load negating
+- added indexStruct() to get the values from a struct passed back to c++
+- added isStruct() to support checking if indexStruct() will work
+- added some more consts in methods
+
 6.0.16 ---------------------------------------------------------------------------------
 - fixed comparing +0.0 with -0.0 in ieee float land
 - fixed '-' sign parsing
+- fixed possible failure-to-init inside array class
 
 6.0.15 ---------------------------------------------------------------------------------
 - fleshed out test code for container lib

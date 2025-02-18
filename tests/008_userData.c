@@ -1,34 +1,5 @@
 /*~ ~*/
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-function stringCheck( string )
-{
-	if ( string != "test string" ) println("bs1");
-//	c = string;
-//	if ( c != "test string" ) println ("bs2" );
-}
-
-
-
-
-
-/*
 var res[] = { "a", 2, 0.3 };
 checkIsWrenchArray( res, 3 );
 checkIter( res, "a", 2, 0.3 );
@@ -134,5 +105,3 @@ function arrayCheck()
 
 	return  res;
 }
-
-*/
