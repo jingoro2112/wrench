@@ -25,24 +25,8 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-void WRContext::mark( WRValue* s )
+void WRContext::markBase( WRGCBase* svb )
 {
-	if ( IS_CONTAINER_MEMBER(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
-	{
-		// we don't mark this type, but we might mark it's target
-		mark( s->r );
-		return;
-	}
-
-	if ( !IS_EXARRAY_TYPE(s->xtype) || (s->va->m_flags & GCFlag_Marked) )
-	{
-		return;
-	}
-
-	assert( !IS_RAW_ARRAY(s->xtype) );
-
-	WRGCBase* svb = s->vb;
-
 	if ( svb->m_type == SV_VALUE )
 	{
 		WRValue* top = ((WRGCObject*)svb)->m_Vdata + ((WRGCObject*)svb)->m_size;
@@ -78,6 +62,26 @@ void WRContext::mark( WRValue* s )
 }
 
 //------------------------------------------------------------------------------
+void WRContext::mark( WRValue* s )
+{
+	if ( IS_CONTAINER_MEMBER(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
+	{
+		// we don't mark this type, but we might mark it's target
+		mark( s->r );
+		return;
+	}
+
+	if ( !IS_EXARRAY_TYPE(s->xtype) || (s->va->m_flags & GCFlag_Marked) )
+	{
+		return;
+	}
+
+	assert( !IS_RAW_ARRAY(s->xtype) );
+
+	markBase( s->vb );
+}
+
+//------------------------------------------------------------------------------
 void WRContext::gc( WRValue* stackTop )
 {
 	if ( allocatedMemoryHint < w->allocatedMemoryLimit )
@@ -86,11 +90,22 @@ void WRContext::gc( WRValue* stackTop )
 	}
 
 	allocatedMemoryHint = 0;
+
+	// mark permenants
+	if ( stackTop ) // zero stacktop means collect EVERYTHING
+	{
+		for( WRGCBase* a=svAllocated; a; a = a->m_nextGC )
+		{
+			if ( (a->m_flags & GCFlag_Perm) && !(a->m_flags & GCFlag_Marked) )
+			{
+				markBase( a );
+			}
+		}
+	}
 	
 	// mark stack
 	for( WRValue* s=stack; s<stackTop; ++s)
 	{
-		// an array in the chain?
 		mark( s );
 	}
 

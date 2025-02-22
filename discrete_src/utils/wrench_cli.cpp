@@ -392,23 +392,8 @@ int main( int argn, char* argv[] )
 		wr_registerFunction( gw, "print", print );
 
 		wr_registerLibraryConstant( gw, "rgb::count", 6 );
-
-
-
+		
 		wr_run( gw, out, outLen );
-/*
-		WRContext* c = wr_run( gw, out, outLen );
-		WRFunction* function = wr_getFunction( c, "tick" );
-		for(;;)
-		{
-			WRValue v;
-			v.setInt( 10 );
-			wr_callFunction( c, function, &v, 1 );
-			Sleep(10);
-			//usleep(10000);
-		}
-*/
-
 
 		wr_free( out );
 
@@ -682,9 +667,56 @@ void checkStruct( WRContext* c, const WRValue* argv, const int argn, WRValue& re
 	WRValue* V = argv->indexStruct("Id");
 	assert( V );
 	assert( V->i == 20 );
+	V->i = 20;
 }
 
+//------------------------------------------------------------------------------
+void testStructs()
+{
+	const char* structProg =
+	   "struct Frame( B )\n"
+		"{\n"
+		"	var Id = 35;\n"
+		"	var fr = B;\n"
+		"	var dd = Id + 10;\n"
+		"}\n"
+		""					
+		"function isit( st )\n"
+		"{\n"
+		"	var local = st;\n"
+		"	local.Id = 36;\n"
+		"	return local.Id;\n"
+		"}\n";
+
+	WRState* w = wr_newState(20);
+
+	unsigned char* outBytes;
+	int outLen;
+	wr_compile( structProg, strlen(structProg), &outBytes, &outLen );
+
+	WRContext* c = wr_run( w, outBytes, outLen );
+
+	WRValue s;
+	WRValue* V = wr_instanceStruct( &s, c, "Frame" );
+
+	if ( V ) // fixes "not using variable" warning
+	{
+		assert( V->indexStruct("Id")->ui == 35 );
+		assert( V->indexStruct("fr")->ui == 0 );
+		assert( V->indexStruct("dd")->ui == 45 );
+		assert( !V->indexStruct("nuthin") );
+		assert( wr_callFunction( c, "isit", V, 1 )->ui == 36 );
+	}
+	else
+	{
+		assert(0);
+	}
+
+	wr_destroyState( w );
+	wr_free( outBytes );
+}
 #endif
+
 
 //------------------------------------------------------------------------------
 int runTests( int number )
@@ -889,6 +921,7 @@ int runTests( int number )
 	testScheduler();
 	testStackOverflow();
 	testYield2();
+	testStructs();
 	setup();
 
 	testGlobalValues( w );
@@ -1330,8 +1363,6 @@ void testImport()
 
 		wr_continue( context );
 	}
-
-	assert( w->err == WR_ERR_struct_not_exported );
 
 	assert( g_importBuf ==
 			"175\n"

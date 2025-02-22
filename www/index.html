@@ -550,6 +550,16 @@ if ( wr_getValueFromContainer(container, "_i")->asInt() == 1001 )
 
 
 
+<p>Given a value and a context which contains the named object, create an
+instance of that struct. The memory for this is managed by the
+context and will never be collected, until the context is destroyed.
+<p><b>NOTE: <code>structs</code> are automatically exported, but a
+function is NOT.</b>
+<code><pre>WRValue* wr_instanceStruct( WRValue* val, WRContext* context, const char* name, const WRValue* argv =0, const int argn =0 );
+</code></pre>
+
+
+
 
 
 <hr><h1><a name="language"></a>Language Reference</h1></hr>
@@ -844,13 +854,20 @@ var argNew = new arg( 10, 20 ); // first will be 10, second will be 20
 
 
 <p><b>export</b>
-<p>Structs can be exported so other scripts can import them, for example
+<p>Objects can be exported so other scripts can import them, for example
 <P>script 1:
-<code><pre>export struct Color
+<code><pre>export function Color
 {
     var red;
     var green;
     var blue;
+}
+
+// structs are implicitly exported:
+struct Automatic // equivilant to "export struct Automatic"
+{
+    var a;
+    var b;
 }
 </code></pre>
 <P>script 2:

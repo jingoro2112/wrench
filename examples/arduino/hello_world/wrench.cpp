@@ -1110,6 +1110,7 @@ enum WRGCFlags
 {
 	GCFlag_NoContext = 1<<0,
 	GCFlag_Marked = 1<<1,
+	GCFlag_Perm = 1<<2,
 };
 
 //------------------------------------------------------------------------------
@@ -1276,6 +1277,7 @@ struct WRContext
 
 	WRContext* nextStateContextLink;
 
+	void markBase( WRGCBase* svb );
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
 	
@@ -1395,6 +1397,8 @@ extern WRReturnFunc wr_CompareEQ[16];
 
 uint32_t wr_hash_read8( const void* dat, const int len );
 uint32_t wr_hashStr_read8( const char* dat );
+
+WRValue* wr_newObjectTable( WRContext* context, WRValue* stackTop, const uint8_t* pc, const unsigned char* tableIn );
 
 bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target );
 void wr_valueToEx( const WRValue* ex, WRValue* value );
@@ -6974,6 +6978,8 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, WROpcode opc
 		}
 		else if ( !m_quoted && token == "struct" )
 		{
+			m_exportNextUnit = true; // always export structs
+			
 			if ( unitIndex != 0 )
 			{
 				m_err = WR_ERR_statement_expected;
@@ -7271,7 +7277,6 @@ SOFTWARE.
 #define WR_DUMP_LINK_OUTPUT(D) //D
 #define WR_DUMP_UNIT_OUTPUT(D) //D
 #define WR_DUMP_BYTECODE(D) //D
-//WRstr str;
 
 //------------------------------------------------------------------------------
 void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned char** buf, int* size )
@@ -10738,24 +10743,8 @@ SOFTWARE.
 #include "wrench.h"
 
 //------------------------------------------------------------------------------
-void WRContext::mark( WRValue* s )
+void WRContext::markBase( WRGCBase* svb )
 {
-	if ( IS_CONTAINER_MEMBER(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
-	{
-		// we don't mark this type, but we might mark it's target
-		mark( s->r );
-		return;
-	}
-
-	if ( !IS_EXARRAY_TYPE(s->xtype) || (s->va->m_flags & GCFlag_Marked) )
-	{
-		return;
-	}
-
-	assert( !IS_RAW_ARRAY(s->xtype) );
-
-	WRGCBase* svb = s->vb;
-
 	if ( svb->m_type == SV_VALUE )
 	{
 		WRValue* top = ((WRGCObject*)svb)->m_Vdata + ((WRGCObject*)svb)->m_size;
@@ -10791,6 +10780,26 @@ void WRContext::mark( WRValue* s )
 }
 
 //------------------------------------------------------------------------------
+void WRContext::mark( WRValue* s )
+{
+	if ( IS_CONTAINER_MEMBER(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
+	{
+		// we don't mark this type, but we might mark it's target
+		mark( s->r );
+		return;
+	}
+
+	if ( !IS_EXARRAY_TYPE(s->xtype) || (s->va->m_flags & GCFlag_Marked) )
+	{
+		return;
+	}
+
+	assert( !IS_RAW_ARRAY(s->xtype) );
+
+	markBase( s->vb );
+}
+
+//------------------------------------------------------------------------------
 void WRContext::gc( WRValue* stackTop )
 {
 	if ( allocatedMemoryHint < w->allocatedMemoryLimit )
@@ -10799,11 +10808,22 @@ void WRContext::gc( WRValue* stackTop )
 	}
 
 	allocatedMemoryHint = 0;
+
+	// mark permenants
+	if ( stackTop ) // zero stacktop means collect EVERYTHING
+	{
+		for( WRGCBase* a=svAllocated; a; a = a->m_nextGC )
+		{
+			if ( (a->m_flags & GCFlag_Perm) && !(a->m_flags & GCFlag_Marked) )
+			{
+				markBase( a );
+			}
+		}
+	}
 	
 	// mark stack
 	for( WRValue* s=stack; s<stackTop; ++s)
 	{
-		// an array in the chain?
 		mark( s );
 	}
 
@@ -10967,6 +10987,72 @@ inline bool wr_getNextValue( WRValue* iterator, WRValue* value, WRValue* key )
 	}
 
 	return true;
+}
+
+//------------------------------------------------------------------------------
+WRValue* wr_newObjectTable( WRContext* context, WRValue* stackTop, const uint8_t* pc, const unsigned char* tableIn )
+{
+	const unsigned char* table;
+	if ( tableIn )
+	{
+		table = tableIn;
+	}
+	else
+	{
+		uint32_t offset = READ_16_FROM_PC(pc);
+		table = context->bottom + offset;
+	}
+
+	if ( tableIn || (table > context->bottom) )
+	{
+		// if unit was called with no arguments from global
+		// level there are no "free" stack entries to
+		// gnab, so create it here, but preserve the
+		// first value
+
+		// NOTE: we are guaranteed to have at least one
+		// value if table > bottom
+		unsigned char count = READ_8_FROM_PC(table++);
+
+		WRValue* register1 = (stackTop + READ_8_FROM_PC(table))->r;
+		WRValue* register2 = (stackTop + READ_8_FROM_PC(table))->r2;
+
+		stackTop->p2 = INIT_AS_STRUCT;
+
+		// table : members in local space
+		// table + 1 : arguments + 1 (+1 to save the calculation below)
+		// table +2/3 : m_mod
+		// table + 4: [static hash table ]
+
+		stackTop->va = context->getSVA( count, SV_VALUE, false );
+
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !stackTop->va )
+		{
+			return 0;
+		}
+#endif
+		stackTop->va->m_ROMHashTable = table + 3;
+
+		stackTop->va->m_mod = READ_16_FROM_PC(table+1);
+
+		WRValue* register0 = stackTop->va->m_Vdata;
+		register0->r = register1;
+		(register0++)->r2 = register2;
+
+		if ( --count > 0 )
+		{
+			memcpy( (char*)register0, stackTop + READ_8_FROM_PC(table) + 1, count*sizeof(WRValue) );
+		}
+
+		context->gc( stackTop + 1 ); // take care of any memory the 'new' allocated
+	}
+	else
+	{
+		stackTop->init();
+	}
+
+	return stackTop;
 }
 
 
@@ -11556,7 +11642,6 @@ yieldContinue:
 
 			CASE(LiteralZero):
 			{
-literalZero:
 				stackTop->p = 0;
 				(stackTop++)->p2 = INIT_AS_INT;
 				CHECK_STACK;
@@ -11708,7 +11793,9 @@ debugReturn:
 									}
 									
 									pc += 3;
-									goto NewObjectTablePastLoad;
+
+									wr_newObjectTable( context, stackTop++, 0, table );
+									goto newObjOut;
 								}
 								
 								goto CallFunctionByHash_continue;
@@ -11739,7 +11826,9 @@ CallFunctionByHash_continue:
 				{
 					++stackTop;
 				}
+				
 				CHECK_STACK;
+newObjOut:
 				CONTINUE;
 			}
 
@@ -11913,60 +12002,9 @@ callFunction:
 
 			CASE(NewObjectTable):
 			{
-				table = context->bottom + READ_16_FROM_PC(pc);
+				wr_newObjectTable( context, stackTop++, pc, 0 );
 				pc += 2;
-
-				if ( table > context->bottom )
-				{
-NewObjectTablePastLoad:
-					// if unit was called with no arguments from global
-					// level there are no "free" stack entries to
-					// gnab, so create it here, but preserve the
-					// first value
-
-					// NOTE: we are guaranteed to have at least one
-					// value if table > bottom
-					unsigned char count = READ_8_FROM_PC(table++);
-
-					register1 = (stackTop + READ_8_FROM_PC(table))->r;
-					register2 = (stackTop + READ_8_FROM_PC(table))->r2;
-
-					stackTop->p2 = INIT_AS_STRUCT;
-
-					// table : members in local space
-					// table + 1 : arguments + 1 (+1 to save the calculation below)
-					// table +2/3 : m_mod
-					// table + 4: [static hash table ]
-
-					stackTop->va = context->getSVA( count, SV_VALUE, false );
-					
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-					if ( !stackTop->va )
-					{
-						CONTINUE;
-					}
-#endif
-					stackTop->va->m_ROMHashTable = table + 3;
-					
-					stackTop->va->m_mod = READ_16_FROM_PC(table+1);
-
-					register0 = stackTop->va->m_Vdata;
-					register0->r = register1;
-					(register0++)->r2 = register2;
-
-					if ( --count > 0 )
-					{
-						memcpy( (char*)register0, stackTop + READ_8_FROM_PC(table) + 1, count*sizeof(WRValue) );
-					}
-
-					context->gc(++stackTop); // take care of any memory the 'new' allocated
-				}
-				else
-				{
-					goto literalZero;
-				}
-
-				FASTCONTINUE;
+				CONTINUE;
 			}
 
 			CASE(AssignToObjectTableByHash):
@@ -11977,7 +12015,7 @@ NewObjectTablePastLoad:
 				register1 = --stackTop;
 				register0 = stackTop - 1;
 
-				const unsigned char* table = register0->va->m_ROMHashTable + ((hash % register0->va->m_mod) * 5);
+				table = register0->va->m_ROMHashTable + ((hash % register0->va->m_mod) * 5);
 				
 				if ( (uint32_t)READ_32_FROM_PC(table) == hash )
 				{
@@ -15141,14 +15179,14 @@ WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, cons
 }
 
 //------------------------------------------------------------------------------
-void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
+WRValue& wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 {
 	val->va = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 	if ( !val->va )
 	{
 		val->init();
-		return;
+		return *val;
 	}
 #endif
 	memset( (unsigned char*)val->va, 0, sizeof(WRGCObject) );
@@ -15157,6 +15195,39 @@ void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 	
 	val->va->m_flags |= GCFlag_NoContext;
 	val->p2 = INIT_AS_HASH_TABLE;
+	return *val;
+}
+
+//------------------------------------------------------------------------------
+WRValue* wr_instanceStruct( WRValue* val, WRContext* context, const char* name, const WRValue* argv, const int argn )
+{
+	uint32_t signature = wr_hashStr( name );
+
+	for( int i=0; i<context->numLocalFunctions; ++i )
+	{
+		if ( context->localFunctions[i].hash == signature  )
+		{
+			if ( context->localFunctions[i].namespaceOffset )
+			{
+				wr_callFunction( context, signature, argv, argn );
+			
+				WRValue* ret = wr_newObjectTable( context,
+												context->stack + (context->stackOffset + 1),
+												0,
+												context->bottom + context->localFunctions[i].namespaceOffset );
+				if (ret)
+				{
+					ret->vb->m_flags |= GCFlag_Perm;
+					*val = *ret;
+					return val;
+				}
+			}
+
+			break;
+		}
+	}
+
+	return 0;
 }
 
 //------------------------------------------------------------------------------

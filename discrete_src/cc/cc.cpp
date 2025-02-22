@@ -3028,6 +3028,8 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, WROpcode opc
 		}
 		else if ( !m_quoted && token == "struct" )
 		{
+			m_exportNextUnit = true; // always export structs
+			
 			if ( unitIndex != 0 )
 			{
 				m_err = WR_ERR_statement_expected;

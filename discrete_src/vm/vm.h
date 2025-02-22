@@ -88,6 +88,7 @@ struct WRContext
 
 	WRContext* nextStateContextLink;
 
+	void markBase( WRGCBase* svb );
 	void mark( WRValue* s );
 	void gc( WRValue* stackTop );
 	
@@ -207,6 +208,8 @@ extern WRReturnFunc wr_CompareEQ[16];
 
 uint32_t wr_hash_read8( const void* dat, const int len );
 uint32_t wr_hashStr_read8( const char* dat );
+
+WRValue* wr_newObjectTable( WRContext* context, WRValue* stackTop, const uint8_t* pc, const unsigned char* tableIn );
 
 bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target );
 void wr_valueToEx( const WRValue* ex, WRValue* value );

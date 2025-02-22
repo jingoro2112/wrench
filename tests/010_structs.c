@@ -2,6 +2,12 @@
 
 // these should both be legal, null list length but legal
 
+struct args( a, b )
+{
+	var c = b;
+	var d = a;
+}
+
 struct Frame
 {
 	var Channel;

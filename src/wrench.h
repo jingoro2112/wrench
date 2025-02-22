@@ -32,7 +32,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 17
+#define WRENCH_VERSION_BUILD 18
 
 struct WRState;
 
@@ -542,8 +542,14 @@ WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, cons
 
 // turning a value into a container,
 // NOTE!! Allocates a hash table which must be released with destroy!!
-void wr_makeContainer( WRValue* val, const uint16_t sizeHint =0 );
+WRValue& wr_makeContainer( WRValue* val, const uint16_t sizeHint =0 );
 void wr_destroyContainer( WRValue* val );
+
+// create an instance of the named struct (as if it were new'ed inside
+// wrench) if the name is not a valid struct in the given context the
+// return value is null.
+// This value is automatically cleaned up when the context is destroyed
+WRValue* wr_instanceStruct( WRValue* val, WRContext* context, const char* name, const WRValue* argv =0, const int argn =0 );
 
 // NOTE: value memory is managed by called and must remain valid for
 // duration of the container!!

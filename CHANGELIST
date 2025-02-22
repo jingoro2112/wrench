@@ -1,3 +1,9 @@
+6.0.18 ---------------------------------------------------------------------------------
+- added WRValue* wr_instanceStruct( WRValue* val, WRContext* context, const char* name, const WRValue* argv =0, const int argn =0 );
+  which creates a struct (which must be defined in the given context) passing the args to the
+  constructor.
+- autmoatically export all 'struct' declarations
+
 6.0.17 ---------------------------------------------------------------------------------
 - optimized constant-load negating
 - added indexStruct() to get the values from a struct passed back to c++

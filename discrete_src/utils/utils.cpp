@@ -1096,14 +1096,14 @@ WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, cons
 }
 
 //------------------------------------------------------------------------------
-void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
+WRValue& wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 {
 	val->va = (WRGCObject*)g_malloc( sizeof(WRGCObject) );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 	if ( !val->va )
 	{
 		val->init();
-		return;
+		return *val;
 	}
 #endif
 	memset( (unsigned char*)val->va, 0, sizeof(WRGCObject) );
@@ -1112,6 +1112,39 @@ void wr_makeContainer( WRValue* val, const uint16_t sizeHint )
 	
 	val->va->m_flags |= GCFlag_NoContext;
 	val->p2 = INIT_AS_HASH_TABLE;
+	return *val;
+}
+
+//------------------------------------------------------------------------------
+WRValue* wr_instanceStruct( WRValue* val, WRContext* context, const char* name, const WRValue* argv, const int argn )
+{
+	uint32_t signature = wr_hashStr( name );
+
+	for( int i=0; i<context->numLocalFunctions; ++i )
+	{
+		if ( context->localFunctions[i].hash == signature  )
+		{
+			if ( context->localFunctions[i].namespaceOffset )
+			{
+				wr_callFunction( context, signature, argv, argn );
+			
+				WRValue* ret = wr_newObjectTable( context,
+												context->stack + (context->stackOffset + 1),
+												0,
+												context->bottom + context->localFunctions[i].namespaceOffset );
+				if (ret)
+				{
+					ret->vb->m_flags |= GCFlag_Perm;
+					*val = *ret;
+					return val;
+				}
+			}
+
+			break;
+		}
+	}
+
+	return 0;
 }
 
 //------------------------------------------------------------------------------

@@ -29,7 +29,6 @@ SOFTWARE.
 #define WR_DUMP_LINK_OUTPUT(D) //D
 #define WR_DUMP_UNIT_OUTPUT(D) //D
 #define WR_DUMP_BYTECODE(D) //D
-//WRstr str;
 
 //------------------------------------------------------------------------------
 void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned char** buf, int* size )
