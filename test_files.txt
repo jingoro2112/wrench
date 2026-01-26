@@ -23,3 +23,4 @@ tests/021_hashes.c
 tests/022_strings.c
 tests/023_container.c
 tests/024_numbers.c
+tests/025_bug54.c

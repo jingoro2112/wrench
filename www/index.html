@@ -1404,8 +1404,11 @@ math::rad2deg( f );
 <button type="button" class="collapsible">Std Lib</button>
 <div class="collapsecontent">
 <pre>
-std::rand( a [,b] ); // returns a psuedo-random number between a and b OR
-                     // 0 to a if only a is provided
+std::rand( a [,b] ); // returns a psuedo-random integer between a and b INCLUSIVE!
+                     // or 0 to a if b is not provided
+                     // ex: std::rand( 5 ) might return 0, 1, 2, 3, 4 or 5
+                     //     std::rand( 2, 6 ) might return 2, 3, 4, 5 or 6
+                     //     std::rand( 6, 2 ) will always return 6
 std::srand( seed );  // seed the rand()
 std::time();         // return unix time on systems that support it
 </pre></div><p></p>

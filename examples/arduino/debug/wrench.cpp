@@ -1910,7 +1910,7 @@ public:
 	WRstr& set( const char c ) { clear(); m_str[0]=c; m_str[1]=0; m_len = 1; return *this; }
 
 	bool isMatch( const char* buf ) const { return strcmp(buf, m_str) == 0; }
-#ifdef WIN32
+#ifdef _WIN32
 	bool isMatchCase( const char* buf ) const { return _strnicmp(buf, m_str, m_len) == 0; }
 #else
 	bool isMatchCase( const char* buf ) const { return strncasecmp(buf, m_str, m_len) == 0; }
@@ -2076,7 +2076,7 @@ bool WRstr::fileToBuffer( const char* fileName, const bool appendToBuffer )
 		return false;
 	}
 
-#ifdef WIN32
+#ifdef _WIN32
 	struct _stat sbuf;
 	int ret = _stat( fileName, &sbuf );
 #else
@@ -2483,6 +2483,9 @@ WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
 {
 	char buf[ c_formatBaseTrySize + 1 ]; // SOME space, malloc if we need a ton more
 
+	va_list vacopy;
+	va_copy( vacopy, arg ); // must be done BEFORE the vsnprintf() on some systems
+
 	int len = vsnprintf( buf, c_formatBaseTrySize, format, arg );
 
 	if ( len < c_formatBaseTrySize )
@@ -2493,10 +2496,7 @@ WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
 	{
 		char* alloc = (char*)g_malloc( ++len );
 
-		va_list vacopy;
-		va_copy( vacopy, arg );
 		len = vsnprintf(alloc, len, format, arg);
-		va_end( vacopy );
 
 		if ( m_len )
 		{
@@ -2508,6 +2508,8 @@ WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
 			giveOwnership( alloc, len );
 		}
 	}
+
+	va_end( vacopy );
 
 	return *this;
 }
@@ -19398,7 +19400,6 @@ void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 				}
 #endif
 				value->p2 = INIT_AS_ARRAY;
-
 			}
 			else
 			{
@@ -19688,31 +19689,24 @@ int wr_ftoa( float f, char* string, size_t len )
 }
 
 //------------------------------------------------------------------------------
+const int32_t wr_randEx( const int32_t from, const int32_t to )
+{
+	const int32_t k = wr_Seed / 127773;
+	wr_Seed = 16807 * (wr_Seed - k * 127773) - 2836 * k;
+
+	return (from >= to) ? from : ((uint32_t)wr_Seed % ((to - from) + 1)) + from;
+}
+
+//------------------------------------------------------------------------------
 void wr_std_rand( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn > 0 )
 	{
 		WRValue* args = stackTop - argn;
-		
-		int32_t a = args[0].asInt();
-		int32_t b; 
-		if ( argn > 1 )
-		{
-			a = args[0].asInt();
-			b = args[1].asInt() - a;
-		}
-		else
-		{
-			a = 0;
-			b = args[0].asInt();
-		}
 
-		if ( b > 0 )
-		{
-			int32_t k = wr_Seed / 127773;
-			wr_Seed = 16807 * (wr_Seed - k * 127773) - 2836 * k;
-			stackTop->i = a + ((uint32_t)wr_Seed % (uint32_t)b);
-		}
+		stackTop->i = argn > 1 ?
+					  wr_randEx(args[0].asInt(), args[1].asInt())
+							   : wr_randEx( 0, args[0].asInt() );
 	}
 }
 
@@ -19725,7 +19719,7 @@ void wr_std_srand( WRValue* stackTop, const int argn, WRContext* c )
 	}
 }
 
-#if __arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__
+#if __arm__ || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__
 #include <time.h>
 //------------------------------------------------------------------------------
 void wr_std_time( WRValue* stackTop, const int argn, WRContext* c )
@@ -23336,6 +23330,100 @@ void wr_loadArduinoLib( WRState* w )
 	wr_loadArduinoIOLib( w );
 	wr_loadArduinoSTDLib( w );
 	wr_loadArduinoWireLib( w );
+}
+
+#endif
+/*******************************************************************************
+Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#ifdef ARDUINO
+
+#include "wrench.h"
+
+#include <Arduino.h>
+#include <FastLED.h>
+
+static CRGB* wr_leds = 0;
+static int wr_numLeds = 0;
+
+//------------------------------------------------------------------------------
+void wr_fastled_setup2812( WRValue* stackTop, const int argn, WRContext* c )
+{
+	if ( argn > 0 )
+	{
+		if ( wr_leds )
+		{
+			g_free( wr_leds );
+		}
+		
+		wr_numLeds = (stackTop - argn)->asInt();
+
+		FastLED.addLeds<WS2812B, WR_FASTLED_DATA_PIN, GRB>(wr_leds, wr_numLeds);
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_fastled_brightness( WRValue* stackTop, const int argn, WRContext* c )
+{
+	if ( argn > 0 )
+	{
+		FastLED.setBrightness( (stackTop - argn)->asInt() );
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_fastled_set( WRValue* stackTop, const int argn, WRContext* c )
+{
+	if ( argn > 3 )
+	{
+		WRValue* args = stackTop - argn;
+
+		int led = args[0].asInt();
+		if ( led >= 0 && led < wr_numLeds )
+		{
+			wr_leds[led].r = args[1].asInt();
+			wr_leds[led].g = args[2].asInt();
+			wr_leds[led].b = args[3].asInt();
+		}
+
+		FastLED.addLeds<WS2812B, WR_FASTLED_DATA_PIN, GRB>(wr_leds, wr_numLeds);
+	}
+}
+
+//------------------------------------------------------------------------------
+void wr_fastled_show( WRValue* stackTop, const int argn, WRContext* c )
+{
+	FastLED.show();
+}
+
+//------------------------------------------------------------------------------
+void wr_loadFastLEDLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "fastled::setup2812", wr_fastled_setup2812 ); // ( data_pin, num leds )
+	wr_registerLibraryFunction( w, "fastled::brightness", wr_fastled_show ); // ( brightness )
+	wr_registerLibraryFunction( w, "fastled::set", wr_fastled_show ); // ( led, r, g, b )
+	wr_registerLibraryFunction( w, "fastled::show", wr_fastled_show ); // ()
 }
 
 #endif

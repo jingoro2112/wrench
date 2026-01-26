@@ -109,7 +109,7 @@ public:
 	WRstr& set( const char c ) { clear(); m_str[0]=c; m_str[1]=0; m_len = 1; return *this; }
 
 	bool isMatch( const char* buf ) const { return strcmp(buf, m_str) == 0; }
-#ifdef WIN32
+#ifdef _WIN32
 	bool isMatchCase( const char* buf ) const { return _strnicmp(buf, m_str, m_len) == 0; }
 #else
 	bool isMatchCase( const char* buf ) const { return strncasecmp(buf, m_str, m_len) == 0; }
@@ -275,7 +275,7 @@ bool WRstr::fileToBuffer( const char* fileName, const bool appendToBuffer )
 		return false;
 	}
 
-#ifdef WIN32
+#ifdef _WIN32
 	struct _stat sbuf;
 	int ret = _stat( fileName, &sbuf );
 #else
@@ -682,6 +682,9 @@ WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
 {
 	char buf[ c_formatBaseTrySize + 1 ]; // SOME space, malloc if we need a ton more
 
+	va_list vacopy;
+	va_copy( vacopy, arg ); // must be done BEFORE the vsnprintf() on some systems
+
 	int len = vsnprintf( buf, c_formatBaseTrySize, format, arg );
 
 	if ( len < c_formatBaseTrySize )
@@ -692,10 +695,7 @@ WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
 	{
 		char* alloc = (char*)g_malloc( ++len );
 
-		va_list vacopy;
-		va_copy( vacopy, arg );
 		len = vsnprintf(alloc, len, format, arg);
-		va_end( vacopy );
 
 		if ( m_len )
 		{
@@ -707,6 +707,8 @@ WRstr& WRstr::appendFormatVA( const char* format, va_list arg )
 			giveOwnership( alloc, len );
 		}
 	}
+
+	va_end( vacopy );
 
 	return *this;
 }

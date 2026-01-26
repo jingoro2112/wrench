@@ -1,8 +1,19 @@
+6.0.19 ---------------------------------------------------------------------------------
+- added library support for FastLED, very very basic support just as a demonstration
+  #define WR_FASTLED_DATA_PIN 6  // define your data pin here
+  void wr_loadFastLEDLib( WRState* w ); adds:
+  fastled::setup2812()
+  fastled::brightness( 0-255 )
+  fastled::set( led, r, g, b )
+  fastled::show()
+
+- fixed _WIN32 vs WIN32 errors
+
 6.0.18 ---------------------------------------------------------------------------------
 - added WRValue* wr_instanceStruct( WRValue* val, WRContext* context, const char* name, const WRValue* argv =0, const int argn =0 );
   which creates a struct (which must be defined in the given context) passing the args to the
   constructor.
-- autmoatically export all 'struct' declarations
+- autmatically export all 'struct' declarations
 
 6.0.17 ---------------------------------------------------------------------------------
 - optimized constant-load negating

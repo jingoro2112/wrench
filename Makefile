@@ -60,6 +60,7 @@ OBJS = \
 	$(OBJDIR)/std_container.o \
 	$(OBJDIR)/debug_lib.o \
 	$(OBJDIR)/linux_comm.o \
+	$(OBJDIR)/fastled_lib.o \
 
 clean:
 	-@rm -rf $(OBJDIR)
@@ -191,4 +192,7 @@ $(OBJDIR)/std_sys.o: discrete_src/lib/std_sys.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/linux_comm.o: discrete_src/utils/linux_comm.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/fastled_lib.o: discrete_src/lib/fastled_lib.cpp
 	$(CC) $@ $<

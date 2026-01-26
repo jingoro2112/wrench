@@ -174,31 +174,24 @@ int wr_ftoa( float f, char* string, size_t len )
 }
 
 //------------------------------------------------------------------------------
+const int32_t wr_randEx( const int32_t from, const int32_t to )
+{
+	const int32_t k = wr_Seed / 127773;
+	wr_Seed = 16807 * (wr_Seed - k * 127773) - 2836 * k;
+
+	return (from >= to) ? from : ((uint32_t)wr_Seed % ((to - from) + 1)) + from;
+}
+
+//------------------------------------------------------------------------------
 void wr_std_rand( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn > 0 )
 	{
 		WRValue* args = stackTop - argn;
-		
-		int32_t a = args[0].asInt();
-		int32_t b; 
-		if ( argn > 1 )
-		{
-			a = args[0].asInt();
-			b = args[1].asInt() - a;
-		}
-		else
-		{
-			a = 0;
-			b = args[0].asInt();
-		}
 
-		if ( b > 0 )
-		{
-			int32_t k = wr_Seed / 127773;
-			wr_Seed = 16807 * (wr_Seed - k * 127773) - 2836 * k;
-			stackTop->i = a + ((uint32_t)wr_Seed % (uint32_t)b);
-		}
+		stackTop->i = argn > 1 ?
+					  wr_randEx(args[0].asInt(), args[1].asInt())
+							   : wr_randEx( 0, args[0].asInt() );
 	}
 }
 
@@ -211,7 +204,7 @@ void wr_std_srand( WRValue* stackTop, const int argn, WRContext* c )
 	}
 }
 
-#if __arm__ || WIN32 || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__
+#if __arm__ || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__
 #include <time.h>
 //------------------------------------------------------------------------------
 void wr_std_time( WRValue* stackTop, const int argn, WRContext* c )

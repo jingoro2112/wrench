@@ -155,7 +155,6 @@ void doIndex_I_E( WRContext* c, WRValue* index, WRValue* value, WRValue* target 
 				}
 #endif
 				value->p2 = INIT_AS_ARRAY;
-
 			}
 			else
 			{
