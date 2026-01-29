@@ -100,7 +100,9 @@ be more than enough.
 To really reduce RAM footprint this can be lowered considerably
 depending on usage. (consumes 8 bytes per stack entry)
 */
+#ifndef WRENCH_DEFAULT_STACK_SIZE
 #define WRENCH_DEFAULT_STACK_SIZE 64
+#endif
 // this costs a small bit of overhead whenever the stack is used, for
 // most applications it is not necessary, but will protect against
 // things like infinite recursion
