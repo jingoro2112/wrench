@@ -21542,7 +21542,11 @@ void wr_printf( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue* args = stackTop - argn;
 		if ( (chars = wr_doSprintf( *stackTop, args->deref(), args + 1, argn - 1, c )) )
 		{
+#if !defined(WRENCH_WIN32_FILE_IO) && !defined(WRENCH_LINUX_FILE_IO) && !defined(WRENCH_SPIFFS_FILE_IO) && !defined(WRENCH_LITTLEFS_FILE_IO)
+			printf( "%s", (const char*)stackTop->va->m_Cdata );
+#else
 			wr_stdout( (const char*)stackTop->va->m_Cdata, stackTop->va->m_size );
+#endif
 		}
 	}
 
@@ -22360,7 +22364,6 @@ void wr_mboxRead( WRValue* stackTop, const int argn, WRContext* c )
 			*stackTop = *msg;
 			return;
 		}
-
 	}
 }
 

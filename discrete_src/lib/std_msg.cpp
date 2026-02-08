@@ -43,7 +43,6 @@ void wr_mboxRead( WRValue* stackTop, const int argn, WRContext* c )
 			*stackTop = *msg;
 			return;
 		}
-
 	}
 }
 
