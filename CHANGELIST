@@ -1,3 +1,12 @@
+6.0.20 ---------------------------------------------------------------------------------
+- fixed off-by-one in a hash delete
+- added more clarity to creating/installing values
+- clarified and added:
+    void setString( WRContext* context, const char* data, const int len =0 );
+    void setFloat( const float f );
+    void setInt( const int i );
+- fixed possible garbage-collection null check
+
 6.0.19 ---------------------------------------------------------------------------------
 - added library support for FastLED, very very basic support just as a demonstration
   #define WR_FASTLED_DATA_PIN 6  // define your data pin here

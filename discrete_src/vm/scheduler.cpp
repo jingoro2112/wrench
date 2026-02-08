@@ -110,7 +110,7 @@ bool WrenchScheduler::removeTask( const int taskId )
 	{
 		if ( task->id == taskId )
 		{
-			wr_destroyContext( m_tasks->context );
+			wr_destroyContext( task->context );
 
 			if ( last )
 			{

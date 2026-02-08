@@ -81,7 +81,7 @@ void wr_doIndexHash( WRValue* index, WRValue* value, WRValue* target )
 	}
 	else // naming an element of a struct "S.element"
 	{
-		if ( (target->r = wr_valueFromConfirmedStruct( value, hash )) )
+		if ( (target->r = wr_valueFromConfirmedStruct(value, hash)) )
 		{
 			target->p2 = INIT_AS_REF;
 		}

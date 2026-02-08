@@ -101,13 +101,14 @@ void WRContext::gc( WRValue* stackTop )
 				markBase( a );
 			}
 		}
+
+		// mark stack
+		for( WRValue* s=stack; s<stackTop; ++s)
+		{
+			mark( s );
+		}
 	}
 	
-	// mark stack
-	for( WRValue* s=stack; s<stackTop; ++s)
-	{
-		mark( s );
-	}
 
 	// mark context's globals
 	WRValue* globalSpace = (WRValue *)(this + 1); // globals are allocated directly after this context

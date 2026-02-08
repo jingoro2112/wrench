@@ -1174,14 +1174,14 @@ callFunction:
 					va = register0->va;
 					if (va->m_type == SV_VALUE )
 					{
-						for( uint32_t move = hash; move < va->m_size; ++move )
+						for( uint32_t move = hash; (move+1) < va->m_size; ++move )
 						{
 							va->m_Vdata[move] = va->m_Vdata[move+1];
 						}
 					}
 					else if ( register0->va->m_type == SV_CHAR )
 					{
-						for( uint32_t move = hash; move < va->m_size; ++move )
+						for( uint32_t move = hash; (move+1) < va->m_size; ++move )
 						{
 							va->m_Cdata[move] = va->m_Cdata[move+1];
 						}

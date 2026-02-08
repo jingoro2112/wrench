@@ -530,33 +530,6 @@ float WRValue::asFloat() const
 	return singleValue().asFloat();
 }
 
-//------------------------------------------------------------------------------
-void WRValue::setInt( const int val )
-{
-	if ( type == WR_REF )
-	{
-		r->setInt( val );
-	}
-	else
-	{
-		p2 = INIT_AS_INT;
-		i = val;
-	}
-}
-
-//------------------------------------------------------------------------------
-void WRValue::setFloat( const float val )
-{
-	if ( type == WR_REF )
-	{
-		r->setFloat( val );
-	}
-	else
-	{
-		p2 = INIT_AS_FLOAT;
-		f = val;
-	}
-}
 
 //------------------------------------------------------------------------------
 bool WRValue::isString( int* len ) const
@@ -618,11 +591,11 @@ bool WRValue::isHashTable( int* len ) const
 	return false;
 }
 
+//------------------------------------------------------------------------------
 bool WRValue::isStruct() const
 {
 	return IS_STRUCT( deref().xtype );
 }
-
 
 //------------------------------------------------------------------------------
 WRValue* WRValue::indexArray( WRContext* context, const uint32_t index, const bool create ) const
@@ -1060,22 +1033,6 @@ WRValue* wr_getGlobalRef( WRContext* context, const char* label )
 	}
 
 	return 0;
-}
-
-//------------------------------------------------------------------------------
-WRValue& wr_makeInt( WRValue* val, int i )
-{
-	val->p2 = INIT_AS_INT;
-	val->i = i;
-	return *val;
-}
-
-//------------------------------------------------------------------------------
-WRValue& wr_makeFloat( WRValue* val, float f )
-{
-	val->p2 = INIT_AS_FLOAT;
-	val->f = f;
-	return *val;
 }
 
 //------------------------------------------------------------------------------

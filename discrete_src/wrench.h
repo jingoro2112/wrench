@@ -31,7 +31,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 19
+#define WRENCH_VERSION_BUILD 20
 
 struct WRState;
 
@@ -537,11 +537,11 @@ void wr_loadArduinoLCDLib( WRState* w );
 // heap will be harmed
 
 // load a value up and make it ready for calling a function
-WRValue& wr_makeInt( WRValue* val, int i );
-WRValue& wr_makeFloat( WRValue* val, float f );
-
 // a string has to exist in a context so it can be worked with
+// ALSO can use the WRValue methods 'set...' directly
 WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, const int len =0 );
+inline WRValue& wr_makeInt( WRValue* val, int i );
+inline WRValue& wr_makeFloat( WRValue* val, float f );
 
 // turning a value into a container,
 // NOTE!! Allocates a hash table which must be released with destroy!!
@@ -765,20 +765,24 @@ struct WRIteratorEntry
 struct WRValue
 {
 	WRValue( int val ) { init(val); }
-	WRValue( float val ) { init((int)val); }
+	WRValue( float val ) { init(val); }
 
 	WRValue* init() { p = 0; p2 = WR_INT; return this; }
 	WRValue* init( int val ) { i = val; p2 = WR_INT; return this; }
-	//WRValue* init( float val ) { f = val; p2 = WR_FLOAT; return this; }
+	WRValue* init( float val ) { f = val; p2 = WR_FLOAT; return this; }
 
 	// never reference the data members directly, they are unions and
 	// bad things will happen. Always access them with one of these
 	// methods
 	int asInt() const;
-	void setInt( const int val );
-	
 	float asFloat() const;
-	void setFloat( const float val );
+
+	// setting this value, do any extra work required. Note that
+	// setString() requires a context, since the string is actually a
+	// created array that needs to be referenced
+	void setString( WRContext* context, const char* data, const int len =0 ) { wr_makeString(context, this, data, len); }
+	void setFloat( const float f ) { wr_makeFloat(this, f); }
+	void setInt( const int i ) { wr_makeInt(this, i); }
 
 	bool isFloat() const {return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
 	bool isInt() const { return type == WR_INT || (type == WR_REF && r->type == WR_INT); }
@@ -928,6 +932,10 @@ public:
 	const Iterator begin() const { return Iterator(deref()); }
 	const Iterator end() const { return Iterator(); }
 };
+
+//------------------------------------------------------------------------------
+inline WRValue& wr_makeInt( WRValue* val, int i ) { return *(val->init( i )); }
+inline WRValue& wr_makeFloat( WRValue* val, float f ) { return *(val->init( f )); }
 
 //------------------------------------------------------------------------------
 // Helper class to represent a wrench value, in all cases it does NOT
