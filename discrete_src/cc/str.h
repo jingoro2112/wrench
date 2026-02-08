@@ -30,6 +30,7 @@ SOFTWARE.
 #include <string.h>
 #include <ctype.h>
 
+
 #ifdef STR_FILE_OPERATIONS
 #include <sys/stat.h>
 #endif

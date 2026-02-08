@@ -784,8 +784,8 @@ struct WRValue
 	// setString() requires a context, since the string is actually a
 	// created array that needs to be referenced
 	void setString( WRContext* context, const char* data, const int len =0 ) { wr_makeString(context, this, data, len); }
-	void setFloat( const float f ) { wr_makeFloat(this, f); }
-	void setInt( const int i ) { wr_makeInt(this, i); }
+	void setFloat( const float F ) { wr_makeFloat(this, F); }
+	void setInt( const int I ) { wr_makeInt(this, I); }
 
 	bool isFloat() const {return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
 	bool isInt() const { return type == WR_INT || (type == WR_REF && r->type == WR_INT); }

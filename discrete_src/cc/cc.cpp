@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -762,7 +762,6 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 		else
 		{
 			pushOpcode( bytecode, O_LiteralInt32 );
-			unsigned char data[4];
 			pushData( bytecode, wr_pack32(value.i, data), 4 );
 		}
 	}
@@ -2065,7 +2064,7 @@ A:
 	bool foreachV = false;
 	int foreachLoadI = 0;
 	unsigned char foreachLoad[4];
-	unsigned char g;
+	unsigned char g = 0;
 
 	m_parsingFor = true;
 
@@ -2135,20 +2134,20 @@ A:
 		{
 			if ( foreachPossible )
 			{
-				WRExpression nex( m_units[m_unitTop].bytecode.localSpace, m_units[m_unitTop].bytecode.isStructSpace );
-				nex.context[0].token = token;
-				nex.context[0].value = value;
-				end = parseExpression( nex );
+				WRExpression nex2( m_units[m_unitTop].bytecode.localSpace, m_units[m_unitTop].bytecode.isStructSpace );
+				nex2.context[0].token = token;
+				nex2.context[0].value = value;
+				end = parseExpression( nex2 );
 				if ( end == ')'
-					 && nex.bytecode.opcodes.size() == 1
-					 && nex.bytecode.all.size() == 2 )
+					 && nex2.bytecode.opcodes.size() == 1
+					 && nex2.bytecode.all.size() == 2 )
 				{
 
 					WRstr T;
 					T.format( "foreach:%d", m_foreachHash++ );
 					g = (unsigned char)(addGlobalSpaceLoad(m_units[0].bytecode, T, true, true)); // #25 force "var seen" true since we are runtime adding the temporary ourselves
 
-					if ( nex.bytecode.opcodes[0] == O_LoadFromLocal )
+					if ( nex2.bytecode.opcodes[0] == O_LoadFromLocal )
 					{
 						m_units[m_unitTop].bytecode.all += O_LPushIterator;
 					}
@@ -2157,7 +2156,7 @@ A:
 						m_units[m_unitTop].bytecode.all += O_GPushIterator;
 					}
 
-					m_units[m_unitTop].bytecode.all += nex.bytecode.all[1];
+					m_units[m_unitTop].bytecode.all += nex2.bytecode.all[1];
 					pushData( m_units[m_unitTop].bytecode, &g, 1 );
 
 					if ( foreachLoadI == 4 )
@@ -2797,7 +2796,6 @@ bool WRCompilationContext::parseSwitch( WROpcode opcodeToReturn )
 	else
 	{
 		pushOpcode( m_units[m_unitTop].bytecode, O_Switch ); // add switch command
-		unsigned char packbuf[4];
 
 		int currentPos = m_units[m_unitTop].bytecode.all.size();
 

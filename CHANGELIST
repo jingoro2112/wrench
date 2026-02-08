@@ -7,6 +7,10 @@
     void setInt( const int i );
 - fixed possible garbage-collection null check
 - fixed some cut/paste optimizer bugs, very obscure
+- fixed some 8-bit boundary checking
+- enums overflowing after -1 used fixed
+- potential EOF bugs fixed
+- fixed win32 warnings
 
 6.0.19 ---------------------------------------------------------------------------------
 - added library support for FastLED, very very basic support just as a demonstration

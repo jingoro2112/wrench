@@ -204,11 +204,11 @@ uint32_t WRValue::getHashEx() const
 		uint32_t hash = wr_hash(va->m_hashTable, va->m_mod * sizeof(uint32_t));
 
 		// hash each element, positionally dependant
-		for (uint32_t i = 0; i < va->m_mod; ++i)
+		for (uint32_t e = 0; e < va->m_mod; ++e)
 		{
-			if (va->m_hashTable[i] != WRENCH_NULL_HASH)
+			if (va->m_hashTable[e] != WRENCH_NULL_HASH)
 			{
-				uint32_t h = i << 16 | va->m_Vdata[i << 1].getHash();
+				uint32_t h = e << 16 | va->m_Vdata[e << 1].getHash();
 				hash = wr_hash(&h, 4, hash);
 			}
 		}
@@ -218,9 +218,9 @@ uint32_t WRValue::getHashEx() const
 	{
 		uint32_t hash = wr_hash((char*)&va->m_hashTable, sizeof(void*)); // this is in ROM and must be identical for the struct to be the same (same namespace)
 
-		for (uint32_t i = 0; i < va->m_mod; ++i)
+		for (uint32_t m = 0; m < va->m_mod; ++m)
 		{
-			const uint8_t* offset = va->m_ROMHashTable + (i * 5);
+			const uint8_t* offset = va->m_ROMHashTable + (m * 5);
 			if ((uint32_t)READ_32_FROM_PC(offset) != WRENCH_NULL_HASH)
 			{
 				uint32_t h = va->m_Vdata[READ_8_FROM_PC(offset + 4)].getHash();

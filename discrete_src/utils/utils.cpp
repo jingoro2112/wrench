@@ -471,11 +471,8 @@ void wr_setAllocatedMemoryGCHint( WRState* state, const uint16_t bytes )
 void wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr )
 {
 	WRValue* V = w->globalRegistry.getAsRawValueHashTable( wr_hashStr(name) );
-	if ( V != (void*)WRENCH_NULL_HASH )
-	{
-		V->usr = usr;
-		V->ccb = function;
-	}
+	V->usr = usr;
+	V->ccb = function;
 }
 
 //------------------------------------------------------------------------------

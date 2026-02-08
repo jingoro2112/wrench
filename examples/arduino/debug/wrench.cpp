@@ -1,3 +1,7 @@
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4996)
+#endif
 #include "wrench.h"
 /*******************************************************************************
 Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
@@ -1002,7 +1006,6 @@ SOFTWARE.
 
 #include <string.h>
 
-
 //------------------------------------------------------------------------------
 namespace SimpleArgs
 {
@@ -1830,6 +1833,7 @@ SOFTWARE.
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+
 
 #ifdef STR_FILE_OPERATIONS
 #include <sys/stat.h>
@@ -3961,7 +3965,7 @@ void wr_closeTCPEx( const int socket );
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -4724,7 +4728,6 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 		else
 		{
 			pushOpcode( bytecode, O_LiteralInt32 );
-			unsigned char data[4];
 			pushData( bytecode, wr_pack32(value.i, data), 4 );
 		}
 	}
@@ -6027,7 +6030,7 @@ A:
 	bool foreachV = false;
 	int foreachLoadI = 0;
 	unsigned char foreachLoad[4];
-	unsigned char g;
+	unsigned char g = 0;
 
 	m_parsingFor = true;
 
@@ -6097,20 +6100,20 @@ A:
 		{
 			if ( foreachPossible )
 			{
-				WRExpression nex( m_units[m_unitTop].bytecode.localSpace, m_units[m_unitTop].bytecode.isStructSpace );
-				nex.context[0].token = token;
-				nex.context[0].value = value;
-				end = parseExpression( nex );
+				WRExpression nex2( m_units[m_unitTop].bytecode.localSpace, m_units[m_unitTop].bytecode.isStructSpace );
+				nex2.context[0].token = token;
+				nex2.context[0].value = value;
+				end = parseExpression( nex2 );
 				if ( end == ')'
-					 && nex.bytecode.opcodes.size() == 1
-					 && nex.bytecode.all.size() == 2 )
+					 && nex2.bytecode.opcodes.size() == 1
+					 && nex2.bytecode.all.size() == 2 )
 				{
 
 					WRstr T;
 					T.format( "foreach:%d", m_foreachHash++ );
 					g = (unsigned char)(addGlobalSpaceLoad(m_units[0].bytecode, T, true, true)); // #25 force "var seen" true since we are runtime adding the temporary ourselves
 
-					if ( nex.bytecode.opcodes[0] == O_LoadFromLocal )
+					if ( nex2.bytecode.opcodes[0] == O_LoadFromLocal )
 					{
 						m_units[m_unitTop].bytecode.all += O_LPushIterator;
 					}
@@ -6119,7 +6122,7 @@ A:
 						m_units[m_unitTop].bytecode.all += O_GPushIterator;
 					}
 
-					m_units[m_unitTop].bytecode.all += nex.bytecode.all[1];
+					m_units[m_unitTop].bytecode.all += nex2.bytecode.all[1];
 					pushData( m_units[m_unitTop].bytecode, &g, 1 );
 
 					if ( foreachLoadI == 4 )
@@ -6759,7 +6762,6 @@ bool WRCompilationContext::parseSwitch( WROpcode opcodeToReturn )
 	else
 	{
 		pushOpcode( m_units[m_unitTop].bytecode, O_Switch ); // add switch command
-		unsigned char packbuf[4];
 
 		int currentPos = m_units[m_unitTop].bytecode.all.size();
 
@@ -14614,11 +14616,8 @@ void wr_setAllocatedMemoryGCHint( WRState* state, const uint16_t bytes )
 void wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr )
 {
 	WRValue* V = w->globalRegistry.getAsRawValueHashTable( wr_hashStr(name) );
-	if ( V != (void*)WRENCH_NULL_HASH )
-	{
-		V->usr = usr;
-		V->ccb = function;
-	}
+	V->usr = usr;
+	V->ccb = function;
 }
 
 //------------------------------------------------------------------------------
@@ -17886,11 +17885,11 @@ uint32_t WRValue::getHashEx() const
 		uint32_t hash = wr_hash(va->m_hashTable, va->m_mod * sizeof(uint32_t));
 
 		// hash each element, positionally dependant
-		for (uint32_t i = 0; i < va->m_mod; ++i)
+		for (uint32_t e = 0; e < va->m_mod; ++e)
 		{
-			if (va->m_hashTable[i] != WRENCH_NULL_HASH)
+			if (va->m_hashTable[e] != WRENCH_NULL_HASH)
 			{
-				uint32_t h = i << 16 | va->m_Vdata[i << 1].getHash();
+				uint32_t h = e << 16 | va->m_Vdata[e << 1].getHash();
 				hash = wr_hash(&h, 4, hash);
 			}
 		}
@@ -17900,9 +17899,9 @@ uint32_t WRValue::getHashEx() const
 	{
 		uint32_t hash = wr_hash((char*)&va->m_hashTable, sizeof(void*)); // this is in ROM and must be identical for the struct to be the same (same namespace)
 
-		for (uint32_t i = 0; i < va->m_mod; ++i)
+		for (uint32_t m = 0; m < va->m_mod; ++m)
 		{
-			const uint8_t* offset = va->m_ROMHashTable + (i * 5);
+			const uint8_t* offset = va->m_ROMHashTable + (m * 5);
 			if ((uint32_t)READ_32_FROM_PC(offset) != WRENCH_NULL_HASH)
 			{
 				uint32_t h = va->m_Vdata[READ_8_FROM_PC(offset + 4)].getHash();
@@ -19734,7 +19733,7 @@ void wr_std_srand( WRValue* stackTop, const int argn, WRContext* c )
 	}
 }
 
-#if __arm__ || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__
+#if defined(__arm__) || defined(_WIN32) || defined(__linux__) || defined(__MINGW32__) || defined(__APPLE__) || defined(__MINGW64__) || defined(__clang__)
 #include <time.h>
 //------------------------------------------------------------------------------
 void wr_std_time( WRValue* stackTop, const int argn, WRContext* c )
@@ -22354,7 +22353,7 @@ void wr_mboxRead( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue* args = stackTop - argn;
 		int clear = (argn > 1) ? args[1].asInt() : 0;
 
-		WRValue* msg = c->w->globalRegistry.exists( args[0].getHash(), clear );
+		WRValue* msg = c->w->globalRegistry.exists( args[0].getHash(), clear != 0 );
 
 		if ( msg )
 		{
@@ -22375,11 +22374,8 @@ void wr_mboxWrite( WRValue* stackTop, const int argn, WRContext* c )
 		WRValue* args = stackTop - argn;
 
 		WRValue* msg = c->w->globalRegistry.getAsRawValueHashTable( args[0].getHash() );
-		if ( msg != (void*)WRENCH_NULL_HASH )
-		{
-			msg->ui = args[1].getHash();
-			msg->p2 = INIT_AS_INT;
-		}
+		msg->ui = args[1].getHash();
+		msg->p2 = INIT_AS_INT;
 	}
 }
 
@@ -23349,7 +23345,7 @@ void wr_loadArduinoLib( WRState* w )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -23372,7 +23368,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
 
-#ifdef ARDUINO
+#ifdef WRENCH_ARDUINO_FASTLED
 
 #include "wrench.h"
 
@@ -23553,4 +23549,7 @@ void wr_serialClose( HANDLE comm )
 	close( comm );
 }
 
+#endif
+#ifdef _MSC_VER
+#pragma warning(pop)
 #endif

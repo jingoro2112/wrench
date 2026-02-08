@@ -540,7 +540,11 @@ int main( int argn, char* argv[] )
 		version.format( "%d.%d.%d", WRENCH_VERSION_MAJOR, WRENCH_VERSION_MINOR, WRENCH_VERSION_BUILD );
 		version.bufferToFile( "version.txt" );
 
-		WRstr out = "#include \"wrench.h\"\n";
+		WRstr out = "#ifdef _MSC_VER\n"
+					"#pragma warning(push)\n"
+					"#pragma warning(disable:4996)\n"
+					"#endif\n"
+					"#include \"wrench.h\"\n";
 		WRstr name;		
 		WRstr read;
 		for( int s=0; sourceOrder[s][0]; ++s )
@@ -555,6 +559,10 @@ int main( int argn, char* argv[] )
 			out += read;
 		}
 
+		out += "#ifdef _MSC_VER\n"
+			   "#pragma warning(pop)\n"
+			   "#endif\n";
+
 		name = SimpleArgs::get(argn, argv, -1);
 		name += "/wrench.cpp";
 		out.bufferToFile( name );
@@ -568,6 +576,8 @@ int main( int argn, char* argv[] )
 		}
 		out = "#define WRENCH_COMBINED\n";
 		out += read;
+
+	
 		name = SimpleArgs::get(argn, argv, -1);
 		name += "/wrench.h";
 		out.bufferToFile( name );

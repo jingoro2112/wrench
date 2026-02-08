@@ -204,7 +204,7 @@ void wr_std_srand( WRValue* stackTop, const int argn, WRContext* c )
 	}
 }
 
-#if __arm__ || _WIN32 || __linux__ || __MINGW32__ || __APPLE__ || __MINGW64__ || __clang__
+#if defined(__arm__) || defined(_WIN32) || defined(__linux__) || defined(__MINGW32__) || defined(__APPLE__) || defined(__MINGW64__) || defined(__clang__)
 #include <time.h>
 //------------------------------------------------------------------------------
 void wr_std_time( WRValue* stackTop, const int argn, WRContext* c )
