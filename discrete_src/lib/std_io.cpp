@@ -29,7 +29,17 @@ SOFTWARE.
 	|| defined(WRENCH_SPIFFS_FILE_IO) \
 	|| defined(WRENCH_LITTLEFS_FILE_IO)
 
-#if defined(WRENCH_WIN32_FILE_IO) || defined(WRENCH_LINUX_FILE_IO)
+#if defined(WRENCH_WIN32_FILE_IO)
+#include <io.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#endif
+
+#if defined(WRENCH_LINUX_FILE_IO)
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 //------------------------------------------------------------------------------
 void wr_stdout( const char* data, const int size )
@@ -329,8 +339,6 @@ void wr_ioPushConstants( WRState* w )
 	wr_registerLibraryConstant( w, "io::SEEK_CUR", (int32_t)SEEK_CUR );
 	wr_registerLibraryConstant( w, "io::SEEK_END", (int32_t)SEEK_END );
 }
-
-#endif
 
 //------------------------------------------------------------------------------
 void wr_loadIOLib( WRState* w )

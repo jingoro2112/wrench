@@ -542,6 +542,7 @@ int main( int argn, char* argv[] )
 
 		WRstr out = "#ifdef _MSC_VER\n"
 					"#pragma warning(push)\n"
+					"#pragma warning(disable:4201)\n"
 					"#pragma warning(disable:4996)\n"
 					"#endif\n"
 					"#include \"wrench.h\"\n";

@@ -997,8 +997,8 @@ void WRExpression::swapWithTop( int stackPosition, bool addOpcodes )
 		return;
 	}
 	
-	unsigned int currentTop = -1;
-	unsigned int swapWith = -1;
+	unsigned int currentTop = (unsigned int)-1;
+	unsigned int swapWith = (unsigned int)-1;
 	for( unsigned int i=0; i<context.count(); ++i )
 	{
 		if ( context[i].stackPosition == stackPosition )

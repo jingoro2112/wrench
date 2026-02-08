@@ -1,5 +1,6 @@
 #ifdef _MSC_VER
 #pragma warning(push)
+#pragma warning(disable:4201)
 #pragma warning(disable:4996)
 #endif
 #include "wrench.h"
@@ -4963,8 +4964,8 @@ void WRExpression::swapWithTop( int stackPosition, bool addOpcodes )
 		return;
 	}
 	
-	unsigned int currentTop = -1;
-	unsigned int swapWith = -1;
+	unsigned int currentTop = (unsigned int)-1;
+	unsigned int swapWith = (unsigned int)-1;
 	for( unsigned int i=0; i<context.count(); ++i )
 	{
 		if ( context[i].stackPosition == stackPosition )
@@ -19827,7 +19828,17 @@ SOFTWARE.
 	|| defined(WRENCH_SPIFFS_FILE_IO) \
 	|| defined(WRENCH_LITTLEFS_FILE_IO)
 
-#if defined(WRENCH_WIN32_FILE_IO) || defined(WRENCH_LINUX_FILE_IO)
+#if defined(WRENCH_WIN32_FILE_IO)
+#include <io.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#endif
+
+#if defined(WRENCH_LINUX_FILE_IO)
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 //------------------------------------------------------------------------------
 void wr_stdout( const char* data, const int size )
@@ -20127,8 +20138,6 @@ void wr_ioPushConstants( WRState* w )
 	wr_registerLibraryConstant( w, "io::SEEK_CUR", (int32_t)SEEK_CUR );
 	wr_registerLibraryConstant( w, "io::SEEK_END", (int32_t)SEEK_END );
 }
-
-#endif
 
 //------------------------------------------------------------------------------
 void wr_loadIOLib( WRState* w )
