@@ -23372,10 +23372,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 *******************************************************************************/
 
-#ifdef ARDUINO
-
+#ifdef WRENCH_ARDUINO_FASTLED
 #include "wrench.h"
-
 #include <Arduino.h>
 #include <FastLED.h>
 
@@ -23440,8 +23438,8 @@ void wr_loadFastLEDLib( WRState* w )
 	wr_registerLibraryFunction( w, "fastled::set", wr_fastled_show ); // ( led, r, g, b )
 	wr_registerLibraryFunction( w, "fastled::show", wr_fastled_show ); // ()
 }
-
 #endif
+
 /*******************************************************************************
 Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
 
