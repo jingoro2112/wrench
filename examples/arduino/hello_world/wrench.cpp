@@ -2648,7 +2648,7 @@ public:
 		if ( (size + m_len) >= m_bufLen )
 		{
 			unsigned char* buf = m_buf;
-			m_bufLen = size + m_len + 16;
+			m_bufLen = size + m_len + (m_bufLen * 3)/2;
 			m_buf = (unsigned char *)g_malloc( m_bufLen );
 			if ( m_len )
 			{
@@ -3165,7 +3165,17 @@ private:
 	int m_sourceLen;
 	int m_pos;
 
-	bool getChar( char &c ) { c = m_source[m_pos++]; return m_pos < m_sourceLen; }
+	bool getChar( char &c )
+	{
+		if ( m_pos < m_sourceLen )
+		{
+			c = m_source[m_pos++];
+			return true;
+		}
+
+		return false;
+	}
+	
 	bool checkAsComment( char lead );
 	bool readCurlyBlock( WRstr& block );
 	struct TokenBlock
@@ -4038,7 +4048,7 @@ WRError WRCompilationContext::compile( const char* source,
 
 	m_addDebugSymbols = compilerOptionFlags & WR_EMBED_DEBUG_CODE;
 	m_embedSourceCode = compilerOptionFlags & WR_EMBED_SOURCE_CODE;
-	m_embedGlobalSymbols = compilerOptionFlags != 0; // (WR_INCLUDE_GLOBALS)
+	m_embedGlobalSymbols = compilerOptionFlags & WR_INCLUDE_GLOBALS;
 	m_needVar = !(compilerOptionFlags & WR_NON_STRICT_VAR);
 
 	do
@@ -4381,7 +4391,7 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 	{
 		for( unsigned int t=0; t<bytecode.jumpOffsetTargets[j].references.count(); ++t )
 		{
-			int16_t diff = bytecode.jumpOffsetTargets[j].offset - bytecode.jumpOffsetTargets[j].references[t];
+			int32_t diff = bytecode.jumpOffsetTargets[j].offset - bytecode.jumpOffsetTargets[j].references[t];
 
 			int offset = bytecode.jumpOffsetTargets[j].references[t];
 			WROpcode o = (WROpcode)bytecode.all[offset - 1];
@@ -4567,6 +4577,11 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 			}
 			else
 			{
+				if ( diff < -32768 || diff > 32767 )
+				{
+					m_err = WR_ERR_bad_goto_location;
+					return;
+				}
 				switch( o )
 				{
 					// check to see if any were pushed into 16-bit land
@@ -6337,7 +6352,7 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 		return false;
 	}
 
-	unsigned int index = 0;
+	int index = 0;
 
 	for(;;)
 	{
@@ -6369,7 +6384,7 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 		
 		WRValue defaultValue;
 		defaultValue.init();
-		defaultValue.ui = index++;
+		defaultValue.i = index++;
 
 		if ( !getToken(ex) )
 		{
@@ -7293,7 +7308,13 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	WRHashTable<unsigned char> offsets;
 	for( unsigned char i=unit.arguments; i<unit.bytecode.localSpace.count(); ++i )
 	{
-		offsets.set( unit.bytecode.localSpace[i].hash, i - unit.arguments );
+		if ( !offsets.set( unit.bytecode.localSpace[i].hash, i - unit.arguments ) )
+		{
+			m_err = WR_ERR_hash_table_size_exceeded;
+			*size = 0;
+			*buf = 0;
+			return;
+		}
 	}
 
 	*buf = (unsigned char *)g_malloc( (offsets.m_mod * 5) + 4 );
@@ -7309,7 +7330,9 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	{
 		wr_pack32( offsets.m_list[i].hash, *buf + *size );
 		*size += 4;
-		(*buf)[(*size)++] = offsets.m_list[i].hash ? offsets.m_list[i].value : (unsigned char)-1;
+		(*buf)[(*size)++] = (offsets.m_list[i].hash != WRENCH_NULL_HASH)
+			? offsets.m_list[i].value
+			: (unsigned char)-1;
 	}
 }
 
@@ -7323,9 +7346,18 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 	NamespacePush *namespaceLookups = 0;
 
 	unsigned int globals = m_units[0].bytecode.localSpace.count();
-	assert( globals < 256 );
+	if ( globals > 255 )
+	{
+		m_err = WR_ERR_compiler_panic;
+		return;
+	}
 
 	code += (uint8_t)globals; // globals count (for VM allocation)
+	if ( (m_units.count() - 1) > 255 )
+	{
+		m_err = WR_ERR_compiler_panic;
+		return;
+	}
 	code += (uint8_t)(m_units.count() - 1); // function count (for VM allocation)
 	code += (uint8_t)compilerOptionFlags;
 
@@ -7352,7 +7384,13 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 		code.append( data, 1 );
 
 		// WRFunction.frameSpaceNeeded;
-		data[1] = m_units[u].bytecode.localSpace.count() - m_units[u].arguments;
+		unsigned int frameSpaceNeeded = m_units[u].bytecode.localSpace.count() - m_units[u].arguments;
+		if ( frameSpaceNeeded > 255 )
+		{
+			m_err = WR_ERR_compiler_panic;
+			return;
+		}
+		data[1] = (uint8_t)frameSpaceNeeded;
 		code.append( data + 1, 1 );
 
 		// WRFunction.frameBaseAdjustment;
@@ -7398,7 +7436,12 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 			}
 		}
 
-		uint16_t symbolSize = symbols.size();
+		if ( symbols.size() > 0xFFFF )
+		{
+			m_err = WR_ERR_compiler_panic;
+			return;
+		}
+		uint16_t symbolSize = (uint16_t)symbols.size();
 		code.append( wr_pack16(symbolSize, data), 2 );
 		code.append( (uint8_t*)symbols.p_str(), symbols.size() );
 	}
@@ -7494,8 +7537,13 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 					}
 					else
 					{
+						if ( diff < -32768 || diff > 32767 )
+						{
+							m_err = WR_ERR_bad_goto_location;
+							return;
+						}
 						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset ) = (unsigned char)O_RelativeJump;
-						wr_pack16( diff, m_units[u].bytecode.all.p_str(m_units[u].bytecode.gotoSource[g].offset + 1) );
+						wr_pack16( (int16_t)diff, m_units[u].bytecode.all.p_str(m_units[u].bytecode.gotoSource[g].offset + 1) );
 					}
 
 					break;
@@ -9688,7 +9736,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 			bytecode.all += addMe.all[0];
 			bytecode.all += O_IndexSkipLoad;
 
-			bytecode.opcodes += O_LoadFromLocal;
+			bytecode.opcodes += O_LoadFromGlobal;
 			bytecode.opcodes += O_IndexSkipLoad;
 			return;
 		}
@@ -9703,7 +9751,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 			bytecode.all += addMe.all[0];
 			bytecode.all += O_IndexSkipLoad;
 
-			bytecode.opcodes += O_LoadFromLocal;
+			bytecode.opcodes += O_LoadFromGlobal;
 			bytecode.opcodes += O_IndexSkipLoad;
 			return;
 		}
@@ -9867,7 +9915,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 			if ( ((offset + len) < m_sourceLen)
 				 && !strncmp(m_source + offset, c_operations[t].token, len) )
 			{
-				if ( isalnum(m_source[offset+len]) )
+				if ( isalnum(m_source[offset+len]) || m_source[offset+len] == '_' )
 				{
 					continue;
 				}
@@ -9884,7 +9932,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 			if ( ((offset + len) < m_sourceLen)
 				 && !strncmp(m_source + offset, m_units[0].constantValues[t].label.c_str(), len) )
 			{
-				if ( isalnum(m_source[offset+len]) )
+				if ( isalnum(m_source[offset+len]) || m_source[offset+len] == '_' )
 				{
 					continue;
 				}
@@ -9902,7 +9950,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 			if ( ((offset + len) < m_sourceLen)
 				 && !strncmp(m_source + offset, m_units[m_unitTop].constantValues[t].label.c_str(), len) )
 			{
-				if ( isalnum(m_source[offset+len]) )
+				if ( isalnum(m_source[offset+len]) || m_source[offset+len] == '_' )
 				{
 					continue;
 				}
@@ -10184,6 +10232,12 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 								 && !(m_source[m_pos] == '*' && m_source[m_pos+1] == '/');
 								 ++m_pos ); // find end of comment
 
+							if ( (m_pos + 1) >= m_sourceLen )
+							{
+								m_err = WR_ERR_unexpected_EOF;
+								return false;
+							}
+
 							m_pos += 2;
 
 							return getToken( ex, expect );
@@ -10199,7 +10253,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 				}
 			}
 			else if ( isdigit(token[0])
-					  || (token[0] == '.' && isdigit(m_source[m_pos])) )
+					  || (token[0] == '.' && (m_pos < m_sourceLen) && isdigit(m_source[m_pos])) )
 			{
 				if ( m_pos >= m_sourceLen )
 				{
@@ -10247,7 +10301,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 							return false;
 						}
 
-						if ( !isxdigit(m_source[m_pos]) )
+						if ( m_source[m_pos] != '0' && m_source[m_pos] != '1' )
 						{
 							break;
 						}
@@ -10270,7 +10324,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 							return false;
 						}
 
-						if ( !isdigit(m_source[m_pos]) )
+						if ( m_source[m_pos] < '0' || m_source[m_pos] > '7' )
 						{
 							break;
 						}
@@ -10333,7 +10387,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 			}
 			else if ( isalpha(token[0]) || token[0] == '_' || token[0] == ':' ) // must be a label
 			{
-				if ( token[0] != ':' || m_source[m_pos] == ':' )
+				if ( token[0] != ':' || (m_pos < m_sourceLen && m_source[m_pos] == ':') )
 				{
 					m_LastParsedLabel = true;
 					if ( m_pos < m_sourceLen
@@ -10346,7 +10400,10 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 
 					for (; m_pos < m_sourceLen; ++m_pos)
 					{
-						if ( m_source[m_pos] == ':' && m_source[m_pos + 1] == ':' && token.size() > 0 )
+						if ( (m_pos + 1) < m_sourceLen
+							 && m_source[m_pos] == ':'
+							 && m_source[m_pos + 1] == ':'
+							 && token.size() > 0 )
 						{
 							token += "::";
 							m_pos ++;

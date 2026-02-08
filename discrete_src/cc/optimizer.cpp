@@ -1482,7 +1482,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 			bytecode.all += addMe.all[0];
 			bytecode.all += O_IndexSkipLoad;
 
-			bytecode.opcodes += O_LoadFromLocal;
+			bytecode.opcodes += O_LoadFromGlobal;
 			bytecode.opcodes += O_IndexSkipLoad;
 			return;
 		}
@@ -1497,7 +1497,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 			bytecode.all += addMe.all[0];
 			bytecode.all += O_IndexSkipLoad;
 
-			bytecode.opcodes += O_LoadFromLocal;
+			bytecode.opcodes += O_LoadFromGlobal;
 			bytecode.opcodes += O_IndexSkipLoad;
 			return;
 		}

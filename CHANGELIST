@@ -6,6 +6,7 @@
     void setFloat( const float f );
     void setInt( const int i );
 - fixed possible garbage-collection null check
+- fixed some cut/paste optimizer bugs, very obscure
 
 6.0.19 ---------------------------------------------------------------------------------
 - added library support for FastLED, very very basic support just as a demonstration

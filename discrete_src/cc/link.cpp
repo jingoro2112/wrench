@@ -43,7 +43,13 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	WRHashTable<unsigned char> offsets;
 	for( unsigned char i=unit.arguments; i<unit.bytecode.localSpace.count(); ++i )
 	{
-		offsets.set( unit.bytecode.localSpace[i].hash, i - unit.arguments );
+		if ( !offsets.set( unit.bytecode.localSpace[i].hash, i - unit.arguments ) )
+		{
+			m_err = WR_ERR_hash_table_size_exceeded;
+			*size = 0;
+			*buf = 0;
+			return;
+		}
 	}
 
 	*buf = (unsigned char *)g_malloc( (offsets.m_mod * 5) + 4 );
@@ -59,7 +65,9 @@ void WRCompilationContext::createLocalHashMap( WRUnitContext& unit, unsigned cha
 	{
 		wr_pack32( offsets.m_list[i].hash, *buf + *size );
 		*size += 4;
-		(*buf)[(*size)++] = offsets.m_list[i].hash ? offsets.m_list[i].value : (unsigned char)-1;
+		(*buf)[(*size)++] = (offsets.m_list[i].hash != WRENCH_NULL_HASH)
+			? offsets.m_list[i].value
+			: (unsigned char)-1;
 	}
 }
 
@@ -73,9 +81,18 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 	NamespacePush *namespaceLookups = 0;
 
 	unsigned int globals = m_units[0].bytecode.localSpace.count();
-	assert( globals < 256 );
+	if ( globals > 255 )
+	{
+		m_err = WR_ERR_compiler_panic;
+		return;
+	}
 
 	code += (uint8_t)globals; // globals count (for VM allocation)
+	if ( (m_units.count() - 1) > 255 )
+	{
+		m_err = WR_ERR_compiler_panic;
+		return;
+	}
 	code += (uint8_t)(m_units.count() - 1); // function count (for VM allocation)
 	code += (uint8_t)compilerOptionFlags;
 
@@ -102,7 +119,13 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 		code.append( data, 1 );
 
 		// WRFunction.frameSpaceNeeded;
-		data[1] = m_units[u].bytecode.localSpace.count() - m_units[u].arguments;
+		unsigned int frameSpaceNeeded = m_units[u].bytecode.localSpace.count() - m_units[u].arguments;
+		if ( frameSpaceNeeded > 255 )
+		{
+			m_err = WR_ERR_compiler_panic;
+			return;
+		}
+		data[1] = (uint8_t)frameSpaceNeeded;
 		code.append( data + 1, 1 );
 
 		// WRFunction.frameBaseAdjustment;
@@ -148,7 +171,12 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 			}
 		}
 
-		uint16_t symbolSize = symbols.size();
+		if ( symbols.size() > 0xFFFF )
+		{
+			m_err = WR_ERR_compiler_panic;
+			return;
+		}
+		uint16_t symbolSize = (uint16_t)symbols.size();
 		code.append( wr_pack16(symbolSize, data), 2 );
 		code.append( (uint8_t*)symbols.p_str(), symbols.size() );
 	}
@@ -244,8 +272,13 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 					}
 					else
 					{
+						if ( diff < -32768 || diff > 32767 )
+						{
+							m_err = WR_ERR_bad_goto_location;
+							return;
+						}
 						*m_units[u].bytecode.all.p_str( m_units[u].bytecode.gotoSource[g].offset ) = (unsigned char)O_RelativeJump;
-						wr_pack16( diff, m_units[u].bytecode.all.p_str(m_units[u].bytecode.gotoSource[g].offset + 1) );
+						wr_pack16( (int16_t)diff, m_units[u].bytecode.all.p_str(m_units[u].bytecode.gotoSource[g].offset + 1) );
 					}
 
 					break;

@@ -74,7 +74,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 			if ( ((offset + len) < m_sourceLen)
 				 && !strncmp(m_source + offset, c_operations[t].token, len) )
 			{
-				if ( isalnum(m_source[offset+len]) )
+				if ( isalnum(m_source[offset+len]) || m_source[offset+len] == '_' )
 				{
 					continue;
 				}
@@ -91,7 +91,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 			if ( ((offset + len) < m_sourceLen)
 				 && !strncmp(m_source + offset, m_units[0].constantValues[t].label.c_str(), len) )
 			{
-				if ( isalnum(m_source[offset+len]) )
+				if ( isalnum(m_source[offset+len]) || m_source[offset+len] == '_' )
 				{
 					continue;
 				}
@@ -109,7 +109,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 			if ( ((offset + len) < m_sourceLen)
 				 && !strncmp(m_source + offset, m_units[m_unitTop].constantValues[t].label.c_str(), len) )
 			{
-				if ( isalnum(m_source[offset+len]) )
+				if ( isalnum(m_source[offset+len]) || m_source[offset+len] == '_' )
 				{
 					continue;
 				}
@@ -391,6 +391,12 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 								 && !(m_source[m_pos] == '*' && m_source[m_pos+1] == '/');
 								 ++m_pos ); // find end of comment
 
+							if ( (m_pos + 1) >= m_sourceLen )
+							{
+								m_err = WR_ERR_unexpected_EOF;
+								return false;
+							}
+
 							m_pos += 2;
 
 							return getToken( ex, expect );
@@ -406,7 +412,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 				}
 			}
 			else if ( isdigit(token[0])
-					  || (token[0] == '.' && isdigit(m_source[m_pos])) )
+					  || (token[0] == '.' && (m_pos < m_sourceLen) && isdigit(m_source[m_pos])) )
 			{
 				if ( m_pos >= m_sourceLen )
 				{
@@ -454,7 +460,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 							return false;
 						}
 
-						if ( !isxdigit(m_source[m_pos]) )
+						if ( m_source[m_pos] != '0' && m_source[m_pos] != '1' )
 						{
 							break;
 						}
@@ -477,7 +483,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 							return false;
 						}
 
-						if ( !isdigit(m_source[m_pos]) )
+						if ( m_source[m_pos] < '0' || m_source[m_pos] > '7' )
 						{
 							break;
 						}
@@ -540,7 +546,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 			}
 			else if ( isalpha(token[0]) || token[0] == '_' || token[0] == ':' ) // must be a label
 			{
-				if ( token[0] != ':' || m_source[m_pos] == ':' )
+				if ( token[0] != ':' || (m_pos < m_sourceLen && m_source[m_pos] == ':') )
 				{
 					m_LastParsedLabel = true;
 					if ( m_pos < m_sourceLen
@@ -553,7 +559,10 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 
 					for (; m_pos < m_sourceLen; ++m_pos)
 					{
-						if ( m_source[m_pos] == ':' && m_source[m_pos + 1] == ':' && token.size() > 0 )
+						if ( (m_pos + 1) < m_sourceLen
+							 && m_source[m_pos] == ':'
+							 && m_source[m_pos + 1] == ':'
+							 && token.size() > 0 )
 						{
 							token += "::";
 							m_pos ++;

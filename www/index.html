@@ -382,10 +382,14 @@ void wr_makeFloat( WRValue* val, float f );
 and accessing the underlying data:
 
 <code><pre>int asInt() const;
-void setInt( const int val );
-	
 float asFloat() const;
-void setFloat( const float val );
+
+// setting this value, do any extra work required. Note that
+// setString() requires a context, since the string is actually a
+// created array that needs to be referenced
+void setString( WRContext* context, const char* data, const int len =0 ) { wr_makeString(context, this, data, len); }
+void setFloat( const float f ) { wr_makeFloat(this, f); }
+void setInt( const int i ) { wr_makeInt(this, i); }
 
 bool isFloat() const
 bool isInt() const

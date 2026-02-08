@@ -472,7 +472,17 @@ private:
 	int m_sourceLen;
 	int m_pos;
 
-	bool getChar( char &c ) { c = m_source[m_pos++]; return m_pos < m_sourceLen; }
+	bool getChar( char &c )
+	{
+		if ( m_pos < m_sourceLen )
+		{
+			c = m_source[m_pos++];
+			return true;
+		}
+
+		return false;
+	}
+	
 	bool checkAsComment( char lead );
 	bool readCurlyBlock( WRstr& block );
 	struct TokenBlock

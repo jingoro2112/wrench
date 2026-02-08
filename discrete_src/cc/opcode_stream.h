@@ -64,7 +64,7 @@ public:
 		if ( (size + m_len) >= m_bufLen )
 		{
 			unsigned char* buf = m_buf;
-			m_bufLen = size + m_len + 16;
+			m_bufLen = size + m_len + (m_bufLen * 3)/2;
 			m_buf = (unsigned char *)g_malloc( m_bufLen );
 			if ( m_len )
 			{

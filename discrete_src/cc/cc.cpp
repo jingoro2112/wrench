@@ -86,7 +86,7 @@ WRError WRCompilationContext::compile( const char* source,
 
 	m_addDebugSymbols = compilerOptionFlags & WR_EMBED_DEBUG_CODE;
 	m_embedSourceCode = compilerOptionFlags & WR_EMBED_SOURCE_CODE;
-	m_embedGlobalSymbols = compilerOptionFlags != 0; // (WR_INCLUDE_GLOBALS)
+	m_embedGlobalSymbols = compilerOptionFlags & WR_INCLUDE_GLOBALS;
 	m_needVar = !(compilerOptionFlags & WR_NON_STRICT_VAR);
 
 	do
@@ -429,7 +429,7 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 	{
 		for( unsigned int t=0; t<bytecode.jumpOffsetTargets[j].references.count(); ++t )
 		{
-			int16_t diff = bytecode.jumpOffsetTargets[j].offset - bytecode.jumpOffsetTargets[j].references[t];
+			int32_t diff = bytecode.jumpOffsetTargets[j].offset - bytecode.jumpOffsetTargets[j].references[t];
 
 			int offset = bytecode.jumpOffsetTargets[j].references[t];
 			WROpcode o = (WROpcode)bytecode.all[offset - 1];
@@ -615,6 +615,11 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 			}
 			else
 			{
+				if ( diff < -32768 || diff > 32767 )
+				{
+					m_err = WR_ERR_bad_goto_location;
+					return;
+				}
 				switch( o )
 				{
 					// check to see if any were pushed into 16-bit land
@@ -2385,7 +2390,7 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 		return false;
 	}
 
-	unsigned int index = 0;
+	int index = 0;
 
 	for(;;)
 	{
@@ -2417,7 +2422,7 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 		
 		WRValue defaultValue;
 		defaultValue.init();
-		defaultValue.ui = index++;
+		defaultValue.i = index++;
 
 		if ( !getToken(ex) )
 		{
