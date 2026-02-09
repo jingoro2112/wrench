@@ -1,7 +1,7 @@
 #ifndef _STD_SERIAL_H
 #define _STD_SERIAL_H
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 

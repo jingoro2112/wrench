@@ -179,7 +179,7 @@ to your project and compile. Of course if you want a more approachable
 version, the traditional layout is included in
 <code>discrete_src/</code>
 
-<h2>example</h2>
+<h2>Minimal Example</h2>
 <pre><code>#include "wrench.h"
 #include &ltstring.h&gt
 #include &ltstdio.h&gt
@@ -223,7 +223,10 @@ int main( int argn, char** argv )
 }
 </code></pre>
 
-<h2>command line</h2>
+Okay great, but how about actually using it in practical applications?
+<h2>Lots More Examples</hs>
+
+<h2>Command Line Tool</h2>
 <p>
 A command-line utility is included, to compile it under linux just
 <code>make</code> in the root dir. For windows a visual studio project is included under
@@ -995,6 +998,10 @@ to a return value.
 <p>wr_forceYield() allows an external thread to force the VM to yield
 immeditely on its next branch/loop instruction, for a multi-threaded
 system that wants to implement a pre-emptive scheduler.
+<pre><code>int wr_slicesUsedLastCall( WRState* w );
+</code></pre>
+Tells you how many slices were used in the last call. This can be
+handy determining how much time a script is burning.
 
 <p>A simple round-robin scheduler is included:
 <pre><code>class WrenchScheduler

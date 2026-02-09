@@ -1,7 +1,7 @@
 #ifndef _WRENCH_H
 #define _WRENCH_H
 /*******************************************************************************
-Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -120,6 +120,7 @@ instruction!
 // set to '0' for unlimited (default)
 void wr_setInstructionsPerSlice( WRState* w, const int instructions );
 void wr_forceYield( WRState* w );  // for the VM to yield right NOW, (called from a different thread)
+int wr_slicesUsedLastCall( WRState* w );  // how many time slices did the last call to the VM use?
 #endif
 
 /************************************************************************

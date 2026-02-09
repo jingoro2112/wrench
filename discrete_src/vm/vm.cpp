@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -200,6 +200,12 @@ void wr_forceYield( WRState* w )
 {
 	w->yieldEnabled = true; // prevent a race in case the count is decremented before this flag is checked
 	w->sliceInstructionCount = 1;
+}
+
+//------------------------------------------------------------------------------
+int wr_slicesUsedLastCall( WRState* w )
+{
+	return w->lastSlicesUsed;
 }
 
 #define CHECK_FORCE_YIELD { if ( !--w->sliceInstructionCount && w->yieldEnabled ) { context->yieldArgs = 0; context->flags |= (uint8_t)WRC_ForceYielded; goto doYield; } }
@@ -823,6 +829,9 @@ yieldContinue:
 #if defined(WRENCH_TIME_SLICES) || defined(WRENCH_INCLUDE_DEBUG_CODE)
 doYield:
 #endif
+#if defined(WRENCH_TIME_SLICES)
+				w->lastSlicesUsed = w->instructionsPerSlice - w->sliceInstructionCount;
+#endif
 				context->yield_pc = pc;
 				context->yield_stackTop = stackTop->init();
 				context->yield_frameBase = frameBase;
@@ -1263,6 +1272,9 @@ callFunction:
 				{
 					context->debugInterface->I->codewordEncountered( pc, WRD_FunctionCall | WRD_GlobalStopFunction, stackTop );
 				}
+#endif
+#if defined(WRENCH_TIME_SLICES)
+				w->lastSlicesUsed = w->instructionsPerSlice - w->sliceInstructionCount;
 #endif
 				return &(stackBase)->deref();
 			}

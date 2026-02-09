@@ -5,7 +5,7 @@
 #endif
 #include "wrench.h"
 /*******************************************************************************
-Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -483,7 +483,7 @@ int wr_addI( int a, int b );
 
 #endif
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -590,7 +590,7 @@ private:
 #ifndef _SIMPLE_LL_H
 #define _SIMPLE_LL_H
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -979,7 +979,7 @@ inline void testLL()
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -1082,7 +1082,7 @@ inline const char* SimpleArgs::get( int argn, char *argv[], const char* opt, cha
 #ifndef GC_OBJECT_H
 #define GC_OBJECT_H
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -1192,7 +1192,7 @@ private:
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -1303,6 +1303,7 @@ struct WRState
 	int instructionsPerSlice;
 	int sliceInstructionCount;
 	int yieldEnabled;
+	int lastSlicesUsed;
 #endif
 	
 	WRContext* contextList;
@@ -1465,7 +1466,7 @@ void wr_valueToEx( const WRValue* ex, WRValue* value );
 
 #endif
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -1806,7 +1807,7 @@ extern const char* c_opcodeName[];
 #ifndef _STR_H
 #define _STR_H
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -2588,7 +2589,7 @@ WRstr& WRstr::appendFormat( const char* format, ... )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -2697,7 +2698,7 @@ private:
 #endif
 
 #endif/*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -3268,7 +3269,7 @@ inline const char* wr_asciiDump( const void* d, unsigned int len, WRstr& str, in
 #ifndef _PACKET_H
 #define _PACKET_H
 /*******************************************************************************
-Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -3374,7 +3375,7 @@ public:
 #ifndef _DEBUG_H
 #define _DEBUG_H
 /*******************************************************************************
-Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -3509,7 +3510,7 @@ public:
 #ifndef _DEBUGGER_H
 #define _DEBUGGER_H
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -3591,7 +3592,7 @@ private:
 #ifndef _STD_SERIAL_H
 #define _STD_SERIAL_H
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -3643,7 +3644,7 @@ int wr_serialPeek( HANDLE comm );
 #ifndef _STD_TCP_H
 #define _STD_TCP_H
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -3731,7 +3732,7 @@ void wr_closeTCPEx( const int socket );
 #ifndef _DEBUG_COMM_H
 #define _DEBUG_COMM_H
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -3833,7 +3834,7 @@ private:
 #ifndef _STD_IO_DEFS_H
 #define _STD_IO_DEFS_H
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -3880,7 +3881,7 @@ void wr_stdout( const char* data, const int size );
 #ifndef _STD_TCP_H
 #define _STD_TCP_H
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -7267,7 +7268,7 @@ WRError wr_compile( const char* source,
 	
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -7685,7 +7686,7 @@ void WRCompilationContext::link( unsigned char** out, int* outLen, const uint8_t
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -8256,7 +8257,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -9843,7 +9844,7 @@ void WRCompilationContext::appendBytecode( WRBytecode& bytecode, WRBytecode& add
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -10456,7 +10457,7 @@ foundMacroToken:
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -10779,7 +10780,7 @@ tryAgain:
 	}
 }
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -10959,7 +10960,7 @@ WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 }
 
 /*******************************************************************************
-Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -11160,6 +11161,12 @@ void wr_forceYield( WRState* w )
 {
 	w->yieldEnabled = true; // prevent a race in case the count is decremented before this flag is checked
 	w->sliceInstructionCount = 1;
+}
+
+//------------------------------------------------------------------------------
+int wr_slicesUsedLastCall( WRState* w )
+{
+	return w->lastSlicesUsed;
 }
 
 #define CHECK_FORCE_YIELD { if ( !--w->sliceInstructionCount && w->yieldEnabled ) { context->yieldArgs = 0; context->flags |= (uint8_t)WRC_ForceYielded; goto doYield; } }
@@ -11783,6 +11790,9 @@ yieldContinue:
 #if defined(WRENCH_TIME_SLICES) || defined(WRENCH_INCLUDE_DEBUG_CODE)
 doYield:
 #endif
+#if defined(WRENCH_TIME_SLICES)
+				w->lastSlicesUsed = w->instructionsPerSlice - w->sliceInstructionCount;
+#endif
 				context->yield_pc = pc;
 				context->yield_stackTop = stackTop->init();
 				context->yield_frameBase = frameBase;
@@ -12223,6 +12233,9 @@ callFunction:
 				{
 					context->debugInterface->I->codewordEncountered( pc, WRD_FunctionCall | WRD_GlobalStopFunction, stackTop );
 				}
+#endif
+#if defined(WRENCH_TIME_SLICES)
+				w->lastSlicesUsed = w->instructionsPerSlice - w->sliceInstructionCount;
 #endif
 				return &(stackBase)->deref();
 			}
@@ -14145,7 +14158,7 @@ targetFuncStoreLocalOp:
 }
 
 /*******************************************************************************
-Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -15731,7 +15744,7 @@ const char* c_errStrings[]=
 
 #endif
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -16001,7 +16014,7 @@ bool wr_deserialize( WRContext* context, WRValue& value, const char* buf, const 
 	return wr_deserializeEx( value, S, context );
 }
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -16218,7 +16231,7 @@ void wr_stackDump( const WRValue* bottom, const WRValue* top, WRstr& out )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -16504,7 +16517,7 @@ void WRDebugClientInterface::clearBreakpoint( const int lineNumber )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -16552,7 +16565,7 @@ WRDebugServerInterface::~WRDebugServerInterface()
 
 #endif
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -16606,7 +16619,7 @@ void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out
 	listing.release( out, outLen );
 }
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT License
 
@@ -16692,7 +16705,7 @@ uint32_t WrenchPacket::xlate()
 
 #endif
 /*******************************************************************************
-Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT License
 
@@ -17180,7 +17193,7 @@ WRDRun:
 
 #endif
 /*******************************************************************************
-Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -17325,7 +17338,7 @@ void WRDebugClientInterfacePrivate::populateSymbols()
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -17447,7 +17460,7 @@ uint32_t WrenchDebugTcpInterface::peekEx( const int timeoutMilliseconds )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -17546,7 +17559,7 @@ uint32_t WrenchDebugSerialInterface::peekEx( const int timeoutMilliseconds )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -17681,7 +17694,7 @@ bool WrenchScheduler::removeTask( const int taskId )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -18136,7 +18149,7 @@ WRVoidFunc wr_assign[16] =
 	doAssign_E_X,  doAssign_E_X,  doAssign_E_R,   doAssign_E_X,
 };
 /*******************************************************************************
-Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -18397,7 +18410,7 @@ WRBoolCallbackReturnFunc wr_Compare[16] =
 
 #endif
 /*******************************************************************************
-Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -19259,7 +19272,7 @@ X_UNARY_POST( wr_postdec, -- );
 
 #endif
 /*******************************************************************************
-Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -19529,7 +19542,7 @@ WRStateFunc wr_index[16] =
 
 #endif
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -19798,7 +19811,7 @@ void wr_loadAllLibs( WRState* w )
 	wr_loadContainerLib( w );
 }
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -20164,7 +20177,7 @@ void wr_loadIOLib( WRState* w )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -20704,7 +20717,7 @@ void wr_loadTCPLib( WRState* w )
 }
 
 #endif/*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -21108,7 +21121,7 @@ void wr_ioPushConstants( WRState* w )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -22013,7 +22026,7 @@ void wr_loadStringLib( WRState* w )
 
 }
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -22329,7 +22342,7 @@ void wr_loadMathLib( WRState* w )
 	wr_registerLibraryFunction( w, "math::iscale", wr_intScale);
 }
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -22423,7 +22436,7 @@ void wr_loadMessageLib( WRState* w )
 	wr_registerLibraryFunction( w, "msg::peek", wr_mboxPeek ); // does the message exist?
 }
 /*******************************************************************************
-Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -22533,7 +22546,7 @@ void wr_loadSysLib( WRState* w )
 
 }
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -22607,7 +22620,7 @@ void wr_loadSerializeLib( WRState* w )
 	wr_registerLibraryFunction( w, "std::deserialize", wr_stdDeserialize );
 }
 /*******************************************************************************
-Copyright (c) 2025 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -23028,7 +23041,7 @@ void wr_loadContainerLib( WRState* w )
 
 
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -23109,7 +23122,7 @@ void wr_loadDebugLib( WRState* w )
 #endif
 }
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -23146,7 +23159,7 @@ void wr_loadEsp32Lib( WRState* w )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2022 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -23451,7 +23464,7 @@ void wr_loadFastLEDLib( WRState* w )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -23504,7 +23517,7 @@ int wr_serialPeek( HANDLE comm )
 
 #endif
 /*******************************************************************************
-Copyright (c) 2023 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 

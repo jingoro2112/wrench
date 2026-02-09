@@ -1,5 +1,5 @@
 /*******************************************************************************
-Copyright (c) 2024 Curt Hartung -- curt.hartung@gmail.com
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
 
@@ -110,6 +110,7 @@ struct WRState
 	int instructionsPerSlice;
 	int sliceInstructionCount;
 	int yieldEnabled;
+	int lastSlicesUsed;
 #endif
 	
 	WRContext* contextList;
