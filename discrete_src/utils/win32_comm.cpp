@@ -27,13 +27,73 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 HANDLE wr_serialOpen( const char* name )
 {
-	return CreateFileA( name,				 // Specify port device "COMx"
-					    GENERIC_READ | GENERIC_WRITE,  // Specify mode that open device.
-					    0,                             // the devide isn't shared.
-					    NULL,                          // the object gets a default security.
-					    OPEN_EXISTING,                 // Specify which action to take on file. 
-					    0,                             // default.
-					    NULL );
+	WRstr portName = name ? name : "";
+	if ( portName.size() >= 4
+		 && !strncmp( portName.c_str(), "COM", 3 )
+		 && *portName.c_str(3) >= '0' && *portName.c_str(3) <= '9'
+		 && strncmp( portName.c_str(), "\\\\.\\", 4 ) )
+	{
+		portName = "\\\\.\\";
+		portName += name;
+	}
+
+	HANDLE h = CreateFileA( portName.c_str(),         // Specify port device "COMx"
+							GENERIC_READ | GENERIC_WRITE, // Specify mode that opens device.
+							0,                            // The device isn't shared.
+							NULL,                         // Default security.
+							OPEN_EXISTING,                // Open existing device.
+							0,
+							NULL );
+
+	if ( h == WR_BAD_SOCKET )
+	{
+		return WR_BAD_SOCKET;
+	}
+
+	SetupComm( h, 4096, 4096 );
+	PurgeComm( h, PURGE_RXABORT | PURGE_TXABORT | PURGE_RXCLEAR | PURGE_TXCLEAR );
+
+	DCB dcb;
+	memset( &dcb, 0, sizeof(dcb) );
+	dcb.DCBlength = sizeof(dcb);
+	if ( !GetCommState( h, &dcb ) )
+	{
+		CloseHandle( h );
+		return WR_BAD_SOCKET;
+	}
+
+	dcb.BaudRate = CBR_115200;
+	dcb.ByteSize = 8;
+	dcb.Parity = NOPARITY;
+	dcb.StopBits = ONESTOPBIT;
+	dcb.fBinary = TRUE;
+	dcb.fParity = FALSE;
+	dcb.fOutxCtsFlow = FALSE;
+	dcb.fOutxDsrFlow = FALSE;
+	dcb.fDtrControl = DTR_CONTROL_DISABLE;
+	dcb.fDsrSensitivity = FALSE;
+	dcb.fTXContinueOnXoff = FALSE;
+	dcb.fOutX = FALSE;
+	dcb.fInX = FALSE;
+	dcb.fRtsControl = RTS_CONTROL_DISABLE;
+	dcb.fAbortOnError = FALSE;
+
+	if ( !SetCommState( h, &dcb ) )
+	{
+		CloseHandle( h );
+		return WR_BAD_SOCKET;
+	}
+
+	COMMTIMEOUTS timeouts;
+	memset( &timeouts, 0, sizeof(timeouts) );
+	timeouts.ReadIntervalTimeout = 1;
+	timeouts.ReadTotalTimeoutConstant = 5;
+	timeouts.ReadTotalTimeoutMultiplier = 1;
+	timeouts.WriteTotalTimeoutConstant = 5;
+	timeouts.WriteTotalTimeoutMultiplier = 1;
+	SetCommTimeouts( h, &timeouts );
+
+	return h;
 }
 
 //------------------------------------------------------------------------------
@@ -63,11 +123,13 @@ int wr_serialReceive( HANDLE comm, char* data, const int max )
 //------------------------------------------------------------------------------
 int wr_serialPeek( HANDLE comm )
 {
-	DWORD avail = 0;
-	
-	PeekNamedPipe( comm, 0, 0, 0, &avail, 0 );
-
-	return (int)avail;
+	COMSTAT st;
+	DWORD err = 0;
+	if ( !ClearCommError( comm, &err, &st ) )
+	{
+		return -1;
+	}
+	return (int)st.cbInQue;
 }
 
 //------------------------------------------------------------------------------
@@ -75,4 +137,3 @@ void wr_serialClose( HANDLE comm )
 {
 	CloseHandle( comm );
 }
-

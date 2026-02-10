@@ -39,7 +39,7 @@ class WRValueSerializer
 public:
 	
 	WRValueSerializer() : m_pos(0), m_size(0), m_buf(0) {}
-	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size)
+	WRValueSerializer( const char* data, const unsigned int size ) : m_pos(0), m_size(size)
 	{
 		m_buf = (char*)g_malloc(size);
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
@@ -51,10 +51,7 @@ public:
 		else
 #endif
 		{
-			if ( size > 0 )
-			{
-				memcpy( m_buf, data, size );
-			}
+			memcpy( m_buf, data, size );
 		}
 	}
 	
@@ -88,10 +85,7 @@ public:
 			{
 				m_size += (size*2) + 8;
 				char* newBuf = (char*)g_malloc( m_size );
-				if ( m_pos > 0 )
-				{
-					memcpy( newBuf, m_buf, m_pos );
-				}
+				memcpy( newBuf, m_buf, m_pos );
 				g_free( m_buf );
 				m_buf = newBuf;
 			}
@@ -102,8 +96,8 @@ public:
 
 private:
 
-	int m_pos;
-	int m_size;
+	unsigned int m_pos;
+	unsigned int m_size;
 	char* m_buf;
 };
 

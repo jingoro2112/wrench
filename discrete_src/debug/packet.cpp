@@ -47,7 +47,7 @@ WrenchPacket* WrenchPacket::alloc( WrenchPacket const& base )
 {
 	WrenchPacket* packet = (WrenchPacket*)g_malloc( base.size );
 
-	memcpy( (char*)packet, (char*)&base, sizeof(WrenchPacket) );
+	memcpy( (char*)packet, (char*)&base, base.size );
 	return packet;
 }
 

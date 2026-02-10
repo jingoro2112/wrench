@@ -196,7 +196,7 @@ bool WRDebugServerInterfacePrivate::codewordEncountered( const uint8_t* pc, uint
 		entry->onLine = -1; // don't know yet!
 		entry->fromUnitIndex = from->thisUnitIndex;
 		entry->thisUnitIndex = codeword & WRD_PayloadMask;
-//		entry->stackOffset = stackTop - m_w->stack;
+		entry->stackOffset = (uint8_t)(stackTop - m_context->stack);
 
 		WRFunction* func = m_context->localFunctions + (entry->thisUnitIndex - 1); // unit '0' is the global unit
 		entry->arguments = func->arguments;
@@ -298,7 +298,7 @@ WRDRun:
 				
 				memcpy( m_externalCodeBlock, packet->payload(), size );
 				
-				m_parent->loadBytes( m_externalCodeBlock, m_externalCodeBlockSize );
+				m_parent->loadBytes( m_externalCodeBlock, size );
 			}
 			else
 			{
@@ -321,7 +321,7 @@ WRDRun:
 			}
 			else
 			{
-				uint32_t size = sizeof(WrenchPacket) + m_embeddedSourceLen + 1;
+				uint32_t size = m_embeddedSourceLen + 1;
 				reply = WrenchPacket::alloc( WRD_ReplySource, size );
 				uint32_t i=0;
 				for( ; i< m_embeddedSourceLen; ++i )
@@ -346,7 +346,7 @@ WRDRun:
 			}
 			else
 			{
-				uint32_t size = sizeof(WrenchPacket) + m_symbolBlockLen;
+				uint32_t size = m_symbolBlockLen;
 				reply = WrenchPacket::alloc( WRD_ReplySymbolBlock, size );
 				uint32_t i=0;
 				for( ; i < m_symbolBlockLen; ++i )

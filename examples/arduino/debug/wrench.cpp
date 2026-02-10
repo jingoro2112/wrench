@@ -523,7 +523,7 @@ class WRValueSerializer
 public:
 	
 	WRValueSerializer() : m_pos(0), m_size(0), m_buf(0) {}
-	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size)
+	WRValueSerializer( const char* data, const unsigned int size ) : m_pos(0), m_size(size)
 	{
 		m_buf = (char*)g_malloc(size);
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
@@ -535,10 +535,7 @@ public:
 		else
 #endif
 		{
-			if ( size > 0 )
-			{
-				memcpy( m_buf, data, size );
-			}
+			memcpy( m_buf, data, size );
 		}
 	}
 	
@@ -572,10 +569,7 @@ public:
 			{
 				m_size += (size*2) + 8;
 				char* newBuf = (char*)g_malloc( m_size );
-				if ( m_pos > 0 )
-				{
-					memcpy( newBuf, m_buf, m_pos );
-				}
+				memcpy( newBuf, m_buf, m_pos );
 				g_free( m_buf );
 				m_buf = newBuf;
 			}
@@ -586,8 +580,8 @@ public:
 
 private:
 
-	int m_pos;
-	int m_size;
+	unsigned int m_pos;
+	unsigned int m_size;
 	char* m_buf;
 };
 
@@ -3355,7 +3349,7 @@ struct WrenchPacket
 	void setPayloadSize( uint32_t newsize ) { size = sizeof(WrenchPacket) + newsize; }
 	uint32_t payloadSize() { return (size <= sizeof(WrenchPacket)) ? 0 : (size - sizeof(WrenchPacket)); }
 	uint8_t* payload( uint32_t offset =0 ) { return (uint8_t*)((char *)this + sizeof(WrenchPacket)) + offset; }
-	uint8_t operator[] ( const int offset ) { return *(uint8_t*)((char*)this + sizeof(WrenchPacket)) + offset; }
+	uint8_t operator[] ( const int offset ) { return *((uint8_t*)((char*)this + sizeof(WrenchPacket)) + offset); }
 	uint8_t* data() { return (uint8_t*)this; }
 	
 	WrenchPacket() {}
@@ -16699,7 +16693,7 @@ WrenchPacket* WrenchPacket::alloc( WrenchPacket const& base )
 {
 	WrenchPacket* packet = (WrenchPacket*)g_malloc( base.size );
 
-	memcpy( (char*)packet, (char*)&base, sizeof(WrenchPacket) );
+	memcpy( (char*)packet, (char*)&base, base.size );
 	return packet;
 }
 
@@ -16934,7 +16928,7 @@ bool WRDebugServerInterfacePrivate::codewordEncountered( const uint8_t* pc, uint
 		entry->onLine = -1; // don't know yet!
 		entry->fromUnitIndex = from->thisUnitIndex;
 		entry->thisUnitIndex = codeword & WRD_PayloadMask;
-//		entry->stackOffset = stackTop - m_w->stack;
+		entry->stackOffset = (uint8_t)(stackTop - m_context->stack);
 
 		WRFunction* func = m_context->localFunctions + (entry->thisUnitIndex - 1); // unit '0' is the global unit
 		entry->arguments = func->arguments;
@@ -17036,7 +17030,7 @@ WRDRun:
 				
 				memcpy( m_externalCodeBlock, packet->payload(), size );
 				
-				m_parent->loadBytes( m_externalCodeBlock, m_externalCodeBlockSize );
+				m_parent->loadBytes( m_externalCodeBlock, size );
 			}
 			else
 			{
@@ -17059,7 +17053,7 @@ WRDRun:
 			}
 			else
 			{
-				uint32_t size = sizeof(WrenchPacket) + m_embeddedSourceLen + 1;
+				uint32_t size = m_embeddedSourceLen + 1;
 				reply = WrenchPacket::alloc( WRD_ReplySource, size );
 				uint32_t i=0;
 				for( ; i< m_embeddedSourceLen; ++i )
@@ -17084,7 +17078,7 @@ WRDRun:
 			}
 			else
 			{
-				uint32_t size = sizeof(WrenchPacket) + m_symbolBlockLen;
+				uint32_t size = m_symbolBlockLen;
 				reply = WrenchPacket::alloc( WRD_ReplySymbolBlock, size );
 				uint32_t i=0;
 				for( ; i < m_symbolBlockLen; ++i )
