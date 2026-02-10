@@ -306,7 +306,7 @@ WRValue* wr_continue( WRContext* context )
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv, const int argn )
 {
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
-	const void* opcodeJumptable[256] =
+	const void* opcodeJumptable[] =
 	{
 		&&Yield,
 
@@ -614,7 +614,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	union
 	{
-		unsigned char findex;
 		WRValue* register0;
 		WRGCObject* va;
 		const unsigned char *hashLoc;
@@ -989,8 +988,7 @@ CallFunctionByHashAndPop_continue:
 
 				// function MUST exist or we wouldn't be here, we would
 				// be in the "call by hash" above
-				findex = READ_8_FROM_PC(pc++);
-				function = context->localFunctions + findex;
+				function = context->localFunctions + READ_8_FROM_PC(pc++);
 				pc += READ_8_FROM_PC(pc);
 callFunction:
 				
@@ -1317,16 +1315,14 @@ callFunction:
 
 			CASE(GlobalIndexHash):
 			{
-				register0 = globalSpace + READ_8_FROM_PC(pc++);
-				register0 = &register0->deref();
+				register0 = &(globalSpace + READ_8_FROM_PC(pc++))->deref();
 				register1 = stackTop++;
 				goto hashIndexJump;
 			}
 
 			CASE(LocalIndexHash):
 			{
-				register0 = frameBase + READ_8_FROM_PC(pc++);
-				register0 = &register0->deref();
+				register0 = &(frameBase + READ_8_FROM_PC(pc++))->deref();
 				register1 = stackTop++;
 				goto hashIndexJump;
 			}
@@ -1405,8 +1401,7 @@ hashIndexJump:
 
 			CASE(LoadFromLocal):
 			{
-				register0 = frameBase + READ_8_FROM_PC(pc++);
-				stackTop->p = register0;
+				stackTop->p = frameBase + READ_8_FROM_PC(pc++);
 				(stackTop++)->p2 = INIT_AS_REF;
 				CHECK_STACK;
 				FASTCONTINUE;
@@ -1414,8 +1409,7 @@ hashIndexJump:
 
 			CASE(LoadFromGlobal):
 			{
-				register0 = globalSpace + READ_8_FROM_PC(pc++);
-				stackTop->p = register0;
+				stackTop->p = globalSpace + READ_8_FROM_PC(pc++);
  				(stackTop++)->p2 = INIT_AS_REF;
 				CHECK_STACK;
 				FASTCONTINUE;
@@ -1678,7 +1672,7 @@ doAssignToLocalAndPop:
 			{
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				register0->p2 = INIT_AS_INT;
-	load32ToTemp:
+load32ToTemp:
 				register0->i = READ_32_FROM_PC(pc);
 				pc += 4;
 				CONTINUE;

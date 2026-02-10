@@ -27,9 +27,9 @@ SOFTWARE.
 #ifndef WRENCH_COMPACT
 
 // Define 32-bit signed integer overflow behavior explicitly as two's-complement wrap.
-static inline int32_t wr_iadd_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a + (uint32_t)b); }
-static inline int32_t wr_isub_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a - (uint32_t)b); }
-static inline int32_t wr_imul_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a * (uint32_t)b); }
+inline int32_t wr_iadd_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a + (uint32_t)b); }
+inline int32_t wr_isub_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a - (uint32_t)b); }
+inline int32_t wr_imul_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a * (uint32_t)b); }
 
 void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
 

@@ -618,7 +618,7 @@ void emitln( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal,
 
 #ifdef WRENCH_TIME_SLICES
 //------------------------------------------------------------------------------
-static int countStringHits( const WRstr& haystack, const char* needle )
+int countStringHits( const WRstr& haystack, const char* needle )
 {
 	int count = 0;
 	const int needleLen = (int)strlen( needle );
