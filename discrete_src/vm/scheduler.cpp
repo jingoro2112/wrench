@@ -58,21 +58,32 @@ WrenchScheduler::~WrenchScheduler()
 void WrenchScheduler::tick( int instructionsPerSlice )
 {
 	wr_setInstructionsPerSlice( m_w, instructionsPerSlice );
-	WrenchScheduledTask* task = m_tasks;
-
-	while( task )
+	WrenchScheduledTask** link = &m_tasks;
+	while( *link )
 	{
+		WrenchScheduledTask* task = *link;
+
+		// If this task is complete, unlink it in-place.
 		if ( !task->context->yield_pc )
 		{
-			const int id = task->id;
-			task = task->next;
-			removeTask( id );
+			*link = task->next;
+			wr_destroyContext( task->context );
+			g_free( task );
+			continue;
 		}
-		else
+
+		wr_callFunction( task->context, (WRFunction*)0, task->context->yield_argv, task->context->yield_argn );
+
+		// A task can finish during this tick; remove it immediately.
+		if ( !task->context->yield_pc )
 		{
-			wr_callFunction( task->context, (WRFunction*)0, task->context->yield_argv, task->context->yield_argn );
-			task = task->next;
+			*link = task->next;
+			wr_destroyContext( task->context );
+			g_free( task );
+			continue;
 		}
+
+		link = &task->next;
 	}
 }
 
@@ -93,6 +104,15 @@ int WrenchScheduler::addThread( const uint8_t* byteCode, const int size, const i
 	}
 
 	WrenchScheduledTask* task = (WrenchScheduledTask*)g_malloc( sizeof(WrenchScheduledTask) );
+	if ( !task )
+	{
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		g_mallocFailed = true;
+#endif
+		m_w->err = WR_ERR_malloc_failed;
+		wr_destroyContext( context );
+		return -1;
+	}
 	task->context = context;
 	task->next = m_tasks;
 	task->id = ++wr_idGenerator;

@@ -224,6 +224,12 @@ bool wr_executeFunctionZero( WRContext* context )
 //------------------------------------------------------------------------------
 WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership, WRValue* stack )
 {
+	if ( blockSize < 8 )
+	{
+		w->err = WR_ERR_bad_bytecode_CRC;
+		return 0;
+	}
+
 	// CRC the code block, at least is it what the compiler intended?
 	uint32_t hash = READ_32_FROM_PC(block + (blockSize - 4));
 	if ( hash != wr_hash_read8(block, (blockSize - 4)) + WRENCH_VERSION_MAJOR )
@@ -234,11 +240,19 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 
 	int globals = READ_8_FROM_PC( block );
 	int localFuncs = READ_8_FROM_PC(block  + 1); // how many?
+
+	// 3-byte header + function table + 4-byte CRC must fit in block
+	int headerSize = 3 + (localFuncs * WR_FUNCTION_CORE_SIZE);
+	if ( headerSize + 4 > blockSize )
+	{
+		w->err = WR_ERR_bad_bytecode_CRC;
+		return 0;
+	}
 	
 	int needed = sizeof(WRContext) // class
 				 + (globals * sizeof(WRValue))  // globals
 				 + (localFuncs * sizeof(WRFunction)) // functions
-				 + (stack ? 0 : (w->stackSize * sizeof(WRValue))); // stack
+				 + (stack ? 0 : (w->stackSize * sizeof(WRValue) + (int)sizeof(void*) - 1)); // stack + alignment slop
 
 	WRContext* C = (WRContext *)g_malloc( needed );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
@@ -257,7 +271,16 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 
 	C->globals = globals;
 	
-	C->stack = stack ? stack : (WRValue *)(C->localFunctions + localFuncs);
+	if ( stack )
+	{
+		C->stack = stack;
+	}
+	else
+	{
+		uintptr_t rawStack = (uintptr_t)(C->localFunctions + localFuncs);
+		uintptr_t alignedStack = (rawStack + (sizeof(void*) - 1)) & ~((uintptr_t)sizeof(void*) - 1);
+		C->stack = (WRValue*)alignedStack;
+	}
 
 	C->flags |= takeOwnership ? WRC_OwnsMemory : 0;
 	

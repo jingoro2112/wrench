@@ -23,7 +23,7 @@ SOFTWARE.
 *******************************************************************************/
 
 #define STR_FILE_OPERATIONS
-#include <wrench.h>
+#include "wrench.h"
 
 #include "utils/simple_args.h"
 
@@ -616,6 +616,27 @@ void emitln( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal,
 	retVal.i = 20; // for argument-return testing
 }
 
+#ifdef WRENCH_TIME_SLICES
+//------------------------------------------------------------------------------
+static int countStringHits( const WRstr& haystack, const char* needle )
+{
+	int count = 0;
+	const int needleLen = (int)strlen( needle );
+	if ( needleLen <= 0 )
+	{
+		return 0;
+	}
+
+	const char* p = haystack.c_str();
+	while( (p = strstr( p, needle )) )
+	{
+		++count;
+		p += needleLen;
+	}
+	return count;
+}
+#endif
+
 //------------------------------------------------------------------------------
 void checkIsRawArray( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
@@ -1104,7 +1125,38 @@ void testScheduler()
 	scheduler.addThread( out, outLen, 10, true );
 	scheduler.tick(10);
 
-	//printf( "%s\n", logger.c_str() );
+	// Stress many short-lived yielded tasks finishing in a single tick.
+	const char* shortYield = "println(\"start\"); yield(0); println(\"end\");";
+	wr_compile( shortYield, strlen(shortYield), &out, &outLen );
+	int ids[64];
+	for( int i=0; i<64; ++i )
+	{
+		ids[i] = scheduler.addThread( out, outLen, 1000, false );
+		assert( ids[i] > 0 );
+	}
+	assert( countStringHits( logger, "start\n" ) >= 64 );
+
+	scheduler.tick(1000);
+	assert( countStringHits( logger, "end\n" ) >= 64 );
+	for( int i=0; i<64; ++i )
+	{
+		assert( !scheduler.removeTask(ids[i]) );
+	}
+	wr_free( out );
+
+	// Validate removeTask behavior on active yielded tasks.
+	const char* foreverYield = "for(;;) { yield(0); }";
+	wr_compile( foreverYield, strlen(foreverYield), &out, &outLen );
+	int idA = scheduler.addThread( out, outLen, 1000, false );
+	int idB = scheduler.addThread( out, outLen, 1000, false );
+	assert( idA > 0 && idB > 0 );
+
+	assert( scheduler.removeTask(idA) );
+	assert( !scheduler.removeTask(idA) );
+	assert( scheduler.removeTask(idB) );
+	assert( !scheduler.removeTask(idB) );
+	assert( !scheduler.removeTask(0x12345678) );
+	wr_free( out );
 
 #endif
 }

@@ -306,7 +306,7 @@ WRValue* wr_continue( WRContext* context )
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv, const int argn )
 {
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
-	const void* opcodeJumptable[] =
+	const void* opcodeJumptable[256] =
 	{
 		&&Yield,
 
@@ -606,6 +606,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&InitVar,
 
 		&&DebugInfo,
+		
 	};
 #endif
 
@@ -988,7 +989,8 @@ CallFunctionByHashAndPop_continue:
 
 				// function MUST exist or we wouldn't be here, we would
 				// be in the "call by hash" above
-				function = context->localFunctions + READ_8_FROM_PC(pc++);
+				findex = READ_8_FROM_PC(pc++);
+				function = context->localFunctions + findex;
 				pc += READ_8_FROM_PC(pc);
 callFunction:
 				
@@ -1315,14 +1317,16 @@ callFunction:
 
 			CASE(GlobalIndexHash):
 			{
-				register0 = &(globalSpace + READ_8_FROM_PC(pc++))->deref();
+				register0 = globalSpace + READ_8_FROM_PC(pc++);
+				register0 = &register0->deref();
 				register1 = stackTop++;
 				goto hashIndexJump;
 			}
 
 			CASE(LocalIndexHash):
 			{
-				register0 = &(frameBase + READ_8_FROM_PC(pc++))->deref();
+				register0 = frameBase + READ_8_FROM_PC(pc++);
+				register0 = &register0->deref();
 				register1 = stackTop++;
 				goto hashIndexJump;
 			}
@@ -1401,7 +1405,8 @@ hashIndexJump:
 
 			CASE(LoadFromLocal):
 			{
-				stackTop->p = frameBase + READ_8_FROM_PC(pc++);
+				register0 = frameBase + READ_8_FROM_PC(pc++);
+				stackTop->p = register0;
 				(stackTop++)->p2 = INIT_AS_REF;
 				CHECK_STACK;
 				FASTCONTINUE;
@@ -1409,7 +1414,8 @@ hashIndexJump:
 
 			CASE(LoadFromGlobal):
 			{
-				stackTop->p = globalSpace + READ_8_FROM_PC(pc++);
+				register0 = globalSpace + READ_8_FROM_PC(pc++);
+				stackTop->p = register0;
  				(stackTop++)->p2 = INIT_AS_REF;
 				CHECK_STACK;
 				FASTCONTINUE;
@@ -1672,7 +1678,7 @@ doAssignToLocalAndPop:
 			{
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				register0->p2 = INIT_AS_INT;
-load32ToTemp:
+	load32ToTemp:
 				register0->i = READ_32_FROM_PC(pc);
 				pc += 4;
 				CONTINUE;
@@ -3186,7 +3192,6 @@ targetFuncStoreLocalOp:
 #endif//-------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
 
-
 #ifndef WRENCH_JUMPTABLE_INTERPRETER
 	#ifdef _MSC_VER
 			default: __assume(0); // tells the compiler to make this a jump table
@@ -3195,4 +3200,3 @@ targetFuncStoreLocalOp:
 	}
 #endif
 }
-

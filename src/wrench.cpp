@@ -523,21 +523,24 @@ class WRValueSerializer
 public:
 	
 	WRValueSerializer() : m_pos(0), m_size(0), m_buf(0) {}
-	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size)
-	{
-		m_buf = (char*)g_malloc(size);
+		WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size)
+		{
+			m_buf = (char*)g_malloc(size);
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 		if ( !m_buf )
 		{
 			m_size = 0;
 			g_mallocFailed = true;
 		}
-		else
+			else
 #endif
-		{
-			memcpy( m_buf, data, size );
+			{
+				if ( size > 0 )
+				{
+					memcpy( m_buf, data, size );
+				}
+			}
 		}
-	}
 	
 	~WRValueSerializer() { g_free(m_buf); }
 
@@ -563,16 +566,19 @@ public:
 		return true;
 	}
 
-	void write( const char* data, const int size )
-	{
-		if ( m_pos + size >= m_size )
+		void write( const char* data, const int size )
 		{
-			m_size += (size*2) + 8;
-			char* newBuf = (char*)g_malloc( m_size );
-			memcpy( newBuf, m_buf, m_pos );
-			g_free( m_buf );
-			m_buf = newBuf;
-		}
+			if ( m_pos + size >= m_size )
+			{
+				m_size += (size*2) + 8;
+				char* newBuf = (char*)g_malloc( m_size );
+				if ( m_pos > 0 )
+				{
+					memcpy( newBuf, m_buf, m_pos );
+				}
+				g_free( m_buf );
+				m_buf = newBuf;
+			}
 
 		memcpy( m_buf + m_pos, data, size );
 		m_pos += size;
@@ -586,7 +592,6 @@ private:
 };
 
 #endif
-
 #ifndef _SIMPLE_LL_H
 #define _SIMPLE_LL_H
 /*******************************************************************************
@@ -2651,6 +2656,11 @@ public:
 	WROpcodeStream& operator += ( const unsigned char data ) { return append(&data, 1); }
 	WROpcodeStream& append( const unsigned char* data, const int size )
 	{
+		if ( size <= 0 )
+		{
+			return *this;
+		}
+
 		if ( (size + m_len) >= m_bufLen )
 		{
 			unsigned char* buf = m_buf;
@@ -2697,7 +2707,8 @@ private:
 
 #endif
 
-#endif/*******************************************************************************
+#endif
+/*******************************************************************************
 Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
@@ -8540,20 +8551,20 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				bytecode.all[ a ] = (uint8_t)(be >> 8);
 				return;
 			}
-			else if ( bytecode.opcodes[o] == O_LiteralInt32 )
-			{
-				int32_t be = ((int32_t)bytecode.all[ a - 3 ])
-							 | ((int32_t)bytecode.all[ a - 2 ] << 8)
-							 | ((int32_t)bytecode.all[ a - 1 ] << 16)
-							 | ((int32_t)bytecode.all[ a ] << 24);
-				be = -be;
+				else if ( bytecode.opcodes[o] == O_LiteralInt32 )
+				{
+					uint32_t be = (uint32_t)bytecode.all[ a - 3 ]
+								| ((uint32_t)bytecode.all[ a - 2 ] << 8)
+								| ((uint32_t)bytecode.all[ a - 1 ] << 16)
+								| ((uint32_t)bytecode.all[ a ] << 24);
+					be = (uint32_t)(0u - be);
 
-				bytecode.all[ a - 3 ] = (uint8_t)(be & 0xFF);
-				bytecode.all[ a - 2 ] = (uint8_t)(be >> 8);
-				bytecode.all[ a - 1 ] = (uint8_t)(be >> 16);
-				bytecode.all[ a ] = (uint8_t)(be >> 24);
-				return;
-			}
+					bytecode.all[ a - 3 ] = (uint8_t)(be & 0xFF);
+					bytecode.all[ a - 2 ] = (uint8_t)(be >> 8);
+					bytecode.all[ a - 1 ] = (uint8_t)(be >> 16);
+					bytecode.all[ a ] = (uint8_t)(be >> 24);
+					return;
+				}
 			else if ( bytecode.opcodes[o] == O_LiteralFloat )
 			{
 				struct BE
@@ -11267,7 +11278,7 @@ WRValue* wr_continue( WRContext* context )
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv, const int argn )
 {
 #ifdef WRENCH_JUMPTABLE_INTERPRETER
-	const void* opcodeJumptable[] =
+	const void* opcodeJumptable[256] =
 	{
 		&&Yield,
 
@@ -11567,6 +11578,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&InitVar,
 
 		&&DebugInfo,
+		
 	};
 #endif
 
@@ -11949,7 +11961,8 @@ CallFunctionByHashAndPop_continue:
 
 				// function MUST exist or we wouldn't be here, we would
 				// be in the "call by hash" above
-				function = context->localFunctions + READ_8_FROM_PC(pc++);
+				findex = READ_8_FROM_PC(pc++);
+				function = context->localFunctions + findex;
 				pc += READ_8_FROM_PC(pc);
 callFunction:
 				
@@ -12276,14 +12289,16 @@ callFunction:
 
 			CASE(GlobalIndexHash):
 			{
-				register0 = &(globalSpace + READ_8_FROM_PC(pc++))->deref();
+				register0 = globalSpace + READ_8_FROM_PC(pc++);
+				register0 = &register0->deref();
 				register1 = stackTop++;
 				goto hashIndexJump;
 			}
 
 			CASE(LocalIndexHash):
 			{
-				register0 = &(frameBase + READ_8_FROM_PC(pc++))->deref();
+				register0 = frameBase + READ_8_FROM_PC(pc++);
+				register0 = &register0->deref();
 				register1 = stackTop++;
 				goto hashIndexJump;
 			}
@@ -12362,7 +12377,8 @@ hashIndexJump:
 
 			CASE(LoadFromLocal):
 			{
-				stackTop->p = frameBase + READ_8_FROM_PC(pc++);
+				register0 = frameBase + READ_8_FROM_PC(pc++);
+				stackTop->p = register0;
 				(stackTop++)->p2 = INIT_AS_REF;
 				CHECK_STACK;
 				FASTCONTINUE;
@@ -12370,7 +12386,8 @@ hashIndexJump:
 
 			CASE(LoadFromGlobal):
 			{
-				stackTop->p = globalSpace + READ_8_FROM_PC(pc++);
+				register0 = globalSpace + READ_8_FROM_PC(pc++);
+				stackTop->p = register0;
  				(stackTop++)->p2 = INIT_AS_REF;
 				CHECK_STACK;
 				FASTCONTINUE;
@@ -12633,7 +12650,7 @@ doAssignToLocalAndPop:
 			{
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
 				register0->p2 = INIT_AS_INT;
-load32ToTemp:
+	load32ToTemp:
 				register0->i = READ_32_FROM_PC(pc);
 				pc += 4;
 				CONTINUE;
@@ -14147,7 +14164,6 @@ targetFuncStoreLocalOp:
 #endif//-------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
 
-
 #ifndef WRENCH_JUMPTABLE_INTERPRETER
 	#ifdef _MSC_VER
 			default: __assume(0); // tells the compiler to make this a jump table
@@ -14156,7 +14172,6 @@ targetFuncStoreLocalOp:
 	}
 #endif
 }
-
 /*******************************************************************************
 Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
@@ -14383,6 +14398,12 @@ bool wr_executeFunctionZero( WRContext* context )
 //------------------------------------------------------------------------------
 WRContext* wr_createContext( WRState* w, const unsigned char* block, const int blockSize, bool takeOwnership, WRValue* stack )
 {
+	if ( blockSize < 8 )
+	{
+		w->err = WR_ERR_bad_bytecode_CRC;
+		return 0;
+	}
+
 	// CRC the code block, at least is it what the compiler intended?
 	uint32_t hash = READ_32_FROM_PC(block + (blockSize - 4));
 	if ( hash != wr_hash_read8(block, (blockSize - 4)) + WRENCH_VERSION_MAJOR )
@@ -14393,11 +14414,19 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 
 	int globals = READ_8_FROM_PC( block );
 	int localFuncs = READ_8_FROM_PC(block  + 1); // how many?
+
+	// 3-byte header + function table + 4-byte CRC must fit in block
+	int headerSize = 3 + (localFuncs * WR_FUNCTION_CORE_SIZE);
+	if ( headerSize + 4 > blockSize )
+	{
+		w->err = WR_ERR_bad_bytecode_CRC;
+		return 0;
+	}
 	
 	int needed = sizeof(WRContext) // class
 				 + (globals * sizeof(WRValue))  // globals
 				 + (localFuncs * sizeof(WRFunction)) // functions
-				 + (stack ? 0 : (w->stackSize * sizeof(WRValue))); // stack
+				 + (stack ? 0 : (w->stackSize * sizeof(WRValue) + (int)sizeof(void*) - 1)); // stack + alignment slop
 
 	WRContext* C = (WRContext *)g_malloc( needed );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
@@ -14416,7 +14445,16 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 
 	C->globals = globals;
 	
-	C->stack = stack ? stack : (WRValue *)(C->localFunctions + localFuncs);
+	if ( stack )
+	{
+		C->stack = stack;
+	}
+	else
+	{
+		uintptr_t rawStack = (uintptr_t)(C->localFunctions + localFuncs);
+		uintptr_t alignedStack = (rawStack + (sizeof(void*) - 1)) & ~((uintptr_t)sizeof(void*) - 1);
+		C->stack = (WRValue*)alignedStack;
+	}
 
 	C->flags |= takeOwnership ? WRC_OwnsMemory : 0;
 	
@@ -17618,21 +17656,32 @@ WrenchScheduler::~WrenchScheduler()
 void WrenchScheduler::tick( int instructionsPerSlice )
 {
 	wr_setInstructionsPerSlice( m_w, instructionsPerSlice );
-	WrenchScheduledTask* task = m_tasks;
-
-	while( task )
+	WrenchScheduledTask** link = &m_tasks;
+	while( *link )
 	{
+		WrenchScheduledTask* task = *link;
+
+		// If this task is complete, unlink it in-place.
 		if ( !task->context->yield_pc )
 		{
-			const int id = task->id;
-			task = task->next;
-			removeTask( id );
+			*link = task->next;
+			wr_destroyContext( task->context );
+			g_free( task );
+			continue;
 		}
-		else
+
+		wr_callFunction( task->context, (WRFunction*)0, task->context->yield_argv, task->context->yield_argn );
+
+		// A task can finish during this tick; remove it immediately.
+		if ( !task->context->yield_pc )
 		{
-			wr_callFunction( task->context, (WRFunction*)0, task->context->yield_argv, task->context->yield_argn );
-			task = task->next;
+			*link = task->next;
+			wr_destroyContext( task->context );
+			g_free( task );
+			continue;
 		}
+
+		link = &task->next;
 	}
 }
 
@@ -17653,6 +17702,15 @@ int WrenchScheduler::addThread( const uint8_t* byteCode, const int size, const i
 	}
 
 	WrenchScheduledTask* task = (WrenchScheduledTask*)g_malloc( sizeof(WrenchScheduledTask) );
+	if ( !task )
+	{
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		g_mallocFailed = true;
+#endif
+		m_w->err = WR_ERR_malloc_failed;
+		wr_destroyContext( context );
+		return -1;
+	}
 	task->context = context;
 	task->next = m_tasks;
 	task->id = ++wr_idGenerator;
@@ -17718,6 +17776,9 @@ SOFTWARE.
 *******************************************************************************/
 
 #include "wrench.h"
+
+// Explicit two's-complement wrap semantics for integer negate.
+static inline int32_t wr_ineg_wrap( const int32_t a ) { return (int32_t)(0u - (uint32_t)a); }
 
 //------------------------------------------------------------------------------
 bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target )
@@ -18066,7 +18127,7 @@ WRReturnSingleFunc wr_LogicalNot[4] =
 
 
 //------------------------------------------------------------------------------
-void doNegate_I( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = -value->i; }
+void doNegate_I( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = wr_ineg_wrap( value->i ); }
 void doNegate_F( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = -value->f; }
 void doNegate_E( WRValue* value, WRValue* target )
 {
@@ -18437,6 +18498,11 @@ SOFTWARE.
 
 #ifndef WRENCH_COMPACT
 
+// Define 32-bit signed integer overflow behavior explicitly as two's-complement wrap.
+static inline int32_t wr_iadd_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a + (uint32_t)b); }
+static inline int32_t wr_isub_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a - (uint32_t)b); }
+static inline int32_t wr_imul_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a * (uint32_t)b); }
+
 void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
 
 #define X_LOGIC_ASSIGN( NAME, OPERATION ) \
@@ -18533,7 +18599,7 @@ void wr_SubtractAssign_R_F( WRValue* to, WRValue* from ) { wr_SubtractAssign[(to
 void wr_SubtractAssign_I_R( WRValue* to, WRValue* from ) { wr_SubtractAssign[(WR_INT<<2)+from->r->type](to, from->r); *from = *to; }
 void wr_SubtractAssign_F_R( WRValue* to, WRValue* from ) { wr_SubtractAssign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }
 void wr_SubtractAssign_F_F( WRValue* to, WRValue* from ) { to->f -= from->f; }
-void wr_SubtractAssign_I_I( WRValue* to, WRValue* from ) { to->i -= from->i; }
+void wr_SubtractAssign_I_I( WRValue* to, WRValue* from ) { to->i = wr_isub_wrap( to->i, from->i ); }
 void wr_SubtractAssign_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; to->f = (float)to->i - from->f; }
 void wr_SubtractAssign_F_I( WRValue* to, WRValue* from ) { from->p2 = INIT_AS_FLOAT; to->f -= (float)from->i; }
 WRVoidFunc wr_SubtractAssign[16] = 
@@ -18794,7 +18860,7 @@ void wr_AddAssign_R_F( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<
 void wr_AddAssign_I_R( WRValue* to, WRValue* from ) { wr_AddAssign[(WR_INT<<2)+from->r->type](to, from->r); *from = *to; }
 void wr_AddAssign_F_R( WRValue* to, WRValue* from ) { wr_AddAssign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }
 void wr_AddAssign_F_F( WRValue* to, WRValue* from ) { to->f += from->f; }
-void wr_AddAssign_I_I( WRValue* to, WRValue* from ) { to->i += from->i; }
+void wr_AddAssign_I_I( WRValue* to, WRValue* from ) { to->i = wr_iadd_wrap( to->i, from->i ); }
 void wr_AddAssign_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; to->f = (float)to->i + from->f; }
 void wr_AddAssign_F_I( WRValue* to, WRValue* from ) { from->p2 = INIT_AS_FLOAT; to->f += (float)from->i; }
 WRVoidFunc wr_AddAssign[16] = 
@@ -18807,7 +18873,7 @@ WRVoidFunc wr_AddAssign[16] =
 
 
 //------------------------------------------------------------------------------
-#define X_BINARY( NAME, OPERATION ) \
+#define X_BINARY( NAME, OPERATION, I_I_OP ) \
 void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
 {\
 	WRValue& V = to->singleValue();\
@@ -18841,7 +18907,7 @@ void NAME##Binary_R_F( WRValue* to, WRValue* from, WRValue* target ) { NAME##Bin
 void NAME##Binary_R_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }\
 void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_INT](to->r, from, target); }\
 void NAME##Binary_F_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_FLOAT<<2)+from->r->type](to, from->r, target); }\
-void NAME##Binary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = to->i OPERATION from->i; }\
+void NAME##Binary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = I_I_OP( to->i, from->i ); }\
 void NAME##Binary_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = (float)to->i OPERATION from->f; }\
 void NAME##Binary_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = to->f OPERATION (float)from->i; }\
 void NAME##Binary_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = to->f OPERATION from->f; }\
@@ -18853,10 +18919,10 @@ WRTargetFunc NAME##Binary[16] = \
 	NAME##Binary_E_I,  NAME##Binary_E_F,  NAME##Binary_E_R,  NAME##Binary_E_E,\
 };\
 
-//X_BINARY( wr_Addition, + );  -- broken out so strings work
-X_BINARY( wr_Multiply, * );
-X_BINARY( wr_Subtract, - );
-//X_BINARY( wr_Divide, / ); -- broken out for divide-by-zero
+//X_BINARY( wr_Addition, +, wr_iadd_wrap );  -- broken out so strings work
+X_BINARY( wr_Multiply, *, wr_imul_wrap );
+X_BINARY( wr_Subtract, -, wr_isub_wrap );
+//X_BINARY( wr_Divide, /, wr_idiv_wrap ); -- broken out for divide-by-zero
 
 void wr_DivideBinary_E_I( WRValue* to, WRValue* from, WRValue* target )
 {
@@ -19013,7 +19079,7 @@ void wr_AdditionBinary_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_A
 void wr_AdditionBinary_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }
 void wr_AdditionBinary_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(to->r->type<<2)|WR_INT](to->r, from, target); }
 void wr_AdditionBinary_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(WR_FLOAT<<2)+from->r->type](to, from->r, target); }
-void wr_AdditionBinary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = to->i + from->i; }
+void wr_AdditionBinary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = wr_iadd_wrap( to->i, from->i ); }
 void wr_AdditionBinary_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = (float)to->i + from->f; }
 void wr_AdditionBinary_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = to->f + (float)from->i; }
 void wr_AdditionBinary_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = to->f + from->f; }

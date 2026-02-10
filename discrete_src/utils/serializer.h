@@ -39,21 +39,24 @@ class WRValueSerializer
 public:
 	
 	WRValueSerializer() : m_pos(0), m_size(0), m_buf(0) {}
-	WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size)
-	{
-		m_buf = (char*)g_malloc(size);
+		WRValueSerializer( const char* data, const int size ) : m_pos(0), m_size(size)
+		{
+			m_buf = (char*)g_malloc(size);
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 		if ( !m_buf )
 		{
 			m_size = 0;
 			g_mallocFailed = true;
 		}
-		else
+			else
 #endif
-		{
-			memcpy( m_buf, data, size );
+			{
+				if ( size > 0 )
+				{
+					memcpy( m_buf, data, size );
+				}
+			}
 		}
-	}
 	
 	~WRValueSerializer() { g_free(m_buf); }
 
@@ -79,16 +82,19 @@ public:
 		return true;
 	}
 
-	void write( const char* data, const int size )
-	{
-		if ( m_pos + size >= m_size )
+		void write( const char* data, const int size )
 		{
-			m_size += (size*2) + 8;
-			char* newBuf = (char*)g_malloc( m_size );
-			memcpy( newBuf, m_buf, m_pos );
-			g_free( m_buf );
-			m_buf = newBuf;
-		}
+			if ( m_pos + size >= m_size )
+			{
+				m_size += (size*2) + 8;
+				char* newBuf = (char*)g_malloc( m_size );
+				if ( m_pos > 0 )
+				{
+					memcpy( newBuf, m_buf, m_pos );
+				}
+				g_free( m_buf );
+				m_buf = newBuf;
+			}
 
 		memcpy( m_buf + m_pos, data, size );
 		m_pos += size;
@@ -102,4 +108,3 @@ private:
 };
 
 #endif
-

@@ -282,20 +282,20 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				bytecode.all[ a ] = (uint8_t)(be >> 8);
 				return;
 			}
-			else if ( bytecode.opcodes[o] == O_LiteralInt32 )
-			{
-				int32_t be = ((int32_t)bytecode.all[ a - 3 ])
-							 | ((int32_t)bytecode.all[ a - 2 ] << 8)
-							 | ((int32_t)bytecode.all[ a - 1 ] << 16)
-							 | ((int32_t)bytecode.all[ a ] << 24);
-				be = -be;
+				else if ( bytecode.opcodes[o] == O_LiteralInt32 )
+				{
+					uint32_t be = (uint32_t)bytecode.all[ a - 3 ]
+								| ((uint32_t)bytecode.all[ a - 2 ] << 8)
+								| ((uint32_t)bytecode.all[ a - 1 ] << 16)
+								| ((uint32_t)bytecode.all[ a ] << 24);
+					be = (uint32_t)(0u - be);
 
-				bytecode.all[ a - 3 ] = (uint8_t)(be & 0xFF);
-				bytecode.all[ a - 2 ] = (uint8_t)(be >> 8);
-				bytecode.all[ a - 1 ] = (uint8_t)(be >> 16);
-				bytecode.all[ a ] = (uint8_t)(be >> 24);
-				return;
-			}
+					bytecode.all[ a - 3 ] = (uint8_t)(be & 0xFF);
+					bytecode.all[ a - 2 ] = (uint8_t)(be >> 8);
+					bytecode.all[ a - 1 ] = (uint8_t)(be >> 16);
+					bytecode.all[ a ] = (uint8_t)(be >> 24);
+					return;
+				}
 			else if ( bytecode.opcodes[o] == O_LiteralFloat )
 			{
 				struct BE

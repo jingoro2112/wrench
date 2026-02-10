@@ -10,8 +10,8 @@ PERF ?=
 C_VER ?= -std=c++98
 
 #FLAGS ?= $(OPT) $(PERF) $(C_VER)
-#FLAGS ?= $(OPT) $(PERF) -Idiscrete_src -I. $(COMPACT) $(C_VER) -MD $(DEBUG) -DWRENCH_LINUX_FILE_IO -DWRENCH_LINUX_SERIAL -DWRENCH_LINUX_TCP
-FLAGS ?= $(OPT) $(PERF) -Idiscrete_src -I. $(COMPACT) $(C_VER) -MD $(DEBUG) -DWRENCH_LINUX_FILE_IO 
+#FLAGS ?= $(OPT) $(PERF) -iquote discrete_src -I. $(COMPACT) $(C_VER) -MD $(DEBUG) -DWRENCH_LINUX_FILE_IO -DWRENCH_LINUX_SERIAL -DWRENCH_LINUX_TCP
+FLAGS ?= $(OPT) $(PERF) -iquote discrete_src -I. $(COMPACT) $(C_VER) -MD $(DEBUG) -DWRENCH_LINUX_FILE_IO 
 
 #FLAGS = $(OPT) -pg
 #FLAGS = $(OPT) $(PERF)
@@ -73,19 +73,19 @@ clean:
 	-@mkdir src
 
 valgrind: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
-	g++ -o wrench_v $(FLAGS) -Wall -Werror -I. -Idiscrete_src -O3 -ggdb $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
+	g++ -o wrench_v $(FLAGS) -Wall -Werror -I. -iquote discrete_src -O3 -ggdb $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
 
 test: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
-	g++ $(OBJS) -Wall -Werror discrete_src/debug/debugger.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_dev
+	g++ $(OBJS) -Wall -Werror discrete_src/debug/debugger.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -iquote discrete_src -Isrc -o wrench_dev
 	./wrench_dev t
 
 wrench_dev: dev_wrench
 
 dev_wrench: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
-	g++ $(OBJS) -Wall -Werror discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_dev
+	g++ $(OBJS) -Wall -Werror discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp $(FLAGS) -iquote discrete_src -Isrc -o wrench_dev
 
 wrench: $(OBJS) discrete_src/utils/wrench_cli.cpp
-	g++ $(OBJS) -Wall -Werror discrete_src/debug/debugger.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -Idiscrete_src -Isrc -o wrench_dev
+	g++ $(OBJS) -Wall -Werror discrete_src/debug/debugger.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -iquote discrete_src -Isrc -o wrench_dev
 	./wrench_dev release discrete_src src/.
 	-@rm wrench_dev
 	g++ -o wrench -Wall -Werror $(FLAGS) -Isrc src/wrench.cpp discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp

@@ -23,7 +23,7 @@ SOFTWARE.
 *******************************************************************************/
 #define STR_FILE_OPERATIONS
 
-#include <wrench.h>
+#include "wrench.h"
 
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
 

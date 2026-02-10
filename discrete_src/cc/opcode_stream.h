@@ -61,6 +61,11 @@ public:
 	WROpcodeStream& operator += ( const unsigned char data ) { return append(&data, 1); }
 	WROpcodeStream& append( const unsigned char* data, const int size )
 	{
+		if ( size <= 0 )
+		{
+			return *this;
+		}
+
 		if ( (size + m_len) >= m_bufLen )
 		{
 			unsigned char* buf = m_buf;

@@ -24,6 +24,9 @@ SOFTWARE.
 
 #include "wrench.h"
 
+// Explicit two's-complement wrap semantics for integer negate.
+static inline int32_t wr_ineg_wrap( const int32_t a ) { return (int32_t)(0u - (uint32_t)a); }
+
 //------------------------------------------------------------------------------
 bool wr_concatStringCheck( WRValue* to, WRValue* from, WRValue* target )
 {
@@ -371,7 +374,7 @@ WRReturnSingleFunc wr_LogicalNot[4] =
 
 
 //------------------------------------------------------------------------------
-void doNegate_I( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = -value->i; }
+void doNegate_I( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = wr_ineg_wrap( value->i ); }
 void doNegate_F( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = -value->f; }
 void doNegate_E( WRValue* value, WRValue* target )
 {
