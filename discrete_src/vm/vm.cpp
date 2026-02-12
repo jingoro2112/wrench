@@ -876,8 +876,10 @@ debugReturn:
 							if ( (I = import->registry.exists(fhash, false)) )
 							{
 								// import shares our stack, tell it where to find it's args
-								import->stackOffset = (stackTop - stackBase);
+								uint8_t savedOffset = import->stackOffset;
+								import->stackOffset = (uint8_t)(stackTop - context->stack);
 								wr_callFunction( import, I->wrf, stackTop - args, args );
+								import->stackOffset = savedOffset;
 								register0 = stackTop;
 
 								if ( *pc == O_NewObjectTable )
@@ -960,8 +962,10 @@ newObjOut:
 							if ( (register0 = import->registry.exists(fhash, false)) )
 							{
 								// import shares our stack, tell it where to find it's args
-								import->stackOffset = (stackTop - stackBase);
+								uint8_t savedOffset = import->stackOffset;
+								import->stackOffset = (uint8_t)(stackTop - context->stack);
 								wr_callFunction( import, register0->wrf, stackTop - args, args );
+								import->stackOffset = savedOffset;
 								goto CallFunctionByHashAndPop_continue;
 							}
 
