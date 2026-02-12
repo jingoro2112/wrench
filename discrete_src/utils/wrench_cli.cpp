@@ -46,6 +46,7 @@ void testScheduler();
 void testStackOverflow();
 void testYield2();
 void testD();
+void testCallFunctionHashLibraryFallback();
 void LEAKtest();
 void C3test();
 #ifdef WIN32_C17
@@ -750,6 +751,61 @@ void testStructs()
 	wr_destroyState( w );
 	wr_free( outBytes );
 }
+
+//------------------------------------------------------------------------------
+static void hashLibSum2( WRValue* stackTop, const int argn, WRContext* context )
+{
+	(void)context;
+	if ( argn != 2 )
+	{
+		stackTop->init();
+		return;
+	}
+
+	wr_makeInt( stackTop, (stackTop - 2)->asInt() + (stackTop - 1)->asInt() );
+}
+
+//------------------------------------------------------------------------------
+static void hashLibFail( WRValue* stackTop, const int argn, WRContext* context )
+{
+	(void)stackTop;
+	(void)argn;
+	context->w->err = WR_ERR_division_by_zero;
+}
+
+//------------------------------------------------------------------------------
+void testCallFunctionHashLibraryFallback()
+{
+	WRState* w = wr_newState( 64 );
+	wr_registerLibraryFunction( w, "lib::sum2", hashLibSum2 );
+	wr_registerLibraryFunction( w, "lib::fail", hashLibFail );
+
+	unsigned char* out = 0;
+	int outLen = 0;
+	assert( wr_compile( "", 0, &out, &outLen, 0, WR_INCLUDE_GLOBALS ) == WR_ERR_None );
+
+	WRContext* c = wr_run( w, out, outLen, true );
+	assert( c );
+
+	WRValue args[2];
+	wr_makeInt( &args[0], 7 );
+	wr_makeInt( &args[1], 11 );
+
+	WRValue* r = wr_callFunction( c, wr_hashStr("lib::sum2"), args, 2 );
+	assert( r && r->asInt() == 18 );
+	assert( wr_getLastError( w ) == WR_ERR_None );
+
+	WRValue* errRet = wr_callFunction( c, wr_hashStr("lib::fail"), 0, 0 );
+	assert( !errRet );
+	assert( wr_getLastError( w ) == WR_ERR_division_by_zero );
+
+	// Verify stale error from previous call does not leak into success path.
+	WRValue* r2 = wr_callFunction( c, wr_hashStr("lib::sum2"), args, 2 );
+	assert( r2 && r2->asInt() == 18 );
+	assert( wr_getLastError( w ) == WR_ERR_None );
+
+	wr_destroyState( w );
+}
 #endif
 
 
@@ -950,6 +1006,20 @@ int runTests( int number )
 #endif
 
 	testD();
+	testCallFunctionHashLibraryFallback();
+#ifdef WRENCH_ENABLE_CROSS_MODULE_EXTERNAL_TEST
+	printf( "test [x][discrete_src/utils/test_wrench_cross_module_globals.cpp]: " );
+	int crossModuleResult = system( "./test_wrench_cross_module_globals > _cross_module_test.log 2>&1" );
+	if ( crossModuleResult != 0 )
+	{
+		printf( "FAIL (exit=%d, see _cross_module_test.log)\n", crossModuleResult );
+		err = err ? err : -1;
+	}
+	else
+	{
+		printf( "PASS\n" );
+	}
+#endif
 	testTimeSlices();
 	testImport();
 	testHalt();

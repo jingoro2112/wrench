@@ -187,7 +187,7 @@ void wr_arrayTruncate( WRValue* stackTop, const int argn, WRContext* c )
 void wr_arrayInsertEx( WRValue* A, const unsigned int where, const unsigned int count, WRValue* stackTop, WRContext* c )
 {
 	unsigned int originalSize = A->va->m_size;
-	// accomodate new size (passed value is expected to be the highest accessible index)
+	// accommodate new size (passed value is expected to be the highest accessible index)
 	wr_growValueArray( A->va, originalSize + (count - 1) );
 
 	// move tail of array UP "count" entries
@@ -417,4 +417,3 @@ void wr_loadContainerLib( WRState* w )
 	wr_registerLibraryFunction( w, "stack::pop", wr_arrayPop );     // ( stack )
 	wr_registerLibraryFunction( w, "stack::peek", wr_arrayPeek );   // ( stack )
 }
-

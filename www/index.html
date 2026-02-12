@@ -1260,6 +1260,12 @@ bool wr_getYieldInfo( WRContext* context, int* args =0, WRValue** firstArg =0, W
 </pre></code>:
 They all return a WRValue from the called function, this pointer will
 be NULL if the called function was not found.
+<p>Also you can call library functions through this interface! Your
+arguments will be presented to the library interface just as they
+should be and returned.
+<p>Why would you want to do this? So you can bind library functions to
+a wrapper that doesn't need to know they are library functions or
+wrench native implementations. 
 
 <br>given this simple script:
 

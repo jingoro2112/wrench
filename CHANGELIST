@@ -1,3 +1,12 @@
+6.0.21 ---------------------------------------------------------------------------------
+- fixed cross-module stack error (thanks to Tom Whiston)
+- added his test to the testing suite
+- ran code through ASAN and some other related tools to find any problems, some minor
+  corner-cases uncovered.
+- did a code pass to fix typos
+- inlined the function-as-name call to wr_callFunction
+- added the ability to call LIBRARY functions through the regular wr_callFunction() interface
+
 6.0.20 ---------------------------------------------------------------------------------
 - fixed off-by-one in a hash delete
 - added more clarity to creating/installing values

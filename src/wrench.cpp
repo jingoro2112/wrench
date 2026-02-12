@@ -11842,8 +11842,10 @@ debugReturn:
 							if ( (I = import->registry.exists(fhash, false)) )
 							{
 								// import shares our stack, tell it where to find it's args
-								import->stackOffset = (stackTop - stackBase);
+								uint8_t savedOffset = import->stackOffset;
+								import->stackOffset = (uint8_t)(stackTop - context->stack);
 								wr_callFunction( import, I->wrf, stackTop - args, args );
+								import->stackOffset = savedOffset;
 								register0 = stackTop;
 
 								if ( *pc == O_NewObjectTable )
@@ -11926,8 +11928,10 @@ newObjOut:
 							if ( (register0 = import->registry.exists(fhash, false)) )
 							{
 								// import shares our stack, tell it where to find it's args
-								import->stackOffset = (stackTop - stackBase);
+								uint8_t savedOffset = import->stackOffset;
+								import->stackOffset = (uint8_t)(stackTop - context->stack);
 								wr_callFunction( import, register0->wrf, stackTop - args, args );
+								import->stackOffset = savedOffset;
 								goto CallFunctionByHashAndPop_continue;
 							}
 
@@ -15142,12 +15146,6 @@ const WRValue::Iterator WRValue::Iterator::operator++()
 }
 
 //------------------------------------------------------------------------------
-WRValue* wr_callFunction( WRContext* context, const char* functionName, const WRValue* argv, const int argn )
-{
-	return wr_callFunction( context, wr_hashStr(functionName), argv, argn );
-}
-
-//------------------------------------------------------------------------------
 WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
 {
 	WRValue* cF = 0;
@@ -15161,8 +15159,24 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 		}
 
 		cF = context->registry.getAsRawValueHashTable( hash );
-		if ( !cF->wrf )
+		if ( !cF->wrf ) // not found in the registry, but...
 		{
+			cF = context->w->globalRegistry.getAsRawValueHashTable(hash);
+			if ( cF->lcb ) // it was a library function, call it
+			{
+				WRValue* stack = context->stack + context->stackOffset;
+				int a = 0;
+				for( ; a<argn; ++a )
+				{
+					stack[a] = argv[a];
+				}
+
+				stack[a].init();
+				context->w->err = WR_ERR_None;
+				cF->lcb( stack + a, argn, context );
+				return (context->w->err) ? 0 : stack + a;
+			}
+			
 			context->w->err = WR_ERR_wrench_function_not_found;
 			return 0;
 		}
@@ -17837,7 +17851,7 @@ void wr_growValueArray( WRGCObject* va, int newMinIndex )
 {
 	int size_of = (va->m_type == SV_CHAR) ? 1 : sizeof(WRValue);
 
-	// increase size to accomodate new element
+	// increase size to accommodate new element
 	int size_el = va->m_size * size_of;
 
 	// create new array to hold the data, and g_free the existing one
@@ -22862,7 +22876,7 @@ void wr_arrayTruncate( WRValue* stackTop, const int argn, WRContext* c )
 void wr_arrayInsertEx( WRValue* A, const unsigned int where, const unsigned int count, WRValue* stackTop, WRContext* c )
 {
 	unsigned int originalSize = A->va->m_size;
-	// accomodate new size (passed value is expected to be the highest accessible index)
+	// accommodate new size (passed value is expected to be the highest accessible index)
 	wr_growValueArray( A->va, originalSize + (count - 1) );
 
 	// move tail of array UP "count" entries
@@ -23092,7 +23106,6 @@ void wr_loadContainerLib( WRState* w )
 	wr_registerLibraryFunction( w, "stack::pop", wr_arrayPop );     // ( stack )
 	wr_registerLibraryFunction( w, "stack::peek", wr_arrayPeek );   // ( stack )
 }
-
 
 /*******************************************************************************
 Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com

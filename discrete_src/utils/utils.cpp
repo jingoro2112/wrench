@@ -980,12 +980,6 @@ const WRValue::Iterator WRValue::Iterator::operator++()
 }
 
 //------------------------------------------------------------------------------
-WRValue* wr_callFunction( WRContext* context, const char* functionName, const WRValue* argv, const int argn )
-{
-	return wr_callFunction( context, wr_hashStr(functionName), argv, argn );
-}
-
-//------------------------------------------------------------------------------
 WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue* argv, const int argn )
 {
 	WRValue* cF = 0;
@@ -999,8 +993,24 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 		}
 
 		cF = context->registry.getAsRawValueHashTable( hash );
-		if ( !cF->wrf )
+		if ( !cF->wrf ) // not found in the registry, but...
 		{
+			cF = context->w->globalRegistry.getAsRawValueHashTable(hash);
+			if ( cF->lcb ) // it was a library function, call it
+			{
+				WRValue* stack = context->stack + context->stackOffset;
+				int a = 0;
+				for( ; a<argn; ++a )
+				{
+					stack[a] = argv[a];
+				}
+
+				stack[a].init();
+				context->w->err = WR_ERR_None;
+				cF->lcb( stack + a, argn, context );
+				return (context->w->err) ? 0 : stack + a;
+			}
+			
 			context->w->err = WR_ERR_wrench_function_not_found;
 			return 0;
 		}

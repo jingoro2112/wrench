@@ -96,7 +96,7 @@ void wr_growValueArray( WRGCObject* va, int newMinIndex )
 {
 	int size_of = (va->m_type == SV_CHAR) ? 1 : sizeof(WRValue);
 
-	// increase size to accomodate new element
+	// increase size to accommodate new element
 	int size_el = va->m_size * size_of;
 
 	// create new array to hold the data, and g_free the existing one

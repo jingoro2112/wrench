@@ -31,7 +31,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 6
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 20
+#define WRENCH_VERSION_BUILD 21
 
 struct WRState;
 
@@ -82,8 +82,8 @@ architecture, see vm.h for the current definitions
  **** EXPERIMENTAL **** only very basic support is in place */
 //#define WRENCH_INCLUDE_DEBUG_CODE
 
-// the debugger works over a serial link, define the architecure this
-// side is being targetted for
+// the debugger works over a serial link, define the architecture this
+// side is being targeted for
 //#define WRENCH_WIN32_SERIAL
 //#define WRENCH_ARDUINO_SERIAL
 //#define WRENCH_LINUX_SERIAL
@@ -287,7 +287,7 @@ void* wr_malloc( size_t size );
 void wr_free( void* ptr );
 
 // hashing function used inside wrench, it's a stripped down murmer,
-// not techcnically the "best" but very good, very fast and very compact
+// not technically the "best" but very good, very fast and very compact
 uint32_t wr_hash( const void* dat, const int len, uint32_t serial=0 );
 uint32_t wr_hashStr( const char* dat, uint32_t serial=0 );
 
@@ -321,7 +321,7 @@ WRError wr_compile( const char* source,
 					char* errMsg =0,
 					const uint8_t compilerOptionFlags = WR_INCLUDE_GLOBALS );
 
-// disassemble the bytecode and output humanm readable
+// disassemble the bytecode and output human readable
 void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out, unsigned int* outLen =0 );
 
 // w:          state (see wr_newState)
@@ -368,7 +368,7 @@ WRValue* wr_executeContext( WRContext* context );
 // after wr_run() this allows any function in the script to be
 // called with the given arguments, returning a single value
 //
-// contexd:      the context in which the function was loaded
+// context:      the context in which the function was loaded
 // functionName: plaintext name of the function to be called
 // argv:         array of WRValues to call the function with (optional)
 // argn:         how many arguments argv contains (optional, but if
@@ -379,16 +379,22 @@ WRValue* wr_executeContext( WRContext* context );
 // If the context is yielded, callFunction(...) will always continue
 // where the yielded function left off and ignore any parameters
 
-WRValue* wr_callFunction( WRContext* context, const char* functionName, const WRValue* argv =0, const int argn =0 );
-
 // exactly the same as the above but the hash is supplied directly to
-// save compute time, us wr_hashStr(...) to obtain the hash of the
+// save compute time, use wr_hashStr(...) to obtain the hash of the
 // functionName
-WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue* argv =0, const int argn =0 );
+// NOTE: You CAN call library functions through this interface as well!
+       WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue* argv =0, const int argn =0 );
+inline WRValue* wr_callFunction( WRContext* context, const char* functionName, const WRValue* argv =0, const int argn =0 ) { return wr_callFunction( context, wr_hashStr(functionName), argv, argn ); }
 
 // The raw function pointer can be pre-loaded with wr_getFunction() and
 // and then called with an absolute minimum of overhead
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
+
+// once wr_run() is called the returned context object can be used to
+// pre-fetch a function pointer. This reduces the overhead of calling
+// that function to almost nothing.
+// THIS DOES NOT WORK FOR LIBRARY FUNCTIONS.
+WRFunction* wr_getFunction( WRContext* context, const char* functionName );
 
 // Continue a yielded context.
 // if context is NOT yielded this will return null will err
@@ -401,14 +407,10 @@ WRValue* wr_continue( WRContext* context );
 bool wr_getYieldInfo( WRContext* context, int* args =0, WRValue** firstArg =0, WRValue** returnValue =0 );
 
 // after wrench executes it may have set an error code, this is how to
-// retreive it. This sytems is coarse at the moment. Re-entering the
+// retrieve it. This system is coarse at the moment. Re-entering the
 // interpreter clears the last error
 WRError wr_getLastError( WRState* w );
 
-// once wr_run() is called the returned context object can be used to
-// pre-fetch a function pointer. This reduces the overhead of calling
-// that function to almost nothing.
-WRFunction* wr_getFunction( WRContext* context, const char* functionName );
 
 // want direct access to a global? okay then, if the code was compiled
 // with symbols (see compile(...) suite) then this will give you a
@@ -418,7 +420,7 @@ WRValue* wr_getGlobalRef( WRContext* context, const char* label );
 // Destroy a context you no longer need and free up all the memory it
 // was using
 // NOTE: all contexts ARE AUTOMATICALLY FREED when wr_destroyState(...)
-//       is called, it it NOT necessary to call this on each context
+//       is called, it is NOT necessary to call this on each context
 void wr_destroyContext( WRContext* context );
 
 // how many bytes of memory must be allocated before the gc will run, default
@@ -456,13 +458,13 @@ typedef void (*WR_C_CALLBACK)(WRContext* c, const WRValue* argv, const int argn,
 // .isString() fast check if this is a string
 
 
-// this will do its pest to represent the value as a string to the
+// this will do its best to represent the value as a string to the
 // supplied buffer, len is maximum size allowed
 // string: .asString(char* string, size_t len )
 
 // w:        state to register with (will be available to all contexts)
 // name:     name of the function
-// function: callback (see typdef above)
+// function: callback (see typedef above)
 // usr:      opaque pointer that will be passed to the callback (optional)
 void wr_registerFunction( WRState* w, const char* name, WR_C_CALLBACK function, void* usr =0 );
 
@@ -497,7 +499,7 @@ typedef void (*WR_LIB_CALLBACK)( WRValue* stackTop, const int argn, WRContext* c
 // w:         state to register with (will be available to all contexts)
 // signature: library signature must be in the form of <lib>::<name>
 //            ex: "math::cos"
-// function:  callback (see typdef above)
+// function:  callback (see typedef above)
 void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLBACK function );
 void wr_registerLibraryConstant( WRState* w, const char* signature, const int32_t i );
 void wr_registerLibraryConstant( WRState* w, const char* signature, const float f );
@@ -514,7 +516,7 @@ void wr_loadIOLib( WRState* w ); // IO funcs (time/file/io)
 void wr_loadStringLib( WRState* w ); // string functions
 void wr_loadMessageLib( WRState* w ); // messaging between contexts
 void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
-void wr_loadDebugLib( WRState* w ); // debuger-interact functions
+void wr_loadDebugLib( WRState* w ); // debugger interaction functions
 void wr_loadTCPLib( WRState* w ); // TCP/IP functions
 void wr_loadContainerLib( WRState* w ); // array/hash/queue/stack/list
 
