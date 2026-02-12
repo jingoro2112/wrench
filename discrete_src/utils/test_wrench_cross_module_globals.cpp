@@ -23,7 +23,7 @@
  *   (stackTop - stackBase) so nested calls compute correct frame bases
  */
 
-#include <doctest.h>
+#include "doctest.h"
 #include "wrench.h"
 #include <cstring>
 #include <string>
