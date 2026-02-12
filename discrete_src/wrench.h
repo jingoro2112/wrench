@@ -181,7 +181,7 @@ graceful exit
 Custom allocator:
 by default wrench uses malloc/free but if you want to use your own
 allocator it can be set up here
-NOTE: used for all RETURNED MEMORY AS WELL, such such asMallocString(...)!!!!
+NOTE: used for all RETURNED MEMORY AS WELL, such as asMallocString(...)!!!!
 */
 typedef void* (*WR_ALLOC)(size_t size);
 typedef void (*WR_FREE)(void* ptr);
@@ -410,7 +410,6 @@ bool wr_getYieldInfo( WRContext* context, int* args =0, WRValue** firstArg =0, W
 // retrieve it. This system is coarse at the moment. Re-entering the
 // interpreter clears the last error
 WRError wr_getLastError( WRState* w );
-
 
 // want direct access to a global? okay then, if the code was compiled
 // with symbols (see compile(...) suite) then this will give you a

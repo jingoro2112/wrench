@@ -792,17 +792,23 @@ void testCallFunctionHashLibraryFallback()
 	wr_makeInt( &args[1], 11 );
 
 	WRValue* r = wr_callFunction( c, wr_hashStr("lib::sum2"), args, 2 );
-	assert( r && r->asInt() == 18 );
-	assert( wr_getLastError( w ) == WR_ERR_None );
+	if ( !r || r->asInt() != 18 || wr_getLastError( w ) != WR_ERR_None )
+	{
+		assert(0);
+	}
 
 	WRValue* errRet = wr_callFunction( c, wr_hashStr("lib::fail"), 0, 0 );
-	assert( !errRet );
-	assert( wr_getLastError( w ) == WR_ERR_division_by_zero );
+	if ( errRet || wr_getLastError( w ) != WR_ERR_division_by_zero )
+	{
+		assert(0);
+	}
 
 	// Verify stale error from previous call does not leak into success path.
 	WRValue* r2 = wr_callFunction( c, wr_hashStr("lib::sum2"), args, 2 );
-	assert( r2 && r2->asInt() == 18 );
-	assert( wr_getLastError( w ) == WR_ERR_None );
+	if ( !r2 || r2->asInt() != 18 || wr_getLastError( w ) != WR_ERR_None )
+	{
+		assert(0);
+	}
 
 	wr_destroyState( w );
 }
