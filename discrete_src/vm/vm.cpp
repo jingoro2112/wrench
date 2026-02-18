@@ -606,7 +606,12 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&InitVar,
 
 		&&DebugInfo,
-		
+
+		&&LocalBZ,
+		&&LocalBZ8,
+		&&GlobalBZ,
+		&&GlobalBZ8,
+
 	};
 #endif
 
@@ -1748,6 +1753,27 @@ NextIterator:
 #ifdef WRENCH_COMPACT //---------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
 
+			CASE(LocalBZ): { register0 = frameBase + READ_8_FROM_PC(pc++); goto compactLoadBZ; }
+			CASE(LocalBZ8):	{ register0 = frameBase + READ_8_FROM_PC(pc++);goto compactLoadBZ8; }
+
+			CASE(GlobalBZ):
+			{
+				register0 = globalSpace + READ_8_FROM_PC(pc++);
+compactLoadBZ:
+				pc += wr_LogicalNot[register0->type](register0) ? READ_16_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
+				FASTCONTINUE;
+			}
+
+			CASE(GlobalBZ8):
+			{
+				register0 = globalSpace + READ_8_FROM_PC(pc++);
+compactLoadBZ8:
+				pc += wr_LogicalNot[register0->type](register0) ? (int8_t)READ_8_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
+				FASTCONTINUE;
+			}
+			
 			CASE(PostIncrement):
 			{
 				register0 = stackTop - 1;
@@ -2450,7 +2476,39 @@ compactCompareGG8:
 #else 
 //-------------------------------------------------------------------------------------------------------------
 // NON-COMPACT version
-			
+
+			CASE(LocalBZ):
+			{
+				register0 = frameBase + READ_8_FROM_PC(pc++);
+				pc += wr_LogicalNot[register0->type](register0) ? READ_16_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
+				FASTCONTINUE;
+			}
+
+			CASE(LocalBZ8):
+			{
+				register0 = frameBase + READ_8_FROM_PC(pc++);
+				pc += wr_LogicalNot[register0->type](register0) ? (int8_t)READ_8_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
+				FASTCONTINUE;
+			}
+
+			CASE(GlobalBZ):
+			{
+				register0 = globalSpace + READ_8_FROM_PC(pc++);
+				pc += wr_LogicalNot[register0->type](register0) ? READ_16_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
+				FASTCONTINUE;
+			}
+
+			CASE(GlobalBZ8):
+			{
+				register0 = globalSpace + READ_8_FROM_PC(pc++);
+				pc += wr_LogicalNot[register0->type](register0) ? (int8_t)READ_8_FROM_PC(pc) : 2;
+				CHECK_FORCE_YIELD;
+				FASTCONTINUE;
+			}
+
 			CASE(PostIncrement):
 			{
 				register0 = stackTop - 1;

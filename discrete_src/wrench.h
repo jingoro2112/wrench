@@ -29,9 +29,9 @@ SOFTWARE.
 #include <string.h>
 #include <math.h>
 
-#define WRENCH_VERSION_MAJOR 6
+#define WRENCH_VERSION_MAJOR 7
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 21
+#define WRENCH_VERSION_BUILD 0
 
 struct WRState;
 
@@ -193,6 +193,7 @@ void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
 struct WRValue;
 struct WRContext;
 struct WRFunction;
+class WRstr;
 
 //------------------------------------------------------------------------------
 // to minimize text segment size, only a minimum of strings
@@ -322,6 +323,7 @@ WRError wr_compile( const char* source,
 					const uint8_t compilerOptionFlags = WR_INCLUDE_GLOBALS );
 
 // disassemble the bytecode and output human readable
+void wr_disassemble( const uint8_t* bytecode, const unsigned int len, WRstr& out, const bool includeComments =true );
 void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out, unsigned int* outLen =0 );
 
 // w:          state (see wr_newState)
@@ -426,7 +428,7 @@ void wr_destroyContext( WRContext* context );
 // set here, can be adjusted at runtime with the
 // wr_setAllocatedMemoryGCHint()
 #define WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT 4000
-void wr_setAllocatedMemoryGCHint( WRState* w, const uint16_t bytes );
+void wr_setAllocatedMemoryGCHint( WRState* w, const uint32_t bytes );
 
 /***************************************************************/
 /***************************************************************/
@@ -991,9 +993,15 @@ public:
 	int addThread( const uint8_t* byteCode, const int size, const int instructionsThisSlice =1000, const bool takeOwnership =false );
 	bool removeTask( const int taskId );
 
+	int lastErr() const { return m_lastErr; }       // WRError of last faulted task, 0 if none
+	int lastErrTaskId() const { return m_lastErrId; } // id of the task that faulted
+	void clearErr() { m_lastErr = 0; m_lastErrId = 0; }
+
 private:
 	WRState* m_w;
 	WrenchScheduledTask* m_tasks;
+	int m_lastErr;
+	int m_lastErrId;
 };
 #endif
 

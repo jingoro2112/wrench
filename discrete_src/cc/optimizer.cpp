@@ -979,6 +979,18 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				bytecode.opcodes[o] = O_BLA;
 				return;
 			}
+			else if ( bytecode.opcodes[o] == O_LoadFromLocal )
+			{
+				bytecode.all[a - 1] = O_LocalBZ;
+				bytecode.opcodes[o] = O_LocalBZ;
+				return;
+			}
+			else if ( bytecode.opcodes[o] == O_LoadFromGlobal )
+			{
+				bytecode.all[a - 1] = O_GlobalBZ;
+				bytecode.opcodes[o] = O_GlobalBZ;
+				return;
+			}
 		}
 		else if ( opcode == O_PopOne )
 		{

@@ -381,7 +381,6 @@ struct WRUnitContext
 		exportNamespace = false;
 		hash = 0;
 		arguments = 0;
-		arguments = 0;
 		parentUnitIndex = 0;
 		constantValues.clear();
 		offsetOfLocalHashMap = 0;

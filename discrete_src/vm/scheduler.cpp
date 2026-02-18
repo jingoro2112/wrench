@@ -39,6 +39,8 @@ WrenchScheduler::WrenchScheduler( const int stackSizePerThread )
 {
 	m_w = wr_newState( stackSizePerThread );
 	m_tasks = 0;
+	m_lastErr = 0;
+	m_lastErrId = 0;
 }
 
 //------------------------------------------------------------------------------
@@ -74,9 +76,15 @@ void WrenchScheduler::tick( int instructionsPerSlice )
 
 		wr_callFunction( task->context, (WRFunction*)0, task->context->yield_argv, task->context->yield_argn );
 
-		// A task can finish during this tick; remove it immediately.
+		// A task can finish during this tick or may have faulted; remove it either way.
 		if ( !task->context->yield_pc )
 		{
+			if ( m_w->err )
+			{
+				m_lastErr = m_w->err;
+				m_lastErrId = task->id;
+				m_w->err = 0;
+			}
 			*link = task->next;
 			wr_destroyContext( task->context );
 			g_free( task );

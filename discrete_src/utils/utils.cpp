@@ -485,7 +485,7 @@ bool wr_runCommand( WRState* w, const char* sourceCode, const int size )
 }
 
 //------------------------------------------------------------------------------
-void wr_setAllocatedMemoryGCHint( WRState* state, const uint16_t bytes )
+void wr_setAllocatedMemoryGCHint( WRState* state, const uint32_t bytes )
 {
 	state->allocatedMemoryLimit = bytes;
 }
@@ -1547,6 +1547,11 @@ const char* c_opcodeName[] =
 	"InitVar",
 
 	"DebugInfo",
+
+	"LocalBZ",
+	"LocalBZ8",
+	"GlobalBZ",
+	"GlobalBZ8",
 };
 
 //------------------------------------------------------------------------------

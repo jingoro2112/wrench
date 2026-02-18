@@ -253,6 +253,12 @@ void wr_valueToEx( const WRValue* ex, WRValue* value )
 			if ( s >= ex->va->m_size )
 			{
 				wr_growValueArray( ex->va, s );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+				if ( s >= ex->va->m_size )
+				{
+					return; // grow failed, don't write out of bounds
+				}
+#endif
 				ex->va->m_creatorContext->allocatedMemoryHint += s * ((ex->va->m_type == SV_CHAR) ? 1 : sizeof(WRValue));
 			}
 
@@ -260,7 +266,7 @@ void wr_valueToEx( const WRValue* ex, WRValue* value )
 			{
 				ex->va->m_Cdata[s] = value->ui;
 			}
-			else 
+			else
 			{
 				WRValue* V = ex->va->m_Vdata + s;
 				wr_assign[(V->type<<2)+value->type](V, value);

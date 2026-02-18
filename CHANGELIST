@@ -1,3 +1,12 @@
+7.0.0 ----------------------------------------------------------------------------------
+- major release adding new opcodes:
+ O_LocalBZ
+ O_LocalBZ8
+ O_GlobalBZ
+ O_GlobalBZ8
+- fixed minor task scheduling bug
+- allowed 32-bit garbage collector hint, 16 bit was just a wee bit small
+
 6.0.21 ---------------------------------------------------------------------------------
 - fixed cross-module stack error (thanks to Tom Whiston)
 - added his test to the testing suite

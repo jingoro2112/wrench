@@ -119,7 +119,7 @@ struct WRState
 	
 	WRGCObject globalRegistry;
 
-	uint16_t allocatedMemoryLimit; // WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT by default
+	uint32_t allocatedMemoryLimit; // WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT by default
 	uint16_t stackSize; // how much stack to give each context
 	int8_t err;
 

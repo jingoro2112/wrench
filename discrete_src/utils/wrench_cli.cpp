@@ -227,7 +227,8 @@ int usage()
 			"                               const char* [name]_bytecode;\n"
 			"                               const int [name]_bytecodeSize;\n"
 			
-			"p [infile]                     print disassembly of file\n"
+				"p [infile]                     print disassembly of file\n"
+				"d [bytecode file]              decode/disassemble bytecode file\n"
 /*
 			"ca [infile] [out file] [name]  compile infile and output as an inc file\n"
 			"                               for assembly of name \"out file\"\n"
@@ -237,8 +238,8 @@ int usage()
 */
 			"\n"
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
-			"d"
-			"\n"
+				"dbg [file]                     debugger client entry\n"
+				"\n"
 #endif
 			"t                              run internal tests\n"
 			"\n"
@@ -322,8 +323,8 @@ int main( int argn, char* argv[] )
 		runTests( (argn >= 3) ? atoi(argv[2]) : 0 );
 		printf("\n");
 	}
-	else if ( SimpleArgs::get(argn, argv, "p") )
-	{
+		else if ( SimpleArgs::get(argn, argv, "p") )
+		{
 		// this is ALPHA and doesn't tell you much yet :)
 		
 		WRstr infile;
@@ -346,13 +347,28 @@ int main( int argn, char* argv[] )
 		char* listing = 0;
 		wr_disassemble( out, outLen, &listing );
 		printf("%s\n", listing );
-		wr_free( listing );
-		
-	}
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-	else if ( SimpleArgs::get(argn, argv, "d") )
-	{
-		WrenchDebugClient client;
+			wr_free( listing );
+			
+		}
+		else if ( SimpleArgs::get(argn, argv, "d") )
+		{
+			const char* filename = SimpleArgs::get(argn, argv, -1);
+			WRstr bytes;
+			if ( !bytes.fileToBuffer(filename) )
+			{
+				printf( "Could not open bytecode file [%s]\n", filename );
+				return usage();
+			}
+
+			char* listing = 0;
+			wr_disassemble( (const uint8_t*)bytes.c_str(), bytes.size(), &listing );
+			printf( "%s\n", listing );
+			wr_free( listing );
+		}
+	#ifdef WRENCH_INCLUDE_DEBUG_CODE
+		else if ( SimpleArgs::get(argn, argv, "dbg") )
+		{
+			WrenchDebugClient client;
 		int port = 0;
 		char address[64];
 		if (SimpleArgs::get(argn, argv, "-port", address, 64))
@@ -777,15 +793,30 @@ static void hashLibFail( WRValue* stackTop, const int argn, WRContext* context )
 void testCallFunctionHashLibraryFallback()
 {
 	WRState* w = wr_newState( 64 );
+	if ( !w )
+	{
+		assert(0);
+		return;
+	}
 	wr_registerLibraryFunction( w, "lib::sum2", hashLibSum2 );
 	wr_registerLibraryFunction( w, "lib::fail", hashLibFail );
 
 	unsigned char* out = 0;
 	int outLen = 0;
-	assert( wr_compile( "", 0, &out, &outLen, 0, WR_INCLUDE_GLOBALS ) == WR_ERR_None );
+	if ( wr_compile( "", 0, &out, &outLen, 0, WR_INCLUDE_GLOBALS ) != WR_ERR_None )
+	{
+		assert(0);
+		wr_destroyState( w );
+		return;
+	}
 
 	WRContext* c = wr_run( w, out, outLen, true );
-	assert( c );
+	if ( !c )
+	{
+		assert(0);
+		wr_destroyState( w );
+		return;
+	}
 
 	WRValue args[2];
 	wr_makeInt( &args[0], 7 );
@@ -795,12 +826,16 @@ void testCallFunctionHashLibraryFallback()
 	if ( !r || r->asInt() != 18 || wr_getLastError( w ) != WR_ERR_None )
 	{
 		assert(0);
+		wr_destroyState( w );
+		return;
 	}
 
 	WRValue* errRet = wr_callFunction( c, wr_hashStr("lib::fail"), 0, 0 );
 	if ( errRet || wr_getLastError( w ) != WR_ERR_division_by_zero )
 	{
 		assert(0);
+		wr_destroyState( w );
+		return;
 	}
 
 	// Verify stale error from previous call does not leak into success path.
@@ -808,6 +843,8 @@ void testCallFunctionHashLibraryFallback()
 	if ( !r2 || r2->asInt() != 18 || wr_getLastError( w ) != WR_ERR_None )
 	{
 		assert(0);
+		wr_destroyState( w );
+		return;
 	}
 
 	wr_destroyState( w );
@@ -1318,7 +1355,7 @@ void testD()
 
 
 
-	unsigned char* outBytes;
+	unsigned char* outBytes = 0;
 	int outLen;
 	WRContext* context = 0;
 	WRFunction* function = 0;
@@ -1332,16 +1369,20 @@ void testD()
 	}
 	else
 	{
-		context = wr_run( w, outBytes, outLen ); // load and run the code!
+			context = wr_run( w, outBytes, outLen ); // load and run the code!
 		if ( !context )
 		{
 			printf( "null context\n" );
 		}
-		else
-		{
-			assert( function = wr_getFunction( context, "tick" ) );
+			else
+			{
+				function = wr_getFunction( context, "tick" );
+				if ( !function )
+				{
+					assert(0);
+				}
+			}
 		}
-	}
 
 
 	if ( function )
@@ -1353,7 +1394,10 @@ void testD()
 		}
 	}
 
-	wr_free( outBytes );
+	if ( outBytes )
+	{
+		wr_free( outBytes );
+	}
 	wr_destroyState( w );
 }
 
@@ -1532,7 +1576,7 @@ const unsigned char Pbasic_bytecode[]=
 	0x01, 0x00, 0x00, 0x04, 0x0D, 0x00, 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x57, 0x6F, 0x72, 0x6C, // 16
 	0x64, 0x21, 0x0A, 0x06, 0x01, 0x88, 0x8A, 0x37, 0x16, 0xCF, 0x00, 0x00, 0xAF, 0x0A, 0x70, 0x00, // 32
 	0x0F, 0x09, 0x20, 0x00, 0x06, 0x01, 0x88, 0x8A, 0x37, 0x16, 0x90, 0x00, 0x37, 0xEF, 0x09, 0x02, // 48
-	0xEF, 0x14, 0x94, 0xF8, 0x8F, 0x5A, // 54
+	0xEF, 0x14, 0x95, 0xF8, 0x8F, 0x5A, // 54
 };
 
 void logBlank( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr ) { }
@@ -1567,7 +1611,7 @@ void setup()
 
 	int err = wr_compile( wrenchCode, (int)strlen(wrenchCode), &outBytes, &outLen );
 	
-				assert( err == 0 );
+	assert( err == 0 );
 	
 	if ( err == 0 )
 	{

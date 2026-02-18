@@ -393,6 +393,8 @@ void WRCompilationContext::addRelativeJumpSource( WRBytecode& bytecode, WROpcode
 		case O_LSCompareGTBZ:
 		case O_GSCompareLTBZ:
 		case O_LSCompareLTBZ:
+		case O_LocalBZ:
+		case O_GlobalBZ:
 		{
 			--offset;
 			break;
@@ -461,6 +463,10 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 				case O_LSCompareGTBZ:
 				case O_GSCompareLTBZ:
 				case O_LSCompareLTBZ:
+				case O_LocalBZ:
+				case O_LocalBZ8:
+				case O_GlobalBZ:
+				case O_GlobalBZ8:
 				{
 					--diff; // these instructions are offset
 					break;
@@ -561,6 +567,9 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 					case O_BLA: *bytecode.all.p_str(offset - 1) = O_BLA8; break;
 					case O_BLO: *bytecode.all.p_str(offset - 1) = O_BLO8; break;
 
+					case O_LocalBZ: *bytecode.all.p_str(offset - 1) = O_LocalBZ8; ++offset; break;
+					case O_GlobalBZ: *bytecode.all.p_str(offset - 1) = O_GlobalBZ8; ++offset; break;
+
 					// no work to be done
 					case O_RelativeJump8:
 					case O_BZ8:
@@ -586,6 +595,8 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 					case O_LSCompareGTBZ8:
 					case O_GSCompareLTBZ8:
 					case O_LSCompareLTBZ8:
+					case O_LocalBZ8:
+					case O_GlobalBZ8:
 						++offset;
 						break;
 
@@ -644,6 +655,8 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 					case O_LSCompareGTBZ8: *bytecode.all.p_str(offset - 1) = O_LSCompareGTBZ; ++offset; break;
 					case O_GSCompareLTBZ8: *bytecode.all.p_str(offset - 1) = O_GSCompareLTBZ; ++offset; break;
 					case O_LSCompareLTBZ8: *bytecode.all.p_str(offset - 1) = O_LSCompareLTBZ; ++offset; break;
+					case O_LocalBZ8: *bytecode.all.p_str(offset - 1) = O_LocalBZ; ++offset; break;
+					case O_GlobalBZ8: *bytecode.all.p_str(offset - 1) = O_GlobalBZ; ++offset; break;
 
 					case O_LLCompareLTBZ8: *bytecode.all.p_str(offset - 1) = O_LLCompareLTBZ; offset += 2; break;
 					case O_LLCompareGTBZ8: *bytecode.all.p_str(offset - 1) = O_LLCompareGTBZ; offset += 2; break;
@@ -702,9 +715,11 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 					case O_LSCompareGTBZ:
 					case O_GSCompareLTBZ:
 					case O_LSCompareLTBZ:
+					case O_LocalBZ:
+					case O_GlobalBZ:
 						++offset;
 						break;
-					
+
 					case O_LLCompareLTBZ:
 					case O_LLCompareGTBZ:
 					case O_LLCompareLEBZ:

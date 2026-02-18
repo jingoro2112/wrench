@@ -103,7 +103,7 @@ void WRContext::gc( WRValue* stackTop )
 		}
 
 		// mark stack
-		for( WRValue* s=stack; s<stackTop; ++s)
+		for( WRValue* s=stack + stackOffset; s<stackTop; ++s)
 		{
 			mark( s );
 		}
