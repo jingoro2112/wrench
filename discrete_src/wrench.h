@@ -200,9 +200,7 @@ class WRstr;
 // are embedded in the code. error messages are very verbose enums
 // also provided as an array of strings which are _not_ referenced
 // by the VM or Compiler, so normally will not be linked in.
-#ifndef WRENCH_COMPACT
 extern const char* c_errStrings[];
-#endif
 enum WRError
 {
 	WR_ERR_None = 0,

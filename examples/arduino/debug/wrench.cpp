@@ -532,14 +532,14 @@ public:
 			m_size = 0;
 			g_mallocFailed = true;
 		}
-			else
+		else
 #endif
+		{
+			if ( size > 0 )
 			{
-				if ( size > 0 )
-				{
-					memcpy( m_buf, data, size );
-				}
+				memcpy( m_buf, data, size );
 			}
+		}
 	}
 	
 	~WRValueSerializer() { g_free(m_buf); }
