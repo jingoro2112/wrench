@@ -156,7 +156,7 @@ const char* sourceOrder[]=
 	"/vm/gc_object.h",
 	"/vm/vm.h",
 	"/utils/opcode.h",
-	"/cc/str.h",
+//	"/cc/str.h",
 	"/cc/opcode_stream.h",
 	"/cc/cc.h",
 	"/debug/packet.h",
