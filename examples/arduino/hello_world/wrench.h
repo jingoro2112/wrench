@@ -32,7 +32,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 7
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 0
+#define WRENCH_VERSION_BUILD 1
 
 struct WRState;
 
@@ -192,8 +192,8 @@ void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
 //------------------------------------------------------------------------------
 
 struct WRValue;
-struct WRContext;
 struct WRFunction;
+struct WRContext;
 class WRstr;
 
 //------------------------------------------------------------------------------
@@ -201,7 +201,9 @@ class WRstr;
 // are embedded in the code. error messages are very verbose enums
 // also provided as an array of strings which are _not_ referenced
 // by the VM or Compiler, so normally will not be linked in.
+#ifndef WRENCH_COMPACT
 extern const char* c_errStrings[];
+#endif
 enum WRError
 {
 	WR_ERR_None = 0,
@@ -293,6 +295,11 @@ void wr_free( void* ptr );
 uint32_t wr_hash( const void* dat, const int len, uint32_t serial=0 );
 uint32_t wr_hashStr( const char* dat, uint32_t serial=0 );
 
+// set a context void* that all function callbacks will have access
+// to through context->w->ctx 
+void wr_setStateContext( WRState* w, void* ctx );
+void* wr_getStateContext( WRState* w );
+
 /***************************************************************/
 /**************************************************************/
 //                        Running Code
@@ -320,7 +327,7 @@ WRError wr_compile( const char* source,
 					const int size,
 					unsigned char** out,
 					int* outLen,
-					char* errMsg =0,
+					WRstr* errMsg =0,
 					const uint8_t compilerOptionFlags = WR_INCLUDE_GLOBALS );
 
 // disassemble the bytecode and output human readable
@@ -945,6 +952,47 @@ inline WRValue& wr_makeInt( WRValue* val, int i ) { return *(val->init( i )); }
 inline WRValue& wr_makeFloat( WRValue* val, float f ) { return *(val->init( f )); }
 
 //------------------------------------------------------------------------------
+class WRGCBase
+{
+public:
+
+	// the order here matters for data alignment
+
+#if (__cplusplus <= 199711L)
+	int8_t m_type;
+#else
+	WRGCObjectType m_type;
+#endif
+
+	int8_t m_flags;
+
+	union
+	{
+		uint16_t m_mod;
+		uint16_t m_hashItem;
+	};
+
+	union
+	{
+		void* m_data;
+		char* m_SCdata;
+		unsigned char* m_Cdata;
+		WRValue* m_Vdata;
+		WRGCBase* m_referencedTable;
+	};
+
+	WRGCBase* m_nextGC;
+
+	void clear()
+	{
+		if ( m_type >= SV_VALUE )
+		{
+			g_free( m_Cdata );
+		}
+	}
+};
+
+//------------------------------------------------------------------------------
 // Helper class to represent a wrench value, in all cases it does NOT
 // manage the memory, but relies on a WRContext to do that
 class WrenchValue
@@ -1005,6 +1053,110 @@ private:
 	int m_lastErrId;
 };
 #endif
+
+//------------------------------------------------------------------------------
+class WRGCObject : public WRGCBase
+{
+public:
+
+	uint32_t m_size;
+	union
+	{
+		uint32_t* m_hashTable;
+		const uint8_t* m_ROMHashTable;
+		WRContext* m_creatorContext;
+	};
+
+	int init( const unsigned int size, const WRGCObjectType type, bool clear );
+	
+	WRValue* getAsRawValueHashTable( const uint32_t hash, int* index =0 );
+	
+	WRValue* exists( const uint32_t hash, bool removeIfPresent );
+	
+	void* get( const uint32_t l, int* index =0 );
+	
+	uint32_t growHash( const uint32_t hash, const uint16_t sizeHint =0, int* sizeAllocated =0 );
+	uint32_t getIndexOfHit( const uint32_t hash, const bool inserting );
+
+private:
+
+	WRGCObject& operator= ( WRGCObject& A );
+	WRGCObject(WRGCObject& A);
+};
+
+//------------------------------------------------------------------------------
+struct WRContext
+{
+	uint16_t globals;
+
+	uint32_t allocatedMemoryHint; // _approximately_ how much memory has been allocated since last gc
+
+	const unsigned char* bottom;
+	const unsigned char* codeStart;
+	int32_t bottomSize;
+
+	WRValue* stack;
+
+	const unsigned char* stopLocation;
+
+	WRGCBase* svAllocated;
+
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+	WRDebugServerInterface* debugInterface;
+#endif
+
+	WRState* w;
+
+	WRGCObject registry; // the 'next' pointer in this registry is used as the context LL next
+
+	const unsigned char* yield_pc;
+	WRValue* yield_stackTop;
+	WRValue* yield_frameBase;
+	const WRValue* yield_argv;
+	uint8_t yield_argn;
+	uint8_t yieldArgs;
+	uint8_t stackOffset;
+	uint8_t flags;
+
+	WRFunction* localFunctions;
+	uint8_t numLocalFunctions;
+
+	WRContext* imported; // linked list of contexts this one imported
+
+	WRContext* nextStateContextLink;
+
+	void markBase( WRGCBase* svb );
+	void mark( WRValue* s );
+	void gc( WRValue* stackTop );
+
+	WRGCObject* getSVA( int size, WRGCObjectType type, bool init );
+};
+
+struct WRLibraryCleanup;
+
+//------------------------------------------------------------------------------
+struct WRState
+{
+#ifdef WRENCH_TIME_SLICES
+	int instructionsPerSlice;
+	int sliceInstructionCount;
+	int yieldEnabled;
+	int lastSlicesUsed;
+#endif
+
+	WRContext* contextList;
+
+	WRLibraryCleanup* libCleanupFunctions;
+
+	WRGCObject globalRegistry;
+
+	void* ctx; // state-wide context pointer, opaque to wrench
+
+	uint32_t allocatedMemoryLimit; // WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT by default
+	uint16_t stackSize; // how much stack to give each context
+	int8_t err;
+
+};
 
 #define WRENCH_NULL_HASH 0xABABABAB  // -1414812757 / -1.2197928214371934e-12, can't be zero since we use int/floats as their own hash
 

@@ -532,11 +532,14 @@ public:
 			m_size = 0;
 			g_mallocFailed = true;
 		}
-		else
+			else
 #endif
-		{
-			memcpy( m_buf, data, size );
-		}
+			{
+				if ( size > 0 )
+				{
+					memcpy( m_buf, data, size );
+				}
+			}
 	}
 	
 	~WRValueSerializer() { g_free(m_buf); }
@@ -553,6 +556,11 @@ public:
 
 	bool read( char* data, const int size )
 	{
+		if ( size <= 0 )
+		{
+			return true;
+		}
+
 		if ( m_pos + size > m_size )
 		{
 			return false;
@@ -563,16 +571,31 @@ public:
 		return true;
 	}
 
-		void write( const char* data, const int size )
+	void write( const char* data, const int size )
+	{
+		if ( size <= 0 )
 		{
-			if ( m_pos + size >= m_size )
+			return;
+		}
+
+		if ( m_pos + size >= m_size )
+		{
+			m_size += (size*2) + 8;
+			char* newBuf = (char*)g_malloc( m_size );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !newBuf )
 			{
-				m_size += (size*2) + 8;
-				char* newBuf = (char*)g_malloc( m_size );
-				memcpy( newBuf, m_buf, m_pos );
-				g_free( m_buf );
-				m_buf = newBuf;
+				g_mallocFailed = true;
+				return;
 			}
+#endif
+			if ( m_pos > 0 )
+			{
+				memcpy( newBuf, m_buf, m_pos );
+			}
+			g_free( m_buf );
+			m_buf = newBuf;
+		}
 
 		memcpy( m_buf + m_pos, data, size );
 		m_pos += size;
@@ -1116,79 +1139,6 @@ enum WRGCFlags
 	GCFlag_Perm = 1<<2,
 };
 
-//------------------------------------------------------------------------------
-class WRGCBase
-{
-public:
-	
-	// the order here matters for data alignment
-
-#if (__cplusplus <= 199711L)
-	int8_t m_type;
-#else
-	WRGCObjectType m_type;
-#endif
-	
-	int8_t m_flags;
-	
-	union
-	{
-		uint16_t m_mod;
-		uint16_t m_hashItem;
-	};
-
-	union
-	{
-		void* m_data;
-		char* m_SCdata;
-		unsigned char* m_Cdata;
-		WRValue* m_Vdata;
-		WRGCBase* m_referencedTable;
-	};
-
-	WRGCBase* m_nextGC;
-
-	void clear()
-	{
-		if ( m_type >= SV_VALUE )
-		{
-			g_free( m_Cdata );
-		}
-	}
-};
-
-//------------------------------------------------------------------------------
-class WRGCObject : public WRGCBase
-{
-public:
-
-	uint32_t m_size;
-
-	union
-	{
-		uint32_t* m_hashTable;
-		const uint8_t* m_ROMHashTable;
-		WRContext* m_creatorContext;
-	};
-
-	int init( const unsigned int size, const WRGCObjectType type, bool clear );
-
-	WRValue* getAsRawValueHashTable( const uint32_t hash, int* index =0 );
-
-	WRValue* exists( const uint32_t hash, bool removeIfPresent );
-
-	void* get( const uint32_t l, int* index =0 );
-
-	uint32_t growHash( const uint32_t hash, const uint16_t sizeHint =0, int* sizeAllocated =0 );
-	uint32_t getIndexOfHit( const uint32_t hash, const bool inserting );
-
-private:
-
-	WRGCObject& operator= ( WRGCObject& A );
-	WRGCObject(WRGCObject& A);
-};
-
-
 #endif
 /*******************************************************************************
 Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
@@ -1240,81 +1190,11 @@ enum WRContextFlags
 };
 
 //------------------------------------------------------------------------------
-struct WRContext
-{
-	uint16_t globals;
-
-	uint32_t allocatedMemoryHint; // _approximately_ how much memory has been allocated since last gc
-	
-	const unsigned char* bottom;
-	const unsigned char* codeStart;
-	int32_t bottomSize;
-
-	WRValue* stack;
-	
-	const unsigned char* stopLocation;
-	
-	WRGCBase* svAllocated;
-
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-	WRDebugServerInterface* debugInterface;
-#endif
-
-	WRState* w;
-
-	WRGCObject registry; // the 'next' pointer in this registry is used as the context LL next
-
-	const unsigned char* yield_pc;
-	WRValue* yield_stackTop;
-	WRValue* yield_frameBase;
-	const WRValue* yield_argv;
-	uint8_t yield_argn;
-	uint8_t yieldArgs;
-	uint8_t stackOffset;
-	uint8_t flags;
-
-	WRFunction* localFunctions;
-	uint8_t numLocalFunctions;
-	
-	WRContext* imported; // linked list of contexts this one imported
-
-	WRContext* nextStateContextLink;
-
-	void markBase( WRGCBase* svb );
-	void mark( WRValue* s );
-	void gc( WRValue* stackTop );
-	
-	WRGCObject* getSVA( int size, WRGCObjectType type, bool init );
-};
-
-//------------------------------------------------------------------------------
 struct WRLibraryCleanup
 {
 	void (*cleanupFunction)(WRState *w, void* param);
 	void* param;
 	WRLibraryCleanup* next;
-};
-
-//------------------------------------------------------------------------------
-struct WRState
-{
-#ifdef WRENCH_TIME_SLICES
-	int instructionsPerSlice;
-	int sliceInstructionCount;
-	int yieldEnabled;
-	int lastSlicesUsed;
-#endif
-	
-	WRContext* contextList;
-
-	WRLibraryCleanup* libCleanupFunctions;
-	
-	WRGCObject globalRegistry;
-
-	uint32_t allocatedMemoryLimit; // WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT by default
-	uint16_t stackSize; // how much stack to give each context
-	int8_t err;
-
 };
 
 void wr_addLibraryCleanupFunction( WRState* w, void(*function)(WRState *w, void* param), void* param );
@@ -3106,7 +2986,7 @@ public:
 					 const int size,
 					 unsigned char** out,
 					 int* outLen,
-					 char* erroMsg,
+					 WRstr* erroMsg,
 					 const uint8_t compilerOptionFlags );
 
 private:
@@ -4037,7 +3917,7 @@ WRError WRCompilationContext::compile( const char* source,
 									   const int size,
 									   unsigned char** out,
 									   int* outLen,
-									   char* errorMsg,
+									   WRstr* errorMsg,
 									   const uint8_t compilerOptionFlags )
 {
 	m_source = source;
@@ -4106,7 +3986,7 @@ WRError WRCompilationContext::compile( const char* source,
 
 		if ( errorMsg )
 		{
-			strncpy( errorMsg, msg, msg.size() + 1 );
+			(*errorMsg) = msg;
 		}
 
 		printf( "%s", msg.c_str() );
@@ -4130,7 +4010,7 @@ WRError WRCompilationContext::compile( const char* source,
 		printf( "link error [%d]\n", m_err );
 		if ( errorMsg )
 		{
-			snprintf( errorMsg, 32, "link error [%d]\n", m_err );
+			errorMsg->format( "link error [%d]\n", m_err );
 		}
 
 	}
@@ -4143,7 +4023,7 @@ WRError wr_compile( const char* source,
 					const int size,
 					unsigned char** out,
 					int* outLen,
-					char* errMsg,
+					WRstr* errMsg,
 					const uint8_t compilerOptionFlags )
 {
 	assert( sizeof(float) == 4 );
@@ -7284,7 +7164,7 @@ WRError wr_compile( const char* source,
 					const int size,
 					unsigned char** out,
 					int* outLen,
-					char* errMsg,
+					WRstr* errMsg,
 					const uint8_t compilerOptionFlags )
 {
 	return WR_ERR_compiler_not_loaded;
@@ -12451,6 +12331,9 @@ hashIndexJump:
 			CASE(BZ):
 			{
 				register0 = --stackTop;
+#ifdef WRENCH_COMPACT
+compactLoadBZ:
+#endif
 				pc += wr_LogicalNot[register0->type](register0) ? READ_16_FROM_PC(pc) : 2;
 				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
@@ -12459,6 +12342,9 @@ hashIndexJump:
 			CASE(BZ8):
 			{
 				register0 = --stackTop;
+#ifdef WRENCH_COMPACT
+compactLoadBZ8:
+#endif
 				pc += wr_LogicalNot[register0->type](register0) ? (int8_t)READ_8_FROM_PC(pc) : 2;
 				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
@@ -12751,25 +12637,9 @@ NextIterator:
 //-------------------------------------------------------------------------------------------------------------
 
 			CASE(LocalBZ): { register0 = frameBase + READ_8_FROM_PC(pc++); goto compactLoadBZ; }
-			CASE(LocalBZ8):	{ register0 = frameBase + READ_8_FROM_PC(pc++);goto compactLoadBZ8; }
-
-			CASE(GlobalBZ):
-			{
-				register0 = globalSpace + READ_8_FROM_PC(pc++);
-compactLoadBZ:
-				pc += wr_LogicalNot[register0->type](register0) ? READ_16_FROM_PC(pc) : 2;
-				CHECK_FORCE_YIELD;
-				FASTCONTINUE;
-			}
-
-			CASE(GlobalBZ8):
-			{
-				register0 = globalSpace + READ_8_FROM_PC(pc++);
-compactLoadBZ8:
-				pc += wr_LogicalNot[register0->type](register0) ? (int8_t)READ_8_FROM_PC(pc) : 2;
-				CHECK_FORCE_YIELD;
-				FASTCONTINUE;
-			}
+			CASE(LocalBZ8):	{ register0 = frameBase + READ_8_FROM_PC(pc++); goto compactLoadBZ8; }
+			CASE(GlobalBZ):	{ register0 = globalSpace + READ_8_FROM_PC(pc++); goto compactLoadBZ; }
+			CASE(GlobalBZ8): { register0 = globalSpace + READ_8_FROM_PC(pc++); goto compactLoadBZ8; }
 			
 			CASE(PostIncrement):
 			{
@@ -14412,6 +14282,8 @@ WRState* wr_newState( int stackSize )
 	w->stackSize = stackSize;
 	w->allocatedMemoryLimit = WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT;
 
+	w->ctx = (void*)0;
+	
 	return w;
 }
 
@@ -14436,6 +14308,18 @@ void wr_destroyState( WRState* w )
 	w->globalRegistry.clear();
 
 	g_free( w );
+}
+
+//------------------------------------------------------------------------------
+void wr_setStateContext( WRState* w, void* ctx )
+{
+	w->ctx = ctx;
+}
+
+//------------------------------------------------------------------------------
+void* wr_getStateContext( WRState* w )
+{
+	return w->ctx;
 }
 
 //------------------------------------------------------------------------------
@@ -14646,19 +14530,19 @@ WRContext* wr_run( WRState* w,
 				   const bool takeOwnership,
 				   const bool destroyContext )
 {
-	WRContext* ctx = wr_newContext( w, block, blockSize, takeOwnership );
+	WRContext* context = wr_newContext( w, block, blockSize, takeOwnership );
 
-	if ( ctx )
+	if ( context )
 	{
-		if ( (!wr_callFunction(ctx, (WRFunction*)0) && !ctx->yield_pc)
+		if ( (!wr_callFunction(context, (WRFunction*)0) && !context->yield_pc)
 			 || destroyContext )
 		{
-			wr_destroyContext( ctx );
-			ctx = 0;
+			wr_destroyContext( context );
+			context = 0;
 		}
 	}
 
-	return ctx;
+	return context;
 }
 
 //------------------------------------------------------------------------------
@@ -15875,7 +15759,6 @@ const char* c_errStrings[]=
 	"WR_ERR_division_by_zero",
 };
 
-
 #endif
 /*******************************************************************************
 Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
@@ -16724,6 +16607,27 @@ SOFTWARE.
 
 #include "wrench.h"
 
+#ifdef WRENCH_WITHOUT_COMPILER
+
+//------------------------------------------------------------------------------
+void wr_disassemble( const uint8_t* bytecode, const unsigned int len, WRstr& out, const bool includeComments )
+{
+	(void)bytecode;
+	(void)len;
+	(void)includeComments;
+	out = "disassembler unavailable in WRENCH_WITHOUT_COMPILER build\n";
+}
+
+//------------------------------------------------------------------------------
+void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out, unsigned int* outLen )
+{
+	WRstr listing;
+	wr_disassemble( bytecode, len, listing, true );
+	listing.release( out, outLen );
+}
+
+#else
+
 //------------------------------------------------------------------------------
 bool wr_startsWith( const char* s, const char* p )
 {
@@ -17431,21 +17335,24 @@ void wr_disassemble( const uint8_t* bytecode, const unsigned int len, WRstr& out
 		out += "\n";
 	}
 
-	out += "Function Table\n";
-	out += "--------------\n";
-	out += "  idx  hash         args frame baseAdj offset\n";
-	for( int i=0; i<context->numLocalFunctions; ++i )
+	if ( context->numLocalFunctions )
 	{
-		const WRFunction* f = context->localFunctions + i;
-		out.appendFormat( "  0x%02X 0x%08X 0x%02X 0x%02X  0x%02X   0x%04X\n",
-						  i,
-						  (unsigned int)f->hash,
-						  (unsigned int)f->arguments,
-						  (unsigned int)f->frameSpaceNeeded,
-						  (unsigned int)f->frameBaseAdjustment,
-						  (unsigned int)f->functionOffset );
+		out += "Function Table\n";
+		out += "--------------\n";
+		out += "  idx  hash         args frame baseAdj offset\n";
+		for( int i=0; i<context->numLocalFunctions; ++i )
+		{
+			const WRFunction* f = context->localFunctions + i;
+			out.appendFormat( "  0x%02X 0x%08X 0x%02X 0x%02X  0x%02X   0x%04X\n",
+							  i,
+							  (unsigned int)f->hash,
+							  (unsigned int)f->arguments,
+							  (unsigned int)f->frameSpaceNeeded,
+							  (unsigned int)f->frameBaseAdjustment,
+							  (unsigned int)f->functionOffset );
+		}
+		out += "\n";
 	}
-	out += "\n";
 
 	const uint8_t* globalStart = context->codeStart;
 	const uint8_t* globalEnd = codeEnd;
@@ -17500,6 +17407,8 @@ void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out
 	wr_disassemble( bytecode, len, listing, true );
 	listing.release( out, outLen );
 }
+
+#endif
 /*******************************************************************************
 Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
@@ -19713,7 +19622,20 @@ void wr_AddAssign_E_R( WRValue* to, WRValue* from )
 }
 void wr_AddAssign_R_E( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_EX](to->r, from); *from = *to->r; }
 void wr_AddAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }
-void wr_AddAssign_R_I( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_INT](to->r, from); *from = *to->r; }
+void wr_AddAssign_R_I( WRValue* to, WRValue* from )
+{
+	WRValue* lhs = to->r;
+	if ( lhs->type == WR_INT )
+	{
+		lhs->i = wr_iadd_wrap( lhs->i, from->i );
+		*from = *lhs;
+	}
+	else
+	{
+		wr_AddAssign[(lhs->type<<2)|WR_INT](lhs, from);
+		*from = *lhs;
+	}
+}
 void wr_AddAssign_R_F( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_FLOAT](to->r, from); *from = *to->r; }
 void wr_AddAssign_I_R( WRValue* to, WRValue* from ) { wr_AddAssign[(WR_INT<<2)+from->r->type](to, from->r); *from = *to; }
 void wr_AddAssign_F_R( WRValue* to, WRValue* from ) { wr_AddAssign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }
@@ -19760,10 +19682,10 @@ void NAME##Binary_F_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_EX]( to->r, from, target); }\
 void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_EX<<2)+from->r->type](to, from->r, target); }\
-void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_INT<<2)+from->r->type](to, from->r, target); }\
+void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { WRValue* rhs = from->r; if ( rhs->type == WR_INT ) { target->p2 = INIT_AS_INT; target->i = I_I_OP( to->i, rhs->i ); } else { NAME##Binary[(WR_INT<<2)+rhs->type](to, rhs, target); } }\
 void NAME##Binary_R_F( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_FLOAT](to->r, from, target); }\
 void NAME##Binary_R_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }\
-void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_INT](to->r, from, target); }\
+void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { WRValue* lhs = to->r; if ( lhs->type == WR_INT ) { target->p2 = INIT_AS_INT; target->i = I_I_OP( lhs->i, from->i ); } else { NAME##Binary[(lhs->type<<2)|WR_INT](lhs, from, target); } }\
 void NAME##Binary_F_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_FLOAT<<2)+from->r->type](to, from->r, target); }\
 void NAME##Binary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = I_I_OP( to->i, from->i ); }\
 void NAME##Binary_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = (float)to->i OPERATION from->f; }\
@@ -19972,9 +19894,9 @@ void NAME##Binary_I_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_EX)|from->r->type](to, from->r, target); }\
 void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_EX]( to->r, from, target); }\
-void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_INT<<2)+from->r->type](to, from->r, target); }\
+void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { WRValue* rhs = from->r; if ( rhs->type == WR_INT ) { target->p2 = INIT_AS_INT; target->i = to->i OPERATION rhs->i; } else { NAME##Binary[(WR_INT<<2)+rhs->type](to, rhs, target); } }\
 void NAME##Binary_R_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }\
-void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_INT](to->r, from, target); }\
+void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { WRValue* lhs = to->r; if ( lhs->type == WR_INT ) { target->p2 = INIT_AS_INT; target->i = lhs->i OPERATION from->i; } else { NAME##Binary[(lhs->type<<2)|WR_INT](lhs, from, target); } }\
 void NAME##Binary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = to->i OPERATION from->i; }\
 WRTargetFunc NAME##Binary[16] = \
 {\

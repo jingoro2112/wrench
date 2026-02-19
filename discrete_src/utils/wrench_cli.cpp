@@ -47,6 +47,7 @@ void testStackOverflow();
 void testYield2();
 void testD();
 void testCallFunctionHashLibraryFallback();
+void testStateContextOpaquePointer();
 void LEAKtest();
 void C3test();
 #ifdef WIN32_C17
@@ -227,8 +228,8 @@ int usage()
 			"                               const char* [name]_bytecode;\n"
 			"                               const int [name]_bytecodeSize;\n"
 			
-				"p [infile]                     print disassembly of file\n"
-				"d [bytecode file]              decode/disassemble bytecode file\n"
+			"p [infile]                     print disassembly of file\n"
+			"d [bytecode file]              decode/disassemble bytecode file\n"
 /*
 			"ca [infile] [out file] [name]  compile infile and output as an inc file\n"
 			"                               for assembly of name \"out file\"\n"
@@ -238,8 +239,8 @@ int usage()
 */
 			"\n"
 #ifdef WRENCH_INCLUDE_DEBUG_CODE
-				"dbg [file]                     debugger client entry\n"
-				"\n"
+			"dbg [file]                     debugger client entry\n"
+			"\n"
 #endif
 			"t                              run internal tests\n"
 			"\n"
@@ -323,8 +324,8 @@ int main( int argn, char* argv[] )
 		runTests( (argn >= 3) ? atoi(argv[2]) : 0 );
 		printf("\n");
 	}
-		else if ( SimpleArgs::get(argn, argv, "p") )
-		{
+	else if ( SimpleArgs::get(argn, argv, "p") )
+	{
 		// this is ALPHA and doesn't tell you much yet :)
 		
 		WRstr infile;
@@ -349,26 +350,26 @@ int main( int argn, char* argv[] )
 		printf("%s\n", listing );
 			wr_free( listing );
 			
-		}
-		else if ( SimpleArgs::get(argn, argv, "d") )
+	}
+	else if ( SimpleArgs::get(argn, argv, "d") )
+	{
+		const char* filename = SimpleArgs::get(argn, argv, -1);
+		WRstr bytes;
+		if ( !bytes.fileToBuffer(filename) )
 		{
-			const char* filename = SimpleArgs::get(argn, argv, -1);
-			WRstr bytes;
-			if ( !bytes.fileToBuffer(filename) )
-			{
-				printf( "Could not open bytecode file [%s]\n", filename );
-				return usage();
-			}
+			printf( "Could not open bytecode file [%s]\n", filename );
+			return usage();
+		}
 
-			char* listing = 0;
-			wr_disassemble( (const uint8_t*)bytes.c_str(), bytes.size(), &listing );
-			printf( "%s\n", listing );
-			wr_free( listing );
-		}
-	#ifdef WRENCH_INCLUDE_DEBUG_CODE
-		else if ( SimpleArgs::get(argn, argv, "dbg") )
-		{
-			WrenchDebugClient client;
+		char* listing = 0;
+		wr_disassemble( (const uint8_t*)bytes.c_str(), bytes.size(), &listing );
+		printf( "%s\n", listing );
+		wr_free( listing );
+	}
+#ifdef WRENCH_INCLUDE_DEBUG_CODE
+	else if ( SimpleArgs::get(argn, argv, "dbg") )
+	{
+		WrenchDebugClient client;
 		int port = 0;
 		char address[64];
 		if (SimpleArgs::get(argn, argv, "-port", address, 64))
@@ -377,7 +378,7 @@ int main( int argn, char* argv[] )
 		}
 		address[0] = 0;
 		SimpleArgs::get(argn, argv, "-address", address, 64);
-
+		
 		client.enter( SimpleArgs::get(argn, argv, -1), address, port );
 	}
 #endif
@@ -790,6 +791,44 @@ static void hashLibFail( WRValue* stackTop, const int argn, WRContext* context )
 }
 
 //------------------------------------------------------------------------------
+struct OpaqueStateContext
+{
+	int magic;
+	int writes;
+};
+
+//------------------------------------------------------------------------------
+static void ctxReadMagic( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	(void)argv;
+	(void)argn;
+	(void)usr;
+	OpaqueStateContext* data = (OpaqueStateContext*)c->w->ctx;
+	if ( !data )
+	{
+		retVal.init();
+		return;
+	}
+	wr_makeInt( &retVal, data->magic );
+}
+
+//------------------------------------------------------------------------------
+static void ctxAccumulate( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	(void)usr;
+	OpaqueStateContext* data = (OpaqueStateContext*)c->w->ctx;
+	if ( !data )
+	{
+		retVal.init();
+		return;
+	}
+
+	int add = (argn > 0) ? argv[0].asInt() : 1;
+	data->writes += add;
+	wr_makeInt( &retVal, data->writes );
+}
+
+//------------------------------------------------------------------------------
 void testCallFunctionHashLibraryFallback()
 {
 	WRState* w = wr_newState( 64 );
@@ -849,6 +888,128 @@ void testCallFunctionHashLibraryFallback()
 
 	wr_destroyState( w );
 }
+
+//------------------------------------------------------------------------------
+void testStateContextOpaquePointer()
+{
+	WRState* w = wr_newState( 64 );
+	if ( !w )
+	{
+		assert(0);
+		return;
+	}
+
+	wr_registerFunction( w, "ctxReadMagic", ctxReadMagic );
+	wr_registerFunction( w, "ctxAccumulate", ctxAccumulate );
+
+	const char* mainScript =
+		"function readMagic() { return ctxReadMagic(); }\n"
+		"function addToState(v) { return ctxAccumulate(v); }\n";
+
+	const char* importScript =
+		"function importedReadMagic() { return ctxReadMagic(); }\n";
+
+	unsigned char* mainOut = 0;
+	unsigned char* importOut = 0;
+	int mainLen = 0;
+	int importLen = 0;
+	WRstr errMsg;
+	if ( wr_compile(mainScript, (int)strlen(mainScript), &mainOut, &mainLen, &errMsg, WR_INCLUDE_GLOBALS) != WR_ERR_None )
+	{
+		assert(0);
+		wr_destroyState( w );
+		return;
+	}
+	if ( wr_compile(importScript, (int)strlen(importScript), &importOut, &importLen, &errMsg, WR_INCLUDE_GLOBALS) != WR_ERR_None )
+	{
+		assert(0);
+		wr_free( mainOut );
+		wr_destroyState( w );
+		return;
+	}
+
+	OpaqueStateContext first = { 111, 0 };
+	wr_setStateContext( w, &first );
+
+	WRContext* mainCtx = wr_run( w, mainOut, mainLen, true );
+	if ( !mainCtx )
+	{
+		assert(0);
+		wr_free( importOut );
+		wr_destroyState( w );
+		return;
+	}
+
+	WRValue* r = wr_callFunction( mainCtx, "readMagic" );
+	if ( !r || r->asInt() != 111 )
+	{
+		assert(0);
+		wr_free( importOut );
+		wr_destroyState( w );
+		return;
+	}
+
+	WRValue addArg;
+	wr_makeInt( &addArg, 7 );
+	WRValue* addRes = wr_callFunction( mainCtx, "addToState", &addArg, 1 );
+	if ( !addRes || addRes->asInt() != 7 || first.writes != 7 )
+	{
+		assert(0);
+		wr_free( importOut );
+		wr_destroyState( w );
+		return;
+	}
+
+	first.magic = 222;
+	r = wr_callFunction( mainCtx, "readMagic" );
+	if ( !r || r->asInt() != 222 )
+	{
+		assert(0);
+		wr_free( importOut );
+		wr_destroyState( w );
+		return;
+	}
+
+	OpaqueStateContext second = { 9001, 10 };
+	wr_setStateContext( w, &second );
+
+	r = wr_callFunction( mainCtx, "readMagic" );
+	if ( !r || r->asInt() != 9001 )
+	{
+		assert(0);
+		wr_free( importOut );
+		wr_destroyState( w );
+		return;
+	}
+
+	wr_makeInt( &addArg, 5 );
+	addRes = wr_callFunction( mainCtx, "addToState", &addArg, 1 );
+	if ( !addRes || addRes->asInt() != 15 || second.writes != 15 || first.writes != 7 )
+	{
+		assert(0);
+		wr_free( importOut );
+		wr_destroyState( w );
+		return;
+	}
+
+	WRContext* importCtx = wr_import( mainCtx, importOut, importLen, true );
+	if ( !importCtx )
+	{
+		assert(0);
+		wr_free( importOut );
+		wr_destroyState( w );
+		return;
+	}
+	WRValue* ir = wr_callFunction( importCtx, "importedReadMagic" );
+	if ( !ir || ir->asInt() != 9001 )
+	{
+		assert(0);
+		wr_destroyState( w );
+		return;
+	}
+
+	wr_destroyState( w );
+}
 #endif
 
 
@@ -899,7 +1060,7 @@ int runTests( int number )
 
 	char buf[256];
 	int fileNumber = 0;
-	char errMsg[256];
+	WRstr errMsg;
 
 	unsigned char* out;
 	int outLen;
@@ -926,7 +1087,7 @@ int runTests( int number )
 
 				printf( "test [%d][%s]: ", fileNumber, codeName.c_str() );
 
-				wr_compile( code, code.size(), &out, &outLen, errMsg, WR_NON_STRICT_VAR|WR_INCLUDE_GLOBALS );
+				wr_compile( code, code.size(), &out, &outLen, &errMsg, WR_NON_STRICT_VAR|WR_INCLUDE_GLOBALS );
 				
 				if ( err )
 				{
@@ -1050,6 +1211,7 @@ int runTests( int number )
 
 	testD();
 	testCallFunctionHashLibraryFallback();
+	testStateContextOpaquePointer();
 #ifdef WRENCH_ENABLE_CROSS_MODULE_EXTERNAL_TEST
 	printf( "test [x][discrete_src/utils/test_wrench_cross_module_globals.cpp]: " );
 	int crossModuleResult = system( "./test_wrench_cross_module_globals > _cross_module_test.log 2>&1" );
@@ -1107,8 +1269,8 @@ void testGlobalValues( WRState* w )
 
 	unsigned char* out;
 	int outLen;
-	char errMsg[256];
-	int err = wr_compile( globalTestCode, (int)strlen(globalTestCode), &out, &outLen, errMsg, WR_INCLUDE_GLOBALS|WR_NON_STRICT_VAR );
+	WRstr errMsg;
+	int err = wr_compile( globalTestCode, (int)strlen(globalTestCode), &out, &outLen, &errMsg, WR_INCLUDE_GLOBALS|WR_NON_STRICT_VAR );
 	if ( err )
 	{
 		assert(0);
@@ -1361,11 +1523,11 @@ void testD()
 	WRFunction* function = 0;
 
 
-	char errorMessage[1024] = "";
-	int err = wr_compile( d, strlen(d), &outBytes, &outLen, errorMessage );
+	WRstr errorMessage;
+	int err = wr_compile( d, strlen(d), &outBytes, &outLen, &errorMessage );
 	if ( err )
 	{
-		printf( "%d:\n%s\n", err, errorMessage );
+		printf( "%d:\n%s\n", err, errorMessage.c_str() );
 	}
 	else
 	{

@@ -397,7 +397,7 @@ public:
 					 const int size,
 					 unsigned char** out,
 					 int* outLen,
-					 char* erroMsg,
+					 WRstr* erroMsg,
 					 const uint8_t compilerOptionFlags );
 
 private:

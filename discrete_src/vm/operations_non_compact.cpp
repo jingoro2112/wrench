@@ -383,7 +383,20 @@ void wr_AddAssign_E_R( WRValue* to, WRValue* from )
 }
 void wr_AddAssign_R_E( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_EX](to->r, from); *from = *to->r; }
 void wr_AddAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }
-void wr_AddAssign_R_I( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_INT](to->r, from); *from = *to->r; }
+void wr_AddAssign_R_I( WRValue* to, WRValue* from )
+{
+	WRValue* lhs = to->r;
+	if ( lhs->type == WR_INT )
+	{
+		lhs->i = wr_iadd_wrap( lhs->i, from->i );
+		*from = *lhs;
+	}
+	else
+	{
+		wr_AddAssign[(lhs->type<<2)|WR_INT](lhs, from);
+		*from = *lhs;
+	}
+}
 void wr_AddAssign_R_F( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_FLOAT](to->r, from); *from = *to->r; }
 void wr_AddAssign_I_R( WRValue* to, WRValue* from ) { wr_AddAssign[(WR_INT<<2)+from->r->type](to, from->r); *from = *to; }
 void wr_AddAssign_F_R( WRValue* to, WRValue* from ) { wr_AddAssign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }
@@ -430,10 +443,10 @@ void NAME##Binary_F_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_EX]( to->r, from, target); }\
 void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_EX<<2)+from->r->type](to, from->r, target); }\
-void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_INT<<2)+from->r->type](to, from->r, target); }\
+void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { WRValue* rhs = from->r; if ( rhs->type == WR_INT ) { target->p2 = INIT_AS_INT; target->i = I_I_OP( to->i, rhs->i ); } else { NAME##Binary[(WR_INT<<2)+rhs->type](to, rhs, target); } }\
 void NAME##Binary_R_F( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_FLOAT](to->r, from, target); }\
 void NAME##Binary_R_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }\
-void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_INT](to->r, from, target); }\
+void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { WRValue* lhs = to->r; if ( lhs->type == WR_INT ) { target->p2 = INIT_AS_INT; target->i = I_I_OP( lhs->i, from->i ); } else { NAME##Binary[(lhs->type<<2)|WR_INT](lhs, from, target); } }\
 void NAME##Binary_F_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_FLOAT<<2)+from->r->type](to, from->r, target); }\
 void NAME##Binary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = I_I_OP( to->i, from->i ); }\
 void NAME##Binary_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = (float)to->i OPERATION from->f; }\
@@ -642,9 +655,9 @@ void NAME##Binary_I_E( WRValue* to, WRValue* from, WRValue* target )\
 }\
 void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_EX)|from->r->type](to, from->r, target); }\
 void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_EX]( to->r, from, target); }\
-void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_INT<<2)+from->r->type](to, from->r, target); }\
+void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { WRValue* rhs = from->r; if ( rhs->type == WR_INT ) { target->p2 = INIT_AS_INT; target->i = to->i OPERATION rhs->i; } else { NAME##Binary[(WR_INT<<2)+rhs->type](to, rhs, target); } }\
 void NAME##Binary_R_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }\
-void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_INT](to->r, from, target); }\
+void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { WRValue* lhs = to->r; if ( lhs->type == WR_INT ) { target->p2 = INIT_AS_INT; target->i = lhs->i OPERATION from->i; } else { NAME##Binary[(lhs->type<<2)|WR_INT](lhs, from, target); } }\
 void NAME##Binary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = to->i OPERATION from->i; }\
 WRTargetFunc NAME##Binary[16] = \
 {\

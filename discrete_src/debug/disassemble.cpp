@@ -24,6 +24,27 @@ SOFTWARE.
 
 #include "wrench.h"
 
+#ifdef WRENCH_WITHOUT_COMPILER
+
+//------------------------------------------------------------------------------
+void wr_disassemble( const uint8_t* bytecode, const unsigned int len, WRstr& out, const bool includeComments )
+{
+	(void)bytecode;
+	(void)len;
+	(void)includeComments;
+	out = "disassembler unavailable in WRENCH_WITHOUT_COMPILER build\n";
+}
+
+//------------------------------------------------------------------------------
+void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out, unsigned int* outLen )
+{
+	WRstr listing;
+	wr_disassemble( bytecode, len, listing, true );
+	listing.release( out, outLen );
+}
+
+#else
+
 //------------------------------------------------------------------------------
 bool wr_startsWith( const char* s, const char* p )
 {
@@ -731,21 +752,24 @@ void wr_disassemble( const uint8_t* bytecode, const unsigned int len, WRstr& out
 		out += "\n";
 	}
 
-	out += "Function Table\n";
-	out += "--------------\n";
-	out += "  idx  hash         args frame baseAdj offset\n";
-	for( int i=0; i<context->numLocalFunctions; ++i )
+	if ( context->numLocalFunctions )
 	{
-		const WRFunction* f = context->localFunctions + i;
-		out.appendFormat( "  0x%02X 0x%08X 0x%02X 0x%02X  0x%02X   0x%04X\n",
-						  i,
-						  (unsigned int)f->hash,
-						  (unsigned int)f->arguments,
-						  (unsigned int)f->frameSpaceNeeded,
-						  (unsigned int)f->frameBaseAdjustment,
-						  (unsigned int)f->functionOffset );
+		out += "Function Table\n";
+		out += "--------------\n";
+		out += "  idx  hash         args frame baseAdj offset\n";
+		for( int i=0; i<context->numLocalFunctions; ++i )
+		{
+			const WRFunction* f = context->localFunctions + i;
+			out.appendFormat( "  0x%02X 0x%08X 0x%02X 0x%02X  0x%02X   0x%04X\n",
+							  i,
+							  (unsigned int)f->hash,
+							  (unsigned int)f->arguments,
+							  (unsigned int)f->frameSpaceNeeded,
+							  (unsigned int)f->frameBaseAdjustment,
+							  (unsigned int)f->functionOffset );
+		}
+		out += "\n";
 	}
-	out += "\n";
 
 	const uint8_t* globalStart = context->codeStart;
 	const uint8_t* globalEnd = codeEnd;
@@ -800,3 +824,5 @@ void wr_disassemble( const uint8_t* bytecode, const unsigned int len, char** out
 	wr_disassemble( bytecode, len, listing, true );
 	listing.release( out, outLen );
 }
+
+#endif

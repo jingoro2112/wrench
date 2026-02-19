@@ -1,3 +1,16 @@
+7.0.1 ----------------------------------------------------------------------------------
+- adding a global context in the form of a void* in WRState, so all functions can
+  have access (c->w->ctx) to any data the calling program wants to make available
+
+  void wr_setStateContext( WRState* w, void* ctx );
+  void* wr_getStateContext( WRState* w );
+
+- moved the context (and a few supporting objects) into wrench.h so they can be used
+  in library functions etc
+- using string object for error messages
+- adding ASan UBSan and perf to Valgrind for validation and strict code cleanliness tools
+- added more test code to thrash it harder
+
 7.0.0 ----------------------------------------------------------------------------------
 - major release adding new opcodes:
  O_LocalBZ
@@ -6,6 +19,7 @@
  O_GlobalBZ8
 - fixed minor task scheduling bug
 - allowed 32-bit garbage collector hint, 16 bit was just a wee bit small
+- added a disassembler, embedded in wrench so:
 
 6.0.21 ---------------------------------------------------------------------------------
 - fixed cross-module stack error (thanks to Tom Whiston)

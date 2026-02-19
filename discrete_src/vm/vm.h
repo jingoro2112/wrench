@@ -48,81 +48,11 @@ enum WRContextFlags
 };
 
 //------------------------------------------------------------------------------
-struct WRContext
-{
-	uint16_t globals;
-
-	uint32_t allocatedMemoryHint; // _approximately_ how much memory has been allocated since last gc
-	
-	const unsigned char* bottom;
-	const unsigned char* codeStart;
-	int32_t bottomSize;
-
-	WRValue* stack;
-	
-	const unsigned char* stopLocation;
-	
-	WRGCBase* svAllocated;
-
-#ifdef WRENCH_INCLUDE_DEBUG_CODE
-	WRDebugServerInterface* debugInterface;
-#endif
-
-	WRState* w;
-
-	WRGCObject registry; // the 'next' pointer in this registry is used as the context LL next
-
-	const unsigned char* yield_pc;
-	WRValue* yield_stackTop;
-	WRValue* yield_frameBase;
-	const WRValue* yield_argv;
-	uint8_t yield_argn;
-	uint8_t yieldArgs;
-	uint8_t stackOffset;
-	uint8_t flags;
-
-	WRFunction* localFunctions;
-	uint8_t numLocalFunctions;
-	
-	WRContext* imported; // linked list of contexts this one imported
-
-	WRContext* nextStateContextLink;
-
-	void markBase( WRGCBase* svb );
-	void mark( WRValue* s );
-	void gc( WRValue* stackTop );
-	
-	WRGCObject* getSVA( int size, WRGCObjectType type, bool init );
-};
-
-//------------------------------------------------------------------------------
 struct WRLibraryCleanup
 {
 	void (*cleanupFunction)(WRState *w, void* param);
 	void* param;
 	WRLibraryCleanup* next;
-};
-
-//------------------------------------------------------------------------------
-struct WRState
-{
-#ifdef WRENCH_TIME_SLICES
-	int instructionsPerSlice;
-	int sliceInstructionCount;
-	int yieldEnabled;
-	int lastSlicesUsed;
-#endif
-	
-	WRContext* contextList;
-
-	WRLibraryCleanup* libCleanupFunctions;
-	
-	WRGCObject globalRegistry;
-
-	uint32_t allocatedMemoryLimit; // WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT by default
-	uint16_t stackSize; // how much stack to give each context
-	int8_t err;
-
 };
 
 void wr_addLibraryCleanupFunction( WRState* w, void(*function)(WRState *w, void* param), void* param );

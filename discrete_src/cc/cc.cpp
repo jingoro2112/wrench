@@ -60,7 +60,7 @@ WRError WRCompilationContext::compile( const char* source,
 									   const int size,
 									   unsigned char** out,
 									   int* outLen,
-									   char* errorMsg,
+									   WRstr* errorMsg,
 									   const uint8_t compilerOptionFlags )
 {
 	m_source = source;
@@ -129,7 +129,7 @@ WRError WRCompilationContext::compile( const char* source,
 
 		if ( errorMsg )
 		{
-			strncpy( errorMsg, msg, msg.size() + 1 );
+			(*errorMsg) = msg;
 		}
 
 		printf( "%s", msg.c_str() );
@@ -153,7 +153,7 @@ WRError WRCompilationContext::compile( const char* source,
 		printf( "link error [%d]\n", m_err );
 		if ( errorMsg )
 		{
-			snprintf( errorMsg, 32, "link error [%d]\n", m_err );
+			errorMsg->format( "link error [%d]\n", m_err );
 		}
 
 	}
@@ -166,7 +166,7 @@ WRError wr_compile( const char* source,
 					const int size,
 					unsigned char** out,
 					int* outLen,
-					char* errMsg,
+					WRstr* errMsg,
 					const uint8_t compilerOptionFlags )
 {
 	assert( sizeof(float) == 4 );
@@ -3307,7 +3307,7 @@ WRError wr_compile( const char* source,
 					const int size,
 					unsigned char** out,
 					int* outLen,
-					char* errMsg,
+					WRstr* errMsg,
 					const uint8_t compilerOptionFlags )
 {
 	return WR_ERR_compiler_not_loaded;

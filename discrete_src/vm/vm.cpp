@@ -1454,6 +1454,9 @@ hashIndexJump:
 			CASE(BZ):
 			{
 				register0 = --stackTop;
+#ifdef WRENCH_COMPACT
+compactLoadBZ:
+#endif
 				pc += wr_LogicalNot[register0->type](register0) ? READ_16_FROM_PC(pc) : 2;
 				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
@@ -1462,6 +1465,9 @@ hashIndexJump:
 			CASE(BZ8):
 			{
 				register0 = --stackTop;
+#ifdef WRENCH_COMPACT
+compactLoadBZ8:
+#endif
 				pc += wr_LogicalNot[register0->type](register0) ? (int8_t)READ_8_FROM_PC(pc) : 2;
 				CHECK_FORCE_YIELD;
 				FASTCONTINUE;
@@ -1754,25 +1760,9 @@ NextIterator:
 //-------------------------------------------------------------------------------------------------------------
 
 			CASE(LocalBZ): { register0 = frameBase + READ_8_FROM_PC(pc++); goto compactLoadBZ; }
-			CASE(LocalBZ8):	{ register0 = frameBase + READ_8_FROM_PC(pc++);goto compactLoadBZ8; }
-
-			CASE(GlobalBZ):
-			{
-				register0 = globalSpace + READ_8_FROM_PC(pc++);
-compactLoadBZ:
-				pc += wr_LogicalNot[register0->type](register0) ? READ_16_FROM_PC(pc) : 2;
-				CHECK_FORCE_YIELD;
-				FASTCONTINUE;
-			}
-
-			CASE(GlobalBZ8):
-			{
-				register0 = globalSpace + READ_8_FROM_PC(pc++);
-compactLoadBZ8:
-				pc += wr_LogicalNot[register0->type](register0) ? (int8_t)READ_8_FROM_PC(pc) : 2;
-				CHECK_FORCE_YIELD;
-				FASTCONTINUE;
-			}
+			CASE(LocalBZ8):	{ register0 = frameBase + READ_8_FROM_PC(pc++); goto compactLoadBZ8; }
+			CASE(GlobalBZ):	{ register0 = globalSpace + READ_8_FROM_PC(pc++); goto compactLoadBZ; }
+			CASE(GlobalBZ8): { register0 = globalSpace + READ_8_FROM_PC(pc++); goto compactLoadBZ8; }
 			
 			CASE(PostIncrement):
 			{

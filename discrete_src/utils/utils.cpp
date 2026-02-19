@@ -157,6 +157,8 @@ WRState* wr_newState( int stackSize )
 	w->stackSize = stackSize;
 	w->allocatedMemoryLimit = WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT;
 
+	w->ctx = (void*)0;
+	
 	return w;
 }
 
@@ -181,6 +183,18 @@ void wr_destroyState( WRState* w )
 	w->globalRegistry.clear();
 
 	g_free( w );
+}
+
+//------------------------------------------------------------------------------
+void wr_setStateContext( WRState* w, void* ctx )
+{
+	w->ctx = ctx;
+}
+
+//------------------------------------------------------------------------------
+void* wr_getStateContext( WRState* w )
+{
+	return w->ctx;
 }
 
 //------------------------------------------------------------------------------
@@ -391,19 +405,19 @@ WRContext* wr_run( WRState* w,
 				   const bool takeOwnership,
 				   const bool destroyContext )
 {
-	WRContext* ctx = wr_newContext( w, block, blockSize, takeOwnership );
+	WRContext* context = wr_newContext( w, block, blockSize, takeOwnership );
 
-	if ( ctx )
+	if ( context )
 	{
-		if ( (!wr_callFunction(ctx, (WRFunction*)0) && !ctx->yield_pc)
+		if ( (!wr_callFunction(context, (WRFunction*)0) && !context->yield_pc)
 			 || destroyContext )
 		{
-			wr_destroyContext( ctx );
-			ctx = 0;
+			wr_destroyContext( context );
+			context = 0;
 		}
 	}
 
-	return ctx;
+	return context;
 }
 
 //------------------------------------------------------------------------------
@@ -1619,6 +1633,5 @@ const char* c_errStrings[]=
 
 	"WR_ERR_division_by_zero",
 };
-
 
 #endif
