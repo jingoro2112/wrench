@@ -28,6 +28,7 @@ SOFTWARE.
 #include <stddef.h>
 #include <string.h>
 #include <math.h>
+#include <assert.h>
 
 #define WRENCH_VERSION_MAJOR 7
 #define WRENCH_VERSION_MINOR 0
@@ -187,7 +188,6 @@ typedef void* (*WR_ALLOC)(size_t size);
 typedef void (*WR_FREE)(void* ptr);
 void wr_setGlobalAllocator( WR_ALLOC wralloc, WR_FREE wrfree );
 
-
 //------------------------------------------------------------------------------
 
 struct WRValue;
@@ -293,9 +293,12 @@ uint32_t wr_hash( const void* dat, const int len, uint32_t serial=0 );
 uint32_t wr_hashStr( const char* dat, uint32_t serial=0 );
 
 // set a context void* that all function callbacks will have access
-// to through context->w->ctx 
-void wr_setStateContext( WRState* w, void* ctx );
-void* wr_getStateContext( WRState* w );
+// to through context->w->ctx
+//         or context->ctxLocal;
+inline void wr_setStateContext( WRState* w, void* ctx );
+inline void wr_setLocalContext( WRContext* c, void* ctx );
+inline void* wr_getStateContext( WRState* w );
+inline void* wr_getLocalContext( WRState* w );
 
 /***************************************************************/
 /**************************************************************/
@@ -727,6 +730,14 @@ enum WRExType : uint8_t
 };
 
 //------------------------------------------------------------------------------
+enum WRGCFlags
+{
+	GCFlag_NoContext = 1<<0,
+	GCFlag_Marked = 1<<1,
+	GCFlag_Perm = 1<<2,
+};
+
+//------------------------------------------------------------------------------
 enum WRGCObjectType
 {
 	SV_VOID_HASH_TABLE = 0x0, // must be zero so memset(0) defaults to it
@@ -1092,6 +1103,8 @@ struct WRContext
 	const unsigned char* codeStart;
 	int32_t bottomSize;
 
+	void* ctxLocal; // user value assigned with this context, opaque to wrench
+
 	WRValue* stack;
 
 	const unsigned char* stopLocation;
@@ -1294,6 +1307,12 @@ extern WRContext* g_context;
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+
+//------------------------------------------------------------------------------
+inline void wr_setStateContext( WRState* w, void* ctx ) { w->ctx = ctx; }
+inline void wr_setStateContext( WRContext* c, void* ctx ) { c->ctxLocal = ctx; }
+inline void* wr_getStateContext( WRState* w ) { return w->ctx; }
+inline void* wr_getLocalContext( WRContext* c ) { return c->ctxLocal; }
 
 #ifdef STR_FILE_OPERATIONS
 #include <sys/stat.h>
@@ -2048,7 +2067,6 @@ WRstr& WRstr::appendFormat( const char* format, ... )
 
 #ifndef WRENCH_COMBINED
 #include "utils/utils.h"
-#include "vm/gc_object.h"
 #include "utils/serializer.h"
 #include "utils/simple_args.h"
 #include "vm/vm.h"

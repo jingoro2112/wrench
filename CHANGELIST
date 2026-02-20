@@ -10,6 +10,11 @@
 - using string object for error messages
 - adding ASan UBSan and perf to Valgrind for validation and strict code cleanliness tools
 - added more test code to thrash it harder
+- added 
+
+	void* ctxLocal; // user value assigned with this context, opaque to wrench
+
+  so each context could set a callback-inspectable value
 
 7.0.0 ----------------------------------------------------------------------------------
 - major release adding new opcodes:

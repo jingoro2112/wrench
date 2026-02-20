@@ -186,18 +186,6 @@ void wr_destroyState( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-void wr_setStateContext( WRState* w, void* ctx )
-{
-	w->ctx = ctx;
-}
-
-//------------------------------------------------------------------------------
-void* wr_getStateContext( WRState* w )
-{
-	return w->ctx;
-}
-
-//------------------------------------------------------------------------------
 bool wr_getYieldInfo( WRContext* context, int* args, WRValue** firstArg, WRValue** returnValue )
 {
 	if ( !context || !context->yield_pc )
