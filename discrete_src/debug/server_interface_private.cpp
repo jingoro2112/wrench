@@ -196,7 +196,7 @@ bool WRDebugServerInterfacePrivate::codewordEncountered( const uint8_t* pc, uint
 		entry->onLine = -1; // don't know yet!
 		entry->fromUnitIndex = from->thisUnitIndex;
 		entry->thisUnitIndex = codeword & WRD_PayloadMask;
-		entry->stackOffset = (uint8_t)(stackTop - m_context->stack);
+		entry->stackOffset = (uint16_t)(stackTop - m_context->stack);
 
 		WRFunction* func = m_context->localFunctions + (entry->thisUnitIndex - 1); // unit '0' is the global unit
 		entry->arguments = func->arguments;
@@ -436,11 +436,12 @@ WRDRun:
 
 				for( WrenchCallStackEntry* E = m_callStack->first(); E; E = m_callStack->next() )
 				{
-					*pack = *E;
-					pack->onLine = wr_x32( pack->onLine );
-					pack->locals = wr_x16( pack->locals );
-					++pack;
-				}
+						*pack = *E;
+						pack->onLine = wr_x32( pack->onLine );
+						pack->locals = wr_x16( pack->locals );
+						pack->stackOffset = wr_x16( pack->stackOffset );
+						++pack;
+					}
 			}
 			
 			break;

@@ -611,7 +611,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&LocalBZ8,
 		&&GlobalBZ,
 		&&GlobalBZ8,
-
 	};
 #endif
 
@@ -878,14 +877,23 @@ debugReturn:
 						while( import != context )
 						{
 							WRValue* I;
-							if ( (I = import->registry.exists(fhash, false)) )
-							{
-								// import shares our stack, tell it where to find it's args
-								uint8_t savedOffset = import->stackOffset;
-								import->stackOffset = (uint8_t)(stackTop - context->stack);
-								wr_callFunction( import, I->wrf, stackTop - args, args );
-								import->stackOffset = savedOffset;
-								register0 = stackTop;
+								if ( (I = import->registry.exists(fhash, false)) )
+								{
+									// import shares our stack, tell it where to find it's args
+									uint16_t savedOffset = import->stackOffset;
+									import->stackOffset = (uint16_t)(stackTop - context->stack);
+									register0 = wr_callFunction( import, I->wrf, stackTop - args, args );
+									import->stackOffset = savedOffset;
+									if ( import->yield_pc )
+									{
+										w->err = WR_ERR_cannot_call_function_context_yielded;
+										return 0;
+									}
+									if ( !register0 )
+									{
+										return 0;
+									}
+									register0 = stackTop;
 
 								if ( *pc == O_NewObjectTable )
 								{
@@ -964,15 +972,24 @@ newObjOut:
 					{
 						while( import != context )
 						{
-							if ( (register0 = import->registry.exists(fhash, false)) )
-							{
-								// import shares our stack, tell it where to find it's args
-								uint8_t savedOffset = import->stackOffset;
-								import->stackOffset = (uint8_t)(stackTop - context->stack);
-								wr_callFunction( import, register0->wrf, stackTop - args, args );
-								import->stackOffset = savedOffset;
-								goto CallFunctionByHashAndPop_continue;
-							}
+								if ( (register0 = import->registry.exists(fhash, false)) )
+								{
+									// import shares our stack, tell it where to find it's args
+									uint16_t savedOffset = import->stackOffset;
+									import->stackOffset = (uint16_t)(stackTop - context->stack);
+									register0 = wr_callFunction( import, register0->wrf, stackTop - args, args );
+									import->stackOffset = savedOffset;
+									if ( import->yield_pc )
+									{
+										w->err = WR_ERR_cannot_call_function_context_yielded;
+										return 0;
+									}
+									if ( !register0 )
+									{
+										return 0;
+									}
+									goto CallFunctionByHashAndPop_continue;
+								}
 
 							import = import->imported;
 						}

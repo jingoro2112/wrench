@@ -808,11 +808,11 @@ void WRCompilationContext::pushLibConstant( WRBytecode& bytecode, WRExpressionCo
 }
 
 //------------------------------------------------------------------------------
-int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen )
+int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen, bool allowFunctionNameHashLiteral )
 {
 	if ( m_unitTop == 0 )
 	{
-		return addGlobalSpaceLoad( bytecode, token, addOnly, varSeen );
+		return addGlobalSpaceLoad( bytecode, token, addOnly, varSeen, allowFunctionNameHashLiteral );
 	}
 
 	uint32_t hash = wr_hashStr(token);
@@ -861,11 +861,19 @@ int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token,
 			}
 		}
 
-		if ( m_needVar && !varSeen )
-		{
-			m_err = WR_ERR_var_not_seen_before_label;
-			return 0;
-		}
+			if ( m_needVar && !varSeen )
+			{
+				if ( !addOnly && allowFunctionNameHashLiteral )
+				{
+					unsigned char data[4];
+					wr_pack32( wr_hashStr(token), data );
+					pushOpcode( bytecode, O_LiteralInt32 );
+					pushData( bytecode, data, 4 );
+					return 0;
+				}
+				m_err = WR_ERR_var_not_seen_before_label;
+				return 0;
+			}
 	}
 
 	bytecode.localSpace[i].hash = hash;
@@ -882,7 +890,7 @@ int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token,
 }
 
 //------------------------------------------------------------------------------
-int WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen )
+int WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen, bool allowFunctionNameHashLiteral )
 {
 	uint32_t hash;
 	WRstr t2;
@@ -908,6 +916,14 @@ int WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token
 
 	if ( m_needVar && !varSeen && i >= m_units[0].bytecode.localSpace.count() )
 	{
+		if ( !addOnly && allowFunctionNameHashLiteral )
+		{
+			unsigned char data[4];
+			wr_pack32( wr_hashStr(token), data );
+			pushOpcode( bytecode, O_LiteralInt32 );
+			pushData( bytecode, data, 4 );
+			return 0;
+		}
 		m_err = WR_ERR_var_not_seen_before_label;
 		return 0;
 	}
@@ -959,20 +975,22 @@ void WRCompilationContext::loadExpressionContext( WRExpression& expression, int 
 			case EXTYPE_LABEL_AND_NULL:
 			case EXTYPE_LABEL:
 			{
-				if ( expression.context[depth].global )
-				{
-					addGlobalSpaceLoad( expression.bytecode,
-										expression.context[depth].token,
-										false,
-										expression.context[depth].varSeen );
-				}
-				else
-				{
-					addLocalSpaceLoad( expression.bytecode,
-									   expression.context[depth].token,
-									   false,
-									   expression.context[depth].varSeen );
-				}
+					if ( expression.context[depth].global )
+					{
+						addGlobalSpaceLoad( expression.bytecode,
+											expression.context[depth].token,
+											false,
+											expression.context[depth].varSeen,
+											expression.allowFunctionNameHashLiteral );
+					}
+					else
+					{
+						addLocalSpaceLoad( expression.bytecode,
+										   expression.context[depth].token,
+										   false,
+										   expression.context[depth].varSeen,
+										   expression.allowFunctionNameHashLiteral );
+					}
 
 				if ( expression.context[depth].type == EXTYPE_LABEL_AND_NULL )
 				{
@@ -1375,7 +1393,6 @@ bool WRCompilationContext::operatorFound( WRstr const& token, WRarray<WRExpressi
 	return false;
 }
 
-//------------------------------------------------------------------------------
 bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr functionName, int depth, bool parseArguments )
 {
 	WRstr prefix = expression.context[depth].prefix;
@@ -1404,9 +1421,10 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 
 			++argsPushed;
 
-			WRExpression nex( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
-			nex.context[0].token = token2;
-			nex.context[0].value = value2;
+				WRExpression nex( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
+				nex.allowFunctionNameHashLiteral = true;
+				nex.context[0].token = token2;
+				nex.context[0].value = value2;
 			m_loadedToken = token2;
 			m_loadedValue = value2;
 			m_loadedQuoted = m_quoted;
@@ -1479,7 +1497,8 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		expression.context[depth].bytecode.functionSpace[i].references.append() = getBytecodePosition( expression.context[depth].bytecode );
 		expression.context[depth].bytecode.functionSpace[i].hash = hash;
 
-		if ( hash == wr_hashStr("yield") )
+		static const uint32_t c_yieldHash = wr_hashStr("yield");
+		if ( hash == c_yieldHash )
 		{
 			pushOpcode( expression.context[depth].bytecode, O_Yield );
 			pushData( expression.context[depth].bytecode, &argsPushed, 1 );

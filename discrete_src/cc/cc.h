@@ -265,6 +265,7 @@ public:
 
 	WRBytecode bytecode;
 	bool lValue;
+	bool allowFunctionNameHashLiteral;
 
 	//------------------------------------------------------------------------------
 	void pushToStack( int index )
@@ -343,6 +344,7 @@ public:
 		context.clear();
 		bytecode.clear();
 		lValue = false;
+		allowFunctionNameHashLiteral = false;
 	}
 };
 
@@ -441,8 +443,8 @@ private:
 	
 	void pushLiteral( WRBytecode& bytecode, WRExpressionContext& context );
 	void pushLibConstant( WRBytecode& bytecode, WRExpressionContext& context );
-	int addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen );
-	int addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen );
+	int addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen, bool allowFunctionNameHashLiteral = false );
+	int addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen, bool allowFunctionNameHashLiteral = false );
 	void addFunctionToHashSpace( WRBytecode& result, WRstr& token );
 	void loadExpressionContext( WRExpression& expression, int depth, int operation );
 	void resolveExpression( WRExpression& expression );

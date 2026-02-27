@@ -32,7 +32,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 7
 #define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 1
+#define WRENCH_VERSION_BUILD 2
 
 struct WRState;
 
@@ -237,7 +237,7 @@ enum WRError
 	WR_ERR_hash_table_invalid_key,
 	WR_ERR_wrench_function_not_found,
 	WR_ERR_array_must_be_indexed,
-	WR_ERR_context_not_found,
+	WR_ERR_scontext_not_found,
 	WR_ERR_context_not_yielded,
 	WR_ERR_cannot_call_function_context_yielded,
 
@@ -404,17 +404,24 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 // pre-fetch a function pointer. This reduces the overhead of calling
 // that function to almost nothing.
 // THIS DOES NOT WORK FOR LIBRARY FUNCTIONS.
-WRFunction* wr_getFunction( WRContext* context, const char* functionName );
+       WRFunction* wr_getFunction( WRContext* context, const uint32_t functionHash );
+inline WRFunction* wr_getFunction( WRContext* context, const char* functionName ) { return wr_getFunction(context, wr_hashStr(functionName)); }
 
 // Continue a yielded context.
-// if context is NOT yielded this will return null will err
-// "WR_ERR_context_not_yielded"
+// Return value semantics:
+//   non-null : script reached return/stop; pointer is the script return value
+//   null     : script yielded again (check wr_getYieldInfo()), or error
+// If context is NOT yielded this sets:
+//   "WR_ERR_context_not_yielded"
 WRValue* wr_continue( WRContext* context );
 
-// If the function is yielded, this returns true and provides the
-// argument list that was passed to yield(...), if requested
-// returns false if this context is not yielded
-bool wr_getYieldInfo( WRContext* context, int* args =0, WRValue** firstArg =0, WRValue** returnValue =0 );
+// If this context in in a yielded state, return true, otherwise false
+// args : will be pointed to the first arg yield(...) pushed
+// argn : number of args yield(...) pushed
+// returnValue : pointer to the return value yield(...) will have (default 0)
+// if the function was forcibly yielded there will be no args and the
+// return value will be ignored
+bool wr_getYieldInfo( WRContext* context, WRValue** args =0, int* argnum =0, WRValue** returnValue =0);
 
 // after wrench executes it may have set an error code, this is how to
 // retrieve it. This system is coarse at the moment. Re-entering the
@@ -456,10 +463,11 @@ typedef void (*WR_C_CALLBACK)(WRContext* c, const WRValue* argv, const int argn,
 // IMPORTANT: The values passed may be references (keepin' it real) so
 // always use the getters inside the WRValue class:
 
-// int:    .asInt();
-// float:  .asFloat();
-// binary: .array( unsigned int* size, char* type );
-// string: .c_str( unsigned int* len );
+// int:      .asInt();
+// float:    .asFloat();
+// uint32_t: .asHash();
+// binary:   .array( unsigned int* size, char* type );
+// string:   .c_str( unsigned int* len );
 
 // tests:
 // .isFloat() fast check if this is a float
@@ -718,8 +726,8 @@ enum WRExType : uint8_t
 
 	WR_EX_RAW_ARRAY  = 0x20,  // 0010
 
-	WR_EX_LL_POINTER = 0x40,  // 0100  [experimental]
-	
+//	0x40 unused
+
 	WR_EX_ITERATOR	       = 0x60,  // 0110
 	WR_EX_CONTAINER_MEMBER = 0x80,  // 1000
 	WR_EX_ARRAY            = 0xA0,  // 1010
@@ -1008,7 +1016,7 @@ class WrenchValue
 public:
 		
 	WrenchValue( WRContext* context, const char* label ) : m_context(context), m_value( wr_getGlobalRef(context, label) ) {}
-	WrenchValue( WRContext* context, WRValue* value ) : m_context(context), m_value(&(value->deref())) {}
+	WrenchValue( WRContext* context, WRValue* value ) : m_context(context), m_value(value ? &(value->deref()) : 0) {}
 
 	bool isValid() const { return m_value ? true : false; }
 
@@ -1024,6 +1032,13 @@ public:
 	WRValue& operator[] ( const int index ) { return *asArrayMember( index ); }
 	WRValue* asArrayMember( const int index );
 	int arraySize() const { return m_value ? m_value->arraySize() : -1; } // returns -1 if this is not an array
+
+	// IMPORTANT: the returned pointers refer to internal storage in the hash
+	// table and can become stale if the hash table grows/re-hashes; reacquire
+	// with getHashTableValue() after modifications.
+	// convert this value to a hash table (if needed) and create key entry
+	WRValue* addHashTableValue( const char* key );
+	WRValue* getHashTableValue( const char* key ); // return null if not found or this is not a hash table
 
 private:
 	WRContext* m_context;
@@ -1125,11 +1140,12 @@ struct WRContext
 	const WRValue* yield_argv;
 	uint8_t yield_argn;
 	uint8_t yieldArgs;
-	uint8_t stackOffset;
-	uint8_t flags;
+	uint16_t stackOffset;
 
 	WRFunction* localFunctions;
 	uint8_t numLocalFunctions;
+
+	uint8_t flags;
 
 	WRContext* imported; // linked list of contexts this one imported
 
@@ -1207,13 +1223,13 @@ struct WrenchFunction
 struct WrenchCallStackEntry
 {
 	int32_t onLine;
+	uint16_t stackOffset;
 
 	uint8_t fromUnitIndex;
 	uint8_t thisUnitIndex;
 	uint16_t locals;
 
 	uint8_t arguments;
-	uint8_t stackOffset;
 };
 
 //------------------------------------------------------------------------------
@@ -1310,7 +1326,7 @@ extern WRContext* g_context;
 
 //------------------------------------------------------------------------------
 inline void wr_setStateContext( WRState* w, void* ctx ) { w->ctx = ctx; }
-inline void wr_setStateContext( WRContext* c, void* ctx ) { c->ctxLocal = ctx; }
+inline void wr_setLocalContext( WRContext* c, void* ctx ) { c->ctxLocal = ctx; }
 inline void* wr_getStateContext( WRState* w ) { return w->ctx; }
 inline void* wr_getLocalContext( WRContext* c ) { return c->ctxLocal; }
 

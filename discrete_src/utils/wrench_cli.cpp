@@ -47,6 +47,8 @@ void testStackOverflow();
 void testYield2();
 void testD();
 void testCallFunctionHashLibraryFallback();
+void testFunctionNameHashAsArgument();
+void testDeepHashTableWithWrenchValue();
 void testStateContextOpaquePointer();
 void LEAKtest();
 void C3test();
@@ -346,8 +348,7 @@ int main( int argn, char* argv[] )
 		char* listing = 0;
 		wr_disassemble( out, outLen, &listing );
 		printf("%s\n", listing );
-			wr_free( listing );
-			
+		wr_free( listing );
 	}
 	else if ( SimpleArgs::get(argn, argv, "d") )
 	{
@@ -788,6 +789,22 @@ static void hashLibFail( WRValue* stackTop, const int argn, WRContext* context )
 	context->w->err = WR_ERR_division_by_zero;
 }
 
+static int32_t g_lastCallbackHashArg = 0;
+static int g_seenCallbackHashArg = 0;
+
+//------------------------------------------------------------------------------
+static void captureHashArg( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	(void)c;
+	(void)usr;
+	retVal.init();
+	if ( argn > 0 )
+	{
+		g_lastCallbackHashArg = argv[0].asInt();
+		g_seenCallbackHashArg = 1;
+	}
+}
+
 //------------------------------------------------------------------------------
 struct OpaqueStateContext
 {
@@ -888,6 +905,113 @@ void testCallFunctionHashLibraryFallback()
 }
 
 //------------------------------------------------------------------------------
+void testFunctionNameHashAsArgument()
+{
+	WRState* w = wr_newState( 64 );
+	if ( !w )
+	{
+		assert(0);
+		return;
+	}
+
+	g_lastCallbackHashArg = 0;
+	g_seenCallbackHashArg = 0;
+	wr_registerFunction( w, "print", captureHashArg );
+
+	const char* src =
+		"print( fname );\n"
+		"function fname() { }\n";
+
+	unsigned char* out = 0;
+	int outLen = 0;
+	WRstr errMsg;
+	if ( wr_compile(src, (int)strlen(src), &out, &outLen, &errMsg, WR_INCLUDE_GLOBALS) != WR_ERR_None )
+	{
+		assert(0);
+		wr_destroyState( w );
+		return;
+	}
+
+	WRContext* c = wr_run( w, out, outLen, true );
+	if ( !c || wr_getLastError( w ) != WR_ERR_None )
+	{
+		assert(0);
+		wr_destroyState( w );
+		return;
+	}
+
+	const int32_t expected = (int32_t)wr_hashStr( "fname" );
+	if ( !g_seenCallbackHashArg || g_lastCallbackHashArg != expected )
+	{
+		assert(0);
+		wr_destroyState( w );
+		return;
+	}
+
+	wr_destroyState( w );
+}
+
+//------------------------------------------------------------------------------
+void testDeepHashTableWithWrenchValue()
+{
+	WRState* w = wr_newState();
+
+	const char* src = "var root;\n"
+					  "function readDeep() { return root.a.b.c.d; }\n";
+
+	unsigned char* out = 0;
+	int outLen = 0;
+	if ( wr_compile(src, (int)strlen(src), &out, &outLen) != WR_ERR_None )
+	{
+		assert(0);
+		wr_destroyState( w );
+		return;
+	}
+
+	WRContext* c = wr_run( w, out, outLen, true );
+	if ( !c || wr_getLastError( w ) != WR_ERR_None )
+	{
+		assert(0);
+		wr_destroyState( w );
+		return;
+	}
+
+	// Build root["a"]["b"]["c"]["d"] from C++ side using WrenchValue helper.
+	WrenchValue root( c, "root" );
+	assert( root.isValid() );
+	root.addHashTableValue( "a" );
+
+	WRValue* a = root.getHashTableValue( "a" );
+	assert( a );
+	WrenchValue aRef( c, a );
+	aRef.addHashTableValue( "b" );
+
+	WRValue* b = aRef.getHashTableValue( "b" );
+	assert( b );
+	WrenchValue bRef( c, b );
+	WRValue* c3 = bRef.addHashTableValue( "c" );
+
+	assert( c3 );
+	WrenchValue cRef( c, c3 );
+	cRef.addHashTableValue( "d" );
+
+	WRValue* d = cRef.getHashTableValue( "d" );
+	assert( d );
+	WrenchValue dRef( c, d );
+	*dRef.Int() = 4242;
+
+	WRValue* r = wr_callFunction( c, "readDeep" );
+	if ( !r || r->asInt() != 4242 || wr_getLastError( w ) != WR_ERR_None )
+	{
+		assert(0);
+		wr_destroyState( w );
+		return;
+	}
+
+	wr_destroyState( w );
+}
+
+//------------------------------------------------------------------------------
 void testStateContextOpaquePointer()
 {
 	WRState* w = wr_newState( 64 );
@@ -900,25 +1024,23 @@ void testStateContextOpaquePointer()
 	wr_registerFunction( w, "ctxReadMagic", ctxReadMagic );
 	wr_registerFunction( w, "ctxAccumulate", ctxAccumulate );
 
-	const char* mainScript =
-		"function readMagic() { return ctxReadMagic(); }\n"
-		"function addToState(v) { return ctxAccumulate(v); }\n";
+	const char* mainScript = "function readMagic() { return ctxReadMagic(); }\n"
+							 "function addToState(v) { return ctxAccumulate(v); }\n";
 
-	const char* importScript =
-		"function importedReadMagic() { return ctxReadMagic(); }\n";
+	const char* importScript = "function importedReadMagic() { return ctxReadMagic(); }\n";
 
 	unsigned char* mainOut = 0;
 	unsigned char* importOut = 0;
 	int mainLen = 0;
 	int importLen = 0;
-	WRstr errMsg;
-	if ( wr_compile(mainScript, (int)strlen(mainScript), &mainOut, &mainLen, &errMsg, WR_INCLUDE_GLOBALS) != WR_ERR_None )
+	if ( wr_compile(mainScript, (int)strlen(mainScript), &mainOut, &mainLen) != WR_ERR_None )
 	{
 		assert(0);
 		wr_destroyState( w );
 		return;
 	}
-	if ( wr_compile(importScript, (int)strlen(importScript), &importOut, &importLen, &errMsg, WR_INCLUDE_GLOBALS) != WR_ERR_None )
+	
+	if ( wr_compile(importScript, (int)strlen(importScript), &importOut, &importLen) != WR_ERR_None )
 	{
 		assert(0);
 		wr_free( mainOut );
@@ -1117,7 +1239,7 @@ int runTests( int number )
 				int args;
 				WRValue* firstArg;
 				WRValue* returnValue;
-				while( wr_getYieldInfo(context, &args, &firstArg, &returnValue) )
+				while( wr_getYieldInfo(context, &firstArg, &args, &returnValue) )
 				{
 					if ( args > 0 )
 					{
@@ -1209,6 +1331,8 @@ int runTests( int number )
 
 	testD();
 	testCallFunctionHashLibraryFallback();
+	testFunctionNameHashAsArgument();
+	testDeepHashTableWithWrenchValue();
 	testStateContextOpaquePointer();
 #ifdef WRENCH_ENABLE_CROSS_MODULE_EXTERNAL_TEST
 	printf( "test [x][discrete_src/utils/test_wrench_cross_module_globals.cpp]: " );

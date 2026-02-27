@@ -126,7 +126,7 @@ foundExists:
 		m_hashTable[index] = WRENCH_NULL_HASH;
 	}
 
-	return m_Vdata + index;
+	return m_Vdata + ((m_type == SV_HASH_TABLE) ? (index << 1) : index);
 }
 
 //------------------------------------------------------------------------------

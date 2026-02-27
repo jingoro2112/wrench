@@ -399,12 +399,33 @@ createNewBuffer:
 			}
 			#endif
 			wr_sprintfEx( (char *)to.va->m_Cdata, size, fmtbuffer, fmtBufferSize, args, argn );
+			}
+			else
+			{
+				// Keep amortized behavior for normal growth/shrink patterns,
+				// but release oversized buffers when utilization gets very low.
+				// This avoids long-lived large allocations after temporary spikes.
+				if ( outbufSize > WR_FORMAT_TRY_SIZE
+					 && size > 0
+					 && outbufSize >= (size << 2) )
+				{
+					to.va = c->getSVA( size, SV_CHAR, false );
+
+					#ifdef WRENCH_HANDLE_MALLOC_FAIL
+					if ( !to.va )
+					{
+						to.p2 = WR_INT;
+						return 0;
+					}
+					#endif
+					wr_sprintfEx( (char *)to.va->m_Cdata, size, fmtbuffer, fmtBufferSize, args, argn );
+				}
+				else
+				{
+					to.va->m_size = size;
+				}
+			}
 		}
-		else
-		{
-			to.va->m_size = size; // just is the new size, TODO- recover memory? seems like not worth the squeeze
-		}
-	}
 
 	to.p2 = INIT_AS_ARRAY;
 

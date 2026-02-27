@@ -464,7 +464,6 @@ WRValue* wr_valueFromConfirmedStruct( WRValue* value, uint32_t hash );
 #define IS_INVALID(P) ((P) == INIT_AS_INVALID)
 
 #define EX_TYPE_MASK   0xE0
-#define IS_LL_POINTER(X) ((X)==WR_EX_LL_POINTER)
 #define IS_CONTAINER_MEMBER(X) (((X)&EX_TYPE_MASK)==WR_EX_CONTAINER_MEMBER)
 #define IS_ARRAY(X) ((X)==WR_EX_ARRAY)
 #define IS_ITERATOR(X) ((X)==WR_EX_ITERATOR)

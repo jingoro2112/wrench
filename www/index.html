@@ -37,14 +37,28 @@ a:active {
 </style>
 
 <style type="text/css">
-pre code {
-  background-color: #eee;
-  border: 1px solid #999;
+.wr-code-block {
+  background-color: #0f172a;
+  border: 1px solid #23324d;
+  border-radius: 8px;
+  color: #e5eefb;
   display: block;
-  padding: 20px;
+  font-family: "Fira Code", "Consolas", "Menlo", monospace;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-x: auto;
+  padding: 16px 18px;
+  tab-size: 4;
 }
 
-	table, th, td {
+.wr-code-block .wr-keyword { color: #7dd3fc; font-weight: 600; }
+.wr-code-block .wr-type { color: #93c5fd; }
+.wr-code-block .wr-func { color: #fca5a5; }
+.wr-code-block .wr-number { color: #fcd34d; }
+.wr-code-block .wr-string { color: #86efac; }
+.wr-code-block .wr-comment { color: #94a3b8; font-style: italic; }
+
+		table, th, td {
   border: 1px solid black;
   border-collapse: collapse;
 }
@@ -118,12 +132,12 @@ scripting language that can fit into a very small space but
 retain full power, flexibility, and speed.</h3>
 
 <ul>
-<li><b>Embedable: </b>Comfortably fits into 32k of ROM, and runs with
+<li><b>Embeddable: </b>Comfortably fits into 32k of ROM, and runs with
 a ~1k RAM footprint
 <li><p><b>Comprehensible: </b>c-like syntax, weakly typed
 
 <li><p><b>Fast: </b>as a comparison: as fast or faster than lua
-(non-JIT of course), much faster than pythgo
+(non-JIT of course), much faster than python
 
 <li><p><b>Compact: </b>Bytecode images a small fraction of other
 interpreters
@@ -368,8 +382,16 @@ public:
     WRValue& operator[] ( const int index ) { return *asArrayMember( index ); }
     WRValue* asArrayMember( const int index );
     int arraySize();
+
+    // convert to hash table if needed and create this key
+    void addHashTableValue( const char* key );
+
+    // return existing key entry, or null if not a hash table / key missing
+    WrenchValue* getHashTableValue( const char* key );
 };
 </pre></code>
+
+<p><i>Note:</i> pointers returned from <code>getHashTableValue()</code> can become stale if the hash table grows/re-hashes, so re-fetch after modifications and avoid long-term caching.
 
 <p><b>outside data</b><br>
 
@@ -647,12 +669,17 @@ a && b
 <p>wrench can yield and then be continued, in code the "yield()" call
 causes the VM to return in a yielded state. the argument passed to
 yield is available to the caller using
-<code>bool wr_getYieldInfo( WRContext* context, int* args =0, WRValue** firstArg =0, WRValue** returnValue =0 );</code>
-which will return true if the context is yielded, and optionally the
-argument passed. this also provides the stack location where a return
-value is expected to the code (default 0)
+<code>bool wr_getYieldInfo( WRContext* context, WRValue** args, int* argnum, WRValue** returnValue );</code>
+which will return true if the context is yielded, and optionally:
+<code>args</code> is a pointer to the first yielded argument,
+<code>argnum</code> is the number of yielded arguments, and
+<code>returnValue</code> is the stack location where a return value is expected.
 <p>Later <code>WRValue* wr_continue( WRContext* context );</code> can
-be called to resume where the code left off. Additionally
+be called to resume where the code left off.
+<br>Return semantics:
+<br>non-null = execution reached return/stop and this is the return value.
+<br>null = execution yielded again (or error). If it yielded again, wr_getYieldInfo(...) will return true.
+Additionally
 if any callFunction(...) is called on the context it will detect that
 it is yielded, and ignore parameters in favor of continuing where it
 left off.
@@ -721,7 +748,7 @@ also supports fall-through.
     case 0:
     case 1:
         break;
-    defalt:
+    default:
         break;
 }
 </code></pre>
@@ -978,7 +1005,7 @@ divisor = (float)divisor;
 <hr><h2>scheduler</h2></hr>
 <p>wrench has a built in time-slicer which will force the VM to yield
 after a certain number of branch/jump instructions are executed. This
-was chosen becuase any program that runs continuously <i>must</i>
+was chosen because any program that runs continuously <i>must</i>
 loop, so it is far more efficient to only check them, and not waste
 cycles.
 <p>To enable the time-slicer, define:
@@ -994,9 +1021,9 @@ allow before forcing a yield and returning.
 <p>The return will have 'null' WRValue* with it's context in a yielded
 state such that wr_getYieldInfo(...) will return true but importantly:
 *returnValue will be NULL since a force-yield is <b>not</b> entitled
-to a return value.
+to a return value (and yielded args/argnum will be empty/zero).
 <p>wr_forceYield() allows an external thread to force the VM to yield
-immeditely on its next branch/loop instruction, for a multi-threaded
+immediately on its next branch/loop instruction, for a multi-threaded
 system that wants to implement a pre-emptive scheduler.
 <pre><code>int wr_slicesUsedLastCall( WRState* w );
 </code></pre>
@@ -1149,6 +1176,7 @@ The arguments passed are directly from the wrench stack for speed,
 because of this their values should never be accessed directly, but
 with the built-in accessors:
 <p>asInt();
+<br>getHash(); // assumes this value IS a hash, otherwise it computes and returns a hash of this
 <br>asFloat();
 <br>asString(...);
 <br>array(...);
@@ -1186,15 +1214,15 @@ arguments (including zero) that should be checked for safety, as in:
 </code></pre>
 
 <hr><h2><a name="libcalls"></a>Library Callbacks</h2></hr>
-<p>The good news is these are very similair to regular callbacks. The
+<p>The good news is these are very similar to regular callbacks. The
 function signature is a bit different, though, to facilitate very fast
 calls, minimizing the work wrench has to do.
 <p>The assumption here is that if you're writing library calls then
 you are likely familiar and comfortable with some of the wrench
 internals and don't mind looking at examples and source code
 
-<p>There are many examples of library calls in std_math.c,
-std_string.c, and std_io.c.
+<p>There are many examples of library calls in std_math.cpp,
+std_string.cpp, and std_io.cpp.
 
 <br>library functions are registered with a different function, and
 their names must conform to the "x::y" format for them to be
@@ -1255,8 +1283,8 @@ is preserved and can be re-entered using the various forms of
 <pre><code>WRValue* wr_callFunction( WRContext* context, const char* functionName, const WRValue* argv =0, const int argn =0 );
 WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue* argv =0, const int argn =0 );
 WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValue* argv =0, const int argn =0 );
-WRValue* wr_continue( WRContext* context ); // only for yielded contexts, see wr_getYieldInfo()
-bool wr_getYieldInfo( WRContext* context, int* args =0, WRValue** firstArg =0, WRValue** returnValue =0 );
+WRValue* wr_continue( WRContext* context ); // non-null on return/stop, null if yielded again or on error
+bool wr_getYieldInfo( WRContext* context, WRValue** args, int* argnum, WRValue** returnValue );
 </pre></code>:
 They all return a WRValue from the called function, this pointer will
 be NULL if the called function was not found.
@@ -1267,6 +1295,50 @@ should be and returned.
 a wrapper that doesn't need to know they are library functions or
 wrench native implementations. 
 
+<h3>Error Codes</h3>
+<p>Wrench uses the <code>WRError</code> enum for both compile-time and runtime failures.
+
+<p><b>Compile-time:</b> <code>wr_compile(...)</code> returns a <code>WRError</code> directly.
+<br><code>WR_ERR_None</code> means success.
+
+<p><b>Runtime:</b> functions like <code>wr_run()</code>, <code>wr_callFunction()</code>, and <code>wr_continue()</code> may return <code>NULL</code> for more than one reason, so check the state error:
+<pre><code>WRValue* r = wr_callFunction( context, "someFunc" );
+if ( !r )
+{
+    if ( wr_getLastError( context->w ) != WR_ERR_None )
+    {
+        // runtime error
+    }
+    else if ( wr_getYieldInfo( context ) )
+    {
+        // function yielded
+    }
+    else
+    {
+        // function not found / null return path depending on call site
+    }
+}</code></pre>
+
+<p><b>Reading the last runtime error:</b> use <code>wr_getLastError( WRState* )</code>.
+The interpreter clears and reuses this field on later calls, so read it immediately after a failure.
+
+<p><b>Human-readable names:</b> <code>c_errStrings[]</code> contains string names for the enum values (when linked in).
+
+<p><b>Common runtime codes:</b>
+<table>
+<tr><th>Code</th><th>Meaning</th><th>Typical cause</th></tr>
+<tr><td><code>WR_ERR_run_must_be_called_by_itself_first</code></td><td>Context was not initialized for function calls yet</td><td>Calling <code>wr_callFunction()</code> before a successful <code>wr_run()</code></td></tr>
+<tr><td><code>WR_ERR_wrench_function_not_found</code></td><td>Named/hash function not found in script or library fallback</td><td>Bad name/hash, function not exported/loaded, wrong module</td></tr>
+<tr><td><code>WR_ERR_function_not_found</code></td><td>VM bytecode call target not found</td><td>Script bytecode calling missing function/import target</td></tr>
+<tr><td><code>WR_ERR_context_not_yielded</code></td><td><code>wr_continue()</code> called when nothing is suspended</td><td>Double-continue or no prior yield</td></tr>
+<tr><td><code>WR_ERR_cannot_call_function_context_yielded</code></td><td>A call was attempted where the target context yielded in a non-reentrant path</td><td>Calling into a yielded/imported context from a path that cannot suspend safely</td></tr>
+<tr><td><code>WR_ERR_bad_bytecode_CRC</code></td><td>Bytecode image failed validation</td><td>Corrupt/mismatched bytecode, wrong version, truncated image</td></tr>
+<tr><td><code>WR_ERR_stack_overflow</code></td><td>VM stack capacity exceeded</td><td>Deep recursion, too many locals, insufficient <code>WRENCH_DEFAULT_STACK_SIZE</code></td></tr>
+<tr><td><code>WR_ERR_malloc_failed</code></td><td>Allocation failed (when enabled)</td><td><code>WRENCH_HANDLE_MALLOC_FAIL</code> build with allocator returning null</td></tr>
+</table>
+
+<p><b>Yield is not an error:</b> if <code>wr_continue()</code> or <code>wr_callFunction()</code> returns <code>NULL</code>, check <code>wr_getYieldInfo(...)</code> before assuming failure.
+	
 <br>given this simple script:
 
 <pre><code>g_a = 20;
@@ -1350,11 +1422,13 @@ cost.
 
 <pre><code>void wr_loadSysLib( WRState* w ); // system/internal functions
 void wr_loadMathLib( WRState* w ); // provides most of the calls in math.h
-void wr_loadStdLib( WRState* w ); // standard functions like sprintf/rand/
+void wr_loadStdLib( WRState* w ); // standard functions like rand/time
 void wr_loadIOLib( WRState* w ); // IO funcs (time/file/io)
 void wr_loadStringLib( WRState* w ); // string functions
 void wr_loadMessageLib( WRState* w ); // messaging between contexts
-void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and
+void wr_loadSerializeLib( WRState* w ); // serialize WRValues to and from binary
+void wr_loadDebugLib( WRState* w ); // debugger output helpers
+void wr_loadTCPLib( WRState* w ); // TCP/IP functions
 void wr_loadContainerLib( WRState* w ); // data container manipulation
 </pre></code>
 
@@ -1404,6 +1478,7 @@ math::abs( f );
 math::ldexp( a, b );
 math::deg2rad( f );
 math::rad2deg( f );
+math::iscale( a, b, divisor ); // integer scale helper: (a*b)/divisor
 </pre></div><p></p>
 
 
@@ -1421,13 +1496,14 @@ math::rad2deg( f );
 <button type="button" class="collapsible">Std Lib</button>
 <div class="collapsecontent">
 <pre>
-std::rand( a [,b] ); // returns a psuedo-random integer between a and b INCLUSIVE!
+std::rand( a [,b] ); // returns a pseudo-random integer between a and b INCLUSIVE!
                      // or 0 to a if b is not provided
                      // ex: std::rand( 5 ) might return 0, 1, 2, 3, 4 or 5
                      //     std::rand( 2, 6 ) might return 2, 3, 4, 5 or 6
                      //     std::rand( 6, 2 ) will always return 6
 std::srand( seed );  // seed the rand()
 std::time();         // return unix time on systems that support it
+time::ms();          // return milliseconds when supported
 </pre></div><p></p>
 
 
@@ -1449,16 +1525,18 @@ str::mid( str, start, len ); // return the middle of a string starting
 str::chr( str, char ); // as c strchr; returns -1 if not found
 str::tolower( str/char ); // convert and return this character or string to lowercase
 str::toupper( str/char ); // convert and return this character or string to uppercase
+str::tol( str [,base] ); // parse string as integer
 str::concat( str1, str2, ... ); // return str1+str2+...
                                 // NOTE: str1 + str2 also works!
 str::left( str, len ); // return string from left side 0 to len 
-str::trunc( str, len ); // [alist for left() see above]
+str::trunc( str, len ); // [alias for left() see above]
 str::right( str, len ); // return string from right side of len chars
 str::substr( str, start, len); // [alias for mid() see above]
 str::trimright( str ); // remove trailing whitespace
 str::trimleft( str ); // remove leading whitespace
 str::trim( str ); // remove leading and trailing whitespace
 str::insert( str1, str2, pos ); // insert str2 into str1 at pos
+str::tprint( value ); // print internal/technical value details
 </pre></div><p></p>
 
 
@@ -1473,7 +1551,7 @@ io::deleteFile( name ); // unlink/delete this file
 io::open( name, flags, mode ); // returns a file descriptor
                                // flags can be any OR of:
                                // io::O_RDONLY io::O_RDWR io::O_CREAT
-                               // io::O_APPEND io::O_TRUNC io::EXCL
+                               // io::O_APPEND io::O_TRUNC io::O_EXCL
                                // mode is octal unix file mode: default 0666
 io::close( fd ); // close fd returned by open
 io::read( fd, max_count ); // read the FD into data array, up to
@@ -1485,7 +1563,7 @@ io::seek( fd, offset, whence ); // set the read point of a fd returned
                                 // by open() above
                                 // whence value can be one of: io::SEEK_SET, io::SEEK_CUR, io::SEEK_END
                                 // as c (default io::SEEK_CUR)
-io::sync( fd ); // make sure all data is committed (flush)
+io::fsync( fd ); // make sure all data is committed (flush)
 
 
 io::getline(); // return a line of text input with fgetc(stdin)
@@ -1501,6 +1579,34 @@ std::serialize( value ); // serializes any value type/combination of
                          // character string suitable for writing to a file
 std::deserialize( string ); // given the string output from
                             // std::serialize(), return the original value, full restored
+</pre></div><p></p>
+
+<button type="button" class="collapsible">Message Lib</button>
+<div class="collapsecontent">
+<pre>
+msg::read( key [,clear=false] ); // read message by key, optionally clear on read
+msg::write( key, value ); // write/replace message (stored as hash of value)
+msg::clear( key ); // clear message by key
+msg::peek( key ); // return 1 if key exists, else 0
+</pre></div><p></p>
+
+<button type="button" class="collapsible">Debug Lib</button>
+<div class="collapsecontent">
+<pre>
+debug::print( ... ); // print values without newline
+debug::println( ... ); // print values with newline
+</pre></div><p></p>
+
+<button type="button" class="collapsible">TCP Lib</button>
+<div class="collapsecontent">
+<pre>
+tcp::bind( port ); // returns socket
+tcp::accept( socket ); // returns accepted socket
+tcp::connect( address, port ); // returns socket
+tcp::close( socket );
+tcp::send( socket, data ); // returns bytes sent
+tcp::receive( socket ); // returns received data
+tcp::peek( socket ); // returns available byte count
 </pre></div><p></p>
 
 
@@ -1549,14 +1655,14 @@ list::push( list, item );       // push item to front of the list
 list::push_front( list, item ); // push item to front of list
 list::push_back( list, item );  // push item to back(end) of list
 
-queue::clear( queue );      // clear/create a queue (filo)
+queue::clear( queue );      // clear/create a queue (fifo)
 queue::count( queue );      // returns: elements
 queue::push( queue, item ); // push item onto the queue
 queue::pop( queue );        // pop an item off the queue
 queue::peek( queue );       // return the first element of the queue without
                             // changing it
 
-stack::clear( stack );      // clear/create a stack (fifo)
+stack::clear( stack );      // clear/create a stack (lifo)
 stack::count( stack );      // return: elements
 stack::push( stack, item ); // push item onto the stack
 stack::pop( stack );        // pop an item off the stack
@@ -1586,7 +1692,7 @@ value compression.
 <h2></h2>
 <pre><code>int : +/-2,147,483,647 (32 bit)
 
-float : 32 bit (compiler/lib dependant)
+float : 32 bit (compiler/lib dependent)
 
 char : 8 bit, no wide char support
 
@@ -1624,7 +1730,7 @@ has 32k total and I needed most of it for shift-buffer space!
 <p><b>So use FORTH?</b><cr>
 Wrench is also motivated by the need for scripts that are approachable
 by novice-to-intermediate programmers. Asking them to become familiar
-with FORTH (or any of the many other expressive minimalistic langauges
+with FORTH (or any of the many other expressive minimalistic languages
 I've encountered) would sink the project.
 
 <p><b>You say wrench is fast, but LuaJITs is faster!</b><cr>
@@ -1651,6 +1757,118 @@ for (i = 0; i < coll.length; i++) {
     }
   });
 }
+
+(function() {
+  function esc(s) {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function highlightWrench(source) {
+    var out = "";
+    var i = 0;
+    var n = source.length;
+    var kw = {
+      "var":1,"function":1,"if":1,"else":1,"for":1,"while":1,"do":1,"switch":1,"case":1,"default":1,
+      "break":1,"continue":1,"return":1,"yield":1,"struct":1,"enum":1,"export":1,"true":1,"false":1,
+      "null":1,"this":1,"new":1
+    };
+    var ty = { "int":1, "float":1, "char":1, "bool":1, "void":1 };
+
+    function ch(k) { return source.charAt(k); }
+    function isDigit(c) { return c >= "0" && c <= "9"; }
+    function isIdentStart(c) { return (c >= "A" && c <= "Z") || (c >= "a" && c <= "z") || c === "_"; }
+    function isIdent(c) { return isIdentStart(c) || isDigit(c); }
+    function wrap(cls, text) { return '<span class="' + cls + '">' + esc(text) + '</span>'; }
+
+    while (i < n) {
+      var c = ch(i);
+      var c2 = (i + 1 < n) ? ch(i + 1) : "";
+
+      if (c === "/" && c2 === "/") {
+        var s0 = i;
+        i += 2;
+        while (i < n && ch(i) !== "\n") { ++i; }
+        out += wrap("wr-comment", source.slice(s0, i));
+        continue;
+      }
+
+      if (c === "/" && c2 === "*") {
+        var b0 = i;
+        i += 2;
+        while (i + 1 < n && !(ch(i) === "*" && ch(i + 1) === "/")) { ++i; }
+        if (i + 1 < n) { i += 2; }
+        out += wrap("wr-comment", source.slice(b0, i));
+        continue;
+      }
+
+      if (c === "\"" || c === "'") {
+        var q = c;
+        var q0 = i++;
+        while (i < n) {
+          if (ch(i) === "\\") { i += 2; continue; }
+          if (ch(i) === q) { ++i; break; }
+          ++i;
+        }
+        out += wrap("wr-string", source.slice(q0, i));
+        continue;
+      }
+
+      if (isDigit(c)) {
+        var d0 = i;
+        if (c === "0" && (c2 === "x" || c2 === "X")) {
+          i += 2;
+          while (i < n) {
+            var hx = ch(i);
+            if (!((hx >= "0" && hx <= "9") || (hx >= "a" && hx <= "f") || (hx >= "A" && hx <= "F"))) { break; }
+            ++i;
+          }
+        } else {
+          ++i;
+          while (i < n && isDigit(ch(i))) { ++i; }
+          if (i < n && ch(i) === ".") {
+            ++i;
+            while (i < n && isDigit(ch(i))) { ++i; }
+          }
+        }
+        out += wrap("wr-number", source.slice(d0, i));
+        continue;
+      }
+
+      if (isIdentStart(c)) {
+        var w0 = i++;
+        while (i < n && isIdent(ch(i))) { ++i; }
+        var word = source.slice(w0, i);
+        var j = i;
+        while (j < n && /\s/.test(ch(j))) { ++j; }
+        if (kw[word]) {
+          out += wrap("wr-keyword", word);
+        } else if (ty[word]) {
+          out += wrap("wr-type", word);
+        } else if (j < n && ch(j) === "(") {
+          out += wrap("wr-func", word);
+        } else {
+          out += esc(word);
+        }
+        continue;
+      }
+
+      out += esc(c);
+      ++i;
+    }
+
+    return out;
+  }
+
+  var blocks = document.querySelectorAll("pre > code");
+  for (var j = 0; j < blocks.length; ++j) {
+    var code = blocks[j];
+    code.classList.add("wr-code-block");
+    code.innerHTML = highlightWrench(code.textContent || "");
+  }
+})();
 
 </script>
 

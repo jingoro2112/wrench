@@ -144,6 +144,54 @@ WRValue* WrenchValue::asArrayMember( const int index )
 }
 
 //------------------------------------------------------------------------------
+WRValue* WrenchValue::addHashTableValue( const char* key )
+{
+	if ( !m_value || !m_context || !key )
+	{
+		return 0;
+	}
+
+	if ( m_value->xtype != WR_EX_HASH_TABLE )
+	{
+		m_value->va = m_context->getSVA( 0, SV_HASH_TABLE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !m_value->va )
+		{
+			m_value->p2 = INIT_AS_INT;
+			return 0;
+		}
+#endif
+		m_value->p2 = INIT_AS_HASH_TABLE;
+	}
+
+	uint32_t hash = wr_hashStr( key );
+	WRValue* entry = (WRValue*)(m_value->va->exists( hash, false ));
+	if ( !entry )
+	{
+		entry = (WRValue*)(m_value->va->get(hash));
+		if ( entry )
+		{
+			wr_makeString( m_context, entry + 1, key );
+		}
+	}
+
+	return entry ? &(entry->deref()) : 0;
+}
+
+//------------------------------------------------------------------------------
+WRValue* WrenchValue::getHashTableValue( const char* key )
+{
+	if ( !m_value || !m_context || !key || (m_value->xtype != WR_EX_HASH_TABLE) )
+	{
+		return 0;
+	}
+
+	WRValue* entry = (WRValue*)(m_value->va->exists( wr_hashStr(key), false ));
+
+	return entry ? &(entry->deref()) : 0;
+}
+
+//------------------------------------------------------------------------------
 WRState* wr_newState( int stackSize )
 {
 	WRState* w = (WRState *)g_malloc( sizeof(WRState) );
@@ -186,21 +234,21 @@ void wr_destroyState( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-bool wr_getYieldInfo( WRContext* context, int* args, WRValue** firstArg, WRValue** returnValue )
+bool wr_getYieldInfo( WRContext* context, WRValue** args, int* argnum, WRValue** returnValue )
 {
 	if ( !context || !context->yield_pc )
 	{
 		return false;
 	}
 
-	if ( args )
+	if ( argnum )
 	{
-		*args = context->yieldArgs;
+		*argnum = context->yieldArgs;
 	}
 
-	if ( firstArg )
+	if ( args )
 	{
-		*firstArg = context->yield_stackTop - context->yieldArgs;
+		*args = context->yield_stackTop - context->yieldArgs;
 	}
 
 	if ( returnValue )
@@ -310,7 +358,6 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 	{
 		C->codeStart += 4 + READ_32_FROM_PC( C->codeStart );		
 	}
-
 
 	int pos = 3;
 	for( int i=0; i<C->numLocalFunctions; ++i )
@@ -551,7 +598,6 @@ float WRValue::asFloat() const
 
 	return singleValue().asFloat();
 }
-
 
 //------------------------------------------------------------------------------
 bool WRValue::isString( int* len ) const
@@ -997,11 +1043,17 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 		cF = context->registry.getAsRawValueHashTable( hash );
 		if ( !cF->wrf ) // not found in the registry, but...
 		{
-			cF = context->w->globalRegistry.getAsRawValueHashTable(hash);
-			if ( cF->lcb ) // it was a library function, call it
-			{
-				WRValue* stack = context->stack + context->stackOffset;
-				int a = 0;
+				cF = context->w->globalRegistry.getAsRawValueHashTable(hash);
+				if ( cF->lcb ) // it was a library function, call it
+				{
+					if ( context->yield_pc )
+					{
+						context->w->err = WR_ERR_cannot_call_function_context_yielded;
+						return 0;
+					}
+
+					WRValue* stack = context->stack + context->stackOffset;
+					int a = 0;
 				for( ; a<argn; ++a )
 				{
 					stack[a] = argv[a];
@@ -1028,9 +1080,9 @@ WRValue* wr_returnValueFromLastCall( WRContext* context )
 }
 
 //------------------------------------------------------------------------------
-WRFunction* wr_getFunction( WRContext* context, const char* functionName )
+WRFunction* wr_getFunction( WRContext* context, const uint32_t functionHash )
 {
-	WRValue* f = context->registry.exists(wr_hashStr(functionName), false);
+	WRValue* f = context->registry.exists(functionHash, false);
 	return f ? f->wrf : 0;
 }
 

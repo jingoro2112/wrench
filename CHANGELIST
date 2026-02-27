@@ -1,3 +1,8 @@
+7.0.2 ----------------------------------------------------------------------------------
+- fixes around yield
+- expanding some uint8 values that were a little too conservative
+- fixed some very corner-y case code and added some more audits and protection
+
 7.0.1 ----------------------------------------------------------------------------------
 - adding a global context in the form of a void* in WRState, so all functions can
   have access (c->w->ctx) to any data the calling program wants to make available
@@ -15,6 +20,16 @@
 	void* ctxLocal; // user value assigned with this context, opaque to wrench
 
   so each context could set a callback-inspectable value
+- using function names as arguments results in wrench substituting the hash value
+  of the function's name. This is so wrench can externalize functions for callback
+  I TRIED to make this work:
+
+  var a = funcname; // assign the function to a variable
+  a(23);            // call the variable
+
+  and I made it work but wow was it a MESS. Technically worked but blew the codebase up
+  and was S L O W because of all the special cases it had to check at runtime. I have 
+  reserved an opcode for this if I ever figure out a way to make this happen.
 
 7.0.0 ----------------------------------------------------------------------------------
 - major release adding new opcodes:

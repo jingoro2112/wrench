@@ -79,6 +79,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 		if ( token == "var" )
 		{
 			expression.context[depth].varSeen = true;
+			expression.allowFunctionNameHashLiteral = true;
 			continue;
 		}
 		else if ( token == "{" )

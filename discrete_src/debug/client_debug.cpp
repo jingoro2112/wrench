@@ -226,10 +226,11 @@ SimpleLL<WrenchCallStackEntry>* WRDebugClientInterface::getCallstack()
 	uint32_t count = r.packet->param1;
 	for( uint32_t i=0; i<count; ++i )
 	{
-		entries[i].onLine = wr_x32( entries[i].onLine );
-		entries[i].locals = wr_x16( entries[i].locals );
-		*I->m_callStack->addTail() = entries[i];
-	}
+			entries[i].onLine = wr_x32( entries[i].onLine );
+			entries[i].locals = wr_x16( entries[i].locals );
+			entries[i].stackOffset = wr_x16( entries[i].stackOffset );
+			*I->m_callStack->addTail() = entries[i];
+		}
 
 	I->m_callstackDirty = false;
 	return I->m_callStack;

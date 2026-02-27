@@ -470,7 +470,6 @@ WRValue* wr_valueFromConfirmedStruct( WRValue* value, uint32_t hash );
 #define IS_INVALID(P) ((P) == INIT_AS_INVALID)
 
 #define EX_TYPE_MASK   0xE0
-#define IS_LL_POINTER(X) ((X)==WR_EX_LL_POINTER)
 #define IS_CONTAINER_MEMBER(X) (((X)&EX_TYPE_MASK)==WR_EX_CONTAINER_MEMBER)
 #define IS_ARRAY(X) ((X)==WR_EX_ARRAY)
 #define IS_ITERATOR(X) ((X)==WR_EX_ITERATOR)
@@ -2031,6 +2030,7 @@ public:
 
 	WRBytecode bytecode;
 	bool lValue;
+	bool allowFunctionNameHashLiteral;
 
 	//------------------------------------------------------------------------------
 	void pushToStack( int index )
@@ -2109,6 +2109,7 @@ public:
 		context.clear();
 		bytecode.clear();
 		lValue = false;
+		allowFunctionNameHashLiteral = false;
 	}
 };
 
@@ -2207,8 +2208,8 @@ private:
 	
 	void pushLiteral( WRBytecode& bytecode, WRExpressionContext& context );
 	void pushLibConstant( WRBytecode& bytecode, WRExpressionContext& context );
-	int addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen );
-	int addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen );
+	int addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen, bool allowFunctionNameHashLiteral = false );
+	int addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen, bool allowFunctionNameHashLiteral = false );
 	void addFunctionToHashSpace( WRBytecode& result, WRstr& token );
 	void loadExpressionContext( WRExpression& expression, int depth, int operation );
 	void resolveExpression( WRExpression& expression );
@@ -3842,11 +3843,11 @@ void WRCompilationContext::pushLibConstant( WRBytecode& bytecode, WRExpressionCo
 }
 
 //------------------------------------------------------------------------------
-int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen )
+int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen, bool allowFunctionNameHashLiteral )
 {
 	if ( m_unitTop == 0 )
 	{
-		return addGlobalSpaceLoad( bytecode, token, addOnly, varSeen );
+		return addGlobalSpaceLoad( bytecode, token, addOnly, varSeen, allowFunctionNameHashLiteral );
 	}
 
 	uint32_t hash = wr_hashStr(token);
@@ -3895,11 +3896,19 @@ int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token,
 			}
 		}
 
-		if ( m_needVar && !varSeen )
-		{
-			m_err = WR_ERR_var_not_seen_before_label;
-			return 0;
-		}
+			if ( m_needVar && !varSeen )
+			{
+				if ( !addOnly && allowFunctionNameHashLiteral )
+				{
+					unsigned char data[4];
+					wr_pack32( wr_hashStr(token), data );
+					pushOpcode( bytecode, O_LiteralInt32 );
+					pushData( bytecode, data, 4 );
+					return 0;
+				}
+				m_err = WR_ERR_var_not_seen_before_label;
+				return 0;
+			}
 	}
 
 	bytecode.localSpace[i].hash = hash;
@@ -3916,7 +3925,7 @@ int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token,
 }
 
 //------------------------------------------------------------------------------
-int WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen )
+int WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen, bool allowFunctionNameHashLiteral )
 {
 	uint32_t hash;
 	WRstr t2;
@@ -3942,6 +3951,14 @@ int WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token
 
 	if ( m_needVar && !varSeen && i >= m_units[0].bytecode.localSpace.count() )
 	{
+		if ( !addOnly && allowFunctionNameHashLiteral )
+		{
+			unsigned char data[4];
+			wr_pack32( wr_hashStr(token), data );
+			pushOpcode( bytecode, O_LiteralInt32 );
+			pushData( bytecode, data, 4 );
+			return 0;
+		}
 		m_err = WR_ERR_var_not_seen_before_label;
 		return 0;
 	}
@@ -3993,20 +4010,22 @@ void WRCompilationContext::loadExpressionContext( WRExpression& expression, int 
 			case EXTYPE_LABEL_AND_NULL:
 			case EXTYPE_LABEL:
 			{
-				if ( expression.context[depth].global )
-				{
-					addGlobalSpaceLoad( expression.bytecode,
-										expression.context[depth].token,
-										false,
-										expression.context[depth].varSeen );
-				}
-				else
-				{
-					addLocalSpaceLoad( expression.bytecode,
-									   expression.context[depth].token,
-									   false,
-									   expression.context[depth].varSeen );
-				}
+					if ( expression.context[depth].global )
+					{
+						addGlobalSpaceLoad( expression.bytecode,
+											expression.context[depth].token,
+											false,
+											expression.context[depth].varSeen,
+											expression.allowFunctionNameHashLiteral );
+					}
+					else
+					{
+						addLocalSpaceLoad( expression.bytecode,
+										   expression.context[depth].token,
+										   false,
+										   expression.context[depth].varSeen,
+										   expression.allowFunctionNameHashLiteral );
+					}
 
 				if ( expression.context[depth].type == EXTYPE_LABEL_AND_NULL )
 				{
@@ -4409,7 +4428,6 @@ bool WRCompilationContext::operatorFound( WRstr const& token, WRarray<WRExpressi
 	return false;
 }
 
-//------------------------------------------------------------------------------
 bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr functionName, int depth, bool parseArguments )
 {
 	WRstr prefix = expression.context[depth].prefix;
@@ -4438,9 +4456,10 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 
 			++argsPushed;
 
-			WRExpression nex( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
-			nex.context[0].token = token2;
-			nex.context[0].value = value2;
+				WRExpression nex( expression.bytecode.localSpace, expression.bytecode.isStructSpace );
+				nex.allowFunctionNameHashLiteral = true;
+				nex.context[0].token = token2;
+				nex.context[0].value = value2;
 			m_loadedToken = token2;
 			m_loadedValue = value2;
 			m_loadedQuoted = m_quoted;
@@ -4513,7 +4532,8 @@ bool WRCompilationContext::parseCallFunction( WRExpression& expression, WRstr fu
 		expression.context[depth].bytecode.functionSpace[i].references.append() = getBytecodePosition( expression.context[depth].bytecode );
 		expression.context[depth].bytecode.functionSpace[i].hash = hash;
 
-		if ( hash == wr_hashStr("yield") )
+		static const uint32_t c_yieldHash = wr_hashStr("yield");
+		if ( hash == c_yieldHash )
 		{
 			pushOpcode( expression.context[depth].bytecode, O_Yield );
 			pushData( expression.context[depth].bytecode, &argsPushed, 1 );
@@ -6847,6 +6867,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 		if ( token == "var" )
 		{
 			expression.context[depth].varSeen = true;
+			expression.allowFunctionNameHashLiteral = true;
 			continue;
 		}
 		else if ( token == "{" )
@@ -9677,7 +9698,7 @@ foundExists:
 		m_hashTable[index] = WRENCH_NULL_HASH;
 	}
 
-	return m_Vdata + index;
+	return m_Vdata + ((m_type == SV_HASH_TABLE) ? (index << 1) : index);
 }
 
 //------------------------------------------------------------------------------
@@ -10665,7 +10686,6 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&LocalBZ8,
 		&&GlobalBZ,
 		&&GlobalBZ8,
-
 	};
 #endif
 
@@ -10932,14 +10952,23 @@ debugReturn:
 						while( import != context )
 						{
 							WRValue* I;
-							if ( (I = import->registry.exists(fhash, false)) )
-							{
-								// import shares our stack, tell it where to find it's args
-								uint8_t savedOffset = import->stackOffset;
-								import->stackOffset = (uint8_t)(stackTop - context->stack);
-								wr_callFunction( import, I->wrf, stackTop - args, args );
-								import->stackOffset = savedOffset;
-								register0 = stackTop;
+								if ( (I = import->registry.exists(fhash, false)) )
+								{
+									// import shares our stack, tell it where to find it's args
+									uint16_t savedOffset = import->stackOffset;
+									import->stackOffset = (uint16_t)(stackTop - context->stack);
+									register0 = wr_callFunction( import, I->wrf, stackTop - args, args );
+									import->stackOffset = savedOffset;
+									if ( import->yield_pc )
+									{
+										w->err = WR_ERR_cannot_call_function_context_yielded;
+										return 0;
+									}
+									if ( !register0 )
+									{
+										return 0;
+									}
+									register0 = stackTop;
 
 								if ( *pc == O_NewObjectTable )
 								{
@@ -11018,15 +11047,24 @@ newObjOut:
 					{
 						while( import != context )
 						{
-							if ( (register0 = import->registry.exists(fhash, false)) )
-							{
-								// import shares our stack, tell it where to find it's args
-								uint8_t savedOffset = import->stackOffset;
-								import->stackOffset = (uint8_t)(stackTop - context->stack);
-								wr_callFunction( import, register0->wrf, stackTop - args, args );
-								import->stackOffset = savedOffset;
-								goto CallFunctionByHashAndPop_continue;
-							}
+								if ( (register0 = import->registry.exists(fhash, false)) )
+								{
+									// import shares our stack, tell it where to find it's args
+									uint16_t savedOffset = import->stackOffset;
+									import->stackOffset = (uint16_t)(stackTop - context->stack);
+									register0 = wr_callFunction( import, register0->wrf, stackTop - args, args );
+									import->stackOffset = savedOffset;
+									if ( import->yield_pc )
+									{
+										w->err = WR_ERR_cannot_call_function_context_yielded;
+										return 0;
+									}
+									if ( !register0 )
+									{
+										return 0;
+									}
+									goto CallFunctionByHashAndPop_continue;
+								}
 
 							import = import->imported;
 						}
@@ -13446,6 +13484,54 @@ WRValue* WrenchValue::asArrayMember( const int index )
 }
 
 //------------------------------------------------------------------------------
+WRValue* WrenchValue::addHashTableValue( const char* key )
+{
+	if ( !m_value || !m_context || !key )
+	{
+		return 0;
+	}
+
+	if ( m_value->xtype != WR_EX_HASH_TABLE )
+	{
+		m_value->va = m_context->getSVA( 0, SV_HASH_TABLE, true );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if ( !m_value->va )
+		{
+			m_value->p2 = INIT_AS_INT;
+			return 0;
+		}
+#endif
+		m_value->p2 = INIT_AS_HASH_TABLE;
+	}
+
+	uint32_t hash = wr_hashStr( key );
+	WRValue* entry = (WRValue*)(m_value->va->exists( hash, false ));
+	if ( !entry )
+	{
+		entry = (WRValue*)(m_value->va->get(hash));
+		if ( entry )
+		{
+			wr_makeString( m_context, entry + 1, key );
+		}
+	}
+
+	return entry ? &(entry->deref()) : 0;
+}
+
+//------------------------------------------------------------------------------
+WRValue* WrenchValue::getHashTableValue( const char* key )
+{
+	if ( !m_value || !m_context || !key || (m_value->xtype != WR_EX_HASH_TABLE) )
+	{
+		return 0;
+	}
+
+	WRValue* entry = (WRValue*)(m_value->va->exists( wr_hashStr(key), false ));
+
+	return entry ? &(entry->deref()) : 0;
+}
+
+//------------------------------------------------------------------------------
 WRState* wr_newState( int stackSize )
 {
 	WRState* w = (WRState *)g_malloc( sizeof(WRState) );
@@ -13488,21 +13574,21 @@ void wr_destroyState( WRState* w )
 }
 
 //------------------------------------------------------------------------------
-bool wr_getYieldInfo( WRContext* context, int* args, WRValue** firstArg, WRValue** returnValue )
+bool wr_getYieldInfo( WRContext* context, WRValue** args, int* argnum, WRValue** returnValue )
 {
 	if ( !context || !context->yield_pc )
 	{
 		return false;
 	}
 
-	if ( args )
+	if ( argnum )
 	{
-		*args = context->yieldArgs;
+		*argnum = context->yieldArgs;
 	}
 
-	if ( firstArg )
+	if ( args )
 	{
-		*firstArg = context->yield_stackTop - context->yieldArgs;
+		*args = context->yield_stackTop - context->yieldArgs;
 	}
 
 	if ( returnValue )
@@ -13612,7 +13698,6 @@ WRContext* wr_createContext( WRState* w, const unsigned char* block, const int b
 	{
 		C->codeStart += 4 + READ_32_FROM_PC( C->codeStart );		
 	}
-
 
 	int pos = 3;
 	for( int i=0; i<C->numLocalFunctions; ++i )
@@ -13853,7 +13938,6 @@ float WRValue::asFloat() const
 
 	return singleValue().asFloat();
 }
-
 
 //------------------------------------------------------------------------------
 bool WRValue::isString( int* len ) const
@@ -14299,11 +14383,17 @@ WRValue* wr_callFunction( WRContext* context, const int32_t hash, const WRValue*
 		cF = context->registry.getAsRawValueHashTable( hash );
 		if ( !cF->wrf ) // not found in the registry, but...
 		{
-			cF = context->w->globalRegistry.getAsRawValueHashTable(hash);
-			if ( cF->lcb ) // it was a library function, call it
-			{
-				WRValue* stack = context->stack + context->stackOffset;
-				int a = 0;
+				cF = context->w->globalRegistry.getAsRawValueHashTable(hash);
+				if ( cF->lcb ) // it was a library function, call it
+				{
+					if ( context->yield_pc )
+					{
+						context->w->err = WR_ERR_cannot_call_function_context_yielded;
+						return 0;
+					}
+
+					WRValue* stack = context->stack + context->stackOffset;
+					int a = 0;
 				for( ; a<argn; ++a )
 				{
 					stack[a] = argv[a];
@@ -14330,9 +14420,9 @@ WRValue* wr_returnValueFromLastCall( WRContext* context )
 }
 
 //------------------------------------------------------------------------------
-WRFunction* wr_getFunction( WRContext* context, const char* functionName )
+WRFunction* wr_getFunction( WRContext* context, const uint32_t functionHash )
 {
-	WRValue* f = context->registry.exists(wr_hashStr(functionName), false);
+	WRValue* f = context->registry.exists(functionHash, false);
 	return f ? f->wrf : 0;
 }
 
@@ -15640,10 +15730,11 @@ SimpleLL<WrenchCallStackEntry>* WRDebugClientInterface::getCallstack()
 	uint32_t count = r.packet->param1;
 	for( uint32_t i=0; i<count; ++i )
 	{
-		entries[i].onLine = wr_x32( entries[i].onLine );
-		entries[i].locals = wr_x16( entries[i].locals );
-		*I->m_callStack->addTail() = entries[i];
-	}
+			entries[i].onLine = wr_x32( entries[i].onLine );
+			entries[i].locals = wr_x16( entries[i].locals );
+			entries[i].stackOffset = wr_x16( entries[i].stackOffset );
+			*I->m_callStack->addTail() = entries[i];
+		}
 
 	I->m_callstackDirty = false;
 	return I->m_callStack;
@@ -16858,7 +16949,7 @@ bool WRDebugServerInterfacePrivate::codewordEncountered( const uint8_t* pc, uint
 		entry->onLine = -1; // don't know yet!
 		entry->fromUnitIndex = from->thisUnitIndex;
 		entry->thisUnitIndex = codeword & WRD_PayloadMask;
-		entry->stackOffset = (uint8_t)(stackTop - m_context->stack);
+		entry->stackOffset = (uint16_t)(stackTop - m_context->stack);
 
 		WRFunction* func = m_context->localFunctions + (entry->thisUnitIndex - 1); // unit '0' is the global unit
 		entry->arguments = func->arguments;
@@ -17098,11 +17189,12 @@ WRDRun:
 
 				for( WrenchCallStackEntry* E = m_callStack->first(); E; E = m_callStack->next() )
 				{
-					*pack = *E;
-					pack->onLine = wr_x32( pack->onLine );
-					pack->locals = wr_x16( pack->locals );
-					++pack;
-				}
+						*pack = *E;
+						pack->onLine = wr_x32( pack->onLine );
+						pack->locals = wr_x16( pack->locals );
+						pack->stackOffset = wr_x16( pack->stackOffset );
+						++pack;
+					}
 			}
 			
 			break;
@@ -21532,12 +21624,33 @@ createNewBuffer:
 			}
 			#endif
 			wr_sprintfEx( (char *)to.va->m_Cdata, size, fmtbuffer, fmtBufferSize, args, argn );
+			}
+			else
+			{
+				// Keep amortized behavior for normal growth/shrink patterns,
+				// but release oversized buffers when utilization gets very low.
+				// This avoids long-lived large allocations after temporary spikes.
+				if ( outbufSize > WR_FORMAT_TRY_SIZE
+					 && size > 0
+					 && outbufSize >= (size << 2) )
+				{
+					to.va = c->getSVA( size, SV_CHAR, false );
+
+					#ifdef WRENCH_HANDLE_MALLOC_FAIL
+					if ( !to.va )
+					{
+						to.p2 = WR_INT;
+						return 0;
+					}
+					#endif
+					wr_sprintfEx( (char *)to.va->m_Cdata, size, fmtbuffer, fmtBufferSize, args, argn );
+				}
+				else
+				{
+					to.va->m_size = size;
+				}
+			}
 		}
-		else
-		{
-			to.va->m_size = size; // just is the new size, TODO- recover memory? seems like not worth the squeeze
-		}
-	}
 
 	to.p2 = INIT_AS_ARRAY;
 
