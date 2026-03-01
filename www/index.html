@@ -58,7 +58,43 @@ a:active {
 .wr-code-block .wr-string { color: #86efac; }
 .wr-code-block .wr-comment { color: #94a3b8; font-style: italic; }
 
-		table, th, td {
+.wr-sidebar-submenu {
+  margin-left: 14px;
+  margin-top: 0;
+}
+
+.wr-sidebar-submenu .wr-sub-title {
+  display: block;
+  font-size: 12px;
+  line-height: 1.05;
+  opacity: 0.92;
+  margin: 0;
+  padding: 0;
+}
+
+.wr-sidebar-submenu .wr-sub-title a {
+  font-size: 12px;
+  display: block;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  line-height: 1.05;
+  align-items: initial;
+}
+
+.wr-collapse-toggle {
+  font-size: 11px;
+  opacity: 0.9;
+  margin-right: 6px;
+  text-decoration: none;
+}
+
+.wr-parent-row {
+  display: inline-flex;
+  align-items: center;
+}
+
+			table, th, td {
   border: 1px solid black;
   border-collapse: collapse;
 }
@@ -93,8 +129,48 @@ a:active {
 
 
                 <span class="menu-title"><a href="#intro">Intro</a></span>
-                <span class="menu-title"><a href="#integration">Integration</a></span>
-                <span class="menu-title"><a href="#language">Language Reference</a></span>
+                <span class="menu-title wr-parent-row">
+                  <a href="#" id="wr-want-toggle" class="wr-collapse-toggle" onclick="var m=document.getElementById('wr-want-submenu'); var t=document.getElementById('wr-want-toggle'); if(m){var show=(m.style.display==='none'); m.style.display=show?'block':'none'; if(t){t.textContent=show?'-':'+';}} return false;">+</a>
+                  <a href="#want-integrate">What I want to do</a>
+                </span>
+                <div id="wr-want-submenu" class="wr-sidebar-submenu" style="display:none;">
+                  <span class="menu-title wr-sub-title"><a href="#want-integrate">integrate wrench into my project</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#want-complex-value">return a complex Value</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#want-context-pointers">pass context pointers to C-function calls</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#want-call-function">call a wrench function</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#want-add-callback">add a function to wrench</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#want-add-library-function">add a library function to wrench</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#want-create-value">create a wrench value</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#want-wrenchvalue-helper">use the WrenchValue helper class</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#want-customize-wrench">customize wrench</a></span>
+                </div>
+                <span class="menu-title wr-parent-row">
+                  <a href="#" id="wr-lang-toggle" class="wr-collapse-toggle" onclick="var m=document.getElementById('wr-lang-submenu'); var t=document.getElementById('wr-lang-toggle'); if(m){var show=(m.style.display==='none'); m.style.display=show?'block':'none'; if(t){t.textContent=show?'-':'+';}} return false;">+</a>
+                  <a href="#language">Language Reference</a>
+                </span>
+                <div id="wr-lang-submenu" class="wr-sidebar-submenu" style="display:none;">
+                  <span class="menu-title wr-sub-title"><a href="#lang-units">units</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-variables">variables</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-operators">operators</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-comments">comments</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-yielding">yielding</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-arrays">arrays</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-for">for</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-foreach">foreach</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-while">while</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-do-while">do/while</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-function">function</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-struct">struct</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-export">export</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-constants">constants</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-switch">switch</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-break-continue">break/continue</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-if-else">if/else</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-enums">enums</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-hash-tables">hash tables</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-compiler-intrinsics">compiler-intrinsics</a></span>
+                  <span class="menu-title wr-sub-title"><a href="#lang-casting">casting</a></span>
+                </div>
                 <span class="menu-title"><a href="#features">Features</a></span>
                 <span class="menu-title"><a href="#debugger">Debugger</a></span>
                 <span class="menu-title"><a href="#extending">Extending Wrench</a></span>
@@ -173,7 +249,7 @@ needed a wrench. So I built one.
 
 
 
-<hr><h1><a name="integration"></a>Integration</h1></hr>
+<hr><h1><a name="integration"></a><a name="want-integrate"></a>Integrate wrench into my project</h1></hr>
 
 Wrench [the project] is kept current on
 <a href="https://github.com/jingoro2112/wrench">GitHub, download it
@@ -591,9 +667,305 @@ function is NOT.</b>
 
 
 
-<hr><h1><a name="language"></a>Language Reference</h1></hr>
+<hr><h1><a name="whatiwant"></a>What I want to do</h1></hr>
+<p><b>In this section:</b>
+<br><a href="#want-integrate">integrate wrench into my project</a>
+<br><a href="#want-complex-value">return a complex Value</a>
+<br><a href="#want-context-pointers">pass context pointers to C-function calls</a>
+<br><a href="#want-call-function">call a wrench function</a>
+<br><a href="#want-add-callback">add a function to wrench</a>
+<br><a href="#want-add-library-function">add a library function to wrench</a>
+<br><a href="#want-create-value">create a wrench value</a>
+<br><a href="#want-wrenchvalue-helper">use the WrenchValue helper class</a>
+<br><a href="#want-customize-wrench">customize wrench</a>
 
-<h2>Everything is a Unit!</h2>
+<hr><h2><a name="want-complex-value"></a>return a complex Value</h2></hr>
+
+<p>You can return nested, structured data by building a hash-table-like value on the return slot.
+Wrench scripts can then use dot notation to read fields (including nested fields).
+
+<pre><code>struct SubComplex
+{
+	int r;
+	int g;
+	int b;
+};
+
+struct Complex
+{
+	float x;
+	float y;
+	int zed;
+	SubComplex sub;
+};
+
+Complex someVal;
+
+/*
+// the return value can be used with dot notation:
+var ret = LIB::getComplexValue();
+var V1 = ret.x;
+var V2 = ret.zed;
+var V3 = ret.sub.r;
+*/
+
+void LIB_getComplexValue( WRValue* stackTop, const int argn, WRContext* c )
+{
+	stackTop->indexHash(c, wr_hashStr("x"), true)->setFloat( someVal.x );
+	stackTop->indexHash(c, wr_hashStr("y"), true)->setFloat( someVal.y );
+	stackTop->indexHash(c, wr_hashStr("zed"), true)->setInt( someVal.zed );
+
+	WRValue* S = stackTop->indexHash(c, wr_hashStr("sub"), true);
+	S->indexHash(c, wr_hashStr("r"), true)->setInt( someVal.sub.r );
+	S->indexHash(c, wr_hashStr("g"), true)->setInt( someVal.sub.g );
+	S->indexHash(c, wr_hashStr("b"), true)->setInt( someVal.sub.b );
+}
+
+void FUNC_getComplexValue( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	retVal.indexHash(c, wr_hashStr("x"), true)->setFloat( someVal.x );
+	retVal.indexHash(c, wr_hashStr("y"), true)->setFloat( someVal.y );
+	retVal.indexHash(c, wr_hashStr("zed"), true)->setInt( someVal.zed );
+
+	WRValue* S = retVal.indexHash(c, wr_hashStr("sub"), true);
+	S->indexHash(c, wr_hashStr("r"), true)->setInt( someVal.sub.r );
+	S->indexHash(c, wr_hashStr("g"), true)->setInt( someVal.sub.g );
+	S->indexHash(c, wr_hashStr("b"), true)->setInt( someVal.sub.b );
+}
+</code></pre>
+
+<p>How it works:
+<br>1) <code>indexHash(..., true)</code> creates each field if it does not already exist.
+<br>2) The top-level return value gets keys <code>x</code>, <code>y</code>, <code>zed</code>, and <code>sub</code>.
+<br>3) The nested <code>sub</code> value is also a hash table, with keys <code>r</code>, <code>g</code>, and <code>b</code>.
+<br>4) Wrench reads those keys via dot notation (<code>ret.sub.r</code>) exactly like object members.
+<br>5) This pattern works the same way for <code>WR_LIB_CALLBACK</code> (<code>stackTop</code>) and <code>WR_C_CALLBACK</code> (<code>retVal</code>).
+
+<hr><h2><a name="want-context-pointers"></a>pass context pointers to C-function calls</h2></hr>
+
+<p>There are three common flavors of context you can use. They overlap on purpose, so pick the smallest scope that matches your use case.
+
+<p><b>1) Per-function user pointer (<code>usr</code>)</b>
+<br>When a function is registered with a user pointer, that same pointer is passed to every callback invocation of that function.
+<br>This is great for binding callback behavior to one specific C/C++ object or data block.
+
+<p><b>2) Per-context local pointer (<code>ctxLocal</code>)</b>
+<br>Every <code>WRContext</code> can carry its own local opaque pointer:
+<pre><code>void wr_setLocalContext( WRContext* c, void* ctx );
+void* wr_getLocalContext( WRContext* c );</code></pre>
+<br>Good for cases like: "this script context belongs to this object instance."
+
+<p><b>3) Per-state global pointer (<code>w->ctx</code>)</b>
+<br>A single pointer can be shared across the entire <code>WRState</code>:
+<pre><code>void wr_setStateContext( WRState* w, void* ctx );
+void* wr_getStateContext( WRState* w );</code></pre>
+<br>Good for process-wide services shared by many contexts (allocators, routers, registries, etc).
+
+<p>Note: these accessors are just convenience wrappers around direct members:
+<pre><code>c->w->ctx
+c->ctxLocal</code></pre>
+
+<p>There is overlapping functionality here by design. Choose the pattern that keeps ownership and lifetime easiest to reason about in your host code.
+
+<hr><h2><a name="want-call-function"></a>call a wrench function</h2></hr>
+
+<p>You can call wrench functions from C/C++ in three ways:
+<br>1) by string name
+<br>2) by precomputed hash
+<br>3) by cached <code>WRFunction*</code>
+
+<p><b>Call by string name</b> (simple and readable):
+<pre><code>WRValue* r = wr_callFunction( context, "update", argv, argn );</code></pre>
+
+<p><b>Call by hash value</b> (skip per-call string hashing):
+<pre><code>uint32_t h = wr_hashStr( "update" );
+WRValue* r = wr_callFunction( context, (int32_t)h, argv, argn );</code></pre>
+
+<p><b>Call by <code>WRFunction*</code></b> (fastest dispatch path):
+<pre><code>WRFunction* fn = wr_getFunction( context, "update" );      // or wr_getFunction(context, h)
+if ( fn )
+{
+    WRValue* r = wr_callFunction( context, fn, argv, argn );
+}</code></pre>
+
+<p><b>Important:</b> <code>WRFunction*</code> is great for very fast repeated calls, but treat it as context-owned and potentially stale.
+If the context/bytecode is destroyed, reloaded, or replaced, reacquire the pointer with <code>wr_getFunction(...)</code> before using it again.
+
+<p>For all three call styles:
+<br>check the return pointer,
+<br>then check <code>wr_getLastError( context->w )</code>,
+<br>and if needed check <code>wr_getYieldInfo( context, ... )</code> to distinguish error vs yield.
+
+<hr><h2><a name="want-add-callback"></a>add a function to wrench</h2></hr>
+
+<p>Register a regular C callback with <code>wr_registerFunction(...)</code>.
+This is the easiest path and gives you named arguments plus a return value reference.
+
+<pre><code>void cbAdd( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+    int a = (argn > 0) ? argv[0].asInt() : 0;
+    int b = (argn > 1) ? argv[1].asInt() : 0;
+    retVal.setInt( a + b );
+}
+
+WRState* w = wr_newState();
+wr_registerFunction( w, "add", cbAdd, 0 );</code></pre>
+
+<p>Script side:
+<pre><code>print( add(2, 3) ); // 5</code></pre>
+
+<hr><h2><a name="want-add-library-function"></a>add a library function to wrench</h2></hr>
+
+<p>Register a library callback with <code>wr_registerLibraryFunction(...)</code>.
+The calling convention is tighter/faster (<code>WR_LIB_CALLBACK</code>), but the function name <b>must</b> follow:
+<code>NAME::FUNCTION</code>
+so the compiler emits a library-call opcode for it.
+
+<pre><code>void libMul( WRValue* stackTop, const int argn, WRContext* c )
+{
+    WRValue* args = stackTop - argn;
+    int a = (argn > 0) ? args[0].asInt() : 0;
+    int b = (argn > 1) ? args[1].asInt() : 0;
+    stackTop->setInt( a * b ); // return value
+}
+
+WRState* w = wr_newState();
+wr_registerLibraryFunction( w, "math::mul", libMul );</code></pre>
+
+<p>Script side:
+<pre><code>print( math::mul(6, 7) ); // 42</code></pre>
+
+<hr><h2><a name="want-create-value"></a>create a wrench value</h2></hr>
+
+<p>Use <code>WRValue</code> directly when you want explicit control over type and container shape.
+
+<pre><code>WRValue vInt;
+wr_makeInt( &vInt, 123 );
+
+WRValue vFloat;
+wr_makeFloat( &vFloat, 3.5f );
+
+WRValue vArray;
+vArray.init();
+vArray.indexArray( context, 0, true )->setInt( 10 );
+vArray.indexArray( context, 1, true )->setFloat( 20.5f );
+
+WRValue vHash;
+vHash.init();
+vHash.indexHash( context, wr_hashStr("r"), true )->setInt( 255 );
+vHash.indexHash( context, wr_hashStr("name"), true )->setString( context, "pixel" );</code></pre>
+
+<p>Notes:
+<br>1) Array/hash/string entries that allocate memory must be attached to a valid <code>WRContext</code>.
+<br>2) Use <code>setInt</code>/<code>setFloat</code>/<code>setString</code> on the returned element pointers.
+
+<hr><h2><a name="want-wrenchvalue-helper"></a>use the WrenchValue helper class</h2></hr>
+
+<p><code>WrenchValue</code> is a convenience wrapper around a context-backed <code>WRValue</code>.
+It is useful when targeting globals or nested members with less boilerplate.
+
+<pre><code>WrenchValue vInt( context, "gInt" );
+*vInt.Int() = 42;                   // int
+
+WrenchValue vFloat( context, "gFloat" );
+*vFloat.Float() = 2.0f;             // float
+
+WrenchValue vArray( context, "gArray" );
+vArray[0].setInt( 10 );             // array element 0
+vArray[1].setFloat( 1.25f );        // array element 1
+
+WrenchValue vHash( context, "gHash" );
+vHash.addHashTableValue( "r" );
+vHash.addHashTableValue( "g" );
+
+WRValue* r = vHash.getHashTableValue( "r" );
+WRValue* g = vHash.getHashTableValue( "g" );
+if ( r ) { r->setInt( 255 ); }
+if ( g ) { g->setInt( 64 ); }</code></pre>
+
+<p>Notes:
+<br>1) Returned hash entry pointers are internal storage; reacquire after hash growth/rehash.
+<br>2) <code>getHashTableValue(...)</code> returns null if key is missing or value is not a hash table.
+
+<hr><h2><a name="want-customize-wrench"></a>customize wrench</h2></hr>
+
+<p>This section summarizes every <code>WRENCH_*</code> define in <code>wrench.h</code>: what the default is, why that default exists, and what changes when you enable/override it.
+
+<p><b>Core build options</b>
+<table>
+<tr><th>Define</th><th>Default</th><th>Why this default exists</th><th>When enabled / changed</th></tr>
+<tr><td><code>WRENCH_WITHOUT_COMPILER</code></td><td>off</td><td>Desktop/integration builds often compile scripts at runtime.</td><td>Removes compiler support; runtime can only execute bytecode (smaller code size).</td></tr>
+<tr><td><code>WRENCH_COMPACT</code></td><td>off</td><td>Default favors VM speed over minimum text size.</td><td>Compiles a smaller VM with some shared paths and less aggressive fast paths.</td></tr>
+<tr><td><code>WRENCH_REALLY_COMPACT</code></td><td>off</td><td>Further size reduction is usually not worth speed loss.</td><td>Forces an even smaller interpreter path; also auto-defines <code>WRENCH_COMPACT</code>.</td></tr>
+<tr><td><code>WRENCH_UNALIGNED_READS</code></td><td>off</td><td>Safe on all targets by default, including strict-alignment MCUs.</td><td>Allows faster unaligned code-stream reads on architectures that support them.</td></tr>
+<tr><td><code>WRENCH_DEFAULT_STACK_SIZE</code></td><td><code>64</code></td><td>Balanced default for typical call depth/locals.</td><td>Changes default VM stack entries for <code>wr_newState()</code>; each entry consumes RAM.</td></tr>
+<tr><td><code>WRENCH_PROTECT_STACK_FROM_OVERFLOW</code></td><td>off</td><td>Default minimizes opcode overhead.</td><td>Adds overflow guards around stack growth; safer, slightly slower.</td></tr>
+</table>
+
+<p><b>Scheduling and runtime behavior</b>
+<table>
+<tr><th>Define</th><th>Default</th><th>Why this default exists</th><th>When enabled / changed</th></tr>
+<tr><td><code>WRENCH_TIME_SLICES</code></td><td>off</td><td>No per-instruction slice accounting in the fast path.</td><td>Enables instruction-slice preemption APIs (<code>wr_setInstructionsPerSlice</code>, <code>wr_forceYield</code>, etc.).</td></tr>
+<tr><td><code>WRENCH_TRAP_DIVISION_BY_ZERO</code></td><td>off</td><td>Default avoids extra result checks on divides.</td><td>Raises <code>WR_ERR_division_by_zero</code> instead of silently producing 0 on divide-by-zero.</td></tr>
+<tr><td><code>WRENCH_HANDLE_MALLOC_FAIL</code></td><td>off</td><td>Fast path assumes allocator success.</td><td>Adds checks so allocation failures are trapped and reported gracefully (<code>WR_ERR_malloc_failed</code>).</td></tr>
+</table>
+
+<p><b>Debug, IO, and platform integration</b>
+<table>
+<tr><th>Define</th><th>Default</th><th>Why this default exists</th><th>When enabled / changed</th></tr>
+<tr><td><code>WRENCH_INCLUDE_DEBUG_CODE</code></td><td>off</td><td>Keeps footprint small when debugger transport is unused.</td><td>Compiles debugger support paths and related debug APIs.</td></tr>
+<tr><td><code>WRENCH_WIN32_SERIAL</code></td><td>off</td><td>No serial backend selected unless explicitly requested.</td><td>Selects Win32 serial transport for debugger communication.</td></tr>
+<tr><td><code>WRENCH_ARDUINO_SERIAL</code></td><td>off</td><td>Target-specific backend should be explicit.</td><td>Selects Arduino serial transport for debugger communication.</td></tr>
+<tr><td><code>WRENCH_LINUX_SERIAL</code></td><td>off</td><td>Target-specific backend should be explicit.</td><td>Selects Linux serial transport for debugger communication.</td></tr>
+<tr><td><code>WRENCH_FLOAT_SPRINTF</code></td><td>off</td><td>Avoids pulling in larger libc float-format support.</td><td>Enables <code>%f/%g</code> style float formatting in string formatting paths.</td></tr>
+<tr><td><code>WRENCH_WIN32_FILE_IO</code></td><td>off</td><td>File backend should match host/target intentionally.</td><td>Builds Win32 file IO backend for the <code>io::</code> library.</td></tr>
+<tr><td><code>WRENCH_LINUX_FILE_IO</code></td><td>off</td><td>File backend should match host/target intentionally.</td><td>Builds Linux file IO backend for the <code>io::</code> library.</td></tr>
+<tr><td><code>WRENCH_SPIFFS_FILE_IO</code></td><td>off</td><td>Embedded FS backends are opt-in.</td><td>Builds SPIFFS file IO backend for the <code>io::</code> library.</td></tr>
+<tr><td><code>WRENCH_LITTLEFS_FILE_IO</code></td><td>off</td><td>Embedded FS backends are opt-in.</td><td>Builds LittleFS file IO backend for the <code>io::</code> library.</td></tr>
+<tr><td><code>WRENCH_WIN32_TCP</code></td><td>off</td><td>Socket backend should match platform intentionally.</td><td>Builds Win32 TCP backend used by TCP library/debug plumbing.</td></tr>
+<tr><td><code>WRENCH_LINUX_TCP</code></td><td>off</td><td>Socket backend should match platform intentionally.</td><td>Builds Linux TCP backend used by TCP library/debug plumbing.</td></tr>
+</table>
+
+<p><b>Versioning, constants, and auto/platform macros</b>
+<table>
+<tr><th>Define</th><th>Default</th><th>Why this default exists</th><th>When enabled / changed</th></tr>
+<tr><td><code>WRENCH_VERSION_MAJOR</code><br><code>WRENCH_VERSION_MINOR</code><br><code>WRENCH_VERSION_BUILD</code></td><td>set in header</td><td>Provides compile-time version identity.</td><td>Used for version reporting/compat tracking; normally only updated by maintainers.</td></tr>
+<tr><td><code>WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT</code></td><td><code>4000</code></td><td>Reasonable initial GC hint for mixed script workloads.</td><td>Changes default allocation threshold hint before GC pressure tuning.</td></tr>
+<tr><td><code>WRENCH_NULL_HASH</code></td><td><code>0xABABABAB</code></td><td>Uses a non-zero sentinel because numeric values can be their own hash representation.</td><td>Internal sentinel; changing it requires consistency with hash/null handling assumptions.</td></tr>
+<tr><td><code>WRENCH_BIG_ENDIAN</code><br><code>WRENCH_LITTLE_ENDIAN</code></td><td>auto-detected</td><td>Avoids requiring users to manually set endian mode.</td><td>Selected by platform/compiler checks; affects code-stream read helpers.</td></tr>
+<tr><td><code>WRENCH_CLI_DEBUG</code></td><td>defined in current header</td><td>Keeps CLI/debug-oriented symbols available in this build layout.</td><td>Internal build-layout switch; not typically a user tuning knob.</td></tr>
+</table>
+
+<p><b>Practical guidance</b>
+<br>1) Embedded/min-size builds typically start with <code>WRENCH_WITHOUT_COMPILER</code> and optionally <code>WRENCH_COMPACT</code>.
+<br>2) Safety-focused builds often add <code>WRENCH_PROTECT_STACK_FROM_OVERFLOW</code> and <code>WRENCH_HANDLE_MALLOC_FAIL</code>.
+<br>3) Host builds should enable only one platform backend per subsystem (serial/file/tcp) unless you explicitly need multiple.
+
+<hr><h1><a name="language"></a>Language Reference</h1></hr>
+<p><b>In this section:</b>
+<br><a href="#lang-units">units</a>
+<br><a href="#lang-variables">variables</a>
+<br><a href="#lang-operators">operators</a>
+<br><a href="#lang-comments">comments</a>
+<br><a href="#lang-yielding">yielding</a>
+<br><a href="#lang-arrays">arrays</a>
+<br><a href="#lang-for">for</a>
+<br><a href="#lang-foreach">foreach</a>
+<br><a href="#lang-while">while</a>
+<br><a href="#lang-do-while">do/while</a>
+<br><a href="#lang-function">function</a>
+<br><a href="#lang-struct">struct</a>
+<br><a href="#lang-export">export</a>
+<br><a href="#lang-constants">constants</a>
+<br><a href="#lang-switch">switch</a>
+<br><a href="#lang-break-continue">break/continue</a>
+<br><a href="#lang-if-else">if/else</a>
+<br><a href="#lang-enums">enums</a>
+<br><a href="#lang-hash-tables">hash tables</a>
+<br><a href="#lang-compiler-intrinsics">compiler-intrinsics</a>
+<br><a href="#lang-casting">casting</a>
+
+<h2><a name="lang-units"></a>Everything is a Unit!</h2>
 <p><b>function?</b> : unit than is called and returns a value!
 <p><b>struct?</b> : unit with local variables, they are the members!
 <p><b>constructors?</b> : a unit that is called and its return value
@@ -604,7 +976,7 @@ discarded
 thing you'll be fine, wrench is intuitive and c-like, the syntax should be
 <i>very</i> familiar.
 
-<p><b>variables</b>
+<p><a name="lang-variables"></a><b>variables</b>
 <p>to create a variable use the <code>var</code> directive (NOTE: in
 previous version of wrench this was optional, to support that behavior
 a "non strict" flag can be used but is discouraged)
@@ -618,7 +990,7 @@ names follow c-syntax for legality, the must start with a letter or
 '_' and can contain letters, numbers and more '_' characters.
 
 
-<p><b>operators</b>
+<p><a name="lang-operators"></a><b>operators</b>
 <p>all of these are supported, with their c-defined precedence:
 <pre><code>//binary:
 a + b;
@@ -658,14 +1030,14 @@ a || b
 a && b
 </code></pre>
 
-<p><b>comments</b>
+<p><a name="lang-comments"></a><b>comments</b>
 <code><pre>var A = 10; // single-line c++ comments are supported
 /*
      as well as block-comment style
 */
 </code></pre>
 
-<p><b>yielding</b>
+<p><a name="lang-yielding"></a><b>yielding</b>
 <p>wrench can yield and then be continued, in code the "yield()" call
 causes the VM to return in a yielded state. the argument passed to
 yield is available to the caller using
@@ -688,7 +1060,7 @@ left off.
 
 
 
-<p><b>arrays</b>
+<p><a name="lang-arrays"></a><b>arrays</b>
 <p>arrays are zero-based (duh) and can be declared with [] syntax, and can contain any legal
 type
 <code><pre>var arrayOne[] = { 0, 1, 2 };
@@ -699,7 +1071,7 @@ var arrayTwo[] = { "zero", 1, 3.55 };
 var blankArrayOfTen[10];
 </code></pre>
 
-<p><b>for</b>
+<p><a name="lang-for"></a><b>for</b>
 
 <p>follows the standard c syntax, allowing a variable to be declared
 in the for convenience:
@@ -715,7 +1087,7 @@ for( var a=0; a<10; ++a )
 }
 </code></pre>
 
-<p><b>foreach</b>
+<p><a name="lang-foreach"></a><b>foreach</b>
 <p>wrench also supports "foreach" in two flavors, value only and
 key/value:
 
@@ -732,14 +1104,14 @@ for( var k, var v : someArray )
 </code></pre>
 
 
-<p><b>while</b>
+<p><a name="lang-while"></a><b>while</b>
 <code><pre>while( condition )
 {
 }
 </code></pre>
 
 
-<p><b>switch</b>
+<p><a name="lang-switch"></a><b>switch</b>
 <p>switch works the same as c, there is an optimized code path for a
 list of cases (including default) that are between 0 and 254. wrench
 also supports fall-through.
@@ -754,18 +1126,18 @@ also supports fall-through.
 </code></pre>
 
 
-<p><b>do/while</b>
+<p><a name="lang-do-while"></a><b>do/while</b>
 <code><pre>do
 {
 } while( condition );
 </code></pre>
 
-<p><b>break/continue</b>
+<p><a name="lang-break-continue"></a><b>break/continue</b>
 <p>inside any looping structure (do/while/for) continue and break
 function as they do in c
 
 
-<p><b>if/else</b>
+<p><a name="lang-if-else"></a><b>if/else</b>
 <p>work exactly the same as c:
 <code><pre>if( a == true )
 {
@@ -778,7 +1150,7 @@ else
 }
 </code></pre>
 
-<p><b>function</b>
+<p><a name="lang-function"></a><b>function</b>
 <p>Functions can be called with any number of arguments, extra arguments
 are ignored, un-specified arguments are set to zero (0)
 <code><pre>function f( arg )
@@ -815,7 +1187,7 @@ function foo()
 foo();
 </code></pre>
 
-<p><b>struct</b>
+<p><a name="lang-struct"></a><b>struct</b>
 <p>In wrench structs are actually functions that preserve their stack
 frames.
 <p>Another way to put it is structs are "called" so they are their own
@@ -887,7 +1259,7 @@ var argNew = new arg( 10, 20 ); // first will be 10, second will be 20
 
 
 
-<p><b>export</b>
+<p><a name="lang-export"></a><b>export</b>
 <p>Objects can be exported so other scripts can import them, for example
 <P>script 1:
 <code><pre>export function Color
@@ -916,7 +1288,7 @@ var myRed = new Color() { red = 0xFF, blue = 0, green = 0 };
 
 
 
-<p><b>constants</b>
+<p><a name="lang-constants"></a><b>constants</b>
 some constants that are compiler-defined:
 <code><pre>true == 1
 false == 0
@@ -928,7 +1300,7 @@ null == 0
 
 
 
-<p><b>enums</b>
+<p><a name="lang-enums"></a><b>enums</b>
 <p>enums are syntactic sugar that introduce compile-time integer (or float) constants.
 They are substituted by the compiler before any code is generated, so they have
 zero runtime cost.
@@ -1003,7 +1375,7 @@ In practice: declare your enums at the top of your script and there is no ambigu
 
 
 
-<p><b>hash tables</b>
+<p><a name="lang-hash-tables"></a><b>hash tables</b>
 <p>wrench uses hash tables internally so this language feature kind of
 comes along "for free". Any valid value can be used as a key or value
 
@@ -1017,7 +1389,7 @@ print( hashTable["str"] ); // 6
 print( hashTable.str ); // 6
 </code></pre>
 
-<p><b>compiler-intrinsics</b>
+<p><a name="lang-compiler-intrinsics"></a><b>compiler-intrinsics</b>
 Some compiler directives are included for working with arrays and hash
 tables:
 
@@ -1039,7 +1411,7 @@ hashTable._exists( 2 ); // now false
 
 
 
-<p><b>casting/coersion</b>
+<p><a name="lang-casting"></a><b>casting/coersion</b>
 <p>it is often handy to force wrench to convert a float to an int or
 vice-versa, for example:
 <code><pre>var divisor = 1000;

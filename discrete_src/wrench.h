@@ -298,7 +298,7 @@ uint32_t wr_hashStr( const char* dat, uint32_t serial=0 );
 inline void wr_setStateContext( WRState* w, void* ctx );
 inline void wr_setLocalContext( WRContext* c, void* ctx );
 inline void* wr_getStateContext( WRState* w );
-inline void* wr_getLocalContext( WRState* w );
+inline void* wr_getLocalContext( WRContext* c );
 
 /***************************************************************/
 /**************************************************************/

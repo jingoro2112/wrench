@@ -18,6 +18,7 @@
   small toy but now it's just bad behavior.
 
 - added win32 project, buildable in the visual studio dev console
+- revamped documentation, added more examples, more to come!
 
 7.0.1 ----------------------------------------------------------------------------------
 - adding a global context in the form of a void* in WRState, so all functions can
