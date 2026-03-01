@@ -929,8 +929,11 @@ null == 0
 
 
 <p><b>enums</b>
-<p>enums are syntactic sugar, when invoked they introduce variables
-into the namespace with automatic initliazation
+<p>enums are syntactic sugar that introduce compile-time integer (or float) constants.
+They are substituted by the compiler before any code is generated, so they have
+zero runtime cost.
+
+<p><i>Anonymous enums</i> — members go directly into the enclosing scope:
 <code><pre>enum
 {
 	n0,
@@ -938,11 +941,64 @@ into the namespace with automatic initliazation
 	n2
 }
 
-// equivilant to:
-var n0 = 0;
-var n1 = 1;
-var n2 = 2;
+// equivalent to the compiler seeing:
+//   n0 everywhere → 0
+//   n1 everywhere → 1
+//   n2 everywhere → 2
 </code></pre>
+
+Values start at 0 and auto-increment. You can override at any point and continuation resumes from there:
+<code><pre>enum
+{
+	A,        // 0
+	B,        // 1
+	C = 10,   // 10
+	D,        // 11
+	E = -1,   // -1
+}
+</code></pre>
+
+Float values are allowed too:
+<code><pre>enum { SCALE = 0.001, BIAS = 1.5 }
+</code></pre>
+
+<p><i>Named enums</i> — members live under a namespace and are accessed with the <code>::</code> operator:
+<code><pre>enum Direction { NORTH = 1, SOUTH, EAST, WEST }
+
+if ( heading == Direction::NORTH ) { ... }
+
+var d = Direction::EAST;   // d == 3
+
+switch( d )
+{
+    case Direction::EAST: { ... break; }
+    case Direction::WEST: { ... break; }
+}
+</code></pre>
+
+Multiple enums can have members with the same name without colliding:
+<code><pre>enum Color  { RED = 0, GREEN, BLUE }
+enum Fruit  { RED = 10, GREEN = 20 }  // separate namespace, no conflict
+
+print( Color::RED );  // 0
+print( Fruit::RED );  // 10
+</code></pre>
+
+<p><b>⚠ Declaration before use</b> — enum constants are resolved at compile time during the
+tokenizer pass. A named enum must be declared <i>before</i> any code that references it.
+If <code>Direction::NORTH</code> appears before the <code>enum Direction</code> declaration,
+the compiler will treat it as a library constant lookup instead (see below), which will
+produce a runtime error unless that library constant is actually registered.
+
+<p><b>⚠ Interaction with library namespace constants</b> — library constants registered
+from C++ also use the <code>x::y</code> syntax (e.g. <code>math::PI</code>). If a named enum
+and a library constant share the same <code>Namespace::name</code>, whichever the compiler
+encounters <i>first</i> wins:
+<ul>
+<li>Enum declared before the code that uses it → compile-time literal substitution (enum wins)
+<li>Enum not yet declared when the reference is compiled → runtime library constant lookup
+</ul>
+In practice: declare your enums at the top of your script and there is no ambiguity.
 
 
 
@@ -1226,7 +1282,10 @@ std_string.cpp, and std_io.cpp.
 
 <br>library functions are registered with a different function, and
 their names must conform to the "x::y" format for them to be
-recognized by wrench code:
+recognized by wrench code. Note that this is the same <code>x::y</code> syntax
+used by named enums — if a script declares <code>enum Foo { ... }</code> before
+referencing <code>Foo::member</code>, the enum literal takes precedence and no
+library lookup is emitted for that name.
 <p>void <b>wr_registerLibraryFunction</b>( WRState* <b>w</b>, const char*
    <b>signature</b>, WR_LIB_CALLBACK <b>function</b> );
 <br><br>WRState* <b>w</b> Pointer to the state that made the call

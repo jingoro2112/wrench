@@ -8,11 +8,11 @@
 4
 ~*/
 
-b = 0.0;
-b1 = 0.0;
-b2 = 0.0;
-b3 = 0.0;
-a = 10.0;
+var b = 0.0;
+var b1 = 0.0;
+var b2 = 0.0;
+var b3 = 0.0;
+var a = 10.0;
 
 function init()
 { 
@@ -35,10 +35,10 @@ test( 2.0, 20.0 );
 
 function faulty_func()
 {
-	t = 1.0;
-	x = t * 4.0;  // <-- any arithmetic operation involving a literal
+	var t = 1.0;
+	var x = t * 4.0;  // <-- any arithmetic operation involving a literal
 	// can be x = 1.0 + 2.0;
-	z = x * t; // <-- any binary operation on two variables
+	var z = x * t; // <-- any binary operation on two variables
 	return z;
 }
 

@@ -64,8 +64,8 @@ if( 10.1 /= zero ) {}
 
 
 
-y = "BB";
-var z = "CC";
+var y = "BB";
+z = "CC";
 var y1 = y + z;
 y = y + z;
 if ( y1 != "BBCC" ) print("fail bin1");
@@ -73,9 +73,9 @@ if ( y != "BBCC" ) print("fail bin1");
 
 
 
-a = "BB";
-b = "CC";
-d = a + b;
+var a = "BB";
+var b = "CC";
+var d = a + b;
 a = a + b;
 b = a + b;
 if ( d != "BBCC" ) println("op 0");
@@ -83,9 +83,9 @@ if ( a != "BBCC" ) println("op 1");
 if ( b != "BBCCCC" ) println("op 2");
 
 
-two = 0;
-s = 0xAABBCCDD;
-r = s + two;
+var two = 0;
+var s = 0xAABBCCDD;
+var r = s + two;
 s = 0xA;
 r = s + two;
 s = 1.0;
@@ -107,9 +107,9 @@ loc();
 
 function loc()
 {
-	ltwo = 0;
-	ls = 0xAABBCCDD;
-	lr = ls + ltwo;
+	var ltwo = 0;
+	var ls = 0xAABBCCDD;
+	var lr = ls + ltwo;
 	ls = 0xA;
 	lr = ls + ltwo;
 	ls = 1.0;
@@ -130,8 +130,8 @@ function loc()
 
 
 // test casting
-ii = 10.5;
-j = (int)ii;
+var ii = 10.5;
+var j = (int)ii;
 if ( ii != 10.5 ) { println("j0"); }
 if ( j != 10 ) { println("j1"); }
 ii = 10 / 1000;
@@ -151,19 +151,20 @@ if ( (float)a[0] / 1000 != .01 ) { println("ii 5"); }
 if ( a[0] / (float)1000 != .01 ) { println("ii 5"); }
 
 
-not = 1;
+var not = 1;
 if ( !not ) println("n1");
 if ( not != 1 ) println("n2");
-flip = 0x0000FFFF;
+var flip = 0x0000FFFF;
 if ( ~flip != 0xFFFF0000 ) println("flip1");
 if ( flip != 0x0000FFFF ) println("flip2");
 
+var a1; var b1; var c1;
 a1 = b1 = c1 = 10;
 if ( a1 != 10 || b1 != 10 || c1 != 10 ) println("err 0");
 
 a = 1;
 b = -1;
-c = --a + ++b;
+var c = --a + ++b;
 if ( c != 0 ) { println("err00"); }
 
 a = 90;
@@ -216,7 +217,7 @@ b -= .5 + (a += 1);
 if ( b != 1.7 ) println( "oper 2" );
 if ( a != 8 ) println( "oper 3" );
 
-n = -(-(-(-(-(-10))))); // 10 
+var n = -(-(-(-(-(-10))))); // 10
 println(n);
 n = -(-(-(-(-10)))); // -10 
 println(n);
@@ -242,9 +243,9 @@ d = 90.1;
 println( d /= 5.5 );
 println( d *= 5.5 );
 
-e = 0x04;
-f = e << 1;
-g = e >> 2;
+var e = 0x04;
+var f = e << 1;
+var g = e >> 2;
 println( f );
 println( g );
 println( e );
@@ -278,15 +279,16 @@ println( a );
 
 // // excercise keyhole optimizer loads
 
+var ag; var bg; var ab;
 local();
 ag = 8;
 bg = 3;
 
 function local()
 {
-	a = 8;
-	b = 3;
-	c = a % b;if ( c != 2 ) println("F1");
+	var a = 8;
+	var b = 3;
+	var c = a % b;if ( c != 2 ) println("F1");
 	c = a << b;if ( c != 64 ) println("F2");
 	c = a >> b;if ( c != 1 ) println("F3");
 	

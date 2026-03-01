@@ -4,14 +4,15 @@ one
 two
 ~*/
 
-somethingH = { 1:10, 2:20 };
+var somethingH = { 1:10, 2:20 };
 if ( somethingH._exists(1) != 1 ) println("x1");
 somethingH._remove( 1 );
 if ( somethingH._exists(1) != 0 ) println("x2");
 
-something = { 1, 2, 3 };
+var something = { 1, 2, 3 };
 
-on = 1;
+var on = 1;
+var value;
 for( value : something )
 {
 	if ( value != on++ )
@@ -36,6 +37,7 @@ if ( on != 3 ) println( "f3");
 something = { 1, 2, 3 };
 somethingH = { 1:10, 2:20, "bill?":30, 500:"bob", 12:13 };
 on = 0;
+var key; var value2;
 for( key,value2 : somethingH )
 {
 	on++;
@@ -44,7 +46,7 @@ for( key,value2 : somethingH )
 if ( on != 5 ) println( "wrong on" );
 
 somethingH = { -1:10, 0:20, 1:30 };
-on2 = 0;
+var on2 = 0;
 for( key,value2 : somethingH )
 {
 	on2++;

@@ -808,6 +808,28 @@ void WRCompilationContext::pushLibConstant( WRBytecode& bytecode, WRExpressionCo
 }
 
 //------------------------------------------------------------------------------
+// Returns true if 'token' is the unqualified short-name of a named-enum member
+// (i.e. a constantValues entry of the form "Namespace::token" exists).
+// Used to catch "RED" when the user meant "Color::RED".
+bool WRCompilationContext::isNamedEnumMember( WRstr const& token )
+{
+	for ( int u = 0; u <= m_unitTop; ++u )
+	{
+		for ( unsigned int c = 0; c < m_units[u].constantValues.count(); ++c )
+		{
+			const WRstr& label = m_units[u].constantValues[c].label;
+			// named-enum labels always contain "::" (anonymous ones never do)
+			const char* sep = strstr( label.c_str(), "::" );
+			if ( sep && strcmp( sep + 2, token.c_str() ) == 0 )
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+//------------------------------------------------------------------------------
 int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen, bool allowFunctionNameHashLiteral )
 {
 	if ( m_unitTop == 0 )
@@ -863,7 +885,7 @@ int WRCompilationContext::addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token,
 
 			if ( m_needVar && !varSeen )
 			{
-				if ( !addOnly && allowFunctionNameHashLiteral )
+				if ( !addOnly && allowFunctionNameHashLiteral && !isNamedEnumMember(token) )
 				{
 					unsigned char data[4];
 					wr_pack32( wr_hashStr(token), data );
@@ -916,7 +938,7 @@ int WRCompilationContext::addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token
 
 	if ( m_needVar && !varSeen && i >= m_units[0].bytecode.localSpace.count() )
 	{
-		if ( !addOnly && allowFunctionNameHashLiteral )
+		if ( !addOnly && allowFunctionNameHashLiteral && !isNamedEnumMember(token) )
 		{
 			unsigned char data[4];
 			wr_pack32( wr_hashStr(token), data );
@@ -2417,10 +2439,29 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 	WRstr& token = ex.token;
 	WRValue& value = ex.value;
 
-	if ( !getToken(ex, "{") )
+	if ( !getToken(ex) )
 	{
 		m_err = WR_ERR_unexpected_token;
 		return false;
+	}
+
+	WRstr enumName;
+	if ( !m_quoted && token != "{" )
+	{
+		bool isGlobal2, isLibConst2;
+		WRstr prefix2;
+		if ( !isValidLabel(token, isGlobal2, prefix2, isLibConst2) || isGlobal2 || isLibConst2 )
+		{
+			m_err = WR_ERR_bad_label;
+			return false;
+		}
+		enumName = token;
+
+		if ( !getToken(ex, "{") )
+		{
+			m_err = WR_ERR_unexpected_token;
+			return false;
+		}
 	}
 
 	int index = 0;
@@ -2520,14 +2561,15 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 			return false;
 		}
 		
-		if ( lookupConstantValue(prefix) )
+		WRstr checkLabel = enumName.size() ? (enumName + "::" + prefix) : prefix;
+		if ( lookupConstantValue(checkLabel) )
 		{
 			m_err = WR_ERR_constant_redefined;
 			return false;
 		}
 
 		ConstantValue& newVal = m_units[m_unitTop].constantValues.append();
-		newVal.label = prefix;
+		newVal.label = checkLabel;
 		newVal.value = value;
 	}
 

@@ -1,5 +1,6 @@
 /*~ ~*/
 
+var f;
 
 switch( f )
 {
@@ -35,7 +36,7 @@ while( f )
 	f--;
 }
 
-
+var k;
 for( k = 0; k<3; ++k )
 {
 	switch( k )
@@ -208,7 +209,7 @@ if ( f != 25000 ) println("d5000");
 function InAFunc()
 {
 
-	f1 = 1000;
+	var f1 = 1000;
 
 
 	switch( f1 )
@@ -365,15 +366,15 @@ function InAFunc()
 	}
 	if ( f1 != 25000 ) println("d5000");
 
-	v = 1;
+	var v = 1;
 	switch( v )
 	{
 		case 1:
-			g = 2;
+			var g = 2;
 			switch( g )
 			{
 				case 2:
-					d = 20;
+					var d = 20;
 					break;
 			}
 			break;
@@ -391,9 +392,9 @@ enum
 	n2,
 	n3
 }
-t = 0;
+var t = 0;
 
-e = n1;
+var e = n1;
 switch( e )
 {
 	case n1: t += 10; 
@@ -582,6 +583,7 @@ switch( 0 )
 if ( t != 32 ) println("t8");
 
 t = 0;
+var i;
 for( i=0; i<6; i++ )
 {
 	switch( i )
@@ -649,6 +651,7 @@ for( i=0; i<6; i++ )
 	}
 
 }
+var st;
 if ( t != 0x444445 ) { str::sprintlnf( st, "%X", t); println(st); println( "t9" ); }
 
 

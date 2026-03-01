@@ -48,6 +48,7 @@ void testYield2();
 void testD();
 void testCallFunctionHashLibraryFallback();
 void testFunctionNameHashAsArgument();
+void testNamedEnumUnqualifiedError();
 void testDeepHashTableWithWrenchValue();
 void testStateContextOpaquePointer();
 void LEAKtest();
@@ -952,6 +953,30 @@ void testFunctionNameHashAsArgument()
 }
 
 //------------------------------------------------------------------------------
+// Confirm that a named-enum member used WITHOUT its namespace qualifier is a
+// compile error (WR_ERR_var_not_seen_before_label), not a silent hash literal.
+// This guards against regression of the bug where println(RED) would compile
+// and output wr_hashStr("RED") instead of failing.
+void testNamedEnumUnqualifiedError()
+{
+	printf( "test [-][named enum member without qualifier is a compile error]:\n" );
+	printf( "     (the compile error below is expected)\n" );
+
+	// A script that declares a named enum then uses the bare member name.
+	// The bare 'RED' must not be accepted as a function-hash literal.
+	const char* src =
+		"enum Color { RED, GREEN, BLUE }\n"
+		"println( RED );\n";
+
+	unsigned char* out = 0;
+	int outLen = 0;
+	WRError result = wr_compile( src, (int)strlen(src), &out, &outLen, 0, WR_INCLUDE_GLOBALS );
+	free( out );
+
+	assert( result == WR_ERR_var_not_seen_before_label );
+}
+
+//------------------------------------------------------------------------------
 void testDeepHashTableWithWrenchValue()
 {
 	WRState* w = wr_newState();
@@ -1178,6 +1203,11 @@ int runTests( int number )
 	wr_loadAllLibs( w );
 	wr_setAllocatedMemoryGCHint( w, 0 );
 
+	// library constants for enum interaction tests (012_enums.c)
+	wr_registerLibraryConstant( w, "TestLC::LIBVAL",  (int32_t)100 ); // never overridden by enum
+	wr_registerLibraryConstant( w, "TestLC::BOTH",    (int32_t)200 ); // shadowed by enum after its declaration
+	wr_registerLibraryConstant( w, "TestMix::LIBONLY",(int32_t)77  ); // lib-only member in a mixed namespace
+
 	char buf[256];
 	int fileNumber = 0;
 	WRstr errMsg;
@@ -1207,7 +1237,7 @@ int runTests( int number )
 
 				printf( "test [%d][%s]: ", fileNumber, codeName.c_str() );
 
-				wr_compile( code, code.size(), &out, &outLen, &errMsg, WR_NON_STRICT_VAR|WR_INCLUDE_GLOBALS );
+				wr_compile( code, code.size(), &out, &outLen, &errMsg, WR_INCLUDE_GLOBALS );
 				
 				if ( err )
 				{
@@ -1332,11 +1362,16 @@ int runTests( int number )
 	testD();
 	testCallFunctionHashLibraryFallback();
 	testFunctionNameHashAsArgument();
+	testNamedEnumUnqualifiedError();
 	testDeepHashTableWithWrenchValue();
 	testStateContextOpaquePointer();
 #ifdef WRENCH_ENABLE_CROSS_MODULE_EXTERNAL_TEST
 	printf( "test [x][discrete_src/utils/test_wrench_cross_module_globals.cpp]: " );
+#ifdef _WIN32
+	int crossModuleResult = system( ".\\test_wrench_cross_module_globals.exe > _cross_module_test.log 2>&1" );
+#else
 	int crossModuleResult = system( "./test_wrench_cross_module_globals > _cross_module_test.log 2>&1" );
+#endif
 	if ( crossModuleResult != 0 )
 	{
 		printf( "FAIL (exit=%d, see _cross_module_test.log)\n", crossModuleResult );

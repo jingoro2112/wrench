@@ -22,7 +22,7 @@ frame.Length = 30;
 
 checkStruct( frame );
 
-z = 1;
+var z = 1;
 
 struct EMPTY
 {
@@ -34,18 +34,18 @@ e = new EMPTY[]{{}};
 
 struct KWT
 {
-	s;
-	tok;
+	var s;
+	var tok;
 };
 
-kwds2 = new KWT[]{};
-kwds3 = new KWT[]{{}};
+var kwds2 = new KWT[]{};
+var kwds3 = new KWT[]{{}};
 
-abs = "and";
+var abs = "and";
 
-really = { 10, 20 };
+var really = { 10, 20 };
 
-kwds = new KWT[]
+var kwds = new KWT[]
 {
 	{"abs", 0},
 	{abs, z},
@@ -63,7 +63,7 @@ if ( kwds[3].s != "bye" || kwds[3].tok[1] != 20 ) println("kwd 3");
 
 
 
-instance2 = new a
+var instance2 = new a
 {
 	123,
 	42,
@@ -75,13 +75,13 @@ instance2 = new a
 if ( instance2.a != "bob" ) println("err 2");
 if ( instance2.p != 123 ) println("err 1");
 
-instance3 = new a()
+var instance3 = new a()
 {
 };
 
 if ( instance3.p != 23 ) println( "err 3" );
 
-instance4 = new a
+var instance4 = new a
 {
 	321
 };
@@ -90,7 +90,7 @@ if ( instance4.p != 321 ) println ("err 4" );
 if ( instance4.h != 2 ) println( "err 5" );
 
 
-instance0 = new a();
+var instance0 = new a();
 instance0 = new a();
 instance0 = new a();
 instance0 = new a();
@@ -99,7 +99,7 @@ instance0 = new a();
 
 if ( instance0.b != "hello" ) println( "err 6" );
 
-g = "hi2";
+var g = "hi2";
 instance0.p = g;
 if ( instance0.p != "hi2" ) println("err 7");
 instance0.p = "1";
@@ -127,20 +127,20 @@ if ( instance0.b != "long string") println("err 16");
 
 
 
-j[30] = { 8, 9 };
+var j[30] = { 8, 9 };
 if ( j[0] != 8 ) println("err 17");
 if ( j[1] != 9 ) println("err 18");
 
 
-aa = 10;
-bb = 20;
+var aa = 10;
+var bb = 20;
 j[10] = { aa, bb + aa, 45, 50, 77, 60 };
 if ( j[0] != 10 )println("err 19");
 if ( j[1] != 30 )println("err 20");
 if ( j[2] != 45 )println("err 21");
 if ( j[5] != 60 )println("err 22");
 
-in = new a;
+var in = new a;
 
 in.a = 8;
 in.b = 7;
@@ -161,6 +161,7 @@ function localIf()
 
 }
 
+var n;
 if ( n != n )
 {
 	println( "null NOT okay" );
@@ -179,7 +180,7 @@ function/**/a()//{
 {
 	var p = 23;
 	var h = 2;
-	b = "hello";
+	var b = "hello";
 	var a;
 	b;
 }
@@ -213,12 +214,12 @@ if ( instance4.h != 2 ) println("err 28");
 
 struct/* */particle
 {//
-	x;
-	y;
-	z; // specifically does NOT get the 'global' z because this is a struct
-	vx;
-	vy;
-	vz;
+	var x;
+	var y;
+	var z; // specifically does NOT get the 'global' z because this is a struct
+	var vx;
+	var vy;
+	var vz;
 };
 
 function update_particle(p)
@@ -230,6 +231,7 @@ function update_particle(p)
 
 function update(particles)
 {
+	var p;
 	for( p=0; p<500; ++p )
 	{
 		update_particle(particles[p]);
@@ -238,6 +240,7 @@ function update(particles)
 
 function update_several_times(particles, count)
 {
+	var i;
 	for ( i = 0; i < count; ++i)
 	{
 		update(particles);
@@ -246,6 +249,8 @@ function update_several_times(particles, count)
 
 function update_several_timesI( particles, count )
 {
+	var i;
+	var p;
 	for ( i = 0; i < count; ++i )
 	{
 		for( p=0; p<500; ++p )
@@ -257,7 +262,8 @@ function update_several_timesI( particles, count )
 	}
 }
 
-particles[500];
+var particles[500];
+var i;
 for ( i = 0; i < 500; ++i )
 {
 	particles[i] = new particle
@@ -296,7 +302,7 @@ if ( t2.a != 0 ) println("t2 1");
 if ( t2.b != 555 ) println("t2 2");
 if ( t2.c != 666) println("t2 3");
 
-a = 10;
+var a = 10;
 var t3 = new T1(a);
 if ( t3.a != 11 ) println("t3 1");
 if ( t3.b != 15 ) println("t3 2");

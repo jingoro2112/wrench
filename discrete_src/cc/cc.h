@@ -445,6 +445,7 @@ private:
 	void pushLibConstant( WRBytecode& bytecode, WRExpressionContext& context );
 	int addLocalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen, bool allowFunctionNameHashLiteral = false );
 	int addGlobalSpaceLoad( WRBytecode& bytecode, WRstr& token, bool addOnly, bool varSeen, bool allowFunctionNameHashLiteral = false );
+	bool isNamedEnumMember( WRstr const& token );
 	void addFunctionToHashSpace( WRBytecode& result, WRstr& token );
 	void loadExpressionContext( WRExpression& expression, int depth, int operation );
 	void resolveExpression( WRExpression& expression );
