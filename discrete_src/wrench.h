@@ -31,8 +31,8 @@ SOFTWARE.
 #include <assert.h>
 
 #define WRENCH_VERSION_MAJOR 7
-#define WRENCH_VERSION_MINOR 0
-#define WRENCH_VERSION_BUILD 2
+#define WRENCH_VERSION_MINOR 2
+#define WRENCH_VERSION_BUILD 0
 
 struct WRState;
 

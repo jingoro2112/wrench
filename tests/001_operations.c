@@ -351,3 +351,20 @@ if ( gn != 30 ) println("gn3");
 foo();
 if ( gn != 40 ) println("gn4");
 if ( ::gn != 40 ) println("gn5");
+
+
+var eq = 10;
+var ne = 1;
+if ( (ne = eq) != 10 )
+{
+	println("neq");
+}
+
+few( ne = 20 );
+function few(r)
+{
+	if ( r != 20 )
+	{
+		println("neq2");
+	}
+}
