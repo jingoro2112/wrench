@@ -1,24 +1,18 @@
-7.1.0 ----------------------------------------------------------------------------------
+7.2.1 ----------------------------------------------------------------------------------
+- added the blank keyword as a declaration modifier: blank X;, blank var X; and var blank X; are accepted
+- blank declarations now produce WR_ERR_blank_variables_cannot_be_initialized if they use = or compound assignment in the declaration statement
+- added parser coverage for blank declarations and a regression test for the compile-time initializer error
+- added a regression proving a host can pre-seed a bare global through wr_newContext() and wr_getGlobalRef() before first execution
+- added a small helper fixture in tests/024_numbers.c for that host-side global pre-seed test
+- fixed wr_getGlobalRef() so short unqualified global names like "N" and "AB" resolve correctly
+- added regression coverage for short global-name lookup through wr_getGlobalRef()
+- fixed wr_import() error cleanup destroying the caller context instead of the failed import context
+- widened WRState::err to uint8_t so the full 0-255 error range is preserved
+
+7.0.2 ----------------------------------------------------------------------------------
 - fixes around yield
 - expanding some uint8 values that were a little too conservative
 - fixed some very corner-y case code and added some more audits and protection
-- enums now have object-status, ie:
-
-   enum Color { RED, GREEN };
-
-  must be referred to in code as Color::RED 
-  just RED will not work the original behavior (no namespace) is still honored
-- var now required in all testing, and in 7.x.x it will be REMOVED. it is strongly
-  reccomended to always use it, as it removes a class of typoes, for example:
-
-  print(BLUE); 
-
-  WILL COMPILE even if 'BLUE' has never been seen before, it's just created out of
-  thin air and assigned zero. This seemed like a good idea when wrench was a
-  small toy but now it's just bad behavior.
-
-- added win32 project, buildable in the visual studio dev console
-- revamped documentation, added more examples, more to come!
 
 7.0.1 ----------------------------------------------------------------------------------
 - adding a global context in the form of a void* in WRState, so all functions can

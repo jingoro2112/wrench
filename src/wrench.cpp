@@ -1982,6 +1982,7 @@ struct WRExpressionContext
 	bool spaceAfter;
 	bool global;
 	bool varSeen;
+	bool blankSeen;
 	WRstr prefix;
 	WRstr token;
 	WRValue value;
@@ -2009,6 +2010,7 @@ struct WRExpressionContext
 	{
 		type = EXTYPE_NONE;
 		varSeen = false;
+		blankSeen = false;
 		spaceBefore = false;
 		spaceAfter = false;
 		global = false;
@@ -3088,6 +3090,7 @@ const char* c_reserved[] =
 	"goto",
 	"export",
 	"unit",
+	"blank",
 	""
 };
 
@@ -4050,7 +4053,8 @@ void WRCompilationContext::loadExpressionContext( WRExpression& expression, int 
 										   expression.allowFunctionNameHashLiteral );
 					}
 
-				if ( expression.context[depth].type == EXTYPE_LABEL_AND_NULL )
+				if ( expression.context[depth].type == EXTYPE_LABEL_AND_NULL
+					 && !expression.context[depth].blankSeen )
 				{
 					expression.bytecode.all += O_InitVar;
 					expression.bytecode.opcodes += O_InitVar;
@@ -6858,6 +6862,36 @@ SOFTWARE.
 #include <assert.h>
 
 //------------------------------------------------------------------------------
+static bool wr_isBlankInitializerToken( WRstr const& token )
+{
+	return token == "="
+		|| token == "+="
+		|| token == "-="
+		|| token == "*="
+		|| token == "/="
+		|| token == "%="
+		|| token == "|="
+		|| token == "&="
+		|| token == "^="
+		|| token == ">>="
+		|| token == "<<=";
+}
+
+//------------------------------------------------------------------------------
+static bool wr_expressionHasBlankDeclaration( WRarray<WRExpressionContext>& context, int depth )
+{
+	for( int i=0; i<depth; ++i )
+	{
+		if ( context[i].blankSeen )
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+//------------------------------------------------------------------------------
 char WRCompilationContext::parseExpression( WRExpression& expression )
 {
 	int depth = 0;
@@ -6913,6 +6947,13 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			expression.allowFunctionNameHashLiteral = true;
 			continue;
 		}
+		else if ( token == "blank" )
+		{
+			expression.context[depth].varSeen = true;
+			expression.context[depth].blankSeen = true;
+			expression.allowFunctionNameHashLiteral = true;
+			continue;
+		}
 		else if ( token == "{" )
 		{
 			depth = parseInitializer( expression, depth ) + 1;
@@ -6922,6 +6963,13 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			}
 
 			continue;
+		}
+
+		if ( wr_isBlankInitializerToken(token)
+			 && wr_expressionHasBlankDeclaration(expression.context, depth) )
+		{
+			m_err = WR_ERR_blank_variables_cannot_be_initialized;
+			return 0;
 		}
 		
 		if ( operatorFound(token, expression.context, depth) )
@@ -13407,6 +13455,8 @@ SOFTWARE.
 
 #include "wrench.h"
 
+void wr_destroyContextEx( WRContext* context );
+
 WR_ALLOC g_malloc = &malloc;
 WR_FREE g_free = &free;
 //------------------------------------------------------------------------------
@@ -13775,7 +13825,7 @@ WRContext* wr_import( WRContext* context, const unsigned char* block, const int 
 	if ( !wr_callFunction(import, (WRFunction*)0) )
 	{ 
 		// imported context may not yield
-		wr_destroyContext( context );
+		wr_destroyContextEx( import );
 		return 0;
 	}
 
@@ -13789,6 +13839,29 @@ WRContext* wr_import( WRContext* context, const unsigned char* block, const int 
 	}
 
 	return import;
+}
+
+//------------------------------------------------------------------------------
+bool wr_isBytecodeValid( const uint8_t* bytecode, const unsigned int len, uint32_t* hash )
+{
+	if ( len < 8 )
+	{
+		return false;
+	}
+
+	// CRC the code block, at least is it what the compiler intended?
+	uint32_t h = READ_32_FROM_PC(bytecode + (len - 4));
+	if ( h != wr_hash_read8(bytecode, (len - 4)) + WRENCH_VERSION_MAJOR )
+	{
+		return false;
+	}
+
+	if ( hash )
+	{
+		*hash = h;
+	}
+
+	return true;
 }
 
 //------------------------------------------------------------------------------
@@ -14477,9 +14550,8 @@ WRValue* wr_getGlobalRef( WRContext* context, const char* label )
 	{
 		return 0;
 	}
-	size_t len = strlen(label);
 	uint32_t match;
-	if ( len < 3 || (label[0] == ':' && label[1] == ':') )
+	if ( label[0] == ':' && label[1] == ':' )
 	{
 		match = wr_hashStr( label );
 	}
@@ -15022,6 +15094,7 @@ const char* c_errStrings[]=
 	"WR_ERR_new_assign_by_label_or_offset_not_both",
 	"WR_ERR_struct_not_exported",
 	"WR_ERR_empty_parens",
+	"WR_ERR_blank_variables_cannot_be_initialized",
 
 	"WR_ERR_run_must_be_called_by_itself_first",
 	"WR_ERR_hash_table_size_exceeded",

@@ -18,8 +18,8 @@ yay2
 yay3
 ~*/
 
-var a = 8;
-var b = 7;
+a = 8;
+b = 7;
 if ( a == b && 1 ) println("G1");
 if ( a != a && 1 ) println("G2");
 if ( a < b && 1 )  println("G3");
@@ -28,11 +28,10 @@ if ( b >= a && 1 ) println("G5");
 if ( a <= b && 1 ) println("G6");
 
 localIf();
-var n;
 function localIf()
 {
-	var a = 8;
-	var b = 7;
+	a = 8;
+	b = 7;
 	if ( a == b && 1 ) println("L1");
 	if ( a != a && 1 ) println("L2");
 	if ( a < b && 1 )  println("L3");
@@ -100,8 +99,8 @@ if ( n != n )
 	println( "null NOT okay" );
 }
 
-var c = 4;
-var d = 6;
+c = 4;
+d = 6;
 
 println(8 + 3 + c++ - --d) ;
 

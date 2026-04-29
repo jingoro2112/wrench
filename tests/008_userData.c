@@ -48,8 +48,8 @@ function userCheck( data )
 	if ( data.name[0] != 'h' ) println("f5");
 	if ( data.name[1] != 'e' ) println("f6");
 
-	var i = 0;
-	var j = 1;
+	i = 0;
+	j = 1;
 	if ( data.name[i++] != 'h' ) println("f5i");
 	if ( data.name[i] != 'e' ) println("f5i");
 	if ( data.name[j] != 'e' ) println("f6j");
@@ -60,7 +60,7 @@ function userCheck( data )
 	if ( data.name[1] != data.name[1] ) println("f71");
 	if ( data.name[1] < data.name[1] ) println("f72");
 	if ( data.name[1] > data.name[1] ) println("f73");
-	var a = 0x64;
+	a = 0x64;
 	if ( data.name[1] == a ) println("f74");
 	if ( a == data.name[1] ) println("f75");
 	if ( !(a < data.name[1]) ) println("f76");
@@ -91,17 +91,17 @@ function userCheck( data )
 function stringCheck( string )
 {
 	if ( string != "test string" ) println("bs1");
-	var c = string;
+	c = string;
 	if ( c != "test string" ) println ("bs2" );
 }
 
 function arrayCheck()
 {
-	var newState = "some string";
-	var newStateDuration = 0.0;
-	var resetCollision = false;
+	newState = "some string";
+	newStateDuration = 0.0;
+	resetCollision = false;
 
-	var res[] = { newState, newStateDuration, resetCollision };
+	res[] = { newState, newStateDuration, resetCollision };
 
 	return  res;
 }

@@ -32,7 +32,7 @@ math::floor(1);
 math::floor(1,2);
 math::floor(1,2,3);
 
-var f = math::floor();
+f = math::floor();
 f = math::floor(1);
 f = math::floor(1,2);
 f = math::floor(1,2,3);
@@ -50,7 +50,6 @@ println( math::ceil(-4.1) );
 
 //str::sprintf( s, 			"%-10.4g", 12.45 );if ( s != "12.45" ) println("bad 1245 ");
 
-var s;
 str::sprintf( s, 			"%0s", "x" );if ( s != "x" ) println("bad 001");
 str::sprintf( s, 			"%-0s", "x" );if ( s != "x" ) println("bad 002");
 str::sprintf( s, 			"%1s", "x" );if ( s != "x" ) println("bad 003");
@@ -164,10 +163,10 @@ str::sprintf( s, 				"%%-02X", 60000 );if ( s != "%-02X") println("bad 111");
 str::sprintf( s, 	"%s %-5d %05d", "test", 123, 123 );if ( s != "test 123   00123") println("bad 112");
 
 
-var s0 = "";
-var s1 = "1";
-var s2 = "22";
-var s3 = "1234";
+s0 = "";
+s1 = "1";
+s2 = "22";
+s3 = "1234";
 if ( str::strlen("1") != 1 ) println("strlen 1");
 if ( str::strlen("") != 0 ) println("strlen 2");
 if ( str::strlen("123") != 3 ) println("strlen 3");
@@ -180,9 +179,9 @@ if ( str::format( "%s", "hi" ) != "hi" ) println("format 1");
 if ( !str::isspace(' ') ) println("isspace 1");
 if ( !str::isspace('\t') ) println("isspace 2");
 if ( !str::isspace('\n') ) println("isspace 3");
-var c0 = ' ';
-var c1 = '\t';
-var c2 = '\n';
+c0 = ' ';
+c1 = '\t';
+c2 = '\n';
 if ( !str::isspace(c0) ) println("isspace 1a");
 if ( !str::isspace(c1) ) println("isspace 2a");
 if ( !str::isspace(c2) ) println("isspace 3a");
@@ -223,8 +222,8 @@ if ( str::chr("#()*+,-/:;<=>?@\\^", '\\') != 15 ) println("strchr 3");
 if ( str::chr("#()*+,-/:;<=>?@\\^", '^') != 16 ) println("strchr 4");
 if ( str::chr("#()*+,-/:;<=>?@\\^", 'A') != -1 ) println("strchr 5");
 
-var a = "hello";
-var b = "world";
+a = "hello";
+b = "world";
 if ( str::concat( "hello", "world" ) != "helloworld" ) println( "concat0" );
 if ( str::concat( a, "world" ) != "helloworld" ) println( "concat1" );
 if ( str::concat( "hello", b ) != "helloworld" ) println( "concat2" );

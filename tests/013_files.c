@@ -1,6 +1,6 @@
 /*~ ~*/
 
-var j = "_test file_";
+j = "_test file_";
 if ( !io::writeFile( "_std_file_test.txt", j) ) println("bad file write");
-var k = io::readFile( "_std_file_test.txt" );
+k = io::readFile( "_std_file_test.txt" );
 if ( k != j ) println( "bad readback" );

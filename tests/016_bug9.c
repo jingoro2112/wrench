@@ -1,11 +1,11 @@
 /*~ ~*/
 
-var a = 10;
-var b = 20;
-var c = 30;
-var d = 40;
-var e = 50;
-var f = 600;
+a = 10;
+b = 20;
+c = 30;
+d = 40;
+e = 50;
+f = 600;
 
 function testFunc( a1, b1, c1, d1, e1 )
 {

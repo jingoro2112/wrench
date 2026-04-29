@@ -52,6 +52,7 @@ const char* c_reserved[] =
 	"goto",
 	"export",
 	"unit",
+	"blank",
 	""
 };
 
@@ -1014,7 +1015,8 @@ void WRCompilationContext::loadExpressionContext( WRExpression& expression, int 
 										   expression.allowFunctionNameHashLiteral );
 					}
 
-				if ( expression.context[depth].type == EXTYPE_LABEL_AND_NULL )
+				if ( expression.context[depth].type == EXTYPE_LABEL_AND_NULL
+					 && !expression.context[depth].blankSeen )
 				{
 					expression.bytecode.all += O_InitVar;
 					expression.bytecode.opcodes += O_InitVar;

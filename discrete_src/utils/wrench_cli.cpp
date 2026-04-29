@@ -45,10 +45,13 @@ void testTimeSlices();
 void testScheduler();
 void testStackOverflow();
 void testYield2();
+void testHostSeededGlobalValue( WRState* w );
+void testBlankHostSeededGlobals( WRState* w );
 void testD();
 void testCallFunctionHashLibraryFallback();
 void testFunctionNameHashAsArgument();
 void testNamedEnumUnqualifiedError();
+void testBlankVariablesCannotBeInitialized();
 void testDeepHashTableWithWrenchValue();
 void testStateContextOpaquePointer();
 void LEAKtest();
@@ -792,6 +795,8 @@ static void hashLibFail( WRValue* stackTop, const int argn, WRContext* context )
 
 static int32_t g_lastCallbackHashArg = 0;
 static int g_seenCallbackHashArg = 0;
+static int g_blankSeedCallbackSeen = 0;
+static int g_blankSeedCallbackOk = 0;
 
 //------------------------------------------------------------------------------
 static void captureHashArg( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
@@ -804,6 +809,19 @@ static void captureHashArg( WRContext* c, const WRValue* argv, const int argn, W
 		g_lastCallbackHashArg = argv[0].asInt();
 		g_seenCallbackHashArg = 1;
 	}
+}
+
+//------------------------------------------------------------------------------
+static void checkBlankSeededGlobals( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
+{
+	(void)c;
+	(void)usr;
+	retVal.init();
+	g_blankSeedCallbackSeen = 1;
+	g_blankSeedCallbackOk = (argn == 3)
+		&& (argv[0].asInt() == 101)
+		&& (argv[1].asInt() == 202)
+		&& (argv[2].asInt() == 303);
 }
 
 //------------------------------------------------------------------------------
@@ -964,9 +982,8 @@ void testNamedEnumUnqualifiedError()
 
 	// A script that declares a named enum then uses the bare member name.
 	// The bare 'RED' must not be accepted as a function-hash literal.
-	const char* src =
-		"enum Color { RED, GREEN, BLUE }\n"
-		"println( RED );\n";
+	const char* src = "enum Color { RED, GREEN, BLUE }\n"
+					  "println( RED );\n";
 
 	unsigned char* out = 0;
 	int outLen = 0;
@@ -974,6 +991,39 @@ void testNamedEnumUnqualifiedError()
 	free( out );
 
 	assert( result == WR_ERR_var_not_seen_before_label );
+	if ( result != WR_ERR_var_not_seen_before_label )
+	{
+		printf( "WR_ERR_var_not_seen_before_label expected but NOT EMITTED\n" );
+	}
+}
+
+//------------------------------------------------------------------------------
+void testBlankVariablesCannotBeInitialized()
+{
+	printf( "test [-][blank variables cannot be initialized]:\n" );
+	printf( "     (the compile errors below are expected)\n" );
+
+	const char* src[] =
+	{
+		"blank X = 1;\n",
+		"blank var X = 1;\n",
+		"var blank X = 1;\n",
+		0
+	};
+
+	for( int i=0; src[i]; ++i )
+	{
+		unsigned char* out = 0;
+		int outLen = 0;
+		WRError result = wr_compile( src[i], (int)strlen(src[i]), &out, &outLen, 0, WR_INCLUDE_GLOBALS );
+		free( out );
+
+		assert( result == WR_ERR_blank_variables_cannot_be_initialized );
+		if ( result != WR_ERR_blank_variables_cannot_be_initialized )
+		{
+			printf( "WR_ERR_blank_variables_cannot_be_initialized expected but NOT EMITTED\n" );
+		}
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -1363,6 +1413,7 @@ int runTests( int number )
 	testCallFunctionHashLibraryFallback();
 	testFunctionNameHashAsArgument();
 	testNamedEnumUnqualifiedError();
+	testBlankVariablesCannotBeInitialized();
 	testDeepHashTableWithWrenchValue();
 	testStateContextOpaquePointer();
 #ifdef WRENCH_ENABLE_CROSS_MODULE_EXTERNAL_TEST
@@ -1392,6 +1443,8 @@ int runTests( int number )
 	setup();
 
 	testGlobalValues( w );
+	testHostSeededGlobalValue( w );
+	testBlankHostSeededGlobals( w );
 
 	wr_destroyState( w );
 
@@ -1411,6 +1464,8 @@ void testGlobalValues( WRState* w )
 							"var global_two = 20;\n"
 							"var global_three = 30;\n"
 							"var global_four = 40;\n"
+							"var N = 50;\n"
+							"var AB = 60;\n"
 							
 							"function test1() { global_two = 25; }\n"
 							"function test2() { return global_two == 35; }\n"
@@ -1442,6 +1497,15 @@ void testGlobalValues( WRState* w )
 		assert(0);
 		printf("used");
 	}
+
+	g = wr_getGlobalRef( gc, "N" );
+	assert( g && g->i == 50 );
+	g = wr_getGlobalRef( gc, "::N" );
+	assert( g && g->i == 50 );
+	g = wr_getGlobalRef( gc, "AB" );
+	assert( g && g->i == 60 );
+	g = wr_getGlobalRef( gc, "::AB" );
+	assert( g && g->i == 60 );
 
 	g = wr_getGlobalRef( gc, "global_one" );
 	assert( g && g->i == 10 );
@@ -1497,6 +1561,88 @@ void testGlobalValues( WRState* w )
 	assert( wr_callFunction(gc, "test10") );
 
 	wr_free( out );
+}
+
+//------------------------------------------------------------------------------
+void testHostSeededGlobalValue( WRState* w )
+{
+	WRstr code;
+	assert( code.fileToBuffer( "tests/024_numbers.c" ) );
+
+	unsigned char* out = 0;
+	int outLen = 0;
+	WRstr errMsg;
+	int err = wr_compile( code, code.size(), &out, &outLen, &errMsg, WR_INCLUDE_GLOBALS );
+	if ( err )
+	{
+		assert(0);
+		printf("used");
+	}
+
+	WRstr logger;
+	wr_registerFunction( w, "print", emit, &logger );
+	wr_registerFunction( w, "println", emitln, &logger );
+
+	WRContext* context = wr_newContext( w, out, outLen, true );
+	assert( context );
+
+	WRValue* n = wr_getGlobalRef( context, "N" );
+	assert( n );
+	wr_makeInt( n, 123456789 );
+
+	WRValue* result = wr_executeContext( context );
+	assert( result );
+	assert( wr_getLastError( w ) == 0 );
+	assert( logger.size() == 0 );
+
+	result = wr_callFunction( context, "hostSeededGlobalN" );
+	assert( result && result->asInt() == 123456789 );
+
+	wr_destroyContext( context );
+}
+
+//------------------------------------------------------------------------------
+void testBlankHostSeededGlobals( WRState* w )
+{
+	const char* code =
+		"blank A;\n"
+		"blank var B;\n"
+		"var blank C;\n"
+		"checkBlankSeededGlobals(A, B, C);\n";
+
+	unsigned char* out = 0;
+	int outLen = 0;
+	WRstr errMsg;
+	int err = wr_compile( code, (int)strlen(code), &out, &outLen, &errMsg, WR_INCLUDE_GLOBALS );
+	if ( err )
+	{
+		assert(0);
+		printf("used");
+	}
+
+	g_blankSeedCallbackSeen = 0;
+	g_blankSeedCallbackOk = 0;
+	wr_registerFunction( w, "checkBlankSeededGlobals", checkBlankSeededGlobals );
+
+	WRContext* context = wr_newContext( w, out, outLen, true );
+	assert( context );
+
+	WRValue* a = wr_getGlobalRef( context, "A" );
+	WRValue* b = wr_getGlobalRef( context, "B" );
+	WRValue* c = wr_getGlobalRef( context, "C" );
+	assert( a && b && c );
+
+	wr_makeInt( a, 101 );
+	wr_makeInt( b, 202 );
+	wr_makeInt( c, 303 );
+
+	WRValue* result = wr_executeContext( context );
+	assert( result );
+	assert( wr_getLastError( w ) == 0 );
+	assert( g_blankSeedCallbackSeen );
+	assert( g_blankSeedCallbackOk );
+
+	wr_destroyContext( context );
 }
 
 //------------------------------------------------------------------------------

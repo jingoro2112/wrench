@@ -30,3 +30,11 @@ if ( 0b010 != 2 ) println( "err bin" );
 if ( 0b != 0 ) println( "err bin2" );
 
 if ( 10f != 10.f ) { println("f1"); }
+
+// Host-side regression fixture: the C harness seeds N before first execution
+// and verifies bare "var N;" does not clobber that value.
+var N;
+function hostSeededGlobalN()
+{
+	return N;
+}

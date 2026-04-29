@@ -32,7 +32,7 @@ SOFTWARE.
 
 #define WRENCH_VERSION_MAJOR 7
 #define WRENCH_VERSION_MINOR 2
-#define WRENCH_VERSION_BUILD 0
+#define WRENCH_VERSION_BUILD 1
 
 struct WRState;
 
@@ -120,7 +120,7 @@ instruction!
 // how many instructions each call to the VM executes before yielding,
 // set to '0' for unlimited (default)
 void wr_setInstructionsPerSlice( WRState* w, const int instructions );
-void wr_forceYield( WRState* w );  // for the VM to yield right NOW, (called from a different thread)
+void wr_forceYield( WRState* w );  // for the VM to yield right NOW
 int wr_slicesUsedLastCall( WRState* w );  // how many time slices did the last call to the VM use?
 #endif
 
@@ -231,6 +231,7 @@ enum WRError
 	WR_ERR_new_assign_by_label_or_offset_not_both,
 	WR_ERR_struct_not_exported,
 	WR_ERR_empty_parens,
+	WR_ERR_blank_variables_cannot_be_initialized,
 
 	WR_ERR_run_must_be_called_by_itself_first,
 	WR_ERR_hash_table_size_exceeded,
@@ -278,7 +279,7 @@ enum WRError
 /***************************************************************/
 //                       State Management
 
-// create/destroy a WRState object that can run multiple contexts/threads
+// create/destroy a WRState object that can run multiple contexts
 WRState* wr_newState( int stackSize =WRENCH_DEFAULT_STACK_SIZE );
 void wr_destroyState( WRState* w );
 
@@ -329,6 +330,10 @@ WRError wr_compile( const char* source,
 					int* outLen,
 					WRstr* errMsg =0,
 					const uint8_t compilerOptionFlags = WR_INCLUDE_GLOBALS );
+
+// is this a valid bytecode image for this version? Optionally return
+// the hash signature
+bool wr_isBytecodeValid( const uint8_t* bytecode, const unsigned int len, uint32_t* hash =0 );
 
 // disassemble the bytecode and output human readable
 void wr_disassemble( const uint8_t* bytecode, const unsigned int len, WRstr& out, const bool includeComments =true );
@@ -1180,7 +1185,7 @@ struct WRState
 
 	uint32_t allocatedMemoryLimit; // WRENCH_DEFAULT_ALLOCATED_MEMORY_GC_HINT by default
 	uint16_t stackSize; // how much stack to give each context
-	int8_t err;
+	uint8_t err;
 
 };
 

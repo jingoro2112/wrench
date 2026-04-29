@@ -217,6 +217,7 @@ struct WRExpressionContext
 	bool spaceAfter;
 	bool global;
 	bool varSeen;
+	bool blankSeen;
 	WRstr prefix;
 	WRstr token;
 	WRValue value;
@@ -244,6 +245,7 @@ struct WRExpressionContext
 	{
 		type = EXTYPE_NONE;
 		varSeen = false;
+		blankSeen = false;
 		spaceBefore = false;
 		spaceAfter = false;
 		global = false;

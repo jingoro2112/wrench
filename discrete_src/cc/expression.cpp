@@ -27,6 +27,36 @@ SOFTWARE.
 #include <assert.h>
 
 //------------------------------------------------------------------------------
+static bool wr_isBlankInitializerToken( WRstr const& token )
+{
+	return token == "="
+		|| token == "+="
+		|| token == "-="
+		|| token == "*="
+		|| token == "/="
+		|| token == "%="
+		|| token == "|="
+		|| token == "&="
+		|| token == "^="
+		|| token == ">>="
+		|| token == "<<=";
+}
+
+//------------------------------------------------------------------------------
+static bool wr_expressionHasBlankDeclaration( WRarray<WRExpressionContext>& context, int depth )
+{
+	for( int i=0; i<depth; ++i )
+	{
+		if ( context[i].blankSeen )
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+//------------------------------------------------------------------------------
 char WRCompilationContext::parseExpression( WRExpression& expression )
 {
 	int depth = 0;
@@ -82,6 +112,13 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			expression.allowFunctionNameHashLiteral = true;
 			continue;
 		}
+		else if ( token == "blank" )
+		{
+			expression.context[depth].varSeen = true;
+			expression.context[depth].blankSeen = true;
+			expression.allowFunctionNameHashLiteral = true;
+			continue;
+		}
 		else if ( token == "{" )
 		{
 			depth = parseInitializer( expression, depth ) + 1;
@@ -91,6 +128,13 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			}
 
 			continue;
+		}
+
+		if ( wr_isBlankInitializerToken(token)
+			 && wr_expressionHasBlankDeclaration(expression.context, depth) )
+		{
+			m_err = WR_ERR_blank_variables_cannot_be_initialized;
+			return 0;
 		}
 		
 		if ( operatorFound(token, expression.context, depth) )

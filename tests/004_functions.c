@@ -66,7 +66,7 @@ if ( x != -2 ) println( "xfail1");
 incGlob(y)-1;
 
 
-var a = 10;
+a = 10;
 a = println("argtest");
 if ( a != 20 ) { println("afail1"); }
 a = 10;
@@ -76,7 +76,7 @@ a = 10;
 a = println(1,2,3,4,5,6);
 if ( a != 20 ) { println("afail3"); }
 
-var glob = 10;
+glob = 10;
 incGlob();
 function incGlob()
 {
@@ -101,7 +101,7 @@ test();
 
 function test()
 {
-	var b = 4000000;
+	b = 4000000;
 	println( b );
 	b = 20;
 	println( b );
@@ -166,9 +166,9 @@ println( test5() );
 
 function test6()
 {
-	var b = 2;
-	var c = 3;
-	var d = 4;
+	b = 2;
+	c = 3;
+	d = 4;
 	return c;
 }
 println( test6() );
@@ -186,7 +186,6 @@ function fibonacci( n )
 	return fibonacci(n - 2) + fibonacci(n - 1);
 }
 
-var i;
 for ( i = 0; i <= 10; ++i)
 {
 	println( fibonacci(i) );

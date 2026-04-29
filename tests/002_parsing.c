@@ -48,10 +48,16 @@ println( "hello" ); // eol comment
 println( /**/"hello"  /*  */ ); /*  *//*
 */
 
+blank blank0;
+blank var blank1;
+var blank blank2;
+if ( blank0 != 0 ) println("err blank0");
+if ( blank1 != 0 ) println("err blank1");
+if ( blank2 != 0 ) println("err blank2");
+
 a = 10 / 2;
 if ( a != 5 ) println("err 1");
 a = 10/	/*h*/2;
 if ( a != 5 ) println("err 1");
 a = 10/**//	/*h*/2;
 if ( a != 5 ) println("err 1");
-

@@ -118,7 +118,6 @@ lt6!
 ~*/
 
 
-var a = 0;
 label2:
 
 goto label;
@@ -158,21 +157,18 @@ function prime2()
 
 function prime(n)
 {
-	var count = 0;
-	var i;
+	count = 0;
 	for (i = 2; i <= n; ++i)
 		if (prime2())
 			++count;
 	return count;
 }
 
-var i;
 for( i=0; i<10; ++i)
 {
-
+	
 }
 
-var j;
 for( i=0,j=0; i<2; ++i,j-- )
 {
 	println(i);
@@ -293,7 +289,6 @@ for( i=0; i<10; ++i )
 println(i);
 
 
-var tristan;
 for( tristan = 1; tristan <= 7; tristan++ )
 {
 	println( tristan );
@@ -338,7 +333,6 @@ for(;;++i)
 }
 println(i);
 
-var k;
 for( i=1, j=2, k=3; i<10; ++i, ++j, k = j + i )
 {
 	println(i);

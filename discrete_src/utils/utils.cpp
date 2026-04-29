@@ -24,6 +24,8 @@ SOFTWARE.
 
 #include "wrench.h"
 
+void wr_destroyContextEx( WRContext* context );
+
 WR_ALLOC g_malloc = &malloc;
 WR_FREE g_free = &free;
 //------------------------------------------------------------------------------
@@ -392,7 +394,7 @@ WRContext* wr_import( WRContext* context, const unsigned char* block, const int 
 	if ( !wr_callFunction(import, (WRFunction*)0) )
 	{ 
 		// imported context may not yield
-		wr_destroyContext( context );
+		wr_destroyContextEx( import );
 		return 0;
 	}
 
@@ -406,6 +408,29 @@ WRContext* wr_import( WRContext* context, const unsigned char* block, const int 
 	}
 
 	return import;
+}
+
+//------------------------------------------------------------------------------
+bool wr_isBytecodeValid( const uint8_t* bytecode, const unsigned int len, uint32_t* hash )
+{
+	if ( len < 8 )
+	{
+		return false;
+	}
+
+	// CRC the code block, at least is it what the compiler intended?
+	uint32_t h = READ_32_FROM_PC(bytecode + (len - 4));
+	if ( h != wr_hash_read8(bytecode, (len - 4)) + WRENCH_VERSION_MAJOR )
+	{
+		return false;
+	}
+
+	if ( hash )
+	{
+		*hash = h;
+	}
+
+	return true;
 }
 
 //------------------------------------------------------------------------------
@@ -1094,9 +1119,8 @@ WRValue* wr_getGlobalRef( WRContext* context, const char* label )
 	{
 		return 0;
 	}
-	size_t len = strlen(label);
 	uint32_t match;
-	if ( len < 3 || (label[0] == ':' && label[1] == ':') )
+	if ( label[0] == ':' && label[1] == ':' )
 	{
 		match = wr_hashStr( label );
 	}
@@ -1639,6 +1663,7 @@ const char* c_errStrings[]=
 	"WR_ERR_new_assign_by_label_or_offset_not_both",
 	"WR_ERR_struct_not_exported",
 	"WR_ERR_empty_parens",
+	"WR_ERR_blank_variables_cannot_be_initialized",
 
 	"WR_ERR_run_must_be_called_by_itself_first",
 	"WR_ERR_hash_table_size_exceeded",
