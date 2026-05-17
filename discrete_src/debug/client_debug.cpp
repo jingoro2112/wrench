@@ -62,6 +62,8 @@ void WRDebugClientInterface::load( const uint8_t* byteCode, const int size )
 
 	I->m_comm->send( WrenchPacketScoped(WRD_Load, size, byteCode) );
 
+	WrenchPacketScoped r( I->getPacket() );
+
 	// invalidate source block;
 	g_free( I->m_sourceBlock );
 	I->m_sourceBlock = 0;

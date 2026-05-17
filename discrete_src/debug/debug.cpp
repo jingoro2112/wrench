@@ -151,12 +151,6 @@ void wr_formatStackEntry( const WRValue* v, WRstr& out )
 					break;
 				}
 
-				case WR_EX_DEBUG_BREAK:
-				{
-					out.appendFormat( "EX:DEBUG_BREAK\n" );
-					break;
-				}
-
 				case WR_EX_ITERATOR:
 				{
 					// todo- break out VA

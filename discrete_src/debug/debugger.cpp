@@ -43,13 +43,6 @@ void dbprintln( WRContext* c, const WRValue* argv, const int argn, WRValue& retV
 }
 
 //------------------------------------------------------------------------------
-void debugPrint( const char* text )
-{
-	wr_stdout( text, strlen(text) );
-	wr_stdout( "\n", 1 );
-}
-
-//------------------------------------------------------------------------------
 void dbprint( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr )
 {
 	for( int i=0; i<argn; ++i )
@@ -152,8 +145,9 @@ bool WrenchDebugClient::init( const char* name, const char* address, const int p
 	else
 	{
 		WrenchDebugLoopbackInterface* loop = new WrenchDebugLoopbackInterface();
-		m_client = new WRDebugClientInterface( loop );
-		m_server = new WRDebugServerInterface( m_w, loop );
+		m_client = new WRDebugClientInterface( loop->clientInterface() );
+		m_server = new WRDebugServerInterface( m_w, loop->serverInterface() );
+		loop->setServer(m_server);
 		m_comm = loop;
 	}
 
@@ -213,6 +207,8 @@ bool WrenchDebugClient::loadSource( const char* name )
 
 	splitNL( sbuf );
 
+	printf( "[%s] ready to run\n", name );
+
 	return true;
 }
 
@@ -224,7 +220,7 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* address, 
 	bool state = init( currentName, address, port );
 
 	bool showCodePos = false;
-	bool showCallStack = false;
+	bool showCallSt = false;
 	bool showVars = false;
 
 	char buf[200];
@@ -244,10 +240,10 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* address, 
 			showCodePosition();
 		}
 
-		if ( showCallStack )
+		if ( showCallSt )
 		{
-			showCallStack = false;
-//			showCallStack();
+			showCallSt = false;
+			showCallStack();
 		}
 		
 		if ( showVars )
@@ -262,11 +258,12 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* address, 
 			}
 		}
 
-/*
-		char stk[64000] = "null";
-		m_client->getStackDump( stk, 64000 );
+		/*
+		printf("stack dump ------------------------\n");
+		char stk[65536] = "null";
+		m_client->getStackDump( stk, 65536 );
 		printf( "%s\n\n", stk );
-*/
+		*/
 		
 		if ( !state )
 		{
@@ -306,7 +303,7 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* address, 
 				printf( "frame [%d]\n", stackLevel );
 			}
 
-			showCallStack = true;
+			showCallSt = true;
 
 			continue;
 		}
@@ -322,11 +319,7 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* address, 
 						currentName = *cmd.next();
 					}
 
-					if ( loadSource(currentName) )
-					{
-						printf( "[%s] ready to run\n", currentName.c_str() );
-					}
-					else
+					if ( !loadSource(currentName) )
 					{
 						printf( "[%s] failed to load\n", currentName.c_str() );
 					}
@@ -338,7 +331,7 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* address, 
 					m_client->run( toLine );
 
 					showCodePos = true;
-					showCallStack = true;
+					showCallSt = true;
 					showVars = true;
 				}
 				break;
@@ -347,7 +340,7 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* address, 
 			case 'l':
 			{
 				showCodePos = true;
-				showCallStack = true;
+				showCallSt = true;
 				showVars = true;
 				break;
 			}
@@ -358,7 +351,7 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* address, 
 				{
 					m_client->stepOver();
 					showCodePos = true;
-					showCallStack = true;
+					showCallSt = true;
 					showVars = true;
 					break;
 				}
@@ -369,7 +362,7 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* address, 
 			{
 				m_client->stepInto();
 				showCodePos = true;
-				showCallStack = true;
+				showCallSt = true;
 				showVars = true;
 				break;
 			}
@@ -394,20 +387,20 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* address, 
 							if ( *b == bp )
 							{
 								bp = -1;
-								showBreakpoint( bp );
+								showBreakpoint( *b );
 								printf( "removed %d\n", *b );
-								m_breakpoints.popItem( b );
 								m_client->clearBreakpoint( *b );
+								m_breakpoints.popItem( b );
 								break;
 							}
 						}
 
 						if ( bp != -1 )
 						{
-							printf( "added %d\n", bp );
-							*m_breakpoints.addHead() = bp;
-							showBreakpoint( bp );
 							m_client->setBreakpoint( bp );
+							*m_breakpoints.addHead() = bp;
+							printf( "added %d\n", bp );
+							showBreakpoint( bp );
 						}
 					}
 				}
@@ -545,6 +538,13 @@ void WrenchDebugClient::enter( const char* sourceFileName, const char* address, 
 				
 				break;
 			}
+
+			case 'w':
+			{
+				showCallStack();
+
+				break;
+			}
 			
 			case 'q': break;
 
@@ -654,6 +654,11 @@ bool WrenchDebugClient::printVariable( WRstr& str )
 	SimpleLL<WrenchCallStackEntry>* stack = m_client->getCallstack();
 	if ( !stack )
 	{	
+		return false;
+	}
+
+	if (m_currentDepth < 0)
+	{
 		return false;
 	}
 

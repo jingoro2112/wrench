@@ -44,20 +44,64 @@ public:
 };
 
 //------------------------------------------------------------------------------
-class WrenchDebugLoopbackInterface : public WrenchDebugCommInterface
+class WrenchDebugLoopbackInterface;
+
+class WrenchDebugLoopbackEndpoint : public WrenchDebugCommInterface
 {
 public:
-
-	bool send( WrenchPacket* packet ) { return (*m_queue.addHead() = WrenchPacket::alloc( *packet)) != 0; }
-	WrenchPacket* receive( const int timeoutMilliseconds )
+	WrenchDebugLoopbackEndpoint(SimpleLL<WrenchPacket*>& writeQueue,
+		SimpleLL<WrenchPacket*>& readQueue)
+		: m_writeQueue(writeQueue)
+		, m_readQueue(readQueue)
+		, m_server(nullptr)
 	{
-		WrenchPacket* p = 0;
-		m_queue.popTail( &p );
+	}
+
+	bool send(WrenchPacket* packet) override
+	{
+		WrenchPacket* p = (*m_writeQueue.addHead() = WrenchPacket::alloc(*packet));
+		if (m_server) m_server->tick();
+		return (p != nullptr);
+	}
+
+	WrenchPacket* receive(const int timeoutMilliseconds = 0) override
+	{
+		WrenchPacket* p = nullptr;
+		m_readQueue.popTail(&p);
 		return p;
 	}
 
+	void setServer(WRDebugServerInterface* server) { m_server = server; }
+
 private:
-	SimpleLL<WrenchPacket*> m_queue;
+	SimpleLL<WrenchPacket*>& m_writeQueue;
+	SimpleLL<WrenchPacket*>& m_readQueue;
+	WRDebugServerInterface* m_server;
+};
+
+class WrenchDebugLoopbackInterface : public WrenchDebugCommInterface
+{
+public:
+	WrenchDebugLoopbackInterface()
+		: m_clientEndpoint(m_c2s, m_s2c)
+		, m_serverEndpoint(m_s2c, m_c2s)
+	{
+	}
+
+	WrenchDebugCommInterface* clientInterface() { return &m_clientEndpoint; }
+
+	WrenchDebugCommInterface* serverInterface() { return &m_serverEndpoint; }
+
+	void setServer(WRDebugServerInterface* server)
+	{
+		m_clientEndpoint.setServer(server);
+	}
+
+private:
+	SimpleLL<WrenchPacket*> m_c2s;
+	SimpleLL<WrenchPacket*> m_s2c;
+	WrenchDebugLoopbackEndpoint m_clientEndpoint;
+	WrenchDebugLoopbackEndpoint m_serverEndpoint;
 };
 
 //------------------------------------------------------------------------------

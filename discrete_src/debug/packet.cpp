@@ -39,6 +39,7 @@ WrenchPacket::WrenchPacket( const WrenchDebugComm type, const uint32_t payloadSi
 WrenchPacket::WrenchPacket( const int32_t type )
 {
 	memset( (char*)this, 0, sizeof(WrenchPacket) );
+	size = sizeof(WrenchPacket);
 	t = type;
 }
 

@@ -374,15 +374,17 @@ int main( int argn, char* argv[] )
 	else if ( SimpleArgs::get(argn, argv, "dbg") )
 	{
 		WrenchDebugClient client;
+		char buf[64];
+		char *address = NULL;
 		int port = 0;
-		char address[64];
-		if (SimpleArgs::get(argn, argv, "-port", address, 64))
+		if (SimpleArgs::get(argn, argv, "-address", buf, 64))
 		{
-			port = atoi(address);
+			address = buf;
 		}
-		address[0] = 0;
-		SimpleArgs::get(argn, argv, "-address", address, 64);
-		
+		if (SimpleArgs::get(argn, argv, "-port", buf, 64))
+		{
+			port = atoi(buf);
+		}
 		client.enter( SimpleArgs::get(argn, argv, -1), address, port );
 	}
 #endif

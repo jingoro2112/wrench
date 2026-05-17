@@ -1112,6 +1112,9 @@ private:
 	WRGCObject(WRGCObject& A);
 };
 
+
+class WRDebugServerInterface;
+
 //------------------------------------------------------------------------------
 struct WRContext
 {
@@ -1197,7 +1200,6 @@ struct WRState
 #endif
 
 struct WrenchPacket;
-class WRDebugServerInterface;
 class WRDebugServerInterfacePrivate;
 class WRDebugClientInterfacePrivate;
 class WrenchDebugCommInterface;
