@@ -395,7 +395,11 @@ WRReturnSingleFunc wr_LogicalNot[4] =
 
 //------------------------------------------------------------------------------
 void doNegate_I( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = wr_ineg_wrap( value->i ); }
+#ifdef WRENCH_DOUBLE_PRECISION
+void doNegate_F( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->d = -value->d; }
+#else
 void doNegate_F( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = -value->f; }
+#endif
 void doNegate_E( WRValue* value, WRValue* target )
 {
 	WRValue& V = value->singleValue();

@@ -174,7 +174,7 @@ int wr_ftoa( float f, char* string, size_t len )
 }
 
 //------------------------------------------------------------------------------
-const int32_t wr_randEx( const int32_t from, const int32_t to )
+int32_t wr_randEx( int32_t from, int32_t to )
 {
 	const int32_t k = wr_Seed / 127773;
 	wr_Seed = 16807 * (wr_Seed - k * 127773) - 2836 * k;

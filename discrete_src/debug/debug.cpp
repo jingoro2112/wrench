@@ -118,7 +118,7 @@ void wr_formatStackEntry( const WRValue* v, WRstr& out )
 	{
 		default:
 		{
-			out.appendFormat( "frame [0x%08X]:[0x%08X]\n", v->p, v->p2 );
+			out.appendFormat( "frame [0x%08X]:[0x%08X]\n", v->p1, v->p2 );
 			break;
 		}
 		
@@ -130,7 +130,11 @@ void wr_formatStackEntry( const WRValue* v, WRstr& out )
 
 		case WR_FLOAT:
 		{
+#ifdef WRENCH_DOUBLE_PRECISION
+			out.appendFormat( "Float [%g]\n", v->d );
+#else
 			out.appendFormat( "Float [%g]\n", v->f );
+#endif
 			break;
 		}
 

@@ -40,7 +40,7 @@ public:
 				int args;
 				WRValue* firstArg;
 				WRValue* returnValue;
-				if( wr_getYieldInfo(m_context, &args, &firstArg, &returnValue) )
+					if( wr_getYieldInfo(m_context, &firstArg, &args, &returnValue) )
 				{
 					if ( args == 1 )
 					{

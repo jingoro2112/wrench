@@ -100,24 +100,40 @@ static bool wr_decodeOverwriteStore( const unsigned char* code, unsigned int off
 			return true;
 		}
 
-		case O_LiteralInt32ToGlobal:
-		case O_LiteralFloatToGlobal:
-		{
-			info.global = true;
-			info.index = code[offset + 1];
+			case O_LiteralInt32ToGlobal:
+			case O_LiteralFloatToGlobal:
+			{
+				info.global = true;
+				info.index = code[offset + 1];
 			info.length = 6;
 			return true;
 		}
 
-		case O_LiteralInt32ToLocal:
-		case O_LiteralFloatToLocal:
-		{
-			info.global = false;
-			info.index = code[offset + 1];
-			info.length = 6;
-			return true;
+			case O_LiteralInt32ToLocal:
+			case O_LiteralFloatToLocal:
+			{
+				info.global = false;
+				info.index = code[offset + 1];
+				info.length = 6;
+				return true;
+			}
+
+			case O_LiteralDoubleToGlobal:
+			{
+				info.global = true;
+				info.index = code[offset + 1];
+				info.length = 10;
+				return true;
+			}
+
+			case O_LiteralDoubleToLocal:
+			{
+				info.global = false;
+				info.index = code[offset + 1];
+				info.length = 10;
+				return true;
+			}
 		}
-	}
 
 	info.valid = false;
 	return false;
@@ -173,10 +189,12 @@ static bool wr_statementIsLiteralClobber( WRBytecode& bytecode, const WROverwrit
 		case O_LiteralInt16ToGlobal:
 		case O_LiteralInt16ToLocal:
 		case O_LiteralInt32ToGlobal:
-		case O_LiteralInt32ToLocal:
-		case O_LiteralFloatToGlobal:
-		case O_LiteralFloatToLocal:
-			return true;
+			case O_LiteralInt32ToLocal:
+			case O_LiteralFloatToGlobal:
+			case O_LiteralFloatToLocal:
+			case O_LiteralDoubleToGlobal:
+			case O_LiteralDoubleToLocal:
+				return true;
 
 		case O_AssignToGlobalAndPop:
 		case O_AssignToLocalAndPop:
@@ -192,10 +210,11 @@ static bool wr_statementIsLiteralClobber( WRBytecode& bytecode, const WROverwrit
 				case O_LiteralZero:
 				case O_LiteralInt8:
 				case O_LiteralInt16:
-				case O_LiteralInt32:
-				case O_LiteralFloat:
-				case O_LiteralString:
-				{
+					case O_LiteralInt32:
+					case O_LiteralFloat:
+					case O_LiteralDouble:
+					case O_LiteralString:
+					{
 					const unsigned char* code = bytecode.all;
 					const uint8_t* end = (const uint8_t*)(code + bytecode.all.size());
 					int operandSize = wr_optimizerOperandSize( code + 1, end, code[0] );
@@ -322,6 +341,7 @@ bool WRCompilationContext::IsLiteralLoadOpcode( unsigned char opcode )
 	return opcode == O_LiteralInt32
 			|| opcode == O_LiteralZero
 			|| opcode == O_LiteralFloat
+			|| opcode == O_LiteralDouble
 			|| opcode == O_LiteralInt8
 			|| opcode == O_LiteralInt16;
 }
@@ -516,11 +536,11 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 					bytecode.all[ a ] = (uint8_t)(be >> 24);
 					return;
 				}
-			else if ( bytecode.opcodes[o] == O_LiteralFloat )
-			{
-				struct BE
+				else if ( bytecode.opcodes[o] == O_LiteralFloat )
 				{
-					union
+					struct BE
+					{
+						union
 					{
 						int32_t i;
 						float f;
@@ -537,10 +557,31 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				bytecode.all[ a - 3 ] = (uint8_t)(be.i & 0xFF);
 				bytecode.all[ a - 2 ] = (uint8_t)(be.i >> 8);
 				bytecode.all[ a - 1 ] = (uint8_t)(be.i >> 16);
-				bytecode.all[ a ] = (uint8_t)(be.i >> 24);
-				return;
+					bytecode.all[ a ] = (uint8_t)(be.i >> 24);
+					return;
+				}
+				else if ( bytecode.opcodes[o] == O_LiteralDouble && (a > 7) )
+				{
+					union
+					{
+						uint64_t u;
+						double d;
+					} be;
+
+					be.u = (uint64_t)bytecode.all[ a - 7 ]
+						   | ((uint64_t)bytecode.all[ a - 6 ] << 8)
+						   | ((uint64_t)bytecode.all[ a - 5 ] << 16)
+						   | ((uint64_t)bytecode.all[ a - 4 ] << 24)
+						   | ((uint64_t)bytecode.all[ a - 3 ] << 32)
+						   | ((uint64_t)bytecode.all[ a - 2 ] << 40)
+						   | ((uint64_t)bytecode.all[ a - 1 ] << 48)
+						   | ((uint64_t)bytecode.all[ a ] << 56);
+					be.d = -be.d;
+
+					wr_pack64( be.u, bytecode.all.p_str( a - 7 ) );
+					return;
+				}
 			}
-		}
 		else if ( opcode == O_Return
 				  && bytecode.opcodes[o] == O_LiteralZero )
 		{
@@ -1316,20 +1357,34 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all.shave(2);
 							bytecode.opcodes.clear();
 						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
-						{
-							bytecode.all[ a - 7 ] = O_LiteralFloatToGlobal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
+							{
+								bytecode.all[ a - 7 ] = O_LiteralFloatToGlobal;
+								bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( (o > 1) && bytecode.opcodes[o-2] == O_LiteralZero )
-						{
-							bytecode.all[ a - 3 ] = O_LiteralInt8ToGlobal;
+								bytecode.all.shave(2);
+								bytecode.opcodes.clear();
+							}
+							else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralDouble )
+							{
+								unsigned int start = a - 11;
+								unsigned char index = bytecode.all[ a - 1 ];
+
+								bytecode.all[ start ] = O_LiteralDoubleToGlobal;
+								for( int i=7; i>=0; --i )
+								{
+									bytecode.all[ start + 2 + i ] = bytecode.all[ start + 1 + i ];
+								}
+								bytecode.all[ start + 1 ] = index;
+								bytecode.all.shave(2);
+								bytecode.opcodes.clear();
+							}
+							else if ( (o > 1) && bytecode.opcodes[o-2] == O_LiteralZero )
+							{
+								bytecode.all[ a - 3 ] = O_LiteralInt8ToGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all[ a - 1 ] = 0;
 							bytecode.all.shave(1);
@@ -1408,20 +1463,34 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all.shave(2);
 							bytecode.opcodes.clear();
 						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
-						{
-							bytecode.all[ a - 7 ] = O_LiteralFloatToLocal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
+							{
+								bytecode.all[ a - 7 ] = O_LiteralFloatToLocal;
+								bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralZero )
-						{
-							bytecode.all[ a - 3 ] = O_LiteralInt8ToLocal;
+								bytecode.all.shave(2);
+								bytecode.opcodes.clear();
+							}
+							else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralDouble )
+							{
+								unsigned int start = a - 11;
+								unsigned char index = bytecode.all[ a - 1 ];
+
+								bytecode.all[ start ] = O_LiteralDoubleToLocal;
+								for( int i=7; i>=0; --i )
+								{
+									bytecode.all[ start + 2 + i ] = bytecode.all[ start + 1 + i ];
+								}
+								bytecode.all[ start + 1 ] = index;
+								bytecode.all.shave(2);
+								bytecode.opcodes.clear();
+							}
+							else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralZero )
+							{
+								bytecode.all[ a - 3 ] = O_LiteralInt8ToLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all[ a - 1 ] = 0;
 							bytecode.all.shave(1);

@@ -146,8 +146,7 @@ resetState:
 		}
 		else // string or integer
 		{
-			const int c_bufSize = 20;
-			char buf[c_bufSize]; // buffer for integer
+			char buf[32]; // buffer for integer
 
 			const char *ptr; // pointer to first char of integer
 			unsigned int len;

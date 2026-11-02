@@ -117,8 +117,10 @@ WRValue* wr_newObjectTable( WRContext* context, WRValue* stackTop, const uint8_t
 		// value if table > bottom
 		unsigned char count = READ_8_FROM_PC(table++);
 
-		WRValue* register1 = (stackTop + READ_8_FROM_PC(table))->r;
-		WRValue* register2 = (stackTop + READ_8_FROM_PC(table))->r2;
+		WRValue T;
+		WRValue* register1 = stackTop + READ_8_FROM_PC(table);
+		T.p1 = register1->p1;
+		T.p2 = register1->p2;
 
 		stackTop->p2 = INIT_AS_STRUCT;
 
@@ -140,8 +142,8 @@ WRValue* wr_newObjectTable( WRContext* context, WRValue* stackTop, const uint8_t
 		stackTop->va->m_mod = READ_16_FROM_PC(table+1);
 
 		WRValue* register0 = stackTop->va->m_Vdata;
-		register0->r = register1;
-		(register0++)->r2 = register2;
+		register0->p1 = T.p1;
+		(register0++)->p2 = T.p2;
 
 		if ( --count > 0 )
 		{
@@ -215,12 +217,14 @@ int wr_slicesUsedLastCall( WRState* w )
 
 //------------------------------------------------------------------------------
 #define WRENCH_JUMPTABLE_INTERPRETER
-#ifdef WRENCH_REALLY_COMPACT
+#if defined(WRENCH_REALLY_COMPACT)
 #undef WRENCH_JUMPTABLE_INTERPRETER
-#elif !defined(__clang__)
-#if _MSC_VER
+#elif defined(_MSC_VER)
 #undef WRENCH_JUMPTABLE_INTERPRETER
-#endif
+#elif defined(__IAR_SYSTEMS_ICC__) || defined(__ICCARM__)
+#undef WRENCH_JUMPTABLE_INTERPRETER
+#elif !defined(__GNUC__) && !defined(__clang__)
+#undef WRENCH_JUMPTABLE_INTERPRETER
 #endif
 
 //------------------------------------------------------------------------------
@@ -237,13 +241,21 @@ int wr_slicesUsedLastCall( WRState* w )
 
 #ifdef WRENCH_COMPACT
 
-static float divisionF( float a, float b )
+#ifdef WRENCH_DOUBLE_PRECISION
+	#define WR_COMPACT_FLOAT double
+	#define WR_COMPACT_FLOAT_ZERO 0.0
+#else
+	#define WR_COMPACT_FLOAT float
+	#define WR_COMPACT_FLOAT_ZERO 0.0f
+#endif
+
+static WR_COMPACT_FLOAT divisionF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b )
 {
-	return b ? a / b : 0.0f;
+	return b ? a / b : WR_COMPACT_FLOAT_ZERO;
 }
-static float addF( float a, float b ) { return a + b; }
-static float subtractionF( float a, float b ) { return a - b; }
-static float multiplicationF( float a, float b ) { return a * b; }
+static WR_COMPACT_FLOAT addF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a + b; }
+static WR_COMPACT_FLOAT subtractionF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a - b; }
+static WR_COMPACT_FLOAT multiplicationF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a * b; }
 
 static int divisionI( int a, int b )
 {
@@ -265,14 +277,38 @@ static bool CompareLTI( int a, int b ) { return a < b; }
 static bool CompareANDI( int a, int b ) { return a && b; }
 static bool CompareORI( int a, int b ) { return a || b; }
 
-static bool CompareLTF( float a, float b ) { return a < b; }
-static bool CompareGTF( float a, float b ) { return a > b; }
+static bool CompareLTF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a < b; }
+static bool CompareGTF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a > b; }
+static bool CompareANDF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a && b; }
+static bool CompareORF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a || b; }
 
 bool CompareEQI( int a, int b ) { return a == b; }
-bool CompareEQF( float a, float b ) { return WR_FLOATS_EQUAL( a, b ); }
+bool CompareEQF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b )
+{
+#ifdef WRENCH_DOUBLE_PRECISION
+	return fabs( a - b ) <= fabs( a * 0.0000000000000005 );
+#else
+	return WR_FLOATS_EQUAL( a, b );
+#endif
+}
 
-static bool CompareBlankF( float a, float b ) { return false; }
-static float blankF( float a, float b ) { return 0; }
+static bool CompareBlankF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return false; }
+static WR_COMPACT_FLOAT blankF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return 0; }
+
+#undef WR_COMPACT_FLOAT
+#undef WR_COMPACT_FLOAT_ZERO
+
+uint64_t READ_64_FROM_PC_func( const unsigned char* P )
+{
+	return ( (((uint64_t)*(P)) )
+			 | (((uint64_t)*((P)+1)) << 8)
+			 | (((uint64_t)*((P)+2)) << 16)
+			 | (((uint64_t)*((P)+3)) << 24)
+			 | (((uint64_t)*((P)+4)) << 32)
+			 | (((uint64_t)*((P)+5)) << 40)
+			 | (((uint64_t)*((P)+6)) << 48) 
+			 | (((uint64_t)*((P)+7)) << 56) );
+}
 
 int32_t READ_32_FROM_PC_func( const unsigned char* P )
 {
@@ -611,6 +647,11 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&LocalBZ8,
 		&&GlobalBZ,
 		&&GlobalBZ8,
+
+		&&LiteralDouble,
+		&&LiteralDoubleToGlobal,
+		&&LiteralDoubleToLocal,
+
 	};
 #endif
 
@@ -714,7 +755,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	if ( function )
 	{
-		stackTop->p = 0;
+		stackTop->p1 = 0;
 		(stackTop++)->p2 = INIT_AS_INT;
 
 		for( args = 0; args < argn; ++args )
@@ -755,7 +796,7 @@ yieldContinue:
 
 			CASE(LiteralZero):
 			{
-				stackTop->p = 0;
+				stackTop->p1 = 0;
 				(stackTop++)->p2 = INIT_AS_INT;
 				CHECK_STACK;
 				FASTCONTINUE;
@@ -764,8 +805,7 @@ yieldContinue:
 			CASE(LiteralFloat):
 			{
 				register0 = stackTop++;
-				register0->p2 = INIT_AS_FLOAT;
-				goto load32ToTemp;
+				goto loadFloatToTemp;
 			}
 
 			CASE(LiteralString):
@@ -1046,7 +1086,7 @@ callFunction:
 						// un-specified arguments are set to IntZero
 						for( ; args < function->arguments; ++args )
 						{
-							stackTop->p = 0;
+							stackTop->p1 = 0;
 							(stackTop++)->p2 = INIT_AS_INT;
 							CHECK_STACK;
 						}
@@ -1064,8 +1104,8 @@ callFunction:
 				// initialize locals to int zero
 				for( int l=0; l<function->frameSpaceNeeded; ++l )
 				{
+					stackTop->p1 = 0;
 					(stackTop++)->p2 = INIT_AS_INT;
-					stackTop->p = 0;
 				}
 			
 				// temp value contains return vector/frame base
@@ -1092,7 +1132,7 @@ callFunction:
 			CASE(CallLibFunction):
 			{
 				stackTop->p2 = INIT_AS_INT;
-				stackTop->p = 0;
+				stackTop->p1 = 0;
 
 				args = READ_8_FROM_PC(pc++); // which have already been pushed
 
@@ -1322,7 +1362,11 @@ callFunction:
 			CASE(ToFloat):
 			{
 				register0 = stackTop - 1;
+#ifdef WRENCH_DOUBLE_PRECISION
+				register0->d = register0->asDouble();
+#else
 				register0->f = register0->asFloat();
+#endif
 				register0->p2 = INIT_AS_FLOAT;
 				FASTCONTINUE;
 			}
@@ -1425,52 +1469,54 @@ hashIndexJump:
 #endif
 			}
 
-			CASE(StackSwap):
-			{
-				register0 = stackTop - 1;
-				register1 = stackTop - READ_8_FROM_PC(pc++);
-				register2 = register0->r2;
-				WRValue* r = register0->r;
+				CASE(StackSwap):
+				{
+					register0 = stackTop - 1;
+					register1 = stackTop - READ_8_FROM_PC(pc++);
+					WRValue T;
+					T.p1 = register0->p1;
+					T.p2 = register0->p2;
 
-				register0->r2 = register1->r2;
-				register0->r = register1->r;
+					register0->p1 = register1->p1;
+					register0->p2 = register1->p2;
 
-				register1->r = r;
-				register1->r2 = register2;
+					register1->p1 = T.p1;
+					register1->p2 = T.p2;
 
-				FASTCONTINUE;
-			} 
+					FASTCONTINUE;
+				} 
 
-			CASE(SwapTwoToTop): // accomplish two (or three when optimized) swaps into one instruction
-			{
-				register0 = stackTop - READ_8_FROM_PC(pc++);
+				CASE(SwapTwoToTop): // accomplish two (or three when optimized) swaps into one instruction
+				{
+					register0 = stackTop - READ_8_FROM_PC(pc++);
 
-				uint32_t t = (stackTop - 1)->p2;
-				const void* p = (stackTop - 1)->p;
+					WRValue T;
+					T.p1 = (stackTop - 1)->p1;
+					T.p2 = (stackTop - 1)->p2;
 
-				(stackTop - 1)->p2 = register0->p2;
-				(stackTop - 1)->p = register0->p;
+					(stackTop - 1)->p1 = register0->p1;
+					(stackTop - 1)->p2 = register0->p2;
 
-				register0->p = p;
-				register0->p2 = t;
+					register0->p1 = T.p1;
+					register0->p2 = T.p2;
 
-				register0 = stackTop - READ_8_FROM_PC(pc++);
+					register0 = stackTop - READ_8_FROM_PC(pc++);
 
-				t = (stackTop - 2)->p2;
-				p = (stackTop - 2)->p;
+					T.p1 = (stackTop - 2)->p1;
+					T.p2 = (stackTop - 2)->p2;
 
-				(stackTop - 2)->p2 = register0->p2;
-				(stackTop - 2)->p = register0->p;
+					(stackTop - 2)->p1 = register0->p1;
+					(stackTop - 2)->p2 = register0->p2;
 
-				register0->p = p;
-				register0->p2 = t;
+					register0->p1 = T.p1;
+					register0->p2 = T.p2;
 
-				FASTCONTINUE;
-			}
+					FASTCONTINUE;
+				}
 
 			CASE(LoadFromLocal):
 			{
-				stackTop->p = frameBase + READ_8_FROM_PC(pc++);
+				stackTop->r = frameBase + READ_8_FROM_PC(pc++);
 				(stackTop++)->p2 = INIT_AS_REF;
 				CHECK_STACK;
 				FASTCONTINUE;
@@ -1478,7 +1524,7 @@ hashIndexJump:
 
 			CASE(LoadFromGlobal):
 			{
-				stackTop->p = globalSpace + READ_8_FROM_PC(pc++);
+				stackTop->r = globalSpace + READ_8_FROM_PC(pc++);
  				(stackTop++)->p2 = INIT_AS_REF;
 				CHECK_STACK;
 				FASTCONTINUE;
@@ -1732,15 +1778,24 @@ doAssignToLocalAndPop:
 			CASE(LiteralFloatToGlobal):
 			{
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
+loadFloatToTemp:
 				register0->p2 = INIT_AS_FLOAT;
+#ifdef WRENCH_DOUBLE_PRECISION
+				goto loadF32ToDouble;
+#else
 				goto load32ToTemp;
+#endif
 			}
 
 			CASE(LiteralFloatToLocal):
 			{
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				register0->p2 = INIT_AS_FLOAT;
+#ifdef WRENCH_DOUBLE_PRECISION
+				goto loadF32ToDouble;
+#else
 				goto load32ToTemp;
+#endif
 			}
 
 			CASE(LiteralInt32ToGlobal):
@@ -1815,6 +1870,47 @@ NextIterator:
 				FASTCONTINUE;
 			}
 
+			CASE(LiteralDouble):
+			{
+				register0 = stackTop++;
+				goto load64;
+			}
+
+			CASE(LiteralDoubleToGlobal):
+			{
+				register0 = globalSpace + READ_8_FROM_PC(pc++);
+				goto load64;
+			}
+
+			CASE(LiteralDoubleToLocal):
+			{
+				register0 = frameBase + READ_8_FROM_PC(pc++);
+load64:
+				register0->p2 = INIT_AS_FLOAT;
+#ifdef WRENCH_DOUBLE_PRECISION
+				register0->ll = READ_64_FROM_PC(pc);
+#else
+				uint64_t ll = READ_64_FROM_PC(pc);
+				double d;
+				memcpy( &d, &ll, sizeof(d) );
+				register0->f = (float)d;
+#endif
+				pc += 8;
+				CONTINUE;
+			}
+
+#ifdef WRENCH_DOUBLE_PRECISION
+loadF32ToDouble:
+			{
+				uint32_t bits = (uint32_t)READ_32_FROM_PC(pc);
+				float tmp;
+				memcpy( &tmp, &bits, sizeof(tmp) );
+				register0->d = (double)tmp;
+			}
+			pc += 4;
+			CONTINUE;
+#endif
+			
 //-------------------------------------------------------------------------------------------------------------
 #ifdef WRENCH_COMPACT //---------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
@@ -2184,8 +2280,8 @@ CompactFGFunc:
 				goto CompactFFFunc;
 			}
 
-			CASE(LogicalAnd): { boolIntCall = CompareANDI; goto compactReturnFuncNormal; }
-			CASE(LogicalOr): { boolIntCall = CompareORI; goto compactReturnFuncNormal; }
+			CASE(LogicalAnd): { boolIntCall = CompareANDI; boolFloatCall = CompareANDF; goto compactReturnFuncNormal; }
+			CASE(LogicalOr): { boolIntCall = CompareORI; boolFloatCall = CompareORF; goto compactReturnFuncNormal; }
 			CASE(CompareLE): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncInverted; }
 			CASE(CompareGE): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnFuncInverted; }
 			CASE(CompareGT): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncNormal; }

@@ -168,7 +168,7 @@ void wr_arrayTruncate( WRValue* stackTop, const int argn, WRContext* c )
 	WRValue* A;
 	WRValue* args = stackTop - argn;
 
-	if( (argn < 1) || !(A = wr_ifValueArray(args)) )
+	if( (argn < 2) || !(A = wr_ifValueArray(args)) )
 	{
 		return;
 	}
@@ -394,7 +394,7 @@ void wr_hashExistEx( WRValue* stackTop, const int argn, bool remove )
 	WRValue* args = stackTop - argn;
 	if( (argn >= 2) && (H = wr_ifHash(args)) )
 	{
-		stackTop->p = H->va->exists( args[1].getHash(), remove );
+		stackTop->r1 = H->va->exists( args[1].getHash(), remove );
 	}
 }
 

@@ -92,7 +92,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			expression.context[depth].type = EXTYPE_LITERAL;
 			if ( (uint8_t)value.type == WR_COMPILER_LITERAL_STRING )
 			{
-				expression.context[depth].literalString = *(WRstr*)value.p;
+				expression.context[depth].literalString = *(WRstr*)value.r1;
 			}
 			
 			++depth;

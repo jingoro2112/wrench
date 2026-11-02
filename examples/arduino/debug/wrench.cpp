@@ -36,6 +36,7 @@ int wr_ftoa( float f, char* string, size_t len );
 
 unsigned char* wr_pack16( int16_t i, unsigned char* buf );
 unsigned char* wr_pack32( int32_t l, unsigned char* buf );
+unsigned char* wr_pack64( uint64_t l, unsigned char* buf );
 
 //------------------------------------------------------------------------------
 // "good values" for hash table progression
@@ -220,6 +221,11 @@ public:
 			m_elementsAllocated = l + 1;
 		}
 		
+		return m_list[l];
+	}
+
+	const T& get( const unsigned int l ) const
+	{
 		return m_list[l];
 	}
 
@@ -1159,14 +1165,22 @@ extern WRVoidPlusFunc m_unaryPost[4];
 
 
 typedef int (*WRFuncIntCall)( int a, int b );
+#ifdef WRENCH_DOUBLE_PRECISION
+typedef double (*WRFuncFloatCall)( double a, double b );
+#else
 typedef float (*WRFuncFloatCall)( float a, float b );
+#endif
 typedef void (*WRTargetCallbackFunc)( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall I, WRFuncFloatCall F );
 typedef void (*WRFuncAssignFunc)( WRValue* to, WRValue* from, WRFuncIntCall I, WRFuncFloatCall F );
 extern WRFuncAssignFunc wr_FuncAssign[16];
 extern WRTargetCallbackFunc wr_funcBinary[16];
 
 typedef bool (*WRCompareFuncIntCall)( int a, int b );
+#ifdef WRENCH_DOUBLE_PRECISION
+typedef bool (*WRCompareFuncFloatCall)( double a, double b );
+#else
 typedef bool (*WRCompareFuncFloatCall)( float a, float b );
+#endif
 typedef bool (*WRBoolCallbackReturnFunc)( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall );
 extern WRBoolCallbackReturnFunc wr_Compare[16];
 
@@ -1232,6 +1246,14 @@ void wr_valueToEx( const WRValue* ex, WRValue* value );
  #define wr_x32(P) (P)
  #define wr_x16(P) (P)
 
+#ifndef READ_64_FROM_PC
+ #ifdef WRENCH_UNALIGNED_READS
+   #define READ_64_FROM_PC(P) ((uint64_t)(*(uint64_t *)(P)))
+  #else
+   #define READ_64_FROM_PC(P) ((uint64_t)((uint64_t)*(P) | ((uint64_t)*((P)+1))<<8 | ((uint64_t)*((P)+2))<<16 | ((uint64_t)*((P)+3))<<24 | ((uint64_t)*((P)+4))<<32 | ((uint64_t)*((P)+5))<<40 | ((uint64_t)*((P)+6))<<48 | ((uint64_t)*((P)+7))<<56))
+  #endif
+#endif
+
 #ifndef READ_32_FROM_PC
   #ifdef WRENCH_UNALIGNED_READS
     #define READ_32_FROM_PC(P) ((int32_t)(*(int32_t *)(P)))
@@ -1239,6 +1261,7 @@ void wr_valueToEx( const WRValue* ex, WRValue* value );
     #define READ_32_FROM_PC(P) ((int32_t)((int32_t)*(P) | ((int32_t)*(P+1))<<8 | ((int32_t)*(P+2))<<16 | ((int32_t)*(P+3))<<24))
   #endif
 #endif
+
 #ifndef READ_16_FROM_PC
   #ifdef WRENCH_UNALIGNED_READS
     #define READ_16_FROM_PC(P) ((int16_t)(*(int16_t *)(P)))
@@ -1254,6 +1277,10 @@ void wr_valueToEx( const WRValue* ex, WRValue* value );
 
  #ifdef WRENCH_COMPACT
 
+  #ifndef READ_64_FROM_PC
+   uint64_t READ_64_FROM_PC_func( const unsigned char* P );
+   #define READ_64_FROM_PC(P) READ_64_FROM_PC_func(P)
+  #endif
   #ifndef READ_32_FROM_PC
    int32_t READ_32_FROM_PC_func( const unsigned char* P );
    #define READ_32_FROM_PC(P) READ_32_FROM_PC_func(P)
@@ -1265,6 +1292,9 @@ void wr_valueToEx( const WRValue* ex, WRValue* value );
    
  #else
 
+  #ifndef READ_64_FROM_PC
+   #define READ_64_FROM_PC(P) ((uint64_t)((uint64_t)*(P) | ((uint64_t)*((P)+1))<<8 | ((uint64_t)*((P)+2))<<16 | ((uint64_t)*((P)+3))<<24 | ((uint64_t)*((P)+4))<<32 | ((uint64_t)*((P)+5))<<40 | ((uint64_t)*((P)+6))<<48 | ((uint64_t)*((P)+7))<<56))
+  #endif
   #ifndef READ_32_FROM_PC
    #define READ_32_FROM_PC(P) ((int32_t)((int32_t)*(P) | ((int32_t)*(P+1))<<8 | ((int32_t)*(P+2))<<16 | ((int32_t)*(P+3))<<24))
   #endif
@@ -1614,6 +1644,10 @@ enum WROpcode
 	O_GlobalBZ,
 	O_GlobalBZ8,
 
+	O_LiteralDouble,
+	O_LiteralDoubleToGlobal,
+	O_LiteralDoubleToLocal,
+
 	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,
 	O_FUNCTION_CALL_PLACEHOLDER,
@@ -1850,8 +1884,8 @@ const WROperation c_operations[] =
 	{ "|=",  17, O_ORAssign,            true,  WR_OPER_BINARY, O_LAST },
 	{ "&=",  17, O_ANDAssign,           true,  WR_OPER_BINARY, O_LAST },
 	{ "^=",  17, O_XORAssign,           true,  WR_OPER_BINARY, O_LAST },
-	{ ">>=", 17, O_RightShiftAssign,   false,  WR_OPER_BINARY, O_LAST },
-	{ "<<=", 17, O_LeftShiftAssign,    false,  WR_OPER_BINARY, O_LAST },
+	{ ">>=", 17, O_RightShiftAssign,    true,  WR_OPER_BINARY, O_LAST },
+	{ "<<=", 17, O_LeftShiftAssign,     true,  WR_OPER_BINARY, O_LAST },
 
 	{ "=",   17, O_Assign,             false,  WR_OPER_BINARY, O_LAST },
 
@@ -3247,10 +3281,13 @@ WRError wr_compile( const char* source,
 					WRstr* errMsg,
 					const uint8_t compilerOptionFlags )
 {
+#ifdef WRENCH_DOUBLE_PRECISION
+	assert( sizeof(double) == 8 );
+#endif
 	assert( sizeof(float) == 4 );
 	assert( sizeof(int) == 4 );
 	assert( sizeof(char) == 1 );
-	assert( O_LAST < 255 );
+	assert( O_LAST <= 255 );
 
 	// create a compiler context that has all the necessary stuff so it's completely unloaded when complete
 	WRCompilationContext comp; 
@@ -3832,7 +3869,7 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContext& context )
 {
 	WRValue& value = context.value;
-	unsigned char data[4];
+	unsigned char data[8];
 	
 	if ( value.type == WR_INT && value.i == 0 )
 	{
@@ -3870,9 +3907,21 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 	}
 	else
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		union
+		{
+			double d;
+			uint64_t u;
+		} be;
+		be.d = value.d;
+
+		pushOpcode( bytecode, O_LiteralDouble );
+		pushData( bytecode, wr_pack64(be.u, data), 8 );
+#else
 		pushOpcode( bytecode, O_LiteralFloat );
 		int32_t be = value.i;
 		pushData( bytecode, wr_pack32(be, data), 4 );
+#endif
 	}
 }
 
@@ -4187,8 +4236,8 @@ void WRCompilationContext::resolveExpression( WRExpression& expression )
 			{
 				return;
 			}
-			o = (unsigned int)-1;
-		}
+				o = -1;
+			}
 
 		// right to left operations
 		for( int o = expression.context.count() - 1; o >= 0; --o )
@@ -4302,7 +4351,10 @@ unsigned int WRCompilationContext::resolveExpressionEx( WRExpression& expression
 				WRCompilationContext::pushOpcode( expression.bytecode, O_SwapTwoToTop );
 				unsigned char pos = expression.context[first].stackPosition + 1;
 				WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
-				pos = expression.context[second].stackPosition + 1;
+				if ( expression.context[second].stackPosition )
+				{
+					pos = expression.context[second].stackPosition + 1;
+				}
 				WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
 
 				expression.swapWithTop( expression.context[second].stackPosition, false );
@@ -4399,7 +4451,6 @@ unsigned int WRCompilationContext::resolveExpressionEx( WRExpression& expression
 					WRCompilationContext::pushOpcode( expression.bytecode, O_SwapTwoToTop );
 					unsigned char pos = expression.context[first].stackPosition + 1;
 					WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
-					pos = 2;
 					WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
 					
 					expression.swapWithTop( 1, false );
@@ -4689,7 +4740,10 @@ bool WRCompilationContext::pushObjectTable( WRExpressionContext& context,
 	context.bytecode.unitObjectSpace[i].references.append() = getBytecodePosition( context.bytecode );
 	context.bytecode.unitObjectSpace[i].hash = hash;
 
-	pushData( context.bytecode, "\0\0", 2 );
+	{
+		const unsigned char zeroData[2] = { 0, 0 };
+		pushData( context.bytecode, zeroData, 2 );
+	}
 
 	context.type = EXTYPE_BYTECODE_RESULT;
 
@@ -5673,7 +5727,11 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 		{
 			if ( negative )
 			{
+#ifdef WRENCH_DOUBLE_PRECISION
+				value.d = -value.d;
+#else
 				value.f = -value.f;
+#endif
 			}
 		}
 		else
@@ -6371,7 +6429,10 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, WROpcode opc
 			GotoSource& G = unit.bytecode.gotoSource.append();
 			G.hash = wr_hashStr( token );
 			G.offset = unit.bytecode.all.size();
-			pushData( unit.bytecode, "\0\0\0", 3 );
+			{
+				const unsigned char zeroData[3] = { 0, 0, 0 };
+				pushData( unit.bytecode, zeroData, 3 );
+			}
 
 			if ( !getToken(ex, ";"))
 			{
@@ -7037,7 +7098,7 @@ char WRCompilationContext::parseExpression( WRExpression& expression )
 			expression.context[depth].type = EXTYPE_LITERAL;
 			if ( (uint8_t)value.type == WR_COMPILER_LITERAL_STRING )
 			{
-				expression.context[depth].literalString = *(WRstr*)value.p;
+				expression.context[depth].literalString = *(WRstr*)value.r1;
 			}
 			
 			++depth;
@@ -7743,24 +7804,40 @@ static bool wr_decodeOverwriteStore( const unsigned char* code, unsigned int off
 			return true;
 		}
 
-		case O_LiteralInt32ToGlobal:
-		case O_LiteralFloatToGlobal:
-		{
-			info.global = true;
-			info.index = code[offset + 1];
+			case O_LiteralInt32ToGlobal:
+			case O_LiteralFloatToGlobal:
+			{
+				info.global = true;
+				info.index = code[offset + 1];
 			info.length = 6;
 			return true;
 		}
 
-		case O_LiteralInt32ToLocal:
-		case O_LiteralFloatToLocal:
-		{
-			info.global = false;
-			info.index = code[offset + 1];
-			info.length = 6;
-			return true;
+			case O_LiteralInt32ToLocal:
+			case O_LiteralFloatToLocal:
+			{
+				info.global = false;
+				info.index = code[offset + 1];
+				info.length = 6;
+				return true;
+			}
+
+			case O_LiteralDoubleToGlobal:
+			{
+				info.global = true;
+				info.index = code[offset + 1];
+				info.length = 10;
+				return true;
+			}
+
+			case O_LiteralDoubleToLocal:
+			{
+				info.global = false;
+				info.index = code[offset + 1];
+				info.length = 10;
+				return true;
+			}
 		}
-	}
 
 	info.valid = false;
 	return false;
@@ -7816,10 +7893,12 @@ static bool wr_statementIsLiteralClobber( WRBytecode& bytecode, const WROverwrit
 		case O_LiteralInt16ToGlobal:
 		case O_LiteralInt16ToLocal:
 		case O_LiteralInt32ToGlobal:
-		case O_LiteralInt32ToLocal:
-		case O_LiteralFloatToGlobal:
-		case O_LiteralFloatToLocal:
-			return true;
+			case O_LiteralInt32ToLocal:
+			case O_LiteralFloatToGlobal:
+			case O_LiteralFloatToLocal:
+			case O_LiteralDoubleToGlobal:
+			case O_LiteralDoubleToLocal:
+				return true;
 
 		case O_AssignToGlobalAndPop:
 		case O_AssignToLocalAndPop:
@@ -7835,10 +7914,11 @@ static bool wr_statementIsLiteralClobber( WRBytecode& bytecode, const WROverwrit
 				case O_LiteralZero:
 				case O_LiteralInt8:
 				case O_LiteralInt16:
-				case O_LiteralInt32:
-				case O_LiteralFloat:
-				case O_LiteralString:
-				{
+					case O_LiteralInt32:
+					case O_LiteralFloat:
+					case O_LiteralDouble:
+					case O_LiteralString:
+					{
 					const unsigned char* code = bytecode.all;
 					const uint8_t* end = (const uint8_t*)(code + bytecode.all.size());
 					int operandSize = wr_optimizerOperandSize( code + 1, end, code[0] );
@@ -7965,6 +8045,7 @@ bool WRCompilationContext::IsLiteralLoadOpcode( unsigned char opcode )
 	return opcode == O_LiteralInt32
 			|| opcode == O_LiteralZero
 			|| opcode == O_LiteralFloat
+			|| opcode == O_LiteralDouble
 			|| opcode == O_LiteralInt8
 			|| opcode == O_LiteralInt16;
 }
@@ -8159,11 +8240,11 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 					bytecode.all[ a ] = (uint8_t)(be >> 24);
 					return;
 				}
-			else if ( bytecode.opcodes[o] == O_LiteralFloat )
-			{
-				struct BE
+				else if ( bytecode.opcodes[o] == O_LiteralFloat )
 				{
-					union
+					struct BE
+					{
+						union
 					{
 						int32_t i;
 						float f;
@@ -8180,10 +8261,31 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 				bytecode.all[ a - 3 ] = (uint8_t)(be.i & 0xFF);
 				bytecode.all[ a - 2 ] = (uint8_t)(be.i >> 8);
 				bytecode.all[ a - 1 ] = (uint8_t)(be.i >> 16);
-				bytecode.all[ a ] = (uint8_t)(be.i >> 24);
-				return;
+					bytecode.all[ a ] = (uint8_t)(be.i >> 24);
+					return;
+				}
+				else if ( bytecode.opcodes[o] == O_LiteralDouble && (a > 7) )
+				{
+					union
+					{
+						uint64_t u;
+						double d;
+					} be;
+
+					be.u = (uint64_t)bytecode.all[ a - 7 ]
+						   | ((uint64_t)bytecode.all[ a - 6 ] << 8)
+						   | ((uint64_t)bytecode.all[ a - 5 ] << 16)
+						   | ((uint64_t)bytecode.all[ a - 4 ] << 24)
+						   | ((uint64_t)bytecode.all[ a - 3 ] << 32)
+						   | ((uint64_t)bytecode.all[ a - 2 ] << 40)
+						   | ((uint64_t)bytecode.all[ a - 1 ] << 48)
+						   | ((uint64_t)bytecode.all[ a ] << 56);
+					be.d = -be.d;
+
+					wr_pack64( be.u, bytecode.all.p_str( a - 7 ) );
+					return;
+				}
 			}
-		}
 		else if ( opcode == O_Return
 				  && bytecode.opcodes[o] == O_LiteralZero )
 		{
@@ -8959,20 +9061,34 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all.shave(2);
 							bytecode.opcodes.clear();
 						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
-						{
-							bytecode.all[ a - 7 ] = O_LiteralFloatToGlobal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
+							{
+								bytecode.all[ a - 7 ] = O_LiteralFloatToGlobal;
+								bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( (o > 1) && bytecode.opcodes[o-2] == O_LiteralZero )
-						{
-							bytecode.all[ a - 3 ] = O_LiteralInt8ToGlobal;
+								bytecode.all.shave(2);
+								bytecode.opcodes.clear();
+							}
+							else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralDouble )
+							{
+								unsigned int start = a - 11;
+								unsigned char index = bytecode.all[ a - 1 ];
+
+								bytecode.all[ start ] = O_LiteralDoubleToGlobal;
+								for( int i=7; i>=0; --i )
+								{
+									bytecode.all[ start + 2 + i ] = bytecode.all[ start + 1 + i ];
+								}
+								bytecode.all[ start + 1 ] = index;
+								bytecode.all.shave(2);
+								bytecode.opcodes.clear();
+							}
+							else if ( (o > 1) && bytecode.opcodes[o-2] == O_LiteralZero )
+							{
+								bytecode.all[ a - 3 ] = O_LiteralInt8ToGlobal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all[ a - 1 ] = 0;
 							bytecode.all.shave(1);
@@ -9051,20 +9167,34 @@ void WRCompilationContext::pushOpcode( WRBytecode& bytecode, WROpcode opcode )
 							bytecode.all.shave(2);
 							bytecode.opcodes.clear();
 						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
-						{
-							bytecode.all[ a - 7 ] = O_LiteralFloatToLocal;
-							bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
+							else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralFloat )
+							{
+								bytecode.all[ a - 7 ] = O_LiteralFloatToLocal;
+								bytecode.all[ a - 2 ] = bytecode.all[ a - 3 ];
 							bytecode.all[ a - 3 ] = bytecode.all[ a - 4 ];
 							bytecode.all[ a - 4 ] = bytecode.all[ a - 5 ];
 							bytecode.all[ a - 5 ] = bytecode.all[ a - 6 ];
 							bytecode.all[ a - 6 ] = bytecode.all[ a - 1 ];
-							bytecode.all.shave(2);
-							bytecode.opcodes.clear();
-						}
-						else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralZero )
-						{
-							bytecode.all[ a - 3 ] = O_LiteralInt8ToLocal;
+								bytecode.all.shave(2);
+								bytecode.opcodes.clear();
+							}
+							else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralDouble )
+							{
+								unsigned int start = a - 11;
+								unsigned char index = bytecode.all[ a - 1 ];
+
+								bytecode.all[ start ] = O_LiteralDoubleToLocal;
+								for( int i=7; i>=0; --i )
+								{
+									bytecode.all[ start + 2 + i ] = bytecode.all[ start + 1 + i ];
+								}
+								bytecode.all[ start + 1 ] = index;
+								bytecode.all.shave(2);
+								bytecode.opcodes.clear();
+							}
+							else if ( o > 1 && bytecode.opcodes[o-2] == O_LiteralZero )
+							{
+								bytecode.all[ a - 3 ] = O_LiteralInt8ToLocal;
 							bytecode.all[ a - 2 ] = bytecode.all[ a - 1 ];
 							bytecode.all[ a - 1 ] = 0;
 							bytecode.all.shave(1);
@@ -9866,7 +9996,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 				{
 					value.p2 = INIT_AS_INT;
 					value.type = (WRValueType)WR_COMPILER_LITERAL_STRING;
-					value.p = &token;
+					value.r1 = &token;
 				}
 			}
 			else if ( token[0] == '/' ) // might be a comment
@@ -10027,7 +10157,11 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 					if ( decimal )
 					{
 						value.p2 = INIT_AS_FLOAT;
+#ifdef WRENCH_DOUBLE_PRECISION
+						value.d = atof( token );
+#else
 						value.f = (float)atof( token );
+#endif
 					}
 					else
 					{
@@ -10417,7 +10551,7 @@ tryAgain:
 
 				// value
 				to->p2 = from->p2;
-				to->p = from->p;
+				to->p1 = from->p1;
 				from->p2 = INIT_AS_REF;
 				from->r = to;
 
@@ -10425,7 +10559,7 @@ tryAgain:
 				++to;
 				++from;
 				to->p2 = from->p2;
-				to->p = from->p;
+				to->p1 = from->p1;
 				from->p2 = INIT_AS_REF;
 				from->r = to;
 			}
@@ -10502,10 +10636,23 @@ void WRContext::markBase( WRGCBase* svb )
 //------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
 {
-	if ( IS_CONTAINER_MEMBER(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
+	if ( IS_CONTAINER_MEMBER(s->xtype) )
 	{
-		// we don't mark this type, but we might mark it's target
-		mark( s->r );
+		// r/vb aliases a WRGCBase* (hash indexing, index.cpp) or a
+		// WRValue* (array/struct indexing). Use the same discriminator
+		// as WRValue::deref(): m_type at offset 0. In the WRValue case
+		// byte 0 is the low byte of an aligned WRGCObject*, so it
+		// cannot collide with SV_HASH_INTERNAL. Reading s->r->xtype for
+		// the hash case would land on a heap pointer's high byte and
+		// can falsely satisfy IS_EXARRAY_TYPE on 32-bit targets.
+		if ( s->vb->m_type == SV_HASH_INTERNAL )
+		{
+			markBase( s->vb );
+		}
+		else if ( IS_EXARRAY_TYPE(s->r->xtype) )
+		{
+			mark( s->r );
+		}
 		return;
 	}
 
@@ -10624,7 +10771,20 @@ WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 	}
 #endif
 
-	ret->m_nextGC = svAllocated;
+	if ( ret->m_nextGC )
+	{
+		WRGCBase* chain = ret->m_nextGC;
+		while( chain->m_nextGC )
+		{
+			chain = chain->m_nextGC;
+		}
+		chain->m_nextGC = svAllocated;
+	}
+	else
+	{
+		ret->m_nextGC = svAllocated;
+	}
+
 	svAllocated = ret;
 
 	allocatedMemoryHint += allocated + sizeof(WRGCObject);
@@ -10755,8 +10915,10 @@ WRValue* wr_newObjectTable( WRContext* context, WRValue* stackTop, const uint8_t
 		// value if table > bottom
 		unsigned char count = READ_8_FROM_PC(table++);
 
-		WRValue* register1 = (stackTop + READ_8_FROM_PC(table))->r;
-		WRValue* register2 = (stackTop + READ_8_FROM_PC(table))->r2;
+		WRValue T;
+		WRValue* register1 = stackTop + READ_8_FROM_PC(table);
+		T.p1 = register1->p1;
+		T.p2 = register1->p2;
 
 		stackTop->p2 = INIT_AS_STRUCT;
 
@@ -10778,8 +10940,8 @@ WRValue* wr_newObjectTable( WRContext* context, WRValue* stackTop, const uint8_t
 		stackTop->va->m_mod = READ_16_FROM_PC(table+1);
 
 		WRValue* register0 = stackTop->va->m_Vdata;
-		register0->r = register1;
-		(register0++)->r2 = register2;
+		register0->p1 = T.p1;
+		(register0++)->p2 = T.p2;
 
 		if ( --count > 0 )
 		{
@@ -10853,12 +11015,14 @@ int wr_slicesUsedLastCall( WRState* w )
 
 //------------------------------------------------------------------------------
 #define WRENCH_JUMPTABLE_INTERPRETER
-#ifdef WRENCH_REALLY_COMPACT
+#if defined(WRENCH_REALLY_COMPACT)
 #undef WRENCH_JUMPTABLE_INTERPRETER
-#elif !defined(__clang__)
-#if _MSC_VER
+#elif defined(_MSC_VER)
 #undef WRENCH_JUMPTABLE_INTERPRETER
-#endif
+#elif defined(__IAR_SYSTEMS_ICC__) || defined(__ICCARM__)
+#undef WRENCH_JUMPTABLE_INTERPRETER
+#elif !defined(__GNUC__) && !defined(__clang__)
+#undef WRENCH_JUMPTABLE_INTERPRETER
 #endif
 
 //------------------------------------------------------------------------------
@@ -10875,13 +11039,21 @@ int wr_slicesUsedLastCall( WRState* w )
 
 #ifdef WRENCH_COMPACT
 
-static float divisionF( float a, float b )
+#ifdef WRENCH_DOUBLE_PRECISION
+	#define WR_COMPACT_FLOAT double
+	#define WR_COMPACT_FLOAT_ZERO 0.0
+#else
+	#define WR_COMPACT_FLOAT float
+	#define WR_COMPACT_FLOAT_ZERO 0.0f
+#endif
+
+static WR_COMPACT_FLOAT divisionF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b )
 {
-	return b ? a / b : 0.0f;
+	return b ? a / b : WR_COMPACT_FLOAT_ZERO;
 }
-static float addF( float a, float b ) { return a + b; }
-static float subtractionF( float a, float b ) { return a - b; }
-static float multiplicationF( float a, float b ) { return a * b; }
+static WR_COMPACT_FLOAT addF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a + b; }
+static WR_COMPACT_FLOAT subtractionF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a - b; }
+static WR_COMPACT_FLOAT multiplicationF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a * b; }
 
 static int divisionI( int a, int b )
 {
@@ -10903,14 +11075,38 @@ static bool CompareLTI( int a, int b ) { return a < b; }
 static bool CompareANDI( int a, int b ) { return a && b; }
 static bool CompareORI( int a, int b ) { return a || b; }
 
-static bool CompareLTF( float a, float b ) { return a < b; }
-static bool CompareGTF( float a, float b ) { return a > b; }
+static bool CompareLTF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a < b; }
+static bool CompareGTF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a > b; }
+static bool CompareANDF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a && b; }
+static bool CompareORF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return a || b; }
 
 bool CompareEQI( int a, int b ) { return a == b; }
-bool CompareEQF( float a, float b ) { return WR_FLOATS_EQUAL( a, b ); }
+bool CompareEQF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b )
+{
+#ifdef WRENCH_DOUBLE_PRECISION
+	return fabs( a - b ) <= fabs( a * 0.0000000000000005 );
+#else
+	return WR_FLOATS_EQUAL( a, b );
+#endif
+}
 
-static bool CompareBlankF( float a, float b ) { return false; }
-static float blankF( float a, float b ) { return 0; }
+static bool CompareBlankF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return false; }
+static WR_COMPACT_FLOAT blankF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b ) { return 0; }
+
+#undef WR_COMPACT_FLOAT
+#undef WR_COMPACT_FLOAT_ZERO
+
+uint64_t READ_64_FROM_PC_func( const unsigned char* P )
+{
+	return ( (((uint64_t)*(P)) )
+			 | (((uint64_t)*((P)+1)) << 8)
+			 | (((uint64_t)*((P)+2)) << 16)
+			 | (((uint64_t)*((P)+3)) << 24)
+			 | (((uint64_t)*((P)+4)) << 32)
+			 | (((uint64_t)*((P)+5)) << 40)
+			 | (((uint64_t)*((P)+6)) << 48) 
+			 | (((uint64_t)*((P)+7)) << 56) );
+}
 
 int32_t READ_32_FROM_PC_func( const unsigned char* P )
 {
@@ -11249,6 +11445,11 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 		&&LocalBZ8,
 		&&GlobalBZ,
 		&&GlobalBZ8,
+
+		&&LiteralDouble,
+		&&LiteralDoubleToGlobal,
+		&&LiteralDoubleToLocal,
+
 	};
 #endif
 
@@ -11352,7 +11553,7 @@ WRValue* wr_callFunction( WRContext* context, WRFunction* function, const WRValu
 
 	if ( function )
 	{
-		stackTop->p = 0;
+		stackTop->p1 = 0;
 		(stackTop++)->p2 = INIT_AS_INT;
 
 		for( args = 0; args < argn; ++args )
@@ -11393,7 +11594,7 @@ yieldContinue:
 
 			CASE(LiteralZero):
 			{
-				stackTop->p = 0;
+				stackTop->p1 = 0;
 				(stackTop++)->p2 = INIT_AS_INT;
 				CHECK_STACK;
 				FASTCONTINUE;
@@ -11402,8 +11603,7 @@ yieldContinue:
 			CASE(LiteralFloat):
 			{
 				register0 = stackTop++;
-				register0->p2 = INIT_AS_FLOAT;
-				goto load32ToTemp;
+				goto loadFloatToTemp;
 			}
 
 			CASE(LiteralString):
@@ -11684,7 +11884,7 @@ callFunction:
 						// un-specified arguments are set to IntZero
 						for( ; args < function->arguments; ++args )
 						{
-							stackTop->p = 0;
+							stackTop->p1 = 0;
 							(stackTop++)->p2 = INIT_AS_INT;
 							CHECK_STACK;
 						}
@@ -11702,8 +11902,8 @@ callFunction:
 				// initialize locals to int zero
 				for( int l=0; l<function->frameSpaceNeeded; ++l )
 				{
+					stackTop->p1 = 0;
 					(stackTop++)->p2 = INIT_AS_INT;
-					stackTop->p = 0;
 				}
 			
 				// temp value contains return vector/frame base
@@ -11730,7 +11930,7 @@ callFunction:
 			CASE(CallLibFunction):
 			{
 				stackTop->p2 = INIT_AS_INT;
-				stackTop->p = 0;
+				stackTop->p1 = 0;
 
 				args = READ_8_FROM_PC(pc++); // which have already been pushed
 
@@ -11960,7 +12160,11 @@ callFunction:
 			CASE(ToFloat):
 			{
 				register0 = stackTop - 1;
+#ifdef WRENCH_DOUBLE_PRECISION
+				register0->d = register0->asDouble();
+#else
 				register0->f = register0->asFloat();
+#endif
 				register0->p2 = INIT_AS_FLOAT;
 				FASTCONTINUE;
 			}
@@ -12063,52 +12267,54 @@ hashIndexJump:
 #endif
 			}
 
-			CASE(StackSwap):
-			{
-				register0 = stackTop - 1;
-				register1 = stackTop - READ_8_FROM_PC(pc++);
-				register2 = register0->r2;
-				WRValue* r = register0->r;
+				CASE(StackSwap):
+				{
+					register0 = stackTop - 1;
+					register1 = stackTop - READ_8_FROM_PC(pc++);
+					WRValue T;
+					T.p1 = register0->p1;
+					T.p2 = register0->p2;
 
-				register0->r2 = register1->r2;
-				register0->r = register1->r;
+					register0->p1 = register1->p1;
+					register0->p2 = register1->p2;
 
-				register1->r = r;
-				register1->r2 = register2;
+					register1->p1 = T.p1;
+					register1->p2 = T.p2;
 
-				FASTCONTINUE;
-			} 
+					FASTCONTINUE;
+				} 
 
-			CASE(SwapTwoToTop): // accomplish two (or three when optimized) swaps into one instruction
-			{
-				register0 = stackTop - READ_8_FROM_PC(pc++);
+				CASE(SwapTwoToTop): // accomplish two (or three when optimized) swaps into one instruction
+				{
+					register0 = stackTop - READ_8_FROM_PC(pc++);
 
-				uint32_t t = (stackTop - 1)->p2;
-				const void* p = (stackTop - 1)->p;
+					WRValue T;
+					T.p1 = (stackTop - 1)->p1;
+					T.p2 = (stackTop - 1)->p2;
 
-				(stackTop - 1)->p2 = register0->p2;
-				(stackTop - 1)->p = register0->p;
+					(stackTop - 1)->p1 = register0->p1;
+					(stackTop - 1)->p2 = register0->p2;
 
-				register0->p = p;
-				register0->p2 = t;
+					register0->p1 = T.p1;
+					register0->p2 = T.p2;
 
-				register0 = stackTop - READ_8_FROM_PC(pc++);
+					register0 = stackTop - READ_8_FROM_PC(pc++);
 
-				t = (stackTop - 2)->p2;
-				p = (stackTop - 2)->p;
+					T.p1 = (stackTop - 2)->p1;
+					T.p2 = (stackTop - 2)->p2;
 
-				(stackTop - 2)->p2 = register0->p2;
-				(stackTop - 2)->p = register0->p;
+					(stackTop - 2)->p1 = register0->p1;
+					(stackTop - 2)->p2 = register0->p2;
 
-				register0->p = p;
-				register0->p2 = t;
+					register0->p1 = T.p1;
+					register0->p2 = T.p2;
 
-				FASTCONTINUE;
-			}
+					FASTCONTINUE;
+				}
 
 			CASE(LoadFromLocal):
 			{
-				stackTop->p = frameBase + READ_8_FROM_PC(pc++);
+				stackTop->r = frameBase + READ_8_FROM_PC(pc++);
 				(stackTop++)->p2 = INIT_AS_REF;
 				CHECK_STACK;
 				FASTCONTINUE;
@@ -12116,7 +12322,7 @@ hashIndexJump:
 
 			CASE(LoadFromGlobal):
 			{
-				stackTop->p = globalSpace + READ_8_FROM_PC(pc++);
+				stackTop->r = globalSpace + READ_8_FROM_PC(pc++);
  				(stackTop++)->p2 = INIT_AS_REF;
 				CHECK_STACK;
 				FASTCONTINUE;
@@ -12370,15 +12576,24 @@ doAssignToLocalAndPop:
 			CASE(LiteralFloatToGlobal):
 			{
 				register0 = globalSpace + READ_8_FROM_PC(pc++);
+loadFloatToTemp:
 				register0->p2 = INIT_AS_FLOAT;
+#ifdef WRENCH_DOUBLE_PRECISION
+				goto loadF32ToDouble;
+#else
 				goto load32ToTemp;
+#endif
 			}
 
 			CASE(LiteralFloatToLocal):
 			{
 				register0 = frameBase + READ_8_FROM_PC(pc++);
 				register0->p2 = INIT_AS_FLOAT;
+#ifdef WRENCH_DOUBLE_PRECISION
+				goto loadF32ToDouble;
+#else
 				goto load32ToTemp;
+#endif
 			}
 
 			CASE(LiteralInt32ToGlobal):
@@ -12453,6 +12668,47 @@ NextIterator:
 				FASTCONTINUE;
 			}
 
+			CASE(LiteralDouble):
+			{
+				register0 = stackTop++;
+				goto load64;
+			}
+
+			CASE(LiteralDoubleToGlobal):
+			{
+				register0 = globalSpace + READ_8_FROM_PC(pc++);
+				goto load64;
+			}
+
+			CASE(LiteralDoubleToLocal):
+			{
+				register0 = frameBase + READ_8_FROM_PC(pc++);
+load64:
+				register0->p2 = INIT_AS_FLOAT;
+#ifdef WRENCH_DOUBLE_PRECISION
+				register0->ll = READ_64_FROM_PC(pc);
+#else
+				uint64_t ll = READ_64_FROM_PC(pc);
+				double d;
+				memcpy( &d, &ll, sizeof(d) );
+				register0->f = (float)d;
+#endif
+				pc += 8;
+				CONTINUE;
+			}
+
+#ifdef WRENCH_DOUBLE_PRECISION
+loadF32ToDouble:
+			{
+				uint32_t bits = (uint32_t)READ_32_FROM_PC(pc);
+				float tmp;
+				memcpy( &tmp, &bits, sizeof(tmp) );
+				register0->d = (double)tmp;
+			}
+			pc += 4;
+			CONTINUE;
+#endif
+			
 //-------------------------------------------------------------------------------------------------------------
 #ifdef WRENCH_COMPACT //---------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
@@ -12822,8 +13078,8 @@ CompactFGFunc:
 				goto CompactFFFunc;
 			}
 
-			CASE(LogicalAnd): { boolIntCall = CompareANDI; goto compactReturnFuncNormal; }
-			CASE(LogicalOr): { boolIntCall = CompareORI; goto compactReturnFuncNormal; }
+			CASE(LogicalAnd): { boolIntCall = CompareANDI; boolFloatCall = CompareANDF; goto compactReturnFuncNormal; }
+			CASE(LogicalOr): { boolIntCall = CompareORI; boolFloatCall = CompareORF; goto compactReturnFuncNormal; }
 			CASE(CompareLE): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncInverted; }
 			CASE(CompareGE): { boolIntCall = CompareLTI; boolFloatCall = CompareLTF; goto compactReturnFuncInverted; }
 			CASE(CompareGT): { boolIntCall = CompareGTI; boolFloatCall = CompareGTF; goto compactReturnFuncNormal; }
@@ -14023,6 +14279,20 @@ unsigned char* wr_pack32( int32_t l, unsigned char* buf )
 	return buf;
 }
 
+//------------------------------------------------------------------------------
+unsigned char* wr_pack64( uint64_t l, unsigned char* buf )
+{
+	*buf = (unsigned char)(l & 0xFF);
+	*(buf + 1) = (unsigned char)((l>>8) & 0xFF);
+	*(buf + 2) = (unsigned char)((l>>16) & 0xFF);
+	*(buf + 3) = (unsigned char)((l>>24) & 0xFF);
+	*(buf + 4) = (unsigned char)((l>>32) & 0xFF);
+	*(buf + 5) = (unsigned char)((l>>40) & 0xFF);
+	*(buf + 6) = (unsigned char)((l>>48) & 0xFF);
+	*(buf + 7) = (unsigned char)((l>>56) & 0xFF);
+	return buf;
+}
+
 #ifdef WRENCH_BIG_ENDIAN
 //------------------------------------------------------------------------------
 int32_t wr_x32( const int32_t val )
@@ -14041,8 +14311,8 @@ int16_t wr_x16( const int16_t val )
 
 
 // convert the value in-place and return a pointer to it
-int32_t* makeInt();
-float* makeFloat();
+//int32_t* makeInt();
+//float* makeFloat();
 
 //------------------------------------------------------------------------------
 int32_t* WrenchValue::Int()
@@ -14058,12 +14328,31 @@ int32_t* WrenchValue::Int()
 //------------------------------------------------------------------------------
 float* WrenchValue::Float()
 {
+#ifdef WRENCH_DOUBLE_PRECISION
+	return 0;
+#else
 	if ( m_value->type != WR_FLOAT )
 	{
 		m_value->f = m_value->asFloat();
 		m_value->p2 = INIT_AS_FLOAT;
 	}
 	return &(m_value->f);
+#endif
+}
+
+//------------------------------------------------------------------------------
+double* WrenchValue::Double()
+{
+#ifdef WRENCH_DOUBLE_PRECISION
+	if ( m_value->type != WR_FLOAT )
+	{
+		m_value->d = m_value->asDouble();
+		m_value->p2 = INIT_AS_FLOAT;
+	}
+	return &(m_value->d);
+#else
+	return 0;
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -14535,6 +14824,15 @@ void wr_registerLibraryConstant( WRState* w, const char* signature, const int32_
 	C->i = i;
 }
 
+#ifdef WRENCH_DOUBLE_PRECISION
+//------------------------------------------------------------------------------
+void wr_registerLibraryConstant( WRState* w, const char* signature, const double d )
+{
+	WRValue* C = w->globalRegistry.getAsRawValueHashTable( wr_hashStr(signature) );
+	C->p2 = INIT_AS_FLOAT | INIT_AS_LIB_CONST;
+	C->d = d;
+}
+#else
 //------------------------------------------------------------------------------
 void wr_registerLibraryConstant( WRState* w, const char* signature, const float f )
 {
@@ -14542,6 +14840,8 @@ void wr_registerLibraryConstant( WRState* w, const char* signature, const float 
 	C->p2 = INIT_AS_FLOAT | INIT_AS_LIB_CONST;
 	C->f = f;
 }
+#endif
+
 
 //------------------------------------------------------------------------------
 int WRValue::asInt() const
@@ -14552,7 +14852,11 @@ int WRValue::asInt() const
 	}
 	else if ( type == WR_FLOAT )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		return (int)d;
+#else
 		return (int)f;
+#endif
 	}
 
 	return singleValue().asInt();
@@ -14563,7 +14867,11 @@ float WRValue::asFloat() const
 {
 	if ( type == WR_FLOAT )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		return (float)d;
+#else
 		return f;
+#endif
 	}
 	else if ( type == WR_INT )
 	{
@@ -14571,6 +14879,25 @@ float WRValue::asFloat() const
 	}
 
 	return singleValue().asFloat();
+}
+
+//------------------------------------------------------------------------------
+double WRValue::asDouble() const
+{
+	if ( type == WR_FLOAT )
+	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		return d;
+#else
+		return (double)f;
+#endif
+	}
+	else if ( type == WR_INT )
+	{
+		return (double)i;
+	}
+
+	return singleValue().asDouble();
 }
 
 //------------------------------------------------------------------------------
@@ -14756,7 +15083,11 @@ int wr_technicalAsStringEx( char* string, const WRValue* value, size_t pos, size
 	}
 	else if ( value->type == WR_FLOAT )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		return pos + snprintf( string + pos, maxLen - pos, "%g", value->d );
+#else
 		return pos + snprintf( string + pos, maxLen - pos, "%g", value->f );
+#endif
 	}
 	else if ( value->type == WR_INT )
 	{
@@ -14861,8 +15192,13 @@ char* WRValue::asMallocString( unsigned int* strLen ) const
 
 	if ( type == WR_FLOAT )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		ret = (char*)g_malloc( 32 );
+		len = snprintf( ret, 31, "%g", d );
+#else
 		ret = (char*)g_malloc( 12 );
 		len = wr_ftoa( f, ret, 11 );
+#endif
 	}
 	else if ( type == WR_INT )
 	{
@@ -14871,6 +15207,7 @@ char* WRValue::asMallocString( unsigned int* strLen ) const
 	}
 	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
 	{
+		len = va->m_size;
 		ret = (char*)g_malloc( va->m_size + 1 );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 		if ( !ret )
@@ -14907,7 +15244,11 @@ char* WRValue::asString( char* string, unsigned int maxLen, unsigned int* strLen
 	
 	if ( type == WR_FLOAT )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		len = snprintf( string, maxLen, "%g", d );
+#else
 		len = wr_ftoa( f, string, maxLen );
+#endif
 	}
 	else if ( type == WR_INT )
 	{
@@ -15183,7 +15524,7 @@ WRValue* wr_addToContainerEx( const char* name, WRValue* container )
 		return 0;
 	}
 
-	const unsigned int len = (const unsigned int)strlen(name);
+	const unsigned int len = (unsigned int)strlen(name);
 
 	// create a 'key' object
 	WRValue key;
@@ -15234,8 +15575,27 @@ void wr_addFloatToContainer( WRValue* container, const char* name, const float f
 	}
 
 	entry->p2 = INIT_AS_FLOAT;
+#ifdef WRENCH_DOUBLE_PRECISION
+	entry->d = (double)f;
+#else
 	entry->f = f;
+#endif
 }
+
+#ifdef WRENCH_DOUBLE_PRECISION
+//------------------------------------------------------------------------------
+void wr_addFloatToContainer( WRValue* container, const char* name, const double f )
+{
+	WRValue* entry = wr_addToContainerEx( name, container );
+	if ( !entry )
+	{
+		return;
+	}
+
+	entry->p2 = INIT_AS_FLOAT;
+	entry->d = f;
+}
+#endif
 
 //------------------------------------------------------------------------------
 void wr_addIntToContainer( WRValue* container, const char* name, const int i )
@@ -15271,7 +15631,7 @@ WRValue* wr_getValueFromContainer( WRValue const& container, const char* name )
 		return 0;
 	}
 
-	return (WRValue*)container.va->get( wr_hash(name, (const unsigned int)strlen(name)) );
+	return (WRValue*)container.va->get( wr_hash(name, (unsigned int)strlen(name)) );
 }
 
 #ifndef WRENCH_WITHOUT_COMPILER
@@ -15582,6 +15942,11 @@ const char* c_opcodeName[] =
 	"LocalBZ8",
 	"GlobalBZ",
 	"GlobalBZ8",
+
+	"LiteralDouble",
+	"LiteralDoubleToGlobal",
+	"LiteralDoubleToLocal",
+
 };
 
 //------------------------------------------------------------------------------
@@ -15691,6 +16056,22 @@ bool wr_serializeEx( WRValueSerializer& serializer, const WRValue& val )
 
 	switch( (uint8_t)value.type )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		case WR_INT:
+		{
+			temp32 = wr_x32( value.ui );
+			serializer.write( (char *)&temp32, 4 );
+			return true;
+		}
+
+		case WR_FLOAT:
+		{
+			unsigned char temp8[8];
+			wr_pack64( value.ll, temp8 );
+			serializer.write( (char *)temp8, 8 );
+			return true;
+		}
+#else
 		case WR_INT:
 		case WR_FLOAT:
 		{
@@ -15698,6 +16079,7 @@ bool wr_serializeEx( WRValueSerializer& serializer, const WRValue& val )
 			serializer.write( (char *)&temp32, 4 );
 			return true;
 		}
+#endif
 
 		case WR_EX:
 		{
@@ -15776,6 +16158,22 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 
 	switch( (uint8_t)temp )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		case WR_INT:
+		{
+			bool ret = serializer.read( (char *)&value.ui, 4 );
+			value.ui = wr_x32( value.ui );
+			return ret;
+		}
+
+		case WR_FLOAT:
+		{
+			unsigned char temp8[8];
+			if ( !serializer.read( (char *)temp8, 8 ) ) return false;
+			value.ll = READ_64_FROM_PC( temp8 );
+			return true;
+		}
+#else
 		case WR_INT:
 		case WR_FLOAT:
 		{
@@ -15783,6 +16181,7 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 			value.ui = wr_x32( value.ui );
 			return ret;
 		}
+#endif
 
 		case WR_EX:
 		{
@@ -16042,7 +16441,7 @@ void wr_formatStackEntry( const WRValue* v, WRstr& out )
 	{
 		default:
 		{
-			out.appendFormat( "frame [0x%08X]:[0x%08X]\n", v->p, v->p2 );
+			out.appendFormat( "frame [0x%08X]:[0x%08X]\n", v->p1, v->p2 );
 			break;
 		}
 		
@@ -16054,7 +16453,11 @@ void wr_formatStackEntry( const WRValue* v, WRstr& out )
 
 		case WR_FLOAT:
 		{
+#ifdef WRENCH_DOUBLE_PRECISION
+			out.appendFormat( "Float [%g]\n", v->d );
+#else
 			out.appendFormat( "Float [%g]\n", v->f );
+#endif
 			break;
 		}
 
@@ -16718,10 +17121,10 @@ int wr_operandSizeForOpcode( const uint8_t* opPtr, const uint8_t* end, const uin
 			return 3;
 		}
 
-		case O_LiteralInt32:
-		case O_LiteralFloat:
-		case O_LoadLibConstant:
-		case O_AssignToObjectTableByHash:
+			case O_LiteralInt32:
+			case O_LiteralFloat:
+			case O_LoadLibConstant:
+			case O_AssignToObjectTableByHash:
 		case O_StackIndexHash:
 		{
 			return 4;
@@ -16737,12 +17140,23 @@ int wr_operandSizeForOpcode( const uint8_t* opPtr, const uint8_t* end, const uin
 		case O_CallLibFunctionAndPop:
 		case O_GlobalIndexHash:
 		case O_LocalIndexHash:
-		{
-			return 5;
-		}
+			{
+				return 5;
+			}
 
-		case O_LiteralString:
-		{
+			case O_LiteralDouble:
+			{
+				return 8;
+			}
+
+			case O_LiteralDoubleToGlobal:
+			case O_LiteralDoubleToLocal:
+			{
+				return 9;
+			}
+
+			case O_LiteralString:
+			{
 			if ( opPtr + 2 > end )
 			{
 				return -1;
@@ -16959,6 +17373,24 @@ void wr_decodeOperands( const uint8_t op,
 			ops.appendFormat( "%c[0x%02X] imm=0x%08X", scope, (unsigned int)opPtr[0], (unsigned int)v.u );
 		}
 		note.appendFormat( "float=%g", v.f );
+		return;
+	}
+
+	if ( op == O_LiteralDouble || op == O_LiteralDoubleToGlobal || op == O_LiteralDoubleToLocal )
+	{
+		union { uint64_t u; double d; } v;
+		if ( op == O_LiteralDouble )
+		{
+			v.u = READ_64_FROM_PC(opPtr);
+			ops.appendFormat( "imm=0x%08X%08X", (unsigned int)(v.u >> 32), (unsigned int)v.u );
+		}
+		else
+		{
+			v.u = READ_64_FROM_PC(opPtr + 1);
+			char scope = (op == O_LiteralDoubleToGlobal) ? 'g' : 'l';
+			ops.appendFormat( "%c[0x%02X] imm=0x%08X%08X", scope, (unsigned int)opPtr[0], (unsigned int)(v.u >> 32), (unsigned int)v.u );
+		}
+		note.appendFormat( "double=%g", v.d );
 		return;
 	}
 
@@ -17193,7 +17625,7 @@ void wr_disassemble( const uint8_t* bytecode, const unsigned int len, WRstr& out
 		return;
 	}
 
-	WRContext* context = wr_createContext( w, bytecode, (int)len, false );
+	WRContext* context = wr_newContext( w, bytecode, (int)len, false );
 	if ( !context )
 	{
 		out.appendFormat( "err: context failed (%s)\n", c_errStrings[wr_getLastError(w)] );
@@ -18800,7 +19232,11 @@ WRReturnSingleFunc wr_LogicalNot[4] =
 
 //------------------------------------------------------------------------------
 void doNegate_I( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = wr_ineg_wrap( value->i ); }
+#ifdef WRENCH_DOUBLE_PRECISION
+void doNegate_F( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->d = -value->d; }
+#else
 void doNegate_F( WRValue* value, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->f = -value->f; }
+#endif
 void doNegate_E( WRValue* value, WRValue* target )
 {
 	WRValue& V = value->singleValue();
@@ -18907,10 +19343,18 @@ SOFTWARE.
 
 #include "wrench.h"
 
-#ifdef WRENCH_COMPACT
+#if defined(WRENCH_COMPACT)
+
+#ifdef WRENCH_DOUBLE_PRECISION
+	#define WR_COMPACT_FLOAT double
+	#define WR_COMPACT_FLOAT_MEMBER d
+#else
+	#define WR_COMPACT_FLOAT float
+	#define WR_COMPACT_FLOAT_MEMBER f
+#endif
 
 extern bool CompareEQI( int a, int b );
-extern bool CompareEQF( float a, float b );
+extern bool CompareEQF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b );
 
 //------------------------------------------------------------------------------
 void unaryPost_E( WRValue* value, WRValue* stack, int add )
@@ -18923,7 +19367,7 @@ void unaryPost_E( WRValue* value, WRValue* stack, int add )
 }
 void unaryPost_I( WRValue* value, WRValue* stack, int add ) { stack->p2 = INIT_AS_INT; stack->i = value->i; value->i += add; }
 void unaryPost_R( WRValue* value, WRValue* stack, int add ) { m_unaryPost[ value->r->type ]( value->r, stack, add ); }
-void unaryPost_F( WRValue* value, WRValue* stack, int add ) { stack->p2 = INIT_AS_FLOAT; stack->f = value->f; value->f += add; }
+void unaryPost_F( WRValue* value, WRValue* stack, int add ) { stack->p2 = INIT_AS_FLOAT; stack->WR_COMPACT_FLOAT_MEMBER = value->WR_COMPACT_FLOAT_MEMBER; value->WR_COMPACT_FLOAT_MEMBER += add; }
 WRVoidPlusFunc m_unaryPost[4] = 
 {
 	unaryPost_I,  unaryPost_F,  unaryPost_R, unaryPost_E
@@ -18937,7 +19381,7 @@ void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 {
 	if ( IS_CONTAINER_MEMBER(from->xtype) )
 	{
-		WRValue& V = from->deref();
+		WRValue V = from->deref();
 
 		wr_FuncAssign[(WR_EX<<2)|V.type]( to, &V, intCall, floatCall );
 		*from = to->deref();
@@ -18995,7 +19439,7 @@ void FuncAssign_X_R( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 
 void FuncAssign_F_F( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	to->f = floatCall( to->f, from->f );
+	to->WR_COMPACT_FLOAT_MEMBER = floatCall( to->WR_COMPACT_FLOAT_MEMBER, from->WR_COMPACT_FLOAT_MEMBER );
 }
 
 void FuncAssign_I_I( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
@@ -19006,11 +19450,11 @@ void FuncAssign_I_I( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 void FuncAssign_I_F( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
 	to->p2 = INIT_AS_FLOAT;
-	to->f = floatCall( (float)to->i, from->f );
+	to->WR_COMPACT_FLOAT_MEMBER = floatCall( (WR_COMPACT_FLOAT)to->i, from->WR_COMPACT_FLOAT_MEMBER );
 }
 void FuncAssign_F_I( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	to->f = floatCall( to->f, (float)from->i );
+	to->WR_COMPACT_FLOAT_MEMBER = floatCall( to->WR_COMPACT_FLOAT_MEMBER, (WR_COMPACT_FLOAT)from->i );
 }
 
 WRFuncAssignFunc wr_FuncAssign[16] = 
@@ -19084,17 +19528,17 @@ void FuncBinary_I_I( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall 
 
 void FuncBinary_I_F( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	target->p2 = INIT_AS_FLOAT; target->f = floatCall( (float)to->i, from->f );
+	target->p2 = INIT_AS_FLOAT; target->WR_COMPACT_FLOAT_MEMBER = floatCall( (WR_COMPACT_FLOAT)to->i, from->WR_COMPACT_FLOAT_MEMBER );
 }
 
 void FuncBinary_F_I( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	target->p2 = INIT_AS_FLOAT; target->f = floatCall( to->f, (float)from->i );
+	target->p2 = INIT_AS_FLOAT; target->WR_COMPACT_FLOAT_MEMBER = floatCall( to->WR_COMPACT_FLOAT_MEMBER, (WR_COMPACT_FLOAT)from->i );
 }
 
 void FuncBinary_F_F( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	target->p2 = INIT_AS_FLOAT; target->f = floatCall( to->f, from->f );
+	target->p2 = INIT_AS_FLOAT; target->WR_COMPACT_FLOAT_MEMBER = floatCall( to->WR_COMPACT_FLOAT_MEMBER, from->WR_COMPACT_FLOAT_MEMBER );
 }
 
 WRTargetCallbackFunc wr_funcBinary[16] = 
@@ -19129,9 +19573,9 @@ bool Compare_R_R( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCo
 bool Compare_R_X( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return wr_Compare[(to->r->type<<2)|from->type](to->r, from, intCall, floatCall); }
 bool Compare_X_R( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return wr_Compare[(to->type<<2)+from->r->type](to, from->r, intCall, floatCall); }
 bool Compare_I_I( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return intCall( to->i, from->i ); }
-bool Compare_I_F( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return floatCall( (float)to->i, from->f); }
-bool Compare_F_I( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return floatCall( to->f, (float)from->i); }
-bool Compare_F_F( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return floatCall( to->f, from->f); }
+bool Compare_I_F( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return floatCall( (WR_COMPACT_FLOAT)to->i, from->WR_COMPACT_FLOAT_MEMBER); }
+bool Compare_F_I( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return floatCall( to->WR_COMPACT_FLOAT_MEMBER, (WR_COMPACT_FLOAT)from->i); }
+bool Compare_F_F( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return floatCall( to->WR_COMPACT_FLOAT_MEMBER, from->WR_COMPACT_FLOAT_MEMBER); }
 WRBoolCallbackReturnFunc wr_Compare[16] = 
 {
 	Compare_I_I, Compare_I_F, Compare_X_R, Compare_X_E,
@@ -19140,6 +19584,8 @@ WRBoolCallbackReturnFunc wr_Compare[16] =
 	Compare_E_X, Compare_E_X, Compare_E_R, Compare_E_E,
 };
 
+#undef WR_COMPACT_FLOAT
+#undef WR_COMPACT_FLOAT_MEMBER
 
 #endif
 /*******************************************************************************
@@ -19168,7 +19614,7 @@ SOFTWARE.
 
 #include "wrench.h"
 
-#ifndef WRENCH_COMPACT
+#if !defined(WRENCH_COMPACT) && !defined(WRENCH_DOUBLE_PRECISION)
 
 // Define 32-bit signed integer overflow behavior explicitly as two's-complement wrap.
 inline int32_t wr_iadd_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a + (uint32_t)b); }
@@ -20054,6 +20500,894 @@ SOFTWARE.
 
 #include "wrench.h"
 
+#ifdef WRENCH_DOUBLE_PRECISION
+
+// Define 32-bit signed integer overflow behavior explicitly as two's-complement wrap.
+inline int32_t wr_iadd_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a + (uint32_t)b); }
+inline int32_t wr_isub_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a - (uint32_t)b); }
+inline int32_t wr_imul_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a * (uint32_t)b); }
+
+inline bool wr_doubles_equal( const double a, const double b ) { return fabs( a - b ) <= fabs( a * 0.0000000000000005 ); }
+
+void doVoidFuncBlank( WRValue* to, WRValue* from ) {}
+
+#define X_LOGIC_ASSIGN( NAME, OPERATION ) \
+void NAME##Assign_E_I( WRValue* to, WRValue* from )\
+{\
+	WRValue& V = to->singleValue();\
+	\
+	NAME##Assign[(V.type<<2)|WR_INT]( &V, from );\
+	\
+	wr_valueToEx( to, &V );\
+	*from = V;\
+}\
+void NAME##Assign_E_E( WRValue* to, WRValue* from ) \
+{\
+	WRValue V = from->singleValue();\
+	\
+	NAME##Assign[(WR_EX<<2)+V.type]( to, &V );\
+	*from = to->deref();\
+}\
+void NAME##Assign_I_E( WRValue* to, WRValue* from )\
+{\
+	WRValue& V = from->singleValue();\
+	NAME##Assign[(WR_INT<<2)+V.type](to, &V);\
+	*from = *to;\
+}\
+void NAME##Assign_E_R( WRValue* to, WRValue* from ) { NAME##Assign[(WR_EX<<2)|from->r->type]( to, from->r ); }\
+void NAME##Assign_R_E( WRValue* to, WRValue* from ) { NAME##Assign[(to->r->type<<2)|WR_EX](to->r, from); }\
+void NAME##Assign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; NAME##Assign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }\
+void NAME##Assign_R_I( WRValue* to, WRValue* from ) { NAME##Assign[(to->r->type<<2)|WR_INT](to->r, from); *from = *to->r; }\
+void NAME##Assign_I_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; NAME##Assign[(WR_INT<<2)+temp.type](to, &temp); *from = *to; }\
+void NAME##Assign_I_I( WRValue* to, WRValue* from ) { to->i OPERATION##= from->i; }\
+WRVoidFunc NAME##Assign[16] = \
+{\
+	NAME##Assign_I_I,   doVoidFuncBlank,   NAME##Assign_I_R,  NAME##Assign_I_E,\
+	doVoidFuncBlank,    doVoidFuncBlank,    doVoidFuncBlank,   doVoidFuncBlank,\
+	NAME##Assign_R_I,   doVoidFuncBlank,   NAME##Assign_R_R,  NAME##Assign_R_E,\
+	NAME##Assign_E_I,   doVoidFuncBlank,   NAME##Assign_E_R,  NAME##Assign_E_E,\
+};\
+
+
+X_LOGIC_ASSIGN( wr_Mod, % );
+X_LOGIC_ASSIGN( wr_OR, | );
+X_LOGIC_ASSIGN( wr_AND, & );
+X_LOGIC_ASSIGN( wr_XOR, ^ );
+X_LOGIC_ASSIGN( wr_RightShift, >> );
+X_LOGIC_ASSIGN( wr_LeftShift, << );
+
+
+void wr_SubtractAssign_E_I( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+
+	wr_SubtractAssign[(V.type<<2)|WR_INT]( &V, from );
+
+	wr_valueToEx( to, &V );
+	*from = V;
+}
+void wr_SubtractAssign_E_F( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+
+	wr_SubtractAssign[(V.type<<2)|WR_FLOAT]( &V, from );
+
+	wr_valueToEx( to, &V );
+	*from = V;
+}
+void wr_SubtractAssign_E_E( WRValue* to, WRValue* from ) 
+{
+	WRValue V = from->singleValue();
+
+	wr_SubtractAssign[(WR_EX<<2)|V.type]( to, &V );
+	*from = to->deref();
+}
+void wr_SubtractAssign_I_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	wr_SubtractAssign[(WR_INT<<2)|V.type](to, &V);
+	*from = *to;
+}
+void wr_SubtractAssign_F_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	wr_SubtractAssign[(WR_FLOAT<<2)|V.type](to, &V);
+	*from = *to;
+}
+void wr_SubtractAssign_E_R( WRValue* to, WRValue* from )
+{
+	wr_SubtractAssign[(WR_EX<<2)|from->r->type]( to, from->r );
+}
+void wr_SubtractAssign_R_E( WRValue* to, WRValue* from ) { wr_SubtractAssign[(to->r->type<<2)|WR_EX](to->r, from); *from = *to->r; } 
+void wr_SubtractAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_SubtractAssign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }
+void wr_SubtractAssign_R_I( WRValue* to, WRValue* from ) { wr_SubtractAssign[(to->r->type<<2)|WR_INT](to->r, from); *from = *to->r; }
+void wr_SubtractAssign_R_F( WRValue* to, WRValue* from ) { wr_SubtractAssign[(to->r->type<<2)|WR_FLOAT](to->r, from); *from = *to->r; }
+void wr_SubtractAssign_I_R( WRValue* to, WRValue* from ) { wr_SubtractAssign[(WR_INT<<2)+from->r->type](to, from->r); *from = *to; }
+void wr_SubtractAssign_F_R( WRValue* to, WRValue* from ) { wr_SubtractAssign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }
+void wr_SubtractAssign_F_F( WRValue* to, WRValue* from ) { to->d -= from->d; }
+void wr_SubtractAssign_I_I( WRValue* to, WRValue* from ) { to->i = wr_isub_wrap( to->i, from->i ); }
+void wr_SubtractAssign_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; to->d = (double)to->i - from->d; }
+void wr_SubtractAssign_F_I( WRValue* to, WRValue* from ) { from->p2 = INIT_AS_FLOAT; to->d -= (double)from->i; }
+WRVoidFunc wr_SubtractAssign[16] = 
+{
+	wr_SubtractAssign_I_I,  wr_SubtractAssign_I_F,  wr_SubtractAssign_I_R,  wr_SubtractAssign_I_E,
+	wr_SubtractAssign_F_I,  wr_SubtractAssign_F_F,  wr_SubtractAssign_F_R,  wr_SubtractAssign_F_E,
+	wr_SubtractAssign_R_I,  wr_SubtractAssign_R_F,  wr_SubtractAssign_R_R,  wr_SubtractAssign_R_E,
+	wr_SubtractAssign_E_I,  wr_SubtractAssign_E_F,  wr_SubtractAssign_E_R,  wr_SubtractAssign_E_E,
+};
+
+
+void wr_MultiplyAssign_E_I( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+
+	wr_MultiplyAssign[(V.type<<2)|WR_INT]( &V, from );
+
+	wr_valueToEx( to, &V );
+	*from = V;
+}
+void wr_MultiplyAssign_E_F( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+
+	wr_MultiplyAssign[(V.type<<2)|WR_FLOAT]( &V, from );
+
+	wr_valueToEx( to, &V );
+	*from = V;
+}
+void wr_MultiplyAssign_E_E( WRValue* to, WRValue* from ) 
+{
+	WRValue V = from->singleValue();
+
+	wr_MultiplyAssign[(WR_EX<<2)|V.type]( to, &V );
+	*from = to->deref();
+}
+void wr_MultiplyAssign_I_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	wr_MultiplyAssign[(WR_INT<<2)|V.type](to, &V);
+	*from = *to;
+}
+void wr_MultiplyAssign_F_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	wr_MultiplyAssign[(WR_FLOAT<<2)|V.type](to, &V);
+	*from = *to;
+}
+void wr_MultiplyAssign_E_R( WRValue* to, WRValue* from )
+{
+	wr_MultiplyAssign[(WR_EX<<2)|from->r->type]( to, from->r );
+}
+void wr_MultiplyAssign_R_E( WRValue* to, WRValue* from ) { wr_MultiplyAssign[(to->r->type<<2)|WR_EX](to->r, from); *from = *to->r; } 
+void wr_MultiplyAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_MultiplyAssign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }
+void wr_MultiplyAssign_R_I( WRValue* to, WRValue* from ) { wr_MultiplyAssign[(to->r->type<<2)|WR_INT](to->r, from); *from = *to->r; }
+void wr_MultiplyAssign_R_F( WRValue* to, WRValue* from ) { wr_MultiplyAssign[(to->r->type<<2)|WR_FLOAT](to->r, from); *from = *to->r; }
+void wr_MultiplyAssign_I_R( WRValue* to, WRValue* from ) { wr_MultiplyAssign[(WR_INT<<2)+from->r->type](to, from->r); *from = *to; }
+void wr_MultiplyAssign_F_R( WRValue* to, WRValue* from ) { wr_MultiplyAssign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }
+void wr_MultiplyAssign_F_F( WRValue* to, WRValue* from ) { to->d *= from->d; }
+void wr_MultiplyAssign_I_I( WRValue* to, WRValue* from ) { to->i *= from->i; }
+void wr_MultiplyAssign_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; to->d = (double)to->i * from->d; }
+void wr_MultiplyAssign_F_I( WRValue* to, WRValue* from ) { from->p2 = INIT_AS_FLOAT; to->d *= (double)from->i; }
+WRVoidFunc wr_MultiplyAssign[16] = 
+{
+	wr_MultiplyAssign_I_I,  wr_MultiplyAssign_I_F,  wr_MultiplyAssign_I_R,  wr_MultiplyAssign_I_E,
+	wr_MultiplyAssign_F_I,  wr_MultiplyAssign_F_F,  wr_MultiplyAssign_F_R,  wr_MultiplyAssign_F_E,
+	wr_MultiplyAssign_R_I,  wr_MultiplyAssign_R_F,  wr_MultiplyAssign_R_R,  wr_MultiplyAssign_R_E,
+	wr_MultiplyAssign_E_I,  wr_MultiplyAssign_E_F,  wr_MultiplyAssign_E_R,  wr_MultiplyAssign_E_E,
+};
+
+
+void wr_DivideAssign_E_I( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+
+	wr_DivideAssign[(V.type<<2)|WR_INT]( &V, from );
+
+	wr_valueToEx( to, &V );
+	*from = V;
+}
+void wr_DivideAssign_E_F( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+
+	wr_DivideAssign[(V.type<<2)|WR_FLOAT]( &V, from );
+
+	wr_valueToEx( to, &V );
+	*from = V;
+}
+void wr_DivideAssign_E_E( WRValue* to, WRValue* from ) 
+{
+	WRValue V = from->singleValue();
+
+	wr_DivideAssign[(WR_EX<<2)|V.type]( to, &V );
+	*from = to->deref();
+}
+void wr_DivideAssign_I_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	wr_DivideAssign[(WR_INT<<2)|V.type](to, &V);
+	*from = *to;
+}
+void wr_DivideAssign_F_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	wr_DivideAssign[(WR_FLOAT<<2)|V.type](to, &V);
+	*from = *to;
+}
+void wr_DivideAssign_E_R( WRValue* to, WRValue* from )
+{
+	wr_DivideAssign[(WR_EX<<2)|from->r->type]( to, from->r );
+}
+void wr_DivideAssign_R_E( WRValue* to, WRValue* from ) { wr_DivideAssign[(to->r->type<<2)|WR_EX](to->r, from); *from = *to->r; } 
+void wr_DivideAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_DivideAssign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }
+void wr_DivideAssign_R_I( WRValue* to, WRValue* from ) { wr_DivideAssign[(to->r->type<<2)|WR_INT](to->r, from); *from = *to->r; }
+void wr_DivideAssign_R_F( WRValue* to, WRValue* from ) { wr_DivideAssign[(to->r->type<<2)|WR_FLOAT](to->r, from); *from = *to->r; }
+void wr_DivideAssign_I_R( WRValue* to, WRValue* from ) { wr_DivideAssign[(WR_INT<<2)+from->r->type](to, from->r); *from = *to; }
+void wr_DivideAssign_F_R( WRValue* to, WRValue* from ) { wr_DivideAssign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }
+
+void wr_DivideAssign_F_F( WRValue* to, WRValue* from )
+{
+	if ( from->d )
+	{
+		to->d = to->d / from->d;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		to->p2 = INIT_AS_INVALID;
+#else
+		to->i = 0;
+#endif
+	}
+
+}
+void wr_DivideAssign_I_I( WRValue* to, WRValue* from )
+{
+	if ( from->i )
+	{
+		to->i = to->i / from->i;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		to->p2 = INIT_AS_INVALID;
+#else
+		to->i = 0;
+#endif
+	}
+}
+void wr_DivideAssign_I_F( WRValue* to, WRValue* from )
+{
+	to->p2 = INIT_AS_FLOAT;
+	if ( from->d )
+	{
+		to->d = (double)to->i / from->d;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		to->p2 = INIT_AS_INVALID;
+#else
+		to->i = 0;
+#endif
+	}
+}
+void wr_DivideAssign_F_I( WRValue* to, WRValue* from )
+{
+	from->p2 = INIT_AS_FLOAT;
+	if ( from->i )
+	{
+		to->d = to->d / (double)from->i;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		to->p2 = INIT_AS_INVALID;
+#else
+		to->i = 0;
+#endif
+	}
+}
+
+WRVoidFunc wr_DivideAssign[16] = 
+{
+	wr_DivideAssign_I_I,  wr_DivideAssign_I_F,  wr_DivideAssign_I_R,  wr_DivideAssign_I_E,
+	wr_DivideAssign_F_I,  wr_DivideAssign_F_F,  wr_DivideAssign_F_R,  wr_DivideAssign_F_E,
+	wr_DivideAssign_R_I,  wr_DivideAssign_R_F,  wr_DivideAssign_R_R,  wr_DivideAssign_R_E,
+	wr_DivideAssign_E_I,  wr_DivideAssign_E_F,  wr_DivideAssign_E_R,  wr_DivideAssign_E_E,
+};
+
+
+void wr_AddAssign_E_I( WRValue* to, WRValue* from )
+{
+	if ( !wr_concatStringCheck( to, from, to) )
+	{
+		WRValue& V = to->singleValue();
+	
+		wr_AddAssign[(V.type<<2)|WR_INT]( &V, from );
+	
+		wr_valueToEx( to, &V );
+		*from = V;
+	}
+}
+
+void wr_AddAssign_E_F( WRValue* to, WRValue* from )
+{
+	if ( !wr_concatStringCheck( to, from, to) )
+	{
+		WRValue& V = to->singleValue();
+
+		wr_AddAssign[(V.type<<2)|WR_FLOAT]( &V, from );
+		
+		wr_valueToEx( to, &V );
+		*from = V;
+	}
+}
+void wr_AddAssign_E_E( WRValue* to, WRValue* from ) 
+{
+	if ( IS_CONTAINER_MEMBER(from->xtype) )
+	{
+		WRValue V = from->deref();
+
+		wr_AddAssign[(WR_EX<<2)|V.type]( to, &V );
+		*from = to->deref();
+	}
+	else
+	{
+		wr_concatStringCheck( to, from, to );
+	}
+}
+void wr_AddAssign_I_E( WRValue* to, WRValue* from )
+{
+	if ( !wr_concatStringCheck( to, from, to) )
+	{
+		WRValue& V = from->singleValue();
+		wr_AddAssign[(WR_INT<<2)|V.type](to, &V);
+		*from = *to;
+	}
+}
+void wr_AddAssign_F_E( WRValue* to, WRValue* from )
+{
+	if ( !wr_concatStringCheck( to, from, to) )
+	{
+		WRValue& V = from->singleValue();
+		wr_AddAssign[(WR_FLOAT<<2)|V.type](to, &V);
+		*from = *to;
+	}
+}
+void wr_AddAssign_E_R( WRValue* to, WRValue* from )
+{
+	wr_AddAssign[(WR_EX<<2)|from->r->type]( to, from->r );
+}
+void wr_AddAssign_R_E( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_EX](to->r, from); *from = *to->r; }
+void wr_AddAssign_R_R( WRValue* to, WRValue* from ) { WRValue temp = *from->r; wr_AddAssign[(to->r->type<<2)|temp.type](to->r, &temp); *from = *to->r; }
+void wr_AddAssign_R_I( WRValue* to, WRValue* from )
+{
+	WRValue* lhs = to->r;
+	if ( lhs->type == WR_INT )
+	{
+		lhs->i = wr_iadd_wrap( lhs->i, from->i );
+		*from = *lhs;
+	}
+	else
+	{
+		wr_AddAssign[(lhs->type<<2)|WR_INT](lhs, from);
+		*from = *lhs;
+	}
+}
+void wr_AddAssign_R_F( WRValue* to, WRValue* from ) { wr_AddAssign[(to->r->type<<2)|WR_FLOAT](to->r, from); *from = *to->r; }
+void wr_AddAssign_I_R( WRValue* to, WRValue* from ) { wr_AddAssign[(WR_INT<<2)+from->r->type](to, from->r); *from = *to; }
+void wr_AddAssign_F_R( WRValue* to, WRValue* from ) { wr_AddAssign[(WR_FLOAT<<2)+from->r->type](to, from->r); *from = *to; }
+void wr_AddAssign_F_F( WRValue* to, WRValue* from ) { to->d += from->d; }
+void wr_AddAssign_I_I( WRValue* to, WRValue* from ) { to->i = wr_iadd_wrap( to->i, from->i ); }
+void wr_AddAssign_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; to->d = (double)to->i + from->d; }
+void wr_AddAssign_F_I( WRValue* to, WRValue* from ) { from->p2 = INIT_AS_FLOAT; to->d += (double)from->i; }
+WRVoidFunc wr_AddAssign[16] = 
+{
+	wr_AddAssign_I_I,  wr_AddAssign_I_F,  wr_AddAssign_I_R,  wr_AddAssign_I_E,
+	wr_AddAssign_F_I,  wr_AddAssign_F_F,  wr_AddAssign_F_R,  wr_AddAssign_F_E,
+	wr_AddAssign_R_I,  wr_AddAssign_R_F,  wr_AddAssign_R_R,  wr_AddAssign_R_E,
+	wr_AddAssign_E_I,  wr_AddAssign_E_F,  wr_AddAssign_E_R,  wr_AddAssign_E_E,
+};
+
+
+//------------------------------------------------------------------------------
+#define X_BINARY( NAME, OPERATION, I_I_OP ) \
+void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	WRValue& V = to->singleValue();\
+	NAME##Binary[(V.type<<2)|WR_INT](&V, from, target);\
+}\
+void NAME##Binary_E_F( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	WRValue& V = to->singleValue();\
+	NAME##Binary[(V.type<<2)|WR_FLOAT](&V, from, target);\
+}\
+void NAME##Binary_E_E( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	WRValue V1 = to->singleValue();\
+	WRValue& V2 = from->singleValue();\
+	NAME##Binary[(V1.type<<2)|V2.type](&V1, &V2, target);\
+}\
+void NAME##Binary_I_E( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	WRValue& V = from->singleValue();\
+	NAME##Binary[(WR_INT<<2)|V.type](to, &V, target);\
+}\
+void NAME##Binary_F_E( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	WRValue& V = from->singleValue();\
+	NAME##Binary[(WR_FLOAT<<2)|V.type](to, &V, target);\
+}\
+void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_EX]( to->r, from, target); }\
+void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_EX<<2)+from->r->type](to, from->r, target); }\
+void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { WRValue* rhs = from->r; if ( rhs->type == WR_INT ) { target->p2 = INIT_AS_INT; target->i = I_I_OP( to->i, rhs->i ); } else { NAME##Binary[(WR_INT<<2)+rhs->type](to, rhs, target); } }\
+void NAME##Binary_R_F( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_FLOAT](to->r, from, target); }\
+void NAME##Binary_R_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }\
+void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { WRValue* lhs = to->r; if ( lhs->type == WR_INT ) { target->p2 = INIT_AS_INT; target->i = I_I_OP( lhs->i, from->i ); } else { NAME##Binary[(lhs->type<<2)|WR_INT](lhs, from, target); } }\
+void NAME##Binary_F_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_FLOAT<<2)+from->r->type](to, from->r, target); }\
+void NAME##Binary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = I_I_OP( to->i, from->i ); }\
+void NAME##Binary_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->d = (double)to->i OPERATION from->d; }\
+void NAME##Binary_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->d = to->d OPERATION (double)from->i; }\
+void NAME##Binary_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->d = to->d OPERATION from->d; }\
+WRTargetFunc NAME##Binary[16] = \
+{\
+	NAME##Binary_I_I,  NAME##Binary_I_F,  NAME##Binary_I_R,  NAME##Binary_I_E,\
+	NAME##Binary_F_I,  NAME##Binary_F_F,  NAME##Binary_F_R,  NAME##Binary_F_E,\
+	NAME##Binary_R_I,  NAME##Binary_R_F,  NAME##Binary_R_R,  NAME##Binary_R_E,\
+	NAME##Binary_E_I,  NAME##Binary_E_F,  NAME##Binary_E_R,  NAME##Binary_E_E,\
+};\
+
+//X_BINARY( wr_Addition, +, wr_iadd_wrap );  -- broken out so strings work
+X_BINARY( wr_Multiply, *, wr_imul_wrap );
+X_BINARY( wr_Subtract, -, wr_isub_wrap );
+//X_BINARY( wr_Divide, /, wr_idiv_wrap ); -- broken out for divide-by-zero
+
+void wr_DivideBinary_E_I( WRValue* to, WRValue* from, WRValue* target )
+{
+	WRValue& V = to->singleValue();
+	wr_DivideBinary[(V.type<<2)|WR_INT](&V, from, target);
+}
+void wr_DivideBinary_E_F( WRValue* to, WRValue* from, WRValue* target )
+{
+	WRValue& V = to->singleValue();
+	wr_DivideBinary[(V.type<<2)|WR_FLOAT](&V, from, target);
+}
+void wr_DivideBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
+{
+	WRValue V1 = to->singleValue();
+	WRValue& V2 = from->singleValue();
+	wr_DivideBinary[(V1.type<<2)|V2.type](&V1, &V2, target);
+}
+void wr_DivideBinary_I_E( WRValue* to, WRValue* from, WRValue* target )
+{
+	WRValue& V = from->singleValue();
+	wr_DivideBinary[(WR_INT<<2)|V.type](to, &V, target);
+}
+void wr_DivideBinary_F_E( WRValue* to, WRValue* from, WRValue* target )
+{
+	WRValue& V = from->singleValue();
+	wr_DivideBinary[(WR_FLOAT<<2)|V.type](to, &V, target);
+}
+void wr_DivideBinary_R_E( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(to->r->type<<2)|WR_EX]( to->r, from, target); }
+void wr_DivideBinary_E_R( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(WR_EX<<2)+from->r->type](to, from->r, target); }
+void wr_DivideBinary_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(WR_INT<<2)+from->r->type](to, from->r, target); }
+void wr_DivideBinary_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(to->r->type<<2)|WR_FLOAT](to->r, from, target); }
+void wr_DivideBinary_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }
+void wr_DivideBinary_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(to->r->type<<2)|WR_INT](to->r, from, target); }
+void wr_DivideBinary_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_DivideBinary[(WR_FLOAT<<2)+from->r->type](to, from->r, target); }
+void wr_DivideBinary_I_I( WRValue* to, WRValue* from, WRValue* target )
+{
+	target->p2 = INIT_AS_INT;
+	if ( from->i )
+	{
+		target->i = to->i / from->i;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		target->p2 = INIT_AS_INVALID;
+#else
+		target->i = 0;
+#endif
+	}
+}
+void wr_DivideBinary_I_F( WRValue* to, WRValue* from, WRValue* target )
+{
+	target->p2 = INIT_AS_FLOAT;
+	if ( from->d )
+	{
+		target->d = (double)to->i / from->d;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		target->p2 = INIT_AS_INVALID;
+#else
+		target->i = 0;
+#endif
+	}
+}
+void wr_DivideBinary_F_I( WRValue* to, WRValue* from, WRValue* target )
+{
+	target->p2 = INIT_AS_FLOAT;
+	if ( from->i )
+	{
+		target->d = to->d / (double)from->i;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		target->p2 = INIT_AS_INVALID;
+#else
+		target->i = 0;
+#endif
+	}
+}
+void wr_DivideBinary_F_F( WRValue* to, WRValue* from, WRValue* target )
+{
+	target->p2 = INIT_AS_FLOAT;
+	if ( from->d )
+	{
+		target->d = to->d / from->d;
+	}
+	else
+	{
+#ifdef WRENCH_TRAP_DIVISION_BY_ZERO
+		target->p2 = INIT_AS_INVALID;
+#else
+		target->i = 0;
+#endif
+	}
+}
+
+WRTargetFunc wr_DivideBinary[16] = 
+{
+	wr_DivideBinary_I_I,  wr_DivideBinary_I_F,  wr_DivideBinary_I_R,  wr_DivideBinary_I_E,
+	wr_DivideBinary_F_I,  wr_DivideBinary_F_F,  wr_DivideBinary_F_R,  wr_DivideBinary_F_E,
+	wr_DivideBinary_R_I,  wr_DivideBinary_R_F,  wr_DivideBinary_R_R,  wr_DivideBinary_R_E,
+	wr_DivideBinary_E_I,  wr_DivideBinary_E_F,  wr_DivideBinary_E_R,  wr_DivideBinary_E_E,
+};
+
+
+void wr_AdditionBinary_E_I( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( !wr_concatStringCheck(to, from, target) )
+	{
+		WRValue& V = to->singleValue();
+		wr_AdditionBinary[(V.type<<2)|WR_INT](&V, from, target);
+	}
+}
+
+void wr_AdditionBinary_I_E(WRValue* to, WRValue* from, WRValue* target)
+{
+	if ( !wr_concatStringCheck(to, from, target) )
+	{
+		WRValue& V = from->singleValue();
+		wr_AdditionBinary[(WR_INT << 2) | V.type](to, &V, target);
+	}
+}
+
+void wr_AdditionBinary_E_F( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( !wr_concatStringCheck(to, from, target) )
+	{
+		WRValue& V = to->singleValue();
+		wr_AdditionBinary[(V.type<<2)|WR_FLOAT](&V, from, target);
+	}
+}
+void wr_AdditionBinary_E_E( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( IS_CONTAINER_MEMBER(to->xtype) || IS_CONTAINER_MEMBER(from->xtype) )
+	{
+		WRValue V1 = to->deref();
+		WRValue& V2 = from->deref();
+		wr_AdditionBinary[(V1.type<<2)|V2.type](&V1, &V2, target);
+	}
+	else
+	{
+		wr_concatStringCheck( to, from, target );
+	}
+}
+void wr_AdditionBinary_F_E( WRValue* to, WRValue* from, WRValue* target )
+{
+	if ( !wr_concatStringCheck(to, from, target) )
+	{
+		WRValue& V = from->singleValue();
+		wr_AdditionBinary[(WR_FLOAT<<2)|V.type](to, &V, target);
+	}
+}
+void wr_AdditionBinary_R_E( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(to->r->type<<2)|WR_EX]( to->r, from, target); }
+void wr_AdditionBinary_E_R( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(WR_EX<<2)+from->r->type](to, from->r, target); }
+void wr_AdditionBinary_I_R( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(WR_INT<<2)+from->r->type](to, from->r, target); }
+void wr_AdditionBinary_R_F( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(to->r->type<<2)|WR_FLOAT](to->r, from, target); }
+void wr_AdditionBinary_R_R( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }
+void wr_AdditionBinary_R_I( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(to->r->type<<2)|WR_INT](to->r, from, target); }
+void wr_AdditionBinary_F_R( WRValue* to, WRValue* from, WRValue* target ) { wr_AdditionBinary[(WR_FLOAT<<2)+from->r->type](to, from->r, target); }
+void wr_AdditionBinary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = wr_iadd_wrap( to->i, from->i ); }
+void wr_AdditionBinary_I_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->d = (double)to->i + from->d; }
+void wr_AdditionBinary_F_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->d = to->d + (double)from->i; }
+void wr_AdditionBinary_F_F( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_FLOAT; target->d = to->d + from->d; }
+WRTargetFunc wr_AdditionBinary[16] = 
+{
+	wr_AdditionBinary_I_I,  wr_AdditionBinary_I_F,  wr_AdditionBinary_I_R,  wr_AdditionBinary_I_E,
+	wr_AdditionBinary_F_I,  wr_AdditionBinary_F_F,  wr_AdditionBinary_F_R,  wr_AdditionBinary_F_E,
+	wr_AdditionBinary_R_I,  wr_AdditionBinary_R_F,  wr_AdditionBinary_R_R,  wr_AdditionBinary_R_E,
+	wr_AdditionBinary_E_I,  wr_AdditionBinary_E_F,  wr_AdditionBinary_E_R,  wr_AdditionBinary_E_E,
+};
+
+
+void doTargetFuncBlank( WRValue* to, WRValue* from, WRValue* target ) {}
+
+//------------------------------------------------------------------------------
+#define X_INT_BINARY( NAME, OPERATION ) \
+void NAME##Binary_E_I( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	WRValue& V = to->singleValue();\
+	NAME##Binary[(V.type<<2)|WR_INT](&V, from, target);\
+}\
+void NAME##Binary_E_E( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	WRValue V1 = to->singleValue();\
+	WRValue& V2 = from->singleValue();\
+	NAME##Binary[(V1.type<<2)|V2.type](&V1, &V2, target);\
+}\
+void NAME##Binary_I_E( WRValue* to, WRValue* from, WRValue* target )\
+{\
+	WRValue& V = from->singleValue();\
+	NAME##Binary[(WR_INT<<2)+V.type](to, &V, target);\
+}\
+void NAME##Binary_E_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(WR_EX)|from->r->type](to, from->r, target); }\
+void NAME##Binary_R_E( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|WR_EX]( to->r, from, target); }\
+void NAME##Binary_I_R( WRValue* to, WRValue* from, WRValue* target ) { WRValue* rhs = from->r; if ( rhs->type == WR_INT ) { target->p2 = INIT_AS_INT; target->i = to->i OPERATION rhs->i; } else { NAME##Binary[(WR_INT<<2)+rhs->type](to, rhs, target); } }\
+void NAME##Binary_R_R( WRValue* to, WRValue* from, WRValue* target ) { NAME##Binary[(to->r->type<<2)|from->r->type](to->r, from->r, target); }\
+void NAME##Binary_R_I( WRValue* to, WRValue* from, WRValue* target ) { WRValue* lhs = to->r; if ( lhs->type == WR_INT ) { target->p2 = INIT_AS_INT; target->i = lhs->i OPERATION from->i; } else { NAME##Binary[(lhs->type<<2)|WR_INT](lhs, from, target); } }\
+void NAME##Binary_I_I( WRValue* to, WRValue* from, WRValue* target ) { target->p2 = INIT_AS_INT; target->i = to->i OPERATION from->i; }\
+WRTargetFunc NAME##Binary[16] = \
+{\
+	NAME##Binary_I_I, doTargetFuncBlank,   NAME##Binary_I_R,  NAME##Binary_I_E,\
+   doTargetFuncBlank, doTargetFuncBlank,  doTargetFuncBlank, doTargetFuncBlank,\
+	NAME##Binary_R_I, doTargetFuncBlank,   NAME##Binary_R_R,  NAME##Binary_R_E,\
+	NAME##Binary_E_I, doTargetFuncBlank,   NAME##Binary_E_R,  NAME##Binary_E_E,\
+};\
+
+X_INT_BINARY( wr_LeftShift, << );
+X_INT_BINARY( wr_RightShift, >> );
+X_INT_BINARY( wr_Mod, % );
+X_INT_BINARY( wr_AND, & );
+X_INT_BINARY( wr_OR, | );
+X_INT_BINARY( wr_XOR, ^ );
+
+
+
+#define X_COMPARE( NAME, OPERATION ) \
+bool NAME##_E_E( WRValue* to, WRValue* from )\
+{\
+	WRValue V1 = to->singleValue();\
+	WRValue& V2 = from->singleValue();\
+	return NAME[(V1.type<<2)|V2.type](&V1, &V2);\
+}\
+bool NAME##_E_I( WRValue* to, WRValue* from )\
+{\
+	WRValue& V = to->singleValue();\
+	return NAME[(V.type<<2)|WR_INT](&V, from);\
+}\
+bool NAME##_E_F( WRValue* to, WRValue* from )\
+{\
+	WRValue& V = to->singleValue();\
+	return NAME[(V.type<<2)|WR_FLOAT](&V, from);\
+}\
+bool NAME##_I_E( WRValue* to, WRValue* from )\
+{\
+	WRValue& V = from->singleValue();\
+	return NAME[(WR_INT<<2)|V.type](to, &V);\
+}\
+bool NAME##_F_E( WRValue* to, WRValue* from )\
+{\
+	WRValue& V = from->singleValue();\
+	return NAME[(WR_FLOAT<<2)|V.type](to, &V);\
+}\
+bool NAME##_R_E( WRValue* to, WRValue* from ) { return NAME[(to->r->type<<2)|WR_EX](to->r, from); }\
+bool NAME##_E_R( WRValue* to, WRValue* from ) { return NAME[(WR_EX<<2)|from->r->type](to, from->r); }\
+bool NAME##_R_R( WRValue* to, WRValue* from ) { return NAME[(to->r->type<<2)|from->r->type](to->r, from->r); }\
+bool NAME##_R_I( WRValue* to, WRValue* from ) { return NAME[(to->r->type<<2)|WR_INT](to->r, from); }\
+bool NAME##_R_F( WRValue* to, WRValue* from ) { return NAME[(to->r->type<<2)|WR_FLOAT](to->r, from); }\
+bool NAME##_I_R( WRValue* to, WRValue* from ) { return NAME[(WR_INT<<2)+from->r->type](to, from->r); }\
+bool NAME##_F_R( WRValue* to, WRValue* from ) { return NAME[(WR_FLOAT<<2)+from->r->type](to, from->r); }\
+bool NAME##_I_I( WRValue* to, WRValue* from ) { return to->i OPERATION from->i; }\
+bool NAME##_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; return to->i OPERATION from->d; }\
+bool NAME##_F_I( WRValue* to, WRValue* from ) { return to->d OPERATION (double)from->i; }\
+bool NAME##_F_F( WRValue* to, WRValue* from ) { return to->d OPERATION from->d; }\
+WRReturnFunc NAME[16] = \
+{\
+	NAME##_I_I, NAME##_I_F, NAME##_I_R, NAME##_I_E,\
+	NAME##_F_I, NAME##_F_F, NAME##_F_R, NAME##_F_E,\
+	NAME##_R_I, NAME##_R_F, NAME##_R_R, NAME##_R_E,\
+	NAME##_E_I, NAME##_E_F, NAME##_E_R, NAME##_E_E,\
+};\
+
+X_COMPARE( wr_CompareGT, > );
+X_COMPARE( wr_LogicalAND, && );
+X_COMPARE( wr_LogicalOR, || );
+
+
+
+
+
+
+
+
+
+
+
+//X_COMPARE( wr_CompareLT, < );
+
+bool wr_CompareLT_E_E( WRValue* to, WRValue* from )
+{
+	WRValue V1 = to->singleValue();
+	WRValue& V2 = from->singleValue();
+	return wr_CompareLT[(V1.type<<2)|V2.type](&V1, &V2);
+}
+bool wr_CompareLT_E_I( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+	return wr_CompareLT[(V.type<<2)|WR_INT](&V, from);
+}
+bool wr_CompareLT_E_F( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+	return wr_CompareLT[(V.type<<2)|WR_FLOAT](&V, from);
+}
+bool wr_CompareLT_I_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	return wr_CompareLT[(WR_INT<<2)|V.type](to, &V);
+}
+bool wr_CompareLT_F_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	return wr_CompareLT[(WR_FLOAT<<2)|V.type](to, &V);
+}
+bool wr_CompareLT_R_E( WRValue* to, WRValue* from ) { return wr_CompareLT[(to->r->type<<2)|WR_EX](to->r, from); }
+bool wr_CompareLT_E_R( WRValue* to, WRValue* from ) { return wr_CompareLT[(WR_EX<<2)|from->r->type](to, from->r); }
+bool wr_CompareLT_R_R( WRValue* to, WRValue* from ) { return wr_CompareLT[(to->r->type<<2)|from->r->type](to->r, from->r); }
+bool wr_CompareLT_R_I( WRValue* to, WRValue* from ) { return wr_CompareLT[(to->r->type<<2)|WR_INT](to->r, from); }
+bool wr_CompareLT_R_F( WRValue* to, WRValue* from ) { return wr_CompareLT[(to->r->type<<2)|WR_FLOAT](to->r, from); }
+bool wr_CompareLT_I_R( WRValue* to, WRValue* from ) { return wr_CompareLT[(WR_INT<<2)+from->r->type](to, from->r); }
+bool wr_CompareLT_F_R( WRValue* to, WRValue* from ) { return wr_CompareLT[(WR_FLOAT<<2)+from->r->type](to, from->r); }
+bool wr_CompareLT_I_I( WRValue* to, WRValue* from ) { return to->i < from->i; }
+bool wr_CompareLT_I_F( WRValue* to, WRValue* from ) { to->p2 = INIT_AS_FLOAT; return to->i < from->d; }
+bool wr_CompareLT_F_I( WRValue* to, WRValue* from ) { return to->d < (double)from->i; }
+bool wr_CompareLT_F_F( WRValue* to, WRValue* from ) { return to->d < from->d; }
+WRReturnFunc wr_CompareLT[16] = 
+{
+	wr_CompareLT_I_I, wr_CompareLT_I_F, wr_CompareLT_I_R, wr_CompareLT_I_E,
+	wr_CompareLT_F_I, wr_CompareLT_F_F, wr_CompareLT_F_R, wr_CompareLT_F_E,
+	wr_CompareLT_R_I, wr_CompareLT_R_F, wr_CompareLT_R_R, wr_CompareLT_R_E,
+	wr_CompareLT_E_I, wr_CompareLT_E_F, wr_CompareLT_E_R, wr_CompareLT_E_E,
+};
+
+bool wr_CompareEQ_E_E( WRValue* to, WRValue* from )
+{
+	WRValue V1 = to->singleValue();
+	WRValue& V2 = from->singleValue();
+	return wr_CompareEQ[(V1.type<<2)|V2.type](&V1, &V2);
+}
+bool wr_CompareEQ_E_I( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+	return wr_CompareEQ[(V.type<<2)|WR_INT](&V, from);
+}
+bool wr_CompareEQ_E_F( WRValue* to, WRValue* from )
+{
+	WRValue& V = to->singleValue();
+	return wr_CompareEQ[(V.type<<2)|WR_FLOAT](&V, from);
+}
+bool wr_CompareEQ_I_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	return wr_CompareEQ[(WR_INT<<2)|V.type](to, &V);
+}
+bool wr_CompareEQ_F_E( WRValue* to, WRValue* from )
+{
+	WRValue& V = from->singleValue();
+	return wr_CompareEQ[(WR_FLOAT<<2)|V.type](to, &V);
+}
+bool wr_CompareEQ_R_E( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|WR_EX](to->r, from); }
+bool wr_CompareEQ_E_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_EX<<2)|from->r->type](to, from->r); }
+bool wr_CompareEQ_R_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|from->r->type](to->r, from->r); }
+bool wr_CompareEQ_R_I( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|WR_INT](to->r, from); }
+bool wr_CompareEQ_R_F( WRValue* to, WRValue* from ) { return wr_CompareEQ[(to->r->type<<2)|WR_FLOAT](to->r, from); }
+bool wr_CompareEQ_I_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_INT<<2)+from->r->type](to, from->r); }
+bool wr_CompareEQ_F_R( WRValue* to, WRValue* from ) { return wr_CompareEQ[(WR_FLOAT<<2)+from->r->type](to, from->r); }
+bool wr_CompareEQ_I_I( WRValue* to, WRValue* from ) { return to->i == from->i; }
+bool wr_CompareEQ_I_F( WRValue* to, WRValue* from )
+{
+	return wr_doubles_equal( (double)to->i, from->d );
+}
+bool wr_CompareEQ_F_I( WRValue* to, WRValue* from )
+{
+	return wr_doubles_equal( to->d, (double)from->i );
+}
+bool wr_CompareEQ_F_F( WRValue* to, WRValue* from )
+{
+	return wr_doubles_equal( to->d, from->d );
+}
+WRReturnFunc wr_CompareEQ[16] = 
+{
+	wr_CompareEQ_I_I, wr_CompareEQ_I_F, wr_CompareEQ_I_R, wr_CompareEQ_I_E,
+	wr_CompareEQ_F_I, wr_CompareEQ_F_F, wr_CompareEQ_F_R, wr_CompareEQ_F_E,
+	wr_CompareEQ_R_I, wr_CompareEQ_R_F, wr_CompareEQ_R_R, wr_CompareEQ_R_E,
+	wr_CompareEQ_E_I, wr_CompareEQ_E_F, wr_CompareEQ_E_R, wr_CompareEQ_E_E,
+};
+
+//------------------------------------------------------------------------------
+#define X_UNARY_PRE( NAME, OPERATION ) \
+void NAME##_E( WRValue* value )\
+{\
+	WRValue& V = value->singleValue();\
+	NAME [ V.type ]( &V );\
+	wr_valueToEx( value, &V );\
+}\
+void NAME##_I( WRValue* value ) { OPERATION value->i; }\
+void NAME##_F( WRValue* value ) { OPERATION value->d; }\
+void NAME##_R( WRValue* value ) { NAME [ value->r->type ]( value->r ); *value = *value->r; }\
+WRUnaryFunc NAME[4] = \
+{\
+	NAME##_I, NAME##_F, NAME##_R, NAME##_E\
+};\
+
+X_UNARY_PRE( wr_preinc, ++ );
+X_UNARY_PRE( wr_predec, -- );
+
+//------------------------------------------------------------------------------
+#define X_UNARY_POST( NAME, OPERATION ) \
+void NAME##_E( WRValue* value, WRValue* stack )\
+{\
+	WRValue& V = value->singleValue();\
+	WRValue temp; \
+	NAME [ V.type ]( &V, &temp );\
+	wr_valueToEx( value, &V );\
+	*stack = temp; \
+}\
+void NAME##_I( WRValue* value, WRValue* stack ) { stack->p2 = INIT_AS_INT; stack->i = value->i OPERATION; }\
+void NAME##_R( WRValue* value, WRValue* stack ) { NAME[ value->r->type ]( value->r, stack ); }\
+void NAME##_F( WRValue* value, WRValue* stack ) { stack->p2 = INIT_AS_FLOAT; stack->d = value->d OPERATION; }\
+WRVoidFunc NAME[4] = \
+{\
+	NAME##_I,  NAME##_F,  NAME##_R, NAME##_E\
+};\
+
+X_UNARY_POST( wr_postinc, ++ );
+X_UNARY_POST( wr_postdec, -- );
+
+#endif
+/*******************************************************************************
+Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
+
+MIT Licence
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*******************************************************************************/
+
+#include "wrench.h"
+
 //------------------------------------------------------------------------------
 void arrayElementToTarget( const uint32_t index, WRValue* target, WRValue* value )
 {
@@ -20478,7 +21812,7 @@ int wr_ftoa( float f, char* string, size_t len )
 }
 
 //------------------------------------------------------------------------------
-const int32_t wr_randEx( const int32_t from, const int32_t to )
+int32_t wr_randEx( int32_t from, int32_t to )
 {
 	const int32_t k = wr_Seed / 127773;
 	wr_Seed = 16807 * (wr_Seed - k * 127773) - 2836 * k;
@@ -20598,9 +21932,7 @@ SOFTWARE.
 #include "wrench.h"
 
 #if defined(WRENCH_WIN32_FILE_IO) \
-	|| defined(WRENCH_LINUX_FILE_IO) \
-	|| defined(WRENCH_SPIFFS_FILE_IO) \
-	|| defined(WRENCH_LITTLEFS_FILE_IO)
+	|| defined(WRENCH_LINUX_FILE_IO)
 
 #if defined(WRENCH_WIN32_FILE_IO)
 #include <io.h>
@@ -20648,23 +21980,28 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 		if ( ret == 0 )
 		{
 			FILE *infil = fopen( fileName, "rb" );
-			if ( infil )
+			if ( !infil )
 			{
-				stackTop->va = c->getSVA( (int)sbuf.st_size, SV_CHAR, false );
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-				if ( !stackTop->va )
-				{
-					return;
-				}
-#endif
-				stackTop->p2 = INIT_AS_ARRAY;
-				if ( fread(stackTop->va->m_Cdata, sbuf.st_size, 1, infil) != 1 )
-				{
-					return;
-				}
+				return;
 			}
 
+			stackTop->va = c->getSVA( (int)sbuf.st_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				fclose( infil );
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
+			size_t bytesRead = fread( stackTop->va->m_Cdata, 1, sbuf.st_size, infil );
+
 			fclose( infil );
+
+			if ( bytesRead != (size_t)sbuf.st_size )
+			{
+				stackTop->init();
+			}
 		}
 	}
 }
@@ -20700,7 +22037,7 @@ void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
-		const char* filename = WRValue::MallocStrScoped(*(stackTop - 1));
+		WRValue::MallocStrScoped filename( *(stackTop - 1) );
 		if ( filename )
 		{
 #if defined(WRENCH_WIN32_FILE_IO)
@@ -20930,7 +22267,8 @@ void wr_loadIOLib( WRState* w )
 	wr_ioPushConstants( w );
 }
 
-#else
+#elif !defined(WRENCH_SPIFFS_FILE_IO) \
+	&& !defined(WRENCH_LITTLEFS_FILE_IO)
 
 void wr_loadIOLib( WRState* w )
 {
@@ -21020,7 +22358,7 @@ static int isIp( const char *data, unsigned int *mask =0 )
 
 	int pos = 0;
 	unsigned int running = 0;
-	int address = 0;
+	unsigned int address = 0;
 
 	if( !COMM_isdigit(data[pos]) )
 	{
@@ -21046,34 +22384,8 @@ static int isIp( const char *data, unsigned int *mask =0 )
 		return 0;
 	}
 
-	address |= running;
+	address |= running << 24;
 	running = 0;
-
-	if( !COMM_isdigit(data[pos]) )
-	{
-		return 0;
-	}
-
-	running = data[pos++] - '0';
-
-	if ( COMM_isdigit(data[pos]) )
-	{
-		running *= 10;
-		running += data[pos++] - '0';
-
-		if ( COMM_isdigit(data[pos]) )
-		{
-			running *= 10;
-			running += data[pos++] - '0';
-		}
-	}
-
-	if ( (data[pos++] != '.') || (running > 255) )
-	{
-		return 0;
-	}
-
-	address |= running << 8;
 
 	if( !COMM_isdigit(data[pos]) )
 	{
@@ -21120,19 +22432,45 @@ static int isIp( const char *data, unsigned int *mask =0 )
 		}
 	}
 
+	if ( (data[pos++] != '.') || (running > 255) )
+	{
+		return 0;
+	}
+
+	address |= running << 8;
+
+	if( !COMM_isdigit(data[pos]) )
+	{
+		return 0;
+	}
+
+	running = data[pos++] - '0';
+
+	if ( COMM_isdigit(data[pos]) )
+	{
+		running *= 10;
+		running += data[pos++] - '0';
+
+		if ( COMM_isdigit(data[pos]) )
+		{
+			running *= 10;
+			running += data[pos++] - '0';
+		}
+	}
+
 	if ( running > 255 )
 	{
 		return 0;
 	}
 
-	address |= running << 24;
+	address |= running;
 
 	if ( mask )
 	{
 		*mask = 0;
 		if ( !data[pos] )
 		{
-			return address;
+			return (int)htonl( address );
 		}
 
 		if ( data[pos++] != '/' )
@@ -21142,7 +22480,7 @@ static int isIp( const char *data, unsigned int *mask =0 )
 
 		if ( !data[pos] )
 		{
-			return address;
+			return (int)htonl( address );
 		}
 
 		if ( !COMM_isdigit(data[pos]) )
@@ -21155,7 +22493,7 @@ static int isIp( const char *data, unsigned int *mask =0 )
 		{
 			*mask = c_legalMasks[*mask];
 			*mask = htonl(*mask);
-			return address;
+			return (int)htonl( address );
 		}
 
 		if ( !COMM_isdigit(data[pos]) )
@@ -21178,7 +22516,7 @@ static int isIp( const char *data, unsigned int *mask =0 )
 		return 0;
 	}
 
-	return address;
+	return (int)htonl( address );
 }
 
 //------------------------------------------------------------------------------
@@ -21186,12 +22524,16 @@ static char* ipFromAddress( const char* hostname, sockaddr_in* location, char* s
 {
 	memset( location, 0, sizeof(sockaddr_in) );
 
-	*((int *)&location->sin_addr) = isIp( hostname );
-	if ( !*((int *)&location->sin_addr) )
+	location->sin_addr.s_addr = (unsigned int)isIp( hostname );
+	if ( !location->sin_addr.s_addr )
 	{
 		struct addrinfo *result;
+		struct addrinfo hints;
+		memset( &hints, 0, sizeof(hints) );
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
 
-		if ( getaddrinfo(hostname, NULL, NULL, &result) )
+		if ( getaddrinfo(hostname, NULL, &hints, &result) )
 		{
 			return 0;
 		}
@@ -21207,12 +22549,17 @@ static char* ipFromAddress( const char* hostname, sockaddr_in* location, char* s
 //------------------------------------------------------------------------------
 int wr_bindTCPEx( const int port )
 {
+	if ( port < 0 || port > 65535 )
+	{
+		return -1;
+	}
+
 	sockaddr_in location;
 	memset( &location, 0, sizeof(location) );
 
 	location.sin_family = AF_INET;
 	location.sin_addr.s_addr = htonl( INADDR_ANY );
-	location.sin_port = htons( (short)port );
+	location.sin_port = htons( (unsigned short)port );
 
 	int s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if ( s == -1 )
@@ -21264,14 +22611,22 @@ void wr_acceptTCP( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 int wr_connectTCPEx( const char* address, const int port )
 {
+	if ( !address || !address[0] || port < 0 || port > 65535 )
+	{
+		return -1;
+	}
+
 	sockaddr_in location;
 	memset( &location, 0, sizeof(location) );
 
 	char ret[21];
-	ipFromAddress( address, &location, ret );
+	if ( !ipFromAddress(address, &location, ret) )
+	{
+		return -1;
+	}
 	
 	location.sin_family = AF_INET;
-	location.sin_port = htons( port );
+	location.sin_port = htons( (unsigned short)port );
 
 	int sock;
 	if ( (sock = ::socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) == -1 )
@@ -21300,8 +22655,13 @@ void wr_connectTCP( WRValue* stackTop, const int argn, WRContext* c )
 	WRValue* args = stackTop - argn;
 
 	char* address = args[0].asMallocString();
-	if ( !address || !address[0] )
+	if ( !address )
 	{
+		return;
+	}
+	if ( !address[0] )
+	{
+		g_free( address );
 		return;
 	}
 
@@ -21313,7 +22673,7 @@ void wr_connectTCP( WRValue* stackTop, const int argn, WRContext* c )
 void wr_closeTCPEx( const int socket )
 {
 #ifdef WRENCH_WIN32_TCP
-	_close( socket );
+	closesocket( socket );
 #endif
 #ifdef WRENCH_LINUX_TCP
 	close( socket );
@@ -21355,7 +22715,7 @@ void wr_sendTCP( WRValue* stackTop, const int argn, WRContext* c )
 	WRValue* args = stackTop - argn;
 
 	unsigned int len;
-	char* data = args[0].asMallocString( &len );
+	char* data = args[1].asMallocString( &len );
 	if ( data )
 	{
 		stackTop->i = wr_sendTCPEx( args[0].asInt(), data, len );
@@ -21370,21 +22730,22 @@ int wr_receiveTCPEx( const int socket, char* data, const int toRead, const int t
 #ifdef WRENCH_WIN32_TCP
 	DWORD timeout = timeoutMilliseconds;
 	setsockopt( socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout) );
-	return _read( socket, data, toRead );
+	return recv( socket, data, toRead, 0 );
 #endif
 #ifdef WRENCH_LINUX_TCP
 	struct timeval timeout;
-	timeout.tv_sec = timeoutMilliseconds;
-	timeout.tv_usec = 0;
+	timeout.tv_sec = timeoutMilliseconds / 1000;
+	timeout.tv_usec = (timeoutMilliseconds % 1000) * 1000;
 	setsockopt( socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-	return read( socket, data, toRead );
+	return recv( socket, data, toRead, 0 );
 #endif
 }
 
 //------------------------------------------------------------------------------
 void wr_receiveTCP( WRValue* stackTop, const int argn, WRContext* c )
 {
-	if ( argn < 2 )
+	stackTop->init();
+	if ( argn < 1 )
 	{
 		return;
 	}
@@ -21395,13 +22756,23 @@ void wr_receiveTCP( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		toRead = args[1].asInt();
 	}
+	if ( toRead <= 0 )
+	{
+		return;
+	}
 
 	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
 	stackTop->p2 = INIT_AS_ARRAY;
 
 	int ret = wr_receiveTCPEx( args[0].asInt(), (char*)stackTop->va->m_Cdata, toRead );
 
-	if ( !ret )
+	if ( ret <= 0 )
 	{
 		stackTop->init();
 	}
@@ -21477,7 +22848,8 @@ void wr_loadTCPLib( WRState* w )
 {
 }
 
-#endif/*******************************************************************************
+#endif
+/*******************************************************************************
 Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
 
 MIT Licence
@@ -21504,6 +22876,7 @@ SOFTWARE.
 #include "wrench.h"
 
 #if defined(WRENCH_LITTLEFS_FILE_IO) || defined(WRENCH_SPIFFS_FILE_IO)
+#include <new>
 #include <FS.h>
 #ifdef WRENCH_LITTLEFS_FILE_IO
 #include <LittleFS.h>
@@ -21538,7 +22911,14 @@ struct WRFSFile
 	WRFSFile* next;
 };
 
-WRFSFile* g_OpenFiles =0;
+static WRFSFile* g_OpenFiles =0;
+
+//------------------------------------------------------------------------------
+void wr_destroyFile( WRFSFile* file )
+{
+	file->~WRFSFile();
+	g_free( file );
+}
 
 //------------------------------------------------------------------------------
 void wr_stdout( const char* data, const int size )
@@ -21599,7 +22979,7 @@ void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 		return;
 	}
 
-	WRValue::MallocStrScoped fileName( *arg );
+	WRValue::MallocStrScoped fileName( *(stackTop - 2) );
 	
 	unsigned int len;
 	const char* data = (char*)((stackTop - 1)->array(&len));
@@ -21624,7 +23004,11 @@ void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
-		FILE_OBJ.remove( WRValue::MallocStrScoped fileName(*arg) );
+		WRValue::MallocStrScoped fileName( *(stackTop - 1) );
+		if ( fileName )
+		{
+			FILE_OBJ.remove( fileName );
+		}
 	} 
 }
 
@@ -21649,42 +23033,44 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 		mode = args[1].asInt();
 	}
 
-	const char* fileName = (const char*)args->array();
+	WRValue::MallocStrScoped fileName( *args );
 	if ( fileName )
 	{
-		WRFSFile* entry = (WRFSFile *)g_malloc( sizeof(WRFSFile) );
+		void* memory = g_malloc( sizeof(WRFSFile) );
 
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-		if(!entry) { g_mallocFailed = true; return; }
-#endif
+	#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if(!memory) { g_mallocFailed = true; return; }
+	#endif
+
+		WRFSFile* entry = new(memory) WRFSFile;
 		
-		if ( mode & LFS_READ )
-		{
-			entry->file = FILE_OBJ.open( fileName, FILE_READ );
-		}
-		else if ( (mode & LFS_RDWR) || (mode & LFS_APPEND) )
-		{
-			entry->file = FILE_OBJ.open( fileName, FILE_WRITE );
-		}
-		else if ( mode & LFS_APPEND )
+		if ( mode & LFS_APPEND )
 		{
 			entry->file = FILE_OBJ.open( fileName, FILE_APPEND );
 		}
+		else if ( mode & LFS_READ )
+		{
+			entry->file = FILE_OBJ.open( fileName, FILE_READ );
+		}
+		else if ( mode & LFS_RDWR )
+		{
+			entry->file = FILE_OBJ.open( fileName, FILE_WRITE );
+		}
 		else
 		{
-			g_free( entry );
+			wr_destroyFile( entry );
 			return;
 		}
 
 		if ( !entry->file )
 		{
-			g_free( entry );
+			wr_destroyFile( entry );
 			return;
 		}
 
 		entry->next = g_OpenFiles;
 		g_OpenFiles = entry;
-		stackTop->p = entry;
+		stackTop->r1 = entry;
 	}
 }
 
@@ -21692,7 +23078,7 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 {
 	WRValue* args = stackTop - argn;
-	if ( !argn || !args->p )
+	if ( !argn || !args->r1 )
 	{
 		return;
 	}
@@ -21701,7 +23087,7 @@ void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 	WRFSFile* cur = g_OpenFiles;
 	while( cur )
 	{
-		if ( cur == args->p )
+		if ( cur == args->r1 )
 		{
 			cur->file.close();
 			
@@ -21714,7 +23100,7 @@ void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 				prev->next = cur->next;
 			}
 			
-			g_free( cur );
+			wr_destroyFile( cur );
 			break;
 		}
 
@@ -21739,7 +23125,7 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 		return;
 	}
 
-	WRFSFile* fd = wr_safeGetFile( args[0].p );
+	WRFSFile* fd = wr_safeGetFile( args[0].r1 );
 	if ( !fd )
 	{
 		return;
@@ -21762,14 +23148,14 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_ioWrite( WRValue* stackTop, const int argn, WRContext* c )
 {
-	if ( argn != 2 )
+	if ( argn < 2 )
 	{
 		return;
 	}
 
 	WRValue* args = stackTop - argn;
 
-	WRFSFile* fd = wr_safeGetFile( args[0].p );
+	WRFSFile* fd = wr_safeGetFile( args[0].r1 );
 	if ( !fd )
 	{
 		return;
@@ -21812,7 +23198,7 @@ void wr_ioSeek( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		WRValue* args = stackTop - argn;
 
-		WRFSFile* fd = wr_safeGetFile( args[0].p );
+		WRFSFile* fd = wr_safeGetFile( args[0].r1 );
 		if ( !fd )
 		{
 			return;
@@ -21839,7 +23225,7 @@ void wr_ioFSync(WRValue* stackTop, const int argn, WRContext* c)
 {
 	if ( argn == 1 )
 	{
-		WRFSFile* fd = wr_safeGetFile( (stackTop - 1)->p );
+		WRFSFile* fd = wr_safeGetFile( (stackTop - 1)->r1 );
 		if ( fd )
 		{
 			fd->file.flush();
@@ -21850,12 +23236,11 @@ void wr_ioFSync(WRValue* stackTop, const int argn, WRContext* c)
 //------------------------------------------------------------------------------
 void wr_ioCleanupFunction( WRState* w, void* param )
 {
-	WRFSFile* g_OpenFiles =0;
 	while( g_OpenFiles )
 	{
 		WRFSFile* next = g_OpenFiles->next;
 		g_OpenFiles->file.close();
-		g_free( g_OpenFiles );
+		wr_destroyFile( g_OpenFiles );
 		g_OpenFiles = next;
 	}
 }
@@ -21863,8 +23248,6 @@ void wr_ioCleanupFunction( WRState* w, void* param )
 //------------------------------------------------------------------------------
 void wr_ioPushConstants( WRState* w )
 {
-	WRValue C;
-	
 	wr_registerLibraryConstant( w, "io::O_RDONLY", (int32_t)LFS_READ );
 	wr_registerLibraryConstant( w, "io::O_RDWR", (int32_t)LFS_RDWR );
 	wr_registerLibraryConstant( w, "io::O_APPEND", (int32_t)LFS_APPEND );
@@ -21879,6 +23262,25 @@ void wr_ioPushConstants( WRState* w )
 	wr_addLibraryCleanupFunction( w, wr_ioCleanupFunction, 0 );
 
 }
+
+//------------------------------------------------------------------------------
+void wr_loadIOLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "io::readFile", wr_read_file );
+	wr_registerLibraryFunction( w, "io::writeFile", wr_write_file );
+	wr_registerLibraryFunction( w, "io::deleteFile", wr_delete_file );
+	wr_registerLibraryFunction( w, "io::getline", wr_getline );
+	wr_registerLibraryFunction( w, "io::open", wr_ioOpen );
+	wr_registerLibraryFunction( w, "io::close", wr_ioClose );
+	wr_registerLibraryFunction( w, "io::read", wr_ioRead );
+	wr_registerLibraryFunction( w, "io::write", wr_ioWrite );
+	wr_registerLibraryFunction( w, "io::seek", wr_ioSeek );
+	wr_registerLibraryFunction( w, "io::fsync", wr_ioFSync );
+
+	wr_ioPushConstants( w );
+}
+
+#undef FILE_OBJ
 
 #endif
 /*******************************************************************************
@@ -22029,8 +23431,7 @@ resetState:
 		}
 		else // string or integer
 		{
-			const int c_bufSize = 20;
-			char buf[c_bufSize]; // buffer for integer
+			char buf[32]; // buffer for integer
 
 			const char *ptr; // pointer to first char of integer
 			unsigned int len;
@@ -22841,7 +24242,11 @@ void wr_math_sin( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = sin( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = sinf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22851,7 +24256,11 @@ void wr_math_cos( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = cos( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = cosf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22861,7 +24270,11 @@ void wr_math_tan( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = tan( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = tanf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22871,7 +24284,11 @@ void wr_math_sinh( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = sinh( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = sinhf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22881,7 +24298,11 @@ void wr_math_cosh( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = cosh( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = coshf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22891,7 +24312,11 @@ void wr_math_tanh( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = tanh( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = tanhf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22901,7 +24326,11 @@ void wr_math_asin( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = asin( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = asinf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22911,7 +24340,11 @@ void wr_math_acos( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = acos( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = acosf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22921,7 +24354,11 @@ void wr_math_atan( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = atan( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = atanf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22931,7 +24368,11 @@ void wr_math_atan2( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 2 )
 	{
-		stackTop->f = atan2f( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = atan2( (stackTop - 2)->asDouble(), (stackTop - 1)->asDouble() );
+#else
+		stackTop->f = atan2f( (stackTop - 2)->asFloat(), (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22941,7 +24382,11 @@ void wr_math_log( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = log( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = logf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22951,7 +24396,11 @@ void wr_math_log10( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = log10( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = log10f( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22961,7 +24410,11 @@ void wr_math_exp( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = exp( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = expf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22971,7 +24424,11 @@ void wr_math_sqrt( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = sqrt( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = sqrtf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22981,7 +24438,11 @@ void wr_math_ceil( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = ceil( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = ceilf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -22991,7 +24452,11 @@ void wr_math_floor( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = floor( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = floorf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -23001,7 +24466,11 @@ void wr_math_abs( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = fabs( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = (float)fabs( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -23011,7 +24480,11 @@ void wr_math_pow( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 2 )
 	{
-		stackTop->f = powf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = pow( (stackTop - 2)->asDouble(), (stackTop - 1)->asDouble() );
+#else
+		stackTop->f = powf( (stackTop - 2)->asFloat(), (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -23021,7 +24494,11 @@ void wr_math_fmod( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 2 )
 	{
-		stackTop->f = fmodf( (stackTop - 1)->asFloat(), (stackTop - 2)->asFloat() );
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = fmod( (stackTop - 2)->asDouble(), (stackTop - 1)->asDouble() );
+#else
+		stackTop->f = fmodf( (stackTop - 2)->asFloat(), (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -23031,7 +24508,11 @@ void wr_math_trunc( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = trunc( (stackTop - 1)->asDouble() );
+#else
 		stackTop->f = truncf( (stackTop - 1)->asFloat() );
+#endif
 	}
 }
 
@@ -23041,14 +24522,24 @@ void wr_math_ldexp( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 2 )
 	{
-		stackTop->f = ldexpf( (stackTop - 1)->asFloat(), (stackTop - 2)->asInt() );
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = ldexp( (stackTop - 2)->asDouble(), (stackTop - 1)->asInt() );
+#else
+		stackTop->f = ldexpf( (stackTop - 2)->asFloat(), (stackTop - 1)->asInt() );
+#endif
 	}
 }
 
 //------------------------------------------------------------------------------
+#ifdef WRENCH_DOUBLE_PRECISION
+const double wr_PI = 3.14159265358979323846;
+const double wr_toDegrees = (180.0 / wr_PI);
+const double wr_toRadians = (1.0 / wr_toDegrees);
+#else
 const float wr_PI = 3.14159265358979323846f;
 const float wr_toDegrees = (180.f / wr_PI);
 const float wr_toRadians = (1.f / wr_toDegrees);
+#endif
 
 //------------------------------------------------------------------------------
 void wr_math_rad2deg( WRValue* stackTop, const int argn, WRContext* c )
@@ -23056,7 +24547,11 @@ void wr_math_rad2deg( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = wr_toDegrees * (stackTop - 1)->asDouble();
+#else
 		stackTop->f = wr_toDegrees * (stackTop - 1)->asFloat();
+#endif
 	}
 }
 
@@ -23066,7 +24561,11 @@ void wr_math_deg2rad( WRValue* stackTop, const int argn, WRContext* c )
 	stackTop->p2 = INIT_AS_FLOAT;
 	if ( argn == 1 )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		stackTop->d = wr_toRadians * (stackTop - 1)->asDouble();
+#else
 		stackTop->f = wr_toRadians * (stackTop - 1)->asFloat();
+#endif
 	}
 }
 
@@ -23090,6 +24589,16 @@ void wr_intScale(WRValue* stackTop, const int argn, WRContext* c)
 	}
 
 	stackTop->i = res;
+}
+
+//------------------------------------------------------------------------------
+void wr_sizeofFloat(WRValue* stackTop, const int argn, WRContext* c)
+{
+#ifdef WRENCH_DOUBLE_PRECISION
+	stackTop->i = 8;
+#else
+	stackTop->i = 4;
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -23122,6 +24631,8 @@ void wr_loadMathLib( WRState* w )
 	wr_registerLibraryFunction( w, "math::rad2deg", wr_math_rad2deg );
 
 	wr_registerLibraryFunction( w, "math::iscale", wr_intScale);
+
+	wr_registerLibraryFunction( w, "math::sizeofFloat", wr_sizeofFloat);
 }
 /*******************************************************************************
 Copyright (c) 2026 Curt Hartung -- curt.hartung@gmail.com
@@ -23571,7 +25082,7 @@ void wr_arrayTruncate( WRValue* stackTop, const int argn, WRContext* c )
 	WRValue* A;
 	WRValue* args = stackTop - argn;
 
-	if( (argn < 1) || !(A = wr_ifValueArray(args)) )
+	if( (argn < 2) || !(A = wr_ifValueArray(args)) )
 	{
 		return;
 	}
@@ -23797,7 +25308,7 @@ void wr_hashExistEx( WRValue* stackTop, const int argn, bool remove )
 	WRValue* args = stackTop - argn;
 	if( (argn >= 2) && (H = wr_ifHash(args)) )
 	{
-		stackTop->p = H->va->exists( args[1].getHash(), remove );
+		stackTop->r1 = H->va->exists( args[1].getHash(), remove );
 	}
 }
 
@@ -24219,12 +25730,29 @@ void wr_fastled_setup2812( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn > 0 )
 	{
+		int numLeds = (stackTop - argn)->asInt();
+		if ( numLeds <= 0 )
+		{
+			return;
+		}
+
 		if ( wr_leds )
 		{
 			g_free( wr_leds );
 		}
-		
-		wr_numLeds = (stackTop - argn)->asInt();
+
+		wr_leds = (CRGB*)g_malloc( sizeof(CRGB) * numLeds );
+		if ( !wr_leds )
+		{
+			wr_numLeds = 0;
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			g_mallocFailed = true;
+#endif
+			return;
+		}
+
+		memset( wr_leds, 0, sizeof(CRGB) * numLeds );
+		wr_numLeds = numLeds;
 
 		FastLED.addLeds<WS2812B, WR_FASTLED_DATA_PIN, GRB>(wr_leds, wr_numLeds);
 	}
@@ -24242,7 +25770,7 @@ void wr_fastled_brightness( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_fastled_set( WRValue* stackTop, const int argn, WRContext* c )
 {
-	if ( argn > 3 )
+	if ( argn > 3 && wr_leds )
 	{
 		WRValue* args = stackTop - argn;
 
@@ -24253,8 +25781,6 @@ void wr_fastled_set( WRValue* stackTop, const int argn, WRContext* c )
 			wr_leds[led].g = args[2].asInt();
 			wr_leds[led].b = args[3].asInt();
 		}
-
-		FastLED.addLeds<WS2812B, WR_FASTLED_DATA_PIN, GRB>(wr_leds, wr_numLeds);
 	}
 }
 
@@ -24267,9 +25793,9 @@ void wr_fastled_show( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_loadFastLEDLib( WRState* w )
 {
-	wr_registerLibraryFunction( w, "fastled::setup2812", wr_fastled_setup2812 ); // ( data_pin, num leds )
-	wr_registerLibraryFunction( w, "fastled::brightness", wr_fastled_show ); // ( brightness )
-	wr_registerLibraryFunction( w, "fastled::set", wr_fastled_show ); // ( led, r, g, b )
+	wr_registerLibraryFunction( w, "fastled::setup2812", wr_fastled_setup2812 ); // ( num leds )
+	wr_registerLibraryFunction( w, "fastled::brightness", wr_fastled_brightness ); // ( brightness )
+	wr_registerLibraryFunction( w, "fastled::set", wr_fastled_set ); // ( led, r, g, b )
 	wr_registerLibraryFunction( w, "fastled::show", wr_fastled_show ); // ()
 }
 

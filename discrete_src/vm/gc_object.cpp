@@ -308,7 +308,7 @@ tryAgain:
 
 				// value
 				to->p2 = from->p2;
-				to->p = from->p;
+				to->p1 = from->p1;
 				from->p2 = INIT_AS_REF;
 				from->r = to;
 
@@ -316,7 +316,7 @@ tryAgain:
 				++to;
 				++from;
 				to->p2 = from->p2;
-				to->p = from->p;
+				to->p1 = from->p1;
 				from->p2 = INIT_AS_REF;
 				from->r = to;
 			}

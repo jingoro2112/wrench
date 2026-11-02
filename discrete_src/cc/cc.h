@@ -109,8 +109,8 @@ const WROperation c_operations[] =
 	{ "|=",  17, O_ORAssign,            true,  WR_OPER_BINARY, O_LAST },
 	{ "&=",  17, O_ANDAssign,           true,  WR_OPER_BINARY, O_LAST },
 	{ "^=",  17, O_XORAssign,           true,  WR_OPER_BINARY, O_LAST },
-	{ ">>=", 17, O_RightShiftAssign,   false,  WR_OPER_BINARY, O_LAST },
-	{ "<<=", 17, O_LeftShiftAssign,    false,  WR_OPER_BINARY, O_LAST },
+	{ ">>=", 17, O_RightShiftAssign,    true,  WR_OPER_BINARY, O_LAST },
+	{ "<<=", 17, O_LeftShiftAssign,     true,  WR_OPER_BINARY, O_LAST },
 
 	{ "=",   17, O_Assign,             false,  WR_OPER_BINARY, O_LAST },
 

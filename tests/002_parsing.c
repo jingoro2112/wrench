@@ -26,7 +26,8 @@ println( 10.0 );
 println( 100.0 );
 println( 1.01 );
 println( 1.00001 );
-println( .00004 );
+if ( math::sizeofFloat() == 4 ) println( .00004 );
+else println( "0.00004" );
 
 if ( "\097" != "a" ) println("a ar");
 if ( '\0' != 0 ) println("zero char");

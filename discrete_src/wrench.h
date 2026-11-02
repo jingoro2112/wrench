@@ -30,9 +30,9 @@ SOFTWARE.
 #include <math.h>
 #include <assert.h>
 
-#define WRENCH_VERSION_MAJOR 7
-#define WRENCH_VERSION_MINOR 2
-#define WRENCH_VERSION_BUILD 2
+#define WRENCH_VERSION_MAJOR 8
+#define WRENCH_VERSION_MINOR 0
+#define WRENCH_VERSION_BUILD 0
 
 struct WRState;
 
@@ -74,6 +74,7 @@ memory requirements, as some embedded systems do, you may re-define
 them here, but they MUST match the endian-ness of the target
 architecture, see vm.h for the current definitions
 */
+//#define READ_64_FROM_PC( P )
 //#define READ_32_FROM_PC( P ) 
 //#define READ_16_FROM_PC( P )
 //#define READ_8_FROM_PC( P )
@@ -123,6 +124,12 @@ void wr_setInstructionsPerSlice( WRState* w, const int instructions );
 void wr_forceYield( WRState* w );  // for the VM to yield right NOW
 int wr_slicesUsedLastCall( WRState* w );  // how many time slices did the last call to the VM use?
 #endif
+
+/************************************************************************
+For double-precision floats, this does incur a 4-byte overhead to every
+stack value.
+*/
+//#define WRENCH_DOUBLE_PRECISION
 
 /************************************************************************
 if you WANT full sprintf support for floats (%f/%g) this adds it at
@@ -477,6 +484,7 @@ inline void wr_setOnCallbackNotFound( WRState* w, WR_C_CALLBACK_NOT_FOUND onCall
 
 // int:      .asInt();
 // float:    .asFloat();
+// double:   .asDouble();
 // uint32_t: .asHash();
 // binary:   .array( unsigned int* size, char* type );
 // string:   .c_str( unsigned int* len );
@@ -537,6 +545,7 @@ inline void wr_setOnLibCallbackNotFound( WRState* w, WR_LIB_CALLBACK_NOT_FOUND o
 // function:  callback (see typedef above)
 void wr_registerLibraryFunction( WRState* w, const char* signature, WR_LIB_CALLBACK function );
 void wr_registerLibraryConstant( WRState* w, const char* signature, const int32_t i );
+void wr_registerLibraryConstant( WRState* w, const char* signature, const double d );
 void wr_registerLibraryConstant( WRState* w, const char* signature, const float f );
 
 // you can write your own libraries (look at std.cpp for all the
@@ -582,6 +591,7 @@ void wr_loadArduinoLCDLib( WRState* w );
 WRValue& wr_makeString( WRContext* context, WRValue* val, const char* data, const int len =0 );
 inline WRValue& wr_makeInt( WRValue* val, int i );
 inline WRValue& wr_makeFloat( WRValue* val, float f );
+inline WRValue& wr_makeDouble( WRValue* val, double d );
 
 // turning a value into a container,
 // NOTE!! Allocates a hash table which must be released with destroy!!
@@ -601,6 +611,9 @@ void wr_addArrayToContainer( WRValue* container, const char* name, char* array, 
 
 // memory managed by the container, fire and forget:
 void wr_addFloatToContainer( WRValue* container, const char* name, const float f );
+#ifdef WRENCH_DOUBLE_PRECISION
+void wr_addFloatToContainer( WRValue* container, const char* name, const double f );
+#endif
 void wr_addIntToContainer( WRValue* container, const char* name, const int i );
 
 // read back the value (if found) from a user-created container
@@ -610,7 +623,7 @@ WRValue* wr_getValueFromContainer( WRValue const& container, const char* name );
 //                    "standard" functions
 
 extern int32_t wr_Seed;
-extern const int32_t wr_randEx( const int32_t from, const int32_t to );
+extern int32_t wr_randEx( int32_t from, int32_t to );
 
 
 // inside-baseball time. This has to be here so stuff that includes
@@ -814,25 +827,36 @@ struct WRValue
 {
 	WRValue( int val ) { init(val); }
 	WRValue( float val ) { init(val); }
+	WRValue( double val ) { init(val); }
 
-	WRValue* init() { p = 0; p2 = WR_INT; return this; }
+	WRValue* init() { p1 = 0; p2 = WR_INT; return this; }
 	WRValue* init( int val ) { i = val; p2 = WR_INT; return this; }
+#ifdef WRENCH_DOUBLE_PRECISION
+	WRValue* init( float val ) { d = (double)val; p2 = WR_FLOAT; return this; }
+	WRValue* init( double val ) { d = val; p2 = WR_FLOAT; return this; }
+#else
 	WRValue* init( float val ) { f = val; p2 = WR_FLOAT; return this; }
+	WRValue* init( double val ) { f = (float)val; p2 = WR_FLOAT; return this; }
+#endif
 
 	// never reference the data members directly, they are unions and
 	// bad things will happen. Always access them with one of these
 	// methods
 	int asInt() const;
 	float asFloat() const;
+	double asDouble() const;
 
 	// setting this value, do any extra work required. Note that
 	// setString() requires a context, since the string is actually a
 	// created array that needs to be referenced
 	void setString( WRContext* context, const char* data, const int len =0 ) { wr_makeString(context, this, data, len); }
 	void setFloat( const float F ) { wr_makeFloat(this, F); }
+	void setDouble( const double D ) { wr_makeDouble(this, D); }
+
 	void setInt( const int I ) { wr_makeInt(this, I); }
 
 	bool isFloat() const {return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
+	bool isDouble() const {return type == WR_FLOAT || (type == WR_REF && r->type == WR_FLOAT); }
 	bool isInt() const { return type == WR_INT || (type == WR_REF && r->type == WR_INT); }
 	bool isString( int* len =0 ) const;
 	bool isWrenchArray( int* len =0 ) const;
@@ -885,16 +909,26 @@ struct WRValue
 	WRValue& singleValue() const; // return a single value for comparison
 	WRValue& deref() const; // if this value is a CONTAINER_MEMBER, copy the referred value in
 
-	uint32_t getHash() const { return (type <= WR_FLOAT) ? ui : getHashEx(); } // easy cases
+	uint32_t getHash() const
+	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		return (type == WR_INT) ? ui
+		     : (type == WR_FLOAT) ? ((uint32_t)ll ^ (uint32_t)(ll >> 32))
+		     : getHashEx();
+#else
+		return (type <= WR_FLOAT) ? ui : getHashEx(); // easy cases
+#endif
+	}
 	uint32_t getHashEx() const; // harder
 
+#ifdef WRENCH_DOUBLE_PRECISION
+	#pragma pack(push, 4)
+#endif
 	union // first 4 bytes 
 	{
 		int32_t i;
 		uint32_t ui;
-		float f;
 		WRValue* frame;
-		const void* p;
 		void* r1;
 		char* c;
 		WRValue* r;
@@ -903,7 +937,20 @@ struct WRValue
 		WR_C_CALLBACK ccb;
 		WR_LIB_CALLBACK lcb;
 		WRFunction* wrf;
+
+#ifdef WRENCH_DOUBLE_PRECISION // er.. first 8 bytes
+		uint64_t p1;
+		double d;
+		uint64_t ll;
+#else
+		uintptr_t p1;
+		float f;
+#endif
+			
 	};
+#ifdef WRENCH_DOUBLE_PRECISION
+	#pragma pack(pop)
+#endif
 
 	union
 	{
@@ -949,8 +996,8 @@ struct WRValue
 	};
 
 	WRValue() {}
-	inline WRValue& operator= (const WRValue& V) { r1 = V.r1; r2 = V.r2; return *this; }
-	inline WRValue(const WRValue& V) { r1 = V.r1; r2 = V.r2; }
+	inline WRValue& operator= (const WRValue& V) { p1 = V.p1; p2 = V.p2; return *this; }
+	inline WRValue(const WRValue& V) { p1 = V.p1; p2 = V.p2; }
 
 public:
 
@@ -984,6 +1031,7 @@ public:
 //------------------------------------------------------------------------------
 inline WRValue& wr_makeInt( WRValue* val, int i ) { return *(val->init( i )); }
 inline WRValue& wr_makeFloat( WRValue* val, float f ) { return *(val->init( f )); }
+inline WRValue& wr_makeDouble( WRValue* val, double d ) { return *(val->init( d )); }
 
 //------------------------------------------------------------------------------
 class WRGCBase
@@ -1044,7 +1092,9 @@ public:
 	int32_t* Int();
 	
 	operator float* () { return (float*)Float(); }
+	operator double* () { return (double*)Double(); }
 	float* Float();
+	double* Double();
 
 	// this will convert it to an array if it isn't one
 	WRValue& operator[] ( const int index ) { return *asArrayMember( index ); }

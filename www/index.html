@@ -282,6 +282,16 @@ performance hit so only use it if absolutely necessary
 code will run just fine but not trigger any functionality.
 
 
+<pre><code>//#define WRENCH_DOUBLE_PRECISION
+</pre></code>
+<p>Enable this to use <code>double</code> for floating point values and
+operations instead of the default <code>float</code>. This is a build-time
+option and must be defined consistently for wrench and every source file
+that includes <code>wrench.h</code>. See
+<a href="#double-precision">Double Precision</a> for memory and bytecode
+compatibility details.
+
+
 <pre><code>#define WRENCH_DEFAULT_STACK_SIZE 64
 </pre></code>
 <p>by default wrench allocates a static stack and does not bounds-check it, this
@@ -295,8 +305,11 @@ Warning: this adds a small if() check to many opcodes, so there is a
 small overhead to using it.
 
 
-<p>Each stack entry consumes 8 bytes, so embedded devices that have
-very limited ram (like the Uno Mini) might want to reduce this.
+<p>On a 32-bit target, each stack entry consumes 8 bytes by default or
+12 bytes when <code>WRENCH_DOUBLE_PRECISION</code> is enabled. On a 64-bit
+target, pointer size normally makes a stack entry 16 bytes in either
+mode. Embedded devices that have very limited ram (like the Uno Mini)
+might want to reduce the stack size.
 The arduino example provided has a stack of 32, which
 should be plenty to run even a pretty intricate script.
 
@@ -1125,12 +1138,47 @@ This sample implementation can be found in wrench_cli.cpp:
 create the WRState (default 64)
 
 
+<hr><h2><a name="double-precision"></a>double precision</h2></hr>
+<p>By default <code>WRENCH_DOUBLE_PRECISION</code> is not defined and
+wrench uses 32-bit, single-precision <code>float</code> values. This keeps
+the original embedded memory footprint and performance characteristics.
+<p>To use 64-bit, double-precision floating point values, define this for
+the entire build, normally with a compiler option such as
+<code>-DWRENCH_DOUBLE_PRECISION</code> or before including
+<code>wrench.h</code>:
+<pre><code>#define WRENCH_DOUBLE_PRECISION
+</code></pre>
+When enabled, floating point literals, values, operators and math-library
+functions use <code>double</code> instead of <code>float</code>. On 32-bit
+targets this adds 4 bytes to each stack entry, growing it from 8 bytes
+to 12 bytes. On typical 64-bit targets, pointers already make stack
+entries 16 bytes, so enabling double precision does not increase their
+size. Code and data used only by double precision are compiled out when
+the option is disabled.
+<p>This define changes the layout of public value types on 32-bit targets.
+The wrench implementation and all application translation units that use
+<code>WRValue</code> must therefore be compiled with the same setting. It
+is not a runtime option and must not be mixed within one executable.
+<p>The bytecode format remains compatible in both directions. A
+single-precision VM accepts bytecode emitted by a double-precision
+compiler and narrows double literals to <code>float</code>. A
+double-precision VM accepts bytecode emitted by a single-precision
+compiler and widens float literals to <code>double</code>. Narrowing can
+lose precision, and calculations or exact floating point comparisons can
+produce different results when bytecode is run at a precision other than
+the one used to compile it.
+<p>The math library call <code>math::sizeofFloat()</code> returns
+<code>4</code> for the default single-precision build and <code>8</code>
+when <code>WRENCH_DOUBLE_PRECISION</code> is defined.
+
+
 <hr><h2>stack protection</h2></hr>
 <p>wrench uses the stack sparingly for storing function locals, return
 vectors and temp space for long calculations. Unless the script uses a
 lot of recursion or a lot of locals, a modest stack of even 20 or 30
-entries is more than enough. The default of 64 consumes only 256 bytes
-of RAM.
+entries is more than enough. On a 32-bit target, the default of 64
+consumes 512 bytes in single-precision mode or 768 bytes with
+<code>WRENCH_DOUBLE_PRECISION</code>, excluding state overhead.
 <p>For this reason the stack is not normally checked for overflow,
 since it would be a waste of cycles.
 <p>If this protection is desired, define
@@ -1517,6 +1565,7 @@ math::ldexp( a, b );
 math::deg2rad( f );
 math::rad2deg( f );
 math::iscale( a, b, divisor ); // integer scale helper: (a*b)/divisor
+math::sizeofFloat(); // returns 4, or 8 when WRENCH_DOUBLE_PRECISION is defined
 </pre></div><p></p>
 
 

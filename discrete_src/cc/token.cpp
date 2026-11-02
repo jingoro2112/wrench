@@ -370,7 +370,7 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 				{
 					value.p2 = INIT_AS_INT;
 					value.type = (WRValueType)WR_COMPILER_LITERAL_STRING;
-					value.p = &token;
+					value.r1 = &token;
 				}
 			}
 			else if ( token[0] == '/' ) // might be a comment
@@ -531,7 +531,11 @@ bool WRCompilationContext::getToken( WRExpressionContext& ex, const char* expect
 					if ( decimal )
 					{
 						value.p2 = INIT_AS_FLOAT;
+#ifdef WRENCH_DOUBLE_PRECISION
+						value.d = atof( token );
+#else
 						value.f = (float)atof( token );
+#endif
 					}
 					else
 					{

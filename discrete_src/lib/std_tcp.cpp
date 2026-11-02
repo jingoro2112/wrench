@@ -81,7 +81,7 @@ static int isIp( const char *data, unsigned int *mask =0 )
 
 	int pos = 0;
 	unsigned int running = 0;
-	int address = 0;
+	unsigned int address = 0;
 
 	if( !COMM_isdigit(data[pos]) )
 	{
@@ -107,34 +107,8 @@ static int isIp( const char *data, unsigned int *mask =0 )
 		return 0;
 	}
 
-	address |= running;
+	address |= running << 24;
 	running = 0;
-
-	if( !COMM_isdigit(data[pos]) )
-	{
-		return 0;
-	}
-
-	running = data[pos++] - '0';
-
-	if ( COMM_isdigit(data[pos]) )
-	{
-		running *= 10;
-		running += data[pos++] - '0';
-
-		if ( COMM_isdigit(data[pos]) )
-		{
-			running *= 10;
-			running += data[pos++] - '0';
-		}
-	}
-
-	if ( (data[pos++] != '.') || (running > 255) )
-	{
-		return 0;
-	}
-
-	address |= running << 8;
 
 	if( !COMM_isdigit(data[pos]) )
 	{
@@ -181,19 +155,45 @@ static int isIp( const char *data, unsigned int *mask =0 )
 		}
 	}
 
+	if ( (data[pos++] != '.') || (running > 255) )
+	{
+		return 0;
+	}
+
+	address |= running << 8;
+
+	if( !COMM_isdigit(data[pos]) )
+	{
+		return 0;
+	}
+
+	running = data[pos++] - '0';
+
+	if ( COMM_isdigit(data[pos]) )
+	{
+		running *= 10;
+		running += data[pos++] - '0';
+
+		if ( COMM_isdigit(data[pos]) )
+		{
+			running *= 10;
+			running += data[pos++] - '0';
+		}
+	}
+
 	if ( running > 255 )
 	{
 		return 0;
 	}
 
-	address |= running << 24;
+	address |= running;
 
 	if ( mask )
 	{
 		*mask = 0;
 		if ( !data[pos] )
 		{
-			return address;
+			return (int)htonl( address );
 		}
 
 		if ( data[pos++] != '/' )
@@ -203,7 +203,7 @@ static int isIp( const char *data, unsigned int *mask =0 )
 
 		if ( !data[pos] )
 		{
-			return address;
+			return (int)htonl( address );
 		}
 
 		if ( !COMM_isdigit(data[pos]) )
@@ -216,7 +216,7 @@ static int isIp( const char *data, unsigned int *mask =0 )
 		{
 			*mask = c_legalMasks[*mask];
 			*mask = htonl(*mask);
-			return address;
+			return (int)htonl( address );
 		}
 
 		if ( !COMM_isdigit(data[pos]) )
@@ -239,7 +239,7 @@ static int isIp( const char *data, unsigned int *mask =0 )
 		return 0;
 	}
 
-	return address;
+	return (int)htonl( address );
 }
 
 //------------------------------------------------------------------------------
@@ -247,12 +247,16 @@ static char* ipFromAddress( const char* hostname, sockaddr_in* location, char* s
 {
 	memset( location, 0, sizeof(sockaddr_in) );
 
-	*((int *)&location->sin_addr) = isIp( hostname );
-	if ( !*((int *)&location->sin_addr) )
+	location->sin_addr.s_addr = (unsigned int)isIp( hostname );
+	if ( !location->sin_addr.s_addr )
 	{
 		struct addrinfo *result;
+		struct addrinfo hints;
+		memset( &hints, 0, sizeof(hints) );
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
 
-		if ( getaddrinfo(hostname, NULL, NULL, &result) )
+		if ( getaddrinfo(hostname, NULL, &hints, &result) )
 		{
 			return 0;
 		}
@@ -268,12 +272,17 @@ static char* ipFromAddress( const char* hostname, sockaddr_in* location, char* s
 //------------------------------------------------------------------------------
 int wr_bindTCPEx( const int port )
 {
+	if ( port < 0 || port > 65535 )
+	{
+		return -1;
+	}
+
 	sockaddr_in location;
 	memset( &location, 0, sizeof(location) );
 
 	location.sin_family = AF_INET;
 	location.sin_addr.s_addr = htonl( INADDR_ANY );
-	location.sin_port = htons( (short)port );
+	location.sin_port = htons( (unsigned short)port );
 
 	int s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if ( s == -1 )
@@ -325,14 +334,22 @@ void wr_acceptTCP( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 int wr_connectTCPEx( const char* address, const int port )
 {
+	if ( !address || !address[0] || port < 0 || port > 65535 )
+	{
+		return -1;
+	}
+
 	sockaddr_in location;
 	memset( &location, 0, sizeof(location) );
 
 	char ret[21];
-	ipFromAddress( address, &location, ret );
+	if ( !ipFromAddress(address, &location, ret) )
+	{
+		return -1;
+	}
 	
 	location.sin_family = AF_INET;
-	location.sin_port = htons( port );
+	location.sin_port = htons( (unsigned short)port );
 
 	int sock;
 	if ( (sock = ::socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) == -1 )
@@ -361,8 +378,13 @@ void wr_connectTCP( WRValue* stackTop, const int argn, WRContext* c )
 	WRValue* args = stackTop - argn;
 
 	char* address = args[0].asMallocString();
-	if ( !address || !address[0] )
+	if ( !address )
 	{
+		return;
+	}
+	if ( !address[0] )
+	{
+		g_free( address );
 		return;
 	}
 
@@ -374,7 +396,7 @@ void wr_connectTCP( WRValue* stackTop, const int argn, WRContext* c )
 void wr_closeTCPEx( const int socket )
 {
 #ifdef WRENCH_WIN32_TCP
-	_close( socket );
+	closesocket( socket );
 #endif
 #ifdef WRENCH_LINUX_TCP
 	close( socket );
@@ -416,7 +438,7 @@ void wr_sendTCP( WRValue* stackTop, const int argn, WRContext* c )
 	WRValue* args = stackTop - argn;
 
 	unsigned int len;
-	char* data = args[0].asMallocString( &len );
+	char* data = args[1].asMallocString( &len );
 	if ( data )
 	{
 		stackTop->i = wr_sendTCPEx( args[0].asInt(), data, len );
@@ -431,21 +453,22 @@ int wr_receiveTCPEx( const int socket, char* data, const int toRead, const int t
 #ifdef WRENCH_WIN32_TCP
 	DWORD timeout = timeoutMilliseconds;
 	setsockopt( socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout) );
-	return _read( socket, data, toRead );
+	return recv( socket, data, toRead, 0 );
 #endif
 #ifdef WRENCH_LINUX_TCP
 	struct timeval timeout;
-	timeout.tv_sec = timeoutMilliseconds;
-	timeout.tv_usec = 0;
+	timeout.tv_sec = timeoutMilliseconds / 1000;
+	timeout.tv_usec = (timeoutMilliseconds % 1000) * 1000;
 	setsockopt( socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-	return read( socket, data, toRead );
+	return recv( socket, data, toRead, 0 );
 #endif
 }
 
 //------------------------------------------------------------------------------
 void wr_receiveTCP( WRValue* stackTop, const int argn, WRContext* c )
 {
-	if ( argn < 2 )
+	stackTop->init();
+	if ( argn < 1 )
 	{
 		return;
 	}
@@ -456,13 +479,23 @@ void wr_receiveTCP( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		toRead = args[1].asInt();
 	}
+	if ( toRead <= 0 )
+	{
+		return;
+	}
 
 	stackTop->va = c->getSVA( toRead, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+	if ( !stackTop->va )
+	{
+		return;
+	}
+#endif
 	stackTop->p2 = INIT_AS_ARRAY;
 
 	int ret = wr_receiveTCPEx( args[0].asInt(), (char*)stackTop->va->m_Cdata, toRead );
 
-	if ( !ret )
+	if ( ret <= 0 )
 	{
 		stackTop->init();
 	}

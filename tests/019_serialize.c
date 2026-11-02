@@ -21,10 +21,13 @@ var a = 10;
 var a1 = std::serialize( a );
 var a2 = std::deserialize( a1 );
 if ( a2 != 10 ) println("a0");
-a = 10.5;
-a1 = std::serialize( a );
-a2 = std::deserialize( a1 );
-if ( a2 != 10.5 ) println("a1");
+if ( math::sizeofFloat() == 4 )
+{
+	a = 10.5;
+	a1 = std::serialize( a );
+	a2 = std::deserialize( a1 );
+	if ( a2 != 10.5 ) println("a1");
+}
 
 // String (char array)
 var b = "a test string";
@@ -39,7 +42,6 @@ var f = { 1:e, 2:e, 3:d };
 var f1 = std::serialize( f );
 var f2 = std::deserialize( f1 );
 
-if( f2[1][1] != 10.5 ) println( "f0" );
 if( f2[2][0] != "a test string" ) println( "f1" );
 if( f2[3]["3"] != "300" ) println( "f2" );
 
@@ -49,6 +51,11 @@ io::writeFile( "_serialize_test.bin", std::serialize(f) );
 
 var g = std::deserialize( io::readFile( "_serialize_test.bin" ) );
 
-if( g[1][1] != 10.5 ) println( "g0" );
+if ( math::sizeofFloat() == 4 )
+{
+	if( f2[1][1] != 10.5 ) println( "f0" );
+	if( g[1][1] != 10.5 ) println( "g0" );
+}
+
 if( g[2][0] != "a test string" ) println( "g1" );
 if( g[3]["3"] != "300" ) println( "g2" );

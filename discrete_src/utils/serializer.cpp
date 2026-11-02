@@ -37,6 +37,22 @@ bool wr_serializeEx( WRValueSerializer& serializer, const WRValue& val )
 
 	switch( (uint8_t)value.type )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		case WR_INT:
+		{
+			temp32 = wr_x32( value.ui );
+			serializer.write( (char *)&temp32, 4 );
+			return true;
+		}
+
+		case WR_FLOAT:
+		{
+			unsigned char temp8[8];
+			wr_pack64( value.ll, temp8 );
+			serializer.write( (char *)temp8, 8 );
+			return true;
+		}
+#else
 		case WR_INT:
 		case WR_FLOAT:
 		{
@@ -44,6 +60,7 @@ bool wr_serializeEx( WRValueSerializer& serializer, const WRValue& val )
 			serializer.write( (char *)&temp32, 4 );
 			return true;
 		}
+#endif
 
 		case WR_EX:
 		{
@@ -122,6 +139,22 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 
 	switch( (uint8_t)temp )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		case WR_INT:
+		{
+			bool ret = serializer.read( (char *)&value.ui, 4 );
+			value.ui = wr_x32( value.ui );
+			return ret;
+		}
+
+		case WR_FLOAT:
+		{
+			unsigned char temp8[8];
+			if ( !serializer.read( (char *)temp8, 8 ) ) return false;
+			value.ll = READ_64_FROM_PC( temp8 );
+			return true;
+		}
+#else
 		case WR_INT:
 		case WR_FLOAT:
 		{
@@ -129,6 +162,7 @@ bool wr_deserializeEx( WRValue& value, WRValueSerializer& serializer, WRContext*
 			value.ui = wr_x32( value.ui );
 			return ret;
 		}
+#endif
 
 		case WR_EX:
 		{

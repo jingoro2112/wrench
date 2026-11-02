@@ -24,7 +24,7 @@ SOFTWARE.
 
 #include "wrench.h"
 
-#ifndef WRENCH_COMPACT
+#if !defined(WRENCH_COMPACT) && !defined(WRENCH_DOUBLE_PRECISION)
 
 // Define 32-bit signed integer overflow behavior explicitly as two's-complement wrap.
 inline int32_t wr_iadd_wrap( const int32_t a, const int32_t b ) { return (int32_t)((uint32_t)a + (uint32_t)b); }

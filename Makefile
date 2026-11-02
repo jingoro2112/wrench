@@ -1,6 +1,8 @@
 OPT ?= -O3
 #OPT ?= -O0 -ggdb
 
+GCC ?= g++
+
 PERF ?=
 
 #DEBUG ?= -DWRENCH_INCLUDE_DEBUG_CODE
@@ -22,8 +24,8 @@ OBJDIR = objs_linux
 
 -include $(OBJDIR)/*.d
 
-CC = g++ -MD -Wall -Werror $(FLAGS) -c -o
-#CC = g++ -MD $(FLAGS) -c -o
+CC = $(GCC) -MD -Wall -Werror $(FLAGS) -c -o
+#CC = $(GCC) -MD $(FLAGS) -c -o
 
 OBJS = \
 	$(OBJDIR)/cc.o \
@@ -34,6 +36,7 @@ OBJS = \
 	$(OBJDIR)/operations.o \
 	$(OBJDIR)/operations_compact.o \
 	$(OBJDIR)/operations_non_compact.o \
+	$(OBJDIR)/operations_double.o \
 	$(OBJDIR)/index.o \
 	$(OBJDIR)/gc.o \
 	$(OBJDIR)/gc_object.o \
@@ -73,24 +76,24 @@ clean:
 	-@mkdir src
 
 valgrind: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
-	g++ -o wrench_v $(FLAGS) -Wall -Werror -I. -iquote discrete_src -O3 -ggdb $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
+	$(GCC) -o wrench_v $(FLAGS) -Wall -Werror -I. -iquote discrete_src -O3 -ggdb $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
 
 test: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
-	g++ $(OBJS) -Wall -Werror $(FLAGS) -iquote discrete_src -Isrc -I. discrete_src/utils/test_wrench_cross_module_globals.cpp -std=c++11 -DDOCTEST_CONFIG_IMPLEMENT_WITH_MAIN -o test_wrench_cross_module_globals
-	g++ $(OBJS) -Wall -Werror discrete_src/debug/debugger.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -iquote discrete_src -Isrc -DWRENCH_ENABLE_CROSS_MODULE_EXTERNAL_TEST -o wrench_dev
+	$(GCC) $(OBJS) -Wall -Werror $(FLAGS) -iquote discrete_src -Isrc -I. discrete_src/utils/test_wrench_cross_module_globals.cpp -std=c++11 -DDOCTEST_CONFIG_IMPLEMENT_WITH_MAIN -o test_wrench_cross_module_globals
+	$(GCC) $(OBJS) -Wall -Werror discrete_src/debug/debugger.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -iquote discrete_src -Isrc -DWRENCH_ENABLE_CROSS_MODULE_EXTERNAL_TEST -o wrench_dev
 	./test_wrench_cross_module_globals
 	./wrench_dev t
 
 wrench_dev: dev_wrench
 
 dev_wrench: $(OBJS) discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
-	g++ $(OBJS) -Wall -Werror discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp $(FLAGS) -iquote discrete_src -Isrc -o wrench_dev
+	$(GCC) $(OBJS) -Wall -Werror discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp $(FLAGS) -iquote discrete_src -Isrc -o wrench_dev
 
 wrench: $(OBJS) discrete_src/utils/wrench_cli.cpp
-	g++ $(OBJS) -Wall -Werror discrete_src/debug/debugger.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -iquote discrete_src -Isrc -o wrench_dev
+	$(GCC) $(OBJS) -Wall -Werror discrete_src/debug/debugger.cpp discrete_src/utils/wrench_cli.cpp $(FLAGS) -iquote discrete_src -Isrc -o wrench_dev
 	./wrench_dev release discrete_src src/.
 	-@rm wrench_dev
-	g++ -o wrench -Wall -Werror $(FLAGS) -Isrc src/wrench.cpp discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
+	$(GCC) -o wrench -Wall -Werror $(FLAGS) -Isrc src/wrench.cpp discrete_src/utils/wrench_cli.cpp discrete_src/debug/debugger.cpp
 
 $(OBJDIR)/cc.o: discrete_src/cc/cc.cpp
 	$(CC) $@ $<
@@ -111,6 +114,9 @@ $(OBJDIR)/operations.o: discrete_src/vm/operations.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/operations_compact.o: discrete_src/vm/operations_compact.cpp
+	$(CC) $@ $<
+
+$(OBJDIR)/operations_double.o: discrete_src/vm/operations_double.cpp
 	$(CC) $@ $<
 
 $(OBJDIR)/operations_non_compact.o: discrete_src/vm/operations_non_compact.cpp

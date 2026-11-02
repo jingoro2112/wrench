@@ -170,11 +170,13 @@ void testArrayMallocFailureHandling()
 	g_mallocFailed = false;
 
 	WRGCObject* emptyString = context->getSVA(0, SV_CHAR, false);
+	(void)emptyString;
 	assert( emptyString );
 	assert( emptyString->m_size == 0 );
 	assert( emptyString->m_Cdata );
 
 	WRGCObject* emptyArray = context->getSVA(0, SV_VALUE, true);
+	(void)emptyArray;
 	assert( emptyArray );
 	assert( emptyArray->m_size == 0 );
 	assert( emptyArray->m_Vdata );
@@ -207,6 +209,7 @@ void testArrayMallocFailureHandling()
 	target.init( 123 );
 
 	unsigned char* old = va->m_Cdata;
+	(void)old;
 
 	wr_setGlobalAllocator( failAfterNAlloc, failAfterNFree );
 	g_allocationsBeforeFailure = 0;
@@ -376,6 +379,7 @@ const char* sourceOrder[]=
 	"/vm/operations.cpp",
 	"/vm/operations_compact.cpp",
 	"/vm/operations_non_compact.cpp",
+	"/vm/operations_double.cpp",
 	"/vm/index.cpp",
 	"/lib/std.cpp",
 	"/lib/std_io.cpp",
@@ -486,10 +490,14 @@ uint32_t flags = 0;
 int main( int argn, char* argv[] )
 {
 //	wr_setGlobalAllocator( devAlloc, devFree );
-	
-	assert( sizeof(WRValue) == 2*sizeof(void*) );
+
+#ifdef WRENCH_DOUBLE_PRECISION
+	assert( sizeof(double) == 8 );
+#endif
 	assert( sizeof(float) == 4 );
-	assert( sizeof(unsigned char) == 1 );
+	assert( sizeof(int) == 4 );
+	assert( sizeof(char) == 1 );
+	assert( O_LAST <= 255 );
 
 	C3test();
 //	LEAKtest();
@@ -2126,7 +2134,28 @@ void testGlobalValues( WRState* w )
 	WrenchValue wv3( gc, "global_three" );
 	assert( *(int *)wv3 == 30 );
 	wr_callFunction(gc, "test3");
-	assert( *(float *)wv3 == 5.3f );
+#ifdef WRENCH_DOUBLE_PRECISION
+	// Compare via a variable so 32-bit x87 does not widen the inline
+	// literal to extended precision (bit patterns match but the FPU
+	// compare diverges).
+#ifndef NDEBUG
+	{ double expected = 5.3; assert( *(double *)wv3 == expected ); }
+#endif
+
+	*(int *)wv3 = 45;
+	assert( wr_callFunction(gc, "test4")->i );
+	*(double *)wv3 = 4.5;
+	assert( wr_callFunction(gc, "test5")->i );
+
+	*(double *)wv3 = 4.6;
+	assert( wr_callFunction(gc, "test5")->i == 0 );
+#else
+	// Compare via a variable so 32-bit x87 does not silently widen the
+	// inline float literal to double excess precision (bit patterns match
+	// but the FPU compare diverges).
+#ifndef NDEBUG
+	{ float expected = 5.3f; assert( *(float *)wv3 == expected ); }
+#endif
 
 	*(int *)wv3 = 45;
 	assert( wr_callFunction(gc, "test4")->i );
@@ -2135,6 +2164,7 @@ void testGlobalValues( WRState* w )
 
 	*(float *)wv3 = 4.6f;
 	assert( wr_callFunction(gc, "test5")->i == 0 );
+#endif
 
 	WrenchValue wv4( gc, "global_four" );
 	
@@ -2146,7 +2176,11 @@ void testGlobalValues( WRState* w )
 	wr_makeInt( wv4.asArrayMember(17), 18 );
 	assert( wr_callFunction(gc, "test7")->i );
 
+#ifdef WRENCH_DOUBLE_PRECISION
+	wv4.asArrayMember(17)->setDouble( 19.3 );
+#else
 	wv4.asArrayMember(17)->setFloat( 19.3f );
+#endif
 	assert( wr_callFunction(gc, "test8")->i );
 
 	wv4.asArrayMember(2)->setInt( 200 );
@@ -2661,13 +2695,24 @@ void testImport()
 #include "wrench.h"
 
 const int Pbasic_bytecodeSize=54;
-const unsigned char Pbasic_bytecode[]=
+
+void fillPbasicBytecode( unsigned char* bytecode )
 {
-	0x01, 0x00, 0x00, 0x04, 0x0D, 0x00, 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x57, 0x6F, 0x72, 0x6C, // 16
-	0x64, 0x21, 0x0A, 0x06, 0x01, 0x88, 0x8A, 0x37, 0x16, 0xCF, 0x00, 0x00, 0xAF, 0x0A, 0x70, 0x00, // 32
-	0x0F, 0x09, 0x20, 0x00, 0x06, 0x01, 0x88, 0x8A, 0x37, 0x16, 0x90, 0x00, 0x37, 0xEF, 0x09, 0x02, // 48
-	0xEF, 0x14, 0x95, 0xF8, 0x8F, 0x5A, // 54
-};
+	bytecode[0] = 0x01; bytecode[1] = 0x00; bytecode[2] = 0x00; bytecode[3] = 0x04;
+	bytecode[4] = 0x0D; bytecode[5] = 0x00; bytecode[6] = 0x48; bytecode[7] = 0x65;
+	bytecode[8] = 0x6C; bytecode[9] = 0x6C; bytecode[10] = 0x6F; bytecode[11] = 0x20;
+	bytecode[12] = 0x57; bytecode[13] = 0x6F; bytecode[14] = 0x72; bytecode[15] = 0x6C;
+	bytecode[16] = 0x64; bytecode[17] = 0x21; bytecode[18] = 0x0A; bytecode[19] = 0x06;
+	bytecode[20] = 0x01; bytecode[21] = 0x88; bytecode[22] = 0x8A; bytecode[23] = 0x37;
+	bytecode[24] = 0x16; bytecode[25] = 0xCF; bytecode[26] = 0x00; bytecode[27] = 0x00;
+	bytecode[28] = 0xAF; bytecode[29] = 0x0A; bytecode[30] = 0x70; bytecode[31] = 0x00;
+	bytecode[32] = 0x0F; bytecode[33] = 0x09; bytecode[34] = 0x20; bytecode[35] = 0x00;
+	bytecode[36] = 0x06; bytecode[37] = 0x01; bytecode[38] = 0x88; bytecode[39] = 0x8A;
+	bytecode[40] = 0x37; bytecode[41] = 0x16; bytecode[42] = 0x90; bytecode[43] = 0x00;
+	bytecode[44] = 0x37; bytecode[45] = 0xEF; bytecode[46] = 0x09; bytecode[47] = 0x02;
+	bytecode[48] = 0xEF; bytecode[49] = 0x14; bytecode[50] = 0x96; bytecode[51] = 0xF8;
+	bytecode[52] = 0x8F; bytecode[53] = 0x5A;
+}
 
 void logBlank( WRContext* c, const WRValue* argv, const int argn, WRValue& retVal, void* usr ) { }
 
@@ -2708,6 +2753,8 @@ void setup()
 		wr_run( w, outBytes, outLen, true, true ); // load and run the code!
 	}
 
+	unsigned char Pbasic_bytecode[Pbasic_bytecodeSize];
+	fillPbasicBytecode( Pbasic_bytecode );
 	assert( wr_run(w, Pbasic_bytecode, Pbasic_bytecodeSize) );
 
 	wr_destroyState( w );

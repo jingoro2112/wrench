@@ -45,6 +45,8 @@ var t[] = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
 array::truncate( t, 4 );
 if ( t[3] != 40 ) println("array10" + t[3] );
 if ( t._count != 4 ) println("array11" + t._count  );
+array::truncate( t );
+if ( t._count != 4 ) println("array11a" + t._count );
 
 var r[] = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
 array::remove( r, 1 ); // remove the '20'

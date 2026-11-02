@@ -64,10 +64,23 @@ void WRContext::markBase( WRGCBase* svb )
 //------------------------------------------------------------------------------
 void WRContext::mark( WRValue* s )
 {
-	if ( IS_CONTAINER_MEMBER(s->xtype) && IS_EXARRAY_TYPE(s->r->xtype) )
+	if ( IS_CONTAINER_MEMBER(s->xtype) )
 	{
-		// we don't mark this type, but we might mark it's target
-		mark( s->r );
+		// r/vb aliases a WRGCBase* (hash indexing, index.cpp) or a
+		// WRValue* (array/struct indexing). Use the same discriminator
+		// as WRValue::deref(): m_type at offset 0. In the WRValue case
+		// byte 0 is the low byte of an aligned WRGCObject*, so it
+		// cannot collide with SV_HASH_INTERNAL. Reading s->r->xtype for
+		// the hash case would land on a heap pointer's high byte and
+		// can falsely satisfy IS_EXARRAY_TYPE on 32-bit targets.
+		if ( s->vb->m_type == SV_HASH_INTERNAL )
+		{
+			markBase( s->vb );
+		}
+		else if ( IS_EXARRAY_TYPE(s->r->xtype) )
+		{
+			mark( s->r );
+		}
 		return;
 	}
 
@@ -186,7 +199,20 @@ WRGCObject* WRContext::getSVA( int size, WRGCObjectType type, bool init )
 	}
 #endif
 
-	ret->m_nextGC = svAllocated;
+	if ( ret->m_nextGC )
+	{
+		WRGCBase* chain = ret->m_nextGC;
+		while( chain->m_nextGC )
+		{
+			chain = chain->m_nextGC;
+		}
+		chain->m_nextGC = svAllocated;
+	}
+	else
+	{
+		ret->m_nextGC = svAllocated;
+	}
+
 	svAllocated = ret;
 
 	allocatedMemoryHint += allocated + sizeof(WRGCObject);

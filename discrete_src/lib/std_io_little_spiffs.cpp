@@ -25,6 +25,7 @@ SOFTWARE.
 #include "wrench.h"
 
 #if defined(WRENCH_LITTLEFS_FILE_IO) || defined(WRENCH_SPIFFS_FILE_IO)
+#include <new>
 #include <FS.h>
 #ifdef WRENCH_LITTLEFS_FILE_IO
 #include <LittleFS.h>
@@ -59,7 +60,14 @@ struct WRFSFile
 	WRFSFile* next;
 };
 
-WRFSFile* g_OpenFiles =0;
+static WRFSFile* g_OpenFiles =0;
+
+//------------------------------------------------------------------------------
+void wr_destroyFile( WRFSFile* file )
+{
+	file->~WRFSFile();
+	g_free( file );
+}
 
 //------------------------------------------------------------------------------
 void wr_stdout( const char* data, const int size )
@@ -120,7 +128,7 @@ void wr_write_file( WRValue* stackTop, const int argn, WRContext* c )
 		return;
 	}
 
-	WRValue::MallocStrScoped fileName( *arg );
+	WRValue::MallocStrScoped fileName( *(stackTop - 2) );
 	
 	unsigned int len;
 	const char* data = (char*)((stackTop - 1)->array(&len));
@@ -145,7 +153,11 @@ void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
-		FILE_OBJ.remove( WRValue::MallocStrScoped fileName(*arg) );
+		WRValue::MallocStrScoped fileName( *(stackTop - 1) );
+		if ( fileName )
+		{
+			FILE_OBJ.remove( fileName );
+		}
 	} 
 }
 
@@ -170,42 +182,44 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 		mode = args[1].asInt();
 	}
 
-	const char* fileName = (const char*)args->array();
+	WRValue::MallocStrScoped fileName( *args );
 	if ( fileName )
 	{
-		WRFSFile* entry = (WRFSFile *)g_malloc( sizeof(WRFSFile) );
+		void* memory = g_malloc( sizeof(WRFSFile) );
 
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-		if(!entry) { g_mallocFailed = true; return; }
-#endif
+	#ifdef WRENCH_HANDLE_MALLOC_FAIL
+		if(!memory) { g_mallocFailed = true; return; }
+	#endif
+
+		WRFSFile* entry = new(memory) WRFSFile;
 		
-		if ( mode & LFS_READ )
-		{
-			entry->file = FILE_OBJ.open( fileName, FILE_READ );
-		}
-		else if ( (mode & LFS_RDWR) || (mode & LFS_APPEND) )
-		{
-			entry->file = FILE_OBJ.open( fileName, FILE_WRITE );
-		}
-		else if ( mode & LFS_APPEND )
+		if ( mode & LFS_APPEND )
 		{
 			entry->file = FILE_OBJ.open( fileName, FILE_APPEND );
 		}
+		else if ( mode & LFS_READ )
+		{
+			entry->file = FILE_OBJ.open( fileName, FILE_READ );
+		}
+		else if ( mode & LFS_RDWR )
+		{
+			entry->file = FILE_OBJ.open( fileName, FILE_WRITE );
+		}
 		else
 		{
-			g_free( entry );
+			wr_destroyFile( entry );
 			return;
 		}
 
 		if ( !entry->file )
 		{
-			g_free( entry );
+			wr_destroyFile( entry );
 			return;
 		}
 
 		entry->next = g_OpenFiles;
 		g_OpenFiles = entry;
-		stackTop->p = entry;
+		stackTop->r1 = entry;
 	}
 }
 
@@ -213,7 +227,7 @@ void wr_ioOpen( WRValue* stackTop, const int argn, WRContext* c )
 void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 {
 	WRValue* args = stackTop - argn;
-	if ( !argn || !args->p )
+	if ( !argn || !args->r1 )
 	{
 		return;
 	}
@@ -222,7 +236,7 @@ void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 	WRFSFile* cur = g_OpenFiles;
 	while( cur )
 	{
-		if ( cur == args->p )
+		if ( cur == args->r1 )
 		{
 			cur->file.close();
 			
@@ -235,7 +249,7 @@ void wr_ioClose( WRValue* stackTop, const int argn, WRContext* c )
 				prev->next = cur->next;
 			}
 			
-			g_free( cur );
+			wr_destroyFile( cur );
 			break;
 		}
 
@@ -260,7 +274,7 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 		return;
 	}
 
-	WRFSFile* fd = wr_safeGetFile( args[0].p );
+	WRFSFile* fd = wr_safeGetFile( args[0].r1 );
 	if ( !fd )
 	{
 		return;
@@ -283,14 +297,14 @@ void wr_ioRead( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_ioWrite( WRValue* stackTop, const int argn, WRContext* c )
 {
-	if ( argn != 2 )
+	if ( argn < 2 )
 	{
 		return;
 	}
 
 	WRValue* args = stackTop - argn;
 
-	WRFSFile* fd = wr_safeGetFile( args[0].p );
+	WRFSFile* fd = wr_safeGetFile( args[0].r1 );
 	if ( !fd )
 	{
 		return;
@@ -333,7 +347,7 @@ void wr_ioSeek( WRValue* stackTop, const int argn, WRContext* c )
 	{
 		WRValue* args = stackTop - argn;
 
-		WRFSFile* fd = wr_safeGetFile( args[0].p );
+		WRFSFile* fd = wr_safeGetFile( args[0].r1 );
 		if ( !fd )
 		{
 			return;
@@ -360,7 +374,7 @@ void wr_ioFSync(WRValue* stackTop, const int argn, WRContext* c)
 {
 	if ( argn == 1 )
 	{
-		WRFSFile* fd = wr_safeGetFile( (stackTop - 1)->p );
+		WRFSFile* fd = wr_safeGetFile( (stackTop - 1)->r1 );
 		if ( fd )
 		{
 			fd->file.flush();
@@ -371,12 +385,11 @@ void wr_ioFSync(WRValue* stackTop, const int argn, WRContext* c)
 //------------------------------------------------------------------------------
 void wr_ioCleanupFunction( WRState* w, void* param )
 {
-	WRFSFile* g_OpenFiles =0;
 	while( g_OpenFiles )
 	{
 		WRFSFile* next = g_OpenFiles->next;
 		g_OpenFiles->file.close();
-		g_free( g_OpenFiles );
+		wr_destroyFile( g_OpenFiles );
 		g_OpenFiles = next;
 	}
 }
@@ -384,8 +397,6 @@ void wr_ioCleanupFunction( WRState* w, void* param )
 //------------------------------------------------------------------------------
 void wr_ioPushConstants( WRState* w )
 {
-	WRValue C;
-	
 	wr_registerLibraryConstant( w, "io::O_RDONLY", (int32_t)LFS_READ );
 	wr_registerLibraryConstant( w, "io::O_RDWR", (int32_t)LFS_RDWR );
 	wr_registerLibraryConstant( w, "io::O_APPEND", (int32_t)LFS_APPEND );
@@ -400,5 +411,24 @@ void wr_ioPushConstants( WRState* w )
 	wr_addLibraryCleanupFunction( w, wr_ioCleanupFunction, 0 );
 
 }
+
+//------------------------------------------------------------------------------
+void wr_loadIOLib( WRState* w )
+{
+	wr_registerLibraryFunction( w, "io::readFile", wr_read_file );
+	wr_registerLibraryFunction( w, "io::writeFile", wr_write_file );
+	wr_registerLibraryFunction( w, "io::deleteFile", wr_delete_file );
+	wr_registerLibraryFunction( w, "io::getline", wr_getline );
+	wr_registerLibraryFunction( w, "io::open", wr_ioOpen );
+	wr_registerLibraryFunction( w, "io::close", wr_ioClose );
+	wr_registerLibraryFunction( w, "io::read", wr_ioRead );
+	wr_registerLibraryFunction( w, "io::write", wr_ioWrite );
+	wr_registerLibraryFunction( w, "io::seek", wr_ioSeek );
+	wr_registerLibraryFunction( w, "io::fsync", wr_ioFSync );
+
+	wr_ioPushConstants( w );
+}
+
+#undef FILE_OBJ
 
 #endif

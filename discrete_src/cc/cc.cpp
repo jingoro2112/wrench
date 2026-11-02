@@ -170,10 +170,13 @@ WRError wr_compile( const char* source,
 					WRstr* errMsg,
 					const uint8_t compilerOptionFlags )
 {
+#ifdef WRENCH_DOUBLE_PRECISION
+	assert( sizeof(double) == 8 );
+#endif
 	assert( sizeof(float) == 4 );
 	assert( sizeof(int) == 4 );
 	assert( sizeof(char) == 1 );
-	assert( O_LAST < 255 );
+	assert( O_LAST <= 255 );
 
 	// create a compiler context that has all the necessary stuff so it's completely unloaded when complete
 	WRCompilationContext comp; 
@@ -755,7 +758,7 @@ void WRCompilationContext::resolveRelativeJumps( WRBytecode& bytecode )
 void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContext& context )
 {
 	WRValue& value = context.value;
-	unsigned char data[4];
+	unsigned char data[8];
 	
 	if ( value.type == WR_INT && value.i == 0 )
 	{
@@ -793,9 +796,21 @@ void WRCompilationContext::pushLiteral( WRBytecode& bytecode, WRExpressionContex
 	}
 	else
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		union
+		{
+			double d;
+			uint64_t u;
+		} be;
+		be.d = value.d;
+
+		pushOpcode( bytecode, O_LiteralDouble );
+		pushData( bytecode, wr_pack64(be.u, data), 8 );
+#else
 		pushOpcode( bytecode, O_LiteralFloat );
 		int32_t be = value.i;
 		pushData( bytecode, wr_pack32(be, data), 4 );
+#endif
 	}
 }
 
@@ -1110,8 +1125,8 @@ void WRCompilationContext::resolveExpression( WRExpression& expression )
 			{
 				return;
 			}
-			o = (unsigned int)-1;
-		}
+				o = -1;
+			}
 
 		// right to left operations
 		for( int o = expression.context.count() - 1; o >= 0; --o )
@@ -1225,7 +1240,10 @@ unsigned int WRCompilationContext::resolveExpressionEx( WRExpression& expression
 				WRCompilationContext::pushOpcode( expression.bytecode, O_SwapTwoToTop );
 				unsigned char pos = expression.context[first].stackPosition + 1;
 				WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
-				pos = expression.context[second].stackPosition + 1;
+				if ( expression.context[second].stackPosition )
+				{
+					pos = expression.context[second].stackPosition + 1;
+				}
 				WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
 
 				expression.swapWithTop( expression.context[second].stackPosition, false );
@@ -1322,7 +1340,6 @@ unsigned int WRCompilationContext::resolveExpressionEx( WRExpression& expression
 					WRCompilationContext::pushOpcode( expression.bytecode, O_SwapTwoToTop );
 					unsigned char pos = expression.context[first].stackPosition + 1;
 					WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
-					pos = 2;
 					WRCompilationContext::pushData( expression.bytecode, &pos, 1 );
 					
 					expression.swapWithTop( 1, false );
@@ -1612,7 +1629,10 @@ bool WRCompilationContext::pushObjectTable( WRExpressionContext& context,
 	context.bytecode.unitObjectSpace[i].references.append() = getBytecodePosition( context.bytecode );
 	context.bytecode.unitObjectSpace[i].hash = hash;
 
-	pushData( context.bytecode, "\0\0", 2 );
+	{
+		const unsigned char zeroData[2] = { 0, 0 };
+		pushData( context.bytecode, zeroData, 2 );
+	}
 
 	context.type = EXTYPE_BYTECODE_RESULT;
 
@@ -2596,7 +2616,11 @@ bool WRCompilationContext::parseEnum( int unitIndex )
 		{
 			if ( negative )
 			{
+#ifdef WRENCH_DOUBLE_PRECISION
+				value.d = -value.d;
+#else
 				value.f = -value.f;
+#endif
 			}
 		}
 		else
@@ -3294,7 +3318,10 @@ bool WRCompilationContext::parseStatement( int unitIndex, char end, WROpcode opc
 			GotoSource& G = unit.bytecode.gotoSource.append();
 			G.hash = wr_hashStr( token );
 			G.offset = unit.bytecode.all.size();
-			pushData( unit.bytecode, "\0\0\0", 3 );
+			{
+				const unsigned char zeroData[3] = { 0, 0, 0 };
+				pushData( unit.bytecode, zeroData, 3 );
+			}
 
 			if ( !getToken(ex, ";"))
 			{

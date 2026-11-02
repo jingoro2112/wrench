@@ -25,9 +25,7 @@ SOFTWARE.
 #include "wrench.h"
 
 #if defined(WRENCH_WIN32_FILE_IO) \
-	|| defined(WRENCH_LINUX_FILE_IO) \
-	|| defined(WRENCH_SPIFFS_FILE_IO) \
-	|| defined(WRENCH_LITTLEFS_FILE_IO)
+	|| defined(WRENCH_LINUX_FILE_IO)
 
 #if defined(WRENCH_WIN32_FILE_IO)
 #include <io.h>
@@ -75,23 +73,28 @@ void wr_read_file( WRValue* stackTop, const int argn, WRContext* c )
 		if ( ret == 0 )
 		{
 			FILE *infil = fopen( fileName, "rb" );
-			if ( infil )
+			if ( !infil )
 			{
-				stackTop->va = c->getSVA( (int)sbuf.st_size, SV_CHAR, false );
-#ifdef WRENCH_HANDLE_MALLOC_FAIL
-				if ( !stackTop->va )
-				{
-					return;
-				}
-#endif
-				stackTop->p2 = INIT_AS_ARRAY;
-				if ( fread(stackTop->va->m_Cdata, sbuf.st_size, 1, infil) != 1 )
-				{
-					return;
-				}
+				return;
 			}
 
+			stackTop->va = c->getSVA( (int)sbuf.st_size, SV_CHAR, false );
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			if ( !stackTop->va )
+			{
+				fclose( infil );
+				return;
+			}
+#endif
+			stackTop->p2 = INIT_AS_ARRAY;
+			size_t bytesRead = fread( stackTop->va->m_Cdata, 1, sbuf.st_size, infil );
+
 			fclose( infil );
+
+			if ( bytesRead != (size_t)sbuf.st_size )
+			{
+				stackTop->init();
+			}
 		}
 	}
 }
@@ -127,7 +130,7 @@ void wr_delete_file( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn == 1 )
 	{
-		const char* filename = WRValue::MallocStrScoped(*(stackTop - 1));
+		WRValue::MallocStrScoped filename( *(stackTop - 1) );
 		if ( filename )
 		{
 #if defined(WRENCH_WIN32_FILE_IO)
@@ -357,7 +360,8 @@ void wr_loadIOLib( WRState* w )
 	wr_ioPushConstants( w );
 }
 
-#else
+#elif !defined(WRENCH_SPIFFS_FILE_IO) \
+	&& !defined(WRENCH_LITTLEFS_FILE_IO)
 
 void wr_loadIOLib( WRState* w )
 {

@@ -77,6 +77,20 @@ unsigned char* wr_pack32( int32_t l, unsigned char* buf )
 	return buf;
 }
 
+//------------------------------------------------------------------------------
+unsigned char* wr_pack64( uint64_t l, unsigned char* buf )
+{
+	*buf = (unsigned char)(l & 0xFF);
+	*(buf + 1) = (unsigned char)((l>>8) & 0xFF);
+	*(buf + 2) = (unsigned char)((l>>16) & 0xFF);
+	*(buf + 3) = (unsigned char)((l>>24) & 0xFF);
+	*(buf + 4) = (unsigned char)((l>>32) & 0xFF);
+	*(buf + 5) = (unsigned char)((l>>40) & 0xFF);
+	*(buf + 6) = (unsigned char)((l>>48) & 0xFF);
+	*(buf + 7) = (unsigned char)((l>>56) & 0xFF);
+	return buf;
+}
+
 #ifdef WRENCH_BIG_ENDIAN
 //------------------------------------------------------------------------------
 int32_t wr_x32( const int32_t val )
@@ -95,8 +109,8 @@ int16_t wr_x16( const int16_t val )
 
 
 // convert the value in-place and return a pointer to it
-int32_t* makeInt();
-float* makeFloat();
+//int32_t* makeInt();
+//float* makeFloat();
 
 //------------------------------------------------------------------------------
 int32_t* WrenchValue::Int()
@@ -112,12 +126,31 @@ int32_t* WrenchValue::Int()
 //------------------------------------------------------------------------------
 float* WrenchValue::Float()
 {
+#ifdef WRENCH_DOUBLE_PRECISION
+	return 0;
+#else
 	if ( m_value->type != WR_FLOAT )
 	{
 		m_value->f = m_value->asFloat();
 		m_value->p2 = INIT_AS_FLOAT;
 	}
 	return &(m_value->f);
+#endif
+}
+
+//------------------------------------------------------------------------------
+double* WrenchValue::Double()
+{
+#ifdef WRENCH_DOUBLE_PRECISION
+	if ( m_value->type != WR_FLOAT )
+	{
+		m_value->d = m_value->asDouble();
+		m_value->p2 = INIT_AS_FLOAT;
+	}
+	return &(m_value->d);
+#else
+	return 0;
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -589,6 +622,15 @@ void wr_registerLibraryConstant( WRState* w, const char* signature, const int32_
 	C->i = i;
 }
 
+#ifdef WRENCH_DOUBLE_PRECISION
+//------------------------------------------------------------------------------
+void wr_registerLibraryConstant( WRState* w, const char* signature, const double d )
+{
+	WRValue* C = w->globalRegistry.getAsRawValueHashTable( wr_hashStr(signature) );
+	C->p2 = INIT_AS_FLOAT | INIT_AS_LIB_CONST;
+	C->d = d;
+}
+#else
 //------------------------------------------------------------------------------
 void wr_registerLibraryConstant( WRState* w, const char* signature, const float f )
 {
@@ -596,6 +638,8 @@ void wr_registerLibraryConstant( WRState* w, const char* signature, const float 
 	C->p2 = INIT_AS_FLOAT | INIT_AS_LIB_CONST;
 	C->f = f;
 }
+#endif
+
 
 //------------------------------------------------------------------------------
 int WRValue::asInt() const
@@ -606,7 +650,11 @@ int WRValue::asInt() const
 	}
 	else if ( type == WR_FLOAT )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		return (int)d;
+#else
 		return (int)f;
+#endif
 	}
 
 	return singleValue().asInt();
@@ -617,7 +665,11 @@ float WRValue::asFloat() const
 {
 	if ( type == WR_FLOAT )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		return (float)d;
+#else
 		return f;
+#endif
 	}
 	else if ( type == WR_INT )
 	{
@@ -625,6 +677,25 @@ float WRValue::asFloat() const
 	}
 
 	return singleValue().asFloat();
+}
+
+//------------------------------------------------------------------------------
+double WRValue::asDouble() const
+{
+	if ( type == WR_FLOAT )
+	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		return d;
+#else
+		return (double)f;
+#endif
+	}
+	else if ( type == WR_INT )
+	{
+		return (double)i;
+	}
+
+	return singleValue().asDouble();
 }
 
 //------------------------------------------------------------------------------
@@ -810,7 +881,11 @@ int wr_technicalAsStringEx( char* string, const WRValue* value, size_t pos, size
 	}
 	else if ( value->type == WR_FLOAT )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		return pos + snprintf( string + pos, maxLen - pos, "%g", value->d );
+#else
 		return pos + snprintf( string + pos, maxLen - pos, "%g", value->f );
+#endif
 	}
 	else if ( value->type == WR_INT )
 	{
@@ -915,8 +990,13 @@ char* WRValue::asMallocString( unsigned int* strLen ) const
 
 	if ( type == WR_FLOAT )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		ret = (char*)g_malloc( 32 );
+		len = snprintf( ret, 31, "%g", d );
+#else
 		ret = (char*)g_malloc( 12 );
 		len = wr_ftoa( f, ret, 11 );
+#endif
 	}
 	else if ( type == WR_INT )
 	{
@@ -925,6 +1005,7 @@ char* WRValue::asMallocString( unsigned int* strLen ) const
 	}
 	else if ( xtype == WR_EX_ARRAY && va->m_type == SV_CHAR )
 	{
+		len = va->m_size;
 		ret = (char*)g_malloc( va->m_size + 1 );
 #ifdef WRENCH_HANDLE_MALLOC_FAIL
 		if ( !ret )
@@ -961,7 +1042,11 @@ char* WRValue::asString( char* string, unsigned int maxLen, unsigned int* strLen
 	
 	if ( type == WR_FLOAT )
 	{
+#ifdef WRENCH_DOUBLE_PRECISION
+		len = snprintf( string, maxLen, "%g", d );
+#else
 		len = wr_ftoa( f, string, maxLen );
+#endif
 	}
 	else if ( type == WR_INT )
 	{
@@ -1237,7 +1322,7 @@ WRValue* wr_addToContainerEx( const char* name, WRValue* container )
 		return 0;
 	}
 
-	const unsigned int len = (const unsigned int)strlen(name);
+	const unsigned int len = (unsigned int)strlen(name);
 
 	// create a 'key' object
 	WRValue key;
@@ -1288,8 +1373,27 @@ void wr_addFloatToContainer( WRValue* container, const char* name, const float f
 	}
 
 	entry->p2 = INIT_AS_FLOAT;
+#ifdef WRENCH_DOUBLE_PRECISION
+	entry->d = (double)f;
+#else
 	entry->f = f;
+#endif
 }
+
+#ifdef WRENCH_DOUBLE_PRECISION
+//------------------------------------------------------------------------------
+void wr_addFloatToContainer( WRValue* container, const char* name, const double f )
+{
+	WRValue* entry = wr_addToContainerEx( name, container );
+	if ( !entry )
+	{
+		return;
+	}
+
+	entry->p2 = INIT_AS_FLOAT;
+	entry->d = f;
+}
+#endif
 
 //------------------------------------------------------------------------------
 void wr_addIntToContainer( WRValue* container, const char* name, const int i )
@@ -1325,7 +1429,7 @@ WRValue* wr_getValueFromContainer( WRValue const& container, const char* name )
 		return 0;
 	}
 
-	return (WRValue*)container.va->get( wr_hash(name, (const unsigned int)strlen(name)) );
+	return (WRValue*)container.va->get( wr_hash(name, (unsigned int)strlen(name)) );
 }
 
 #ifndef WRENCH_WITHOUT_COMPILER
@@ -1636,6 +1740,11 @@ const char* c_opcodeName[] =
 	"LocalBZ8",
 	"GlobalBZ",
 	"GlobalBZ8",
+
+	"LiteralDouble",
+	"LiteralDoubleToGlobal",
+	"LiteralDoubleToLocal",
+
 };
 
 //------------------------------------------------------------------------------

@@ -37,12 +37,29 @@ void wr_fastled_setup2812( WRValue* stackTop, const int argn, WRContext* c )
 {
 	if ( argn > 0 )
 	{
+		int numLeds = (stackTop - argn)->asInt();
+		if ( numLeds <= 0 )
+		{
+			return;
+		}
+
 		if ( wr_leds )
 		{
 			g_free( wr_leds );
 		}
-		
-		wr_numLeds = (stackTop - argn)->asInt();
+
+		wr_leds = (CRGB*)g_malloc( sizeof(CRGB) * numLeds );
+		if ( !wr_leds )
+		{
+			wr_numLeds = 0;
+#ifdef WRENCH_HANDLE_MALLOC_FAIL
+			g_mallocFailed = true;
+#endif
+			return;
+		}
+
+		memset( wr_leds, 0, sizeof(CRGB) * numLeds );
+		wr_numLeds = numLeds;
 
 		FastLED.addLeds<WS2812B, WR_FASTLED_DATA_PIN, GRB>(wr_leds, wr_numLeds);
 	}
@@ -60,7 +77,7 @@ void wr_fastled_brightness( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_fastled_set( WRValue* stackTop, const int argn, WRContext* c )
 {
-	if ( argn > 3 )
+	if ( argn > 3 && wr_leds )
 	{
 		WRValue* args = stackTop - argn;
 
@@ -71,8 +88,6 @@ void wr_fastled_set( WRValue* stackTop, const int argn, WRContext* c )
 			wr_leds[led].g = args[2].asInt();
 			wr_leds[led].b = args[3].asInt();
 		}
-
-		FastLED.addLeds<WS2812B, WR_FASTLED_DATA_PIN, GRB>(wr_leds, wr_numLeds);
 	}
 }
 
@@ -85,9 +100,9 @@ void wr_fastled_show( WRValue* stackTop, const int argn, WRContext* c )
 //------------------------------------------------------------------------------
 void wr_loadFastLEDLib( WRState* w )
 {
-	wr_registerLibraryFunction( w, "fastled::setup2812", wr_fastled_setup2812 ); // ( data_pin, num leds )
-	wr_registerLibraryFunction( w, "fastled::brightness", wr_fastled_show ); // ( brightness )
-	wr_registerLibraryFunction( w, "fastled::set", wr_fastled_show ); // ( led, r, g, b )
+	wr_registerLibraryFunction( w, "fastled::setup2812", wr_fastled_setup2812 ); // ( num leds )
+	wr_registerLibraryFunction( w, "fastled::brightness", wr_fastled_brightness ); // ( brightness )
+	wr_registerLibraryFunction( w, "fastled::set", wr_fastled_set ); // ( led, r, g, b )
 	wr_registerLibraryFunction( w, "fastled::show", wr_fastled_show ); // ()
 }
 

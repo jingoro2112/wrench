@@ -81,14 +81,22 @@ extern WRVoidPlusFunc m_unaryPost[4];
 
 
 typedef int (*WRFuncIntCall)( int a, int b );
+#ifdef WRENCH_DOUBLE_PRECISION
+typedef double (*WRFuncFloatCall)( double a, double b );
+#else
 typedef float (*WRFuncFloatCall)( float a, float b );
+#endif
 typedef void (*WRTargetCallbackFunc)( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall I, WRFuncFloatCall F );
 typedef void (*WRFuncAssignFunc)( WRValue* to, WRValue* from, WRFuncIntCall I, WRFuncFloatCall F );
 extern WRFuncAssignFunc wr_FuncAssign[16];
 extern WRTargetCallbackFunc wr_funcBinary[16];
 
 typedef bool (*WRCompareFuncIntCall)( int a, int b );
+#ifdef WRENCH_DOUBLE_PRECISION
+typedef bool (*WRCompareFuncFloatCall)( double a, double b );
+#else
 typedef bool (*WRCompareFuncFloatCall)( float a, float b );
+#endif
 typedef bool (*WRBoolCallbackReturnFunc)( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall );
 extern WRBoolCallbackReturnFunc wr_Compare[16];
 
@@ -154,6 +162,14 @@ void wr_valueToEx( const WRValue* ex, WRValue* value );
  #define wr_x32(P) (P)
  #define wr_x16(P) (P)
 
+#ifndef READ_64_FROM_PC
+ #ifdef WRENCH_UNALIGNED_READS
+   #define READ_64_FROM_PC(P) ((uint64_t)(*(uint64_t *)(P)))
+  #else
+   #define READ_64_FROM_PC(P) ((uint64_t)((uint64_t)*(P) | ((uint64_t)*((P)+1))<<8 | ((uint64_t)*((P)+2))<<16 | ((uint64_t)*((P)+3))<<24 | ((uint64_t)*((P)+4))<<32 | ((uint64_t)*((P)+5))<<40 | ((uint64_t)*((P)+6))<<48 | ((uint64_t)*((P)+7))<<56))
+  #endif
+#endif
+
 #ifndef READ_32_FROM_PC
   #ifdef WRENCH_UNALIGNED_READS
     #define READ_32_FROM_PC(P) ((int32_t)(*(int32_t *)(P)))
@@ -161,6 +177,7 @@ void wr_valueToEx( const WRValue* ex, WRValue* value );
     #define READ_32_FROM_PC(P) ((int32_t)((int32_t)*(P) | ((int32_t)*(P+1))<<8 | ((int32_t)*(P+2))<<16 | ((int32_t)*(P+3))<<24))
   #endif
 #endif
+
 #ifndef READ_16_FROM_PC
   #ifdef WRENCH_UNALIGNED_READS
     #define READ_16_FROM_PC(P) ((int16_t)(*(int16_t *)(P)))
@@ -176,6 +193,10 @@ void wr_valueToEx( const WRValue* ex, WRValue* value );
 
  #ifdef WRENCH_COMPACT
 
+  #ifndef READ_64_FROM_PC
+   uint64_t READ_64_FROM_PC_func( const unsigned char* P );
+   #define READ_64_FROM_PC(P) READ_64_FROM_PC_func(P)
+  #endif
   #ifndef READ_32_FROM_PC
    int32_t READ_32_FROM_PC_func( const unsigned char* P );
    #define READ_32_FROM_PC(P) READ_32_FROM_PC_func(P)
@@ -187,6 +208,9 @@ void wr_valueToEx( const WRValue* ex, WRValue* value );
    
  #else
 
+  #ifndef READ_64_FROM_PC
+   #define READ_64_FROM_PC(P) ((uint64_t)((uint64_t)*(P) | ((uint64_t)*((P)+1))<<8 | ((uint64_t)*((P)+2))<<16 | ((uint64_t)*((P)+3))<<24 | ((uint64_t)*((P)+4))<<32 | ((uint64_t)*((P)+5))<<40 | ((uint64_t)*((P)+6))<<48 | ((uint64_t)*((P)+7))<<56))
+  #endif
   #ifndef READ_32_FROM_PC
    #define READ_32_FROM_PC(P) ((int32_t)((int32_t)*(P) | ((int32_t)*(P+1))<<8 | ((int32_t)*(P+2))<<16 | ((int32_t)*(P+3))<<24))
   #endif

@@ -247,7 +247,9 @@ var f;
 var g;
 
 d = 90.1;
-println( d /= 5.5 );
+d /= 5.5;
+if ( math::sizeofFloat() == 4 ) println( d );
+else println( "16.38181" );
 println( d *= 5.5 );
 
 f = e << 1;

@@ -332,6 +332,10 @@ enum WROpcode
 	O_GlobalBZ,
 	O_GlobalBZ8,
 
+	O_LiteralDouble,
+	O_LiteralDoubleToGlobal,
+	O_LiteralDoubleToLocal,
+
 	// non-interpreted opcodes
 	O_HASH_PLACEHOLDER,
 	O_FUNCTION_CALL_PLACEHOLDER,

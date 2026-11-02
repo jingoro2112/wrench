@@ -246,10 +246,10 @@ int wr_operandSizeForOpcode( const uint8_t* opPtr, const uint8_t* end, const uin
 			return 3;
 		}
 
-		case O_LiteralInt32:
-		case O_LiteralFloat:
-		case O_LoadLibConstant:
-		case O_AssignToObjectTableByHash:
+			case O_LiteralInt32:
+			case O_LiteralFloat:
+			case O_LoadLibConstant:
+			case O_AssignToObjectTableByHash:
 		case O_StackIndexHash:
 		{
 			return 4;
@@ -265,12 +265,23 @@ int wr_operandSizeForOpcode( const uint8_t* opPtr, const uint8_t* end, const uin
 		case O_CallLibFunctionAndPop:
 		case O_GlobalIndexHash:
 		case O_LocalIndexHash:
-		{
-			return 5;
-		}
+			{
+				return 5;
+			}
 
-		case O_LiteralString:
-		{
+			case O_LiteralDouble:
+			{
+				return 8;
+			}
+
+			case O_LiteralDoubleToGlobal:
+			case O_LiteralDoubleToLocal:
+			{
+				return 9;
+			}
+
+			case O_LiteralString:
+			{
 			if ( opPtr + 2 > end )
 			{
 				return -1;
@@ -487,6 +498,24 @@ void wr_decodeOperands( const uint8_t op,
 			ops.appendFormat( "%c[0x%02X] imm=0x%08X", scope, (unsigned int)opPtr[0], (unsigned int)v.u );
 		}
 		note.appendFormat( "float=%g", v.f );
+		return;
+	}
+
+	if ( op == O_LiteralDouble || op == O_LiteralDoubleToGlobal || op == O_LiteralDoubleToLocal )
+	{
+		union { uint64_t u; double d; } v;
+		if ( op == O_LiteralDouble )
+		{
+			v.u = READ_64_FROM_PC(opPtr);
+			ops.appendFormat( "imm=0x%08X%08X", (unsigned int)(v.u >> 32), (unsigned int)v.u );
+		}
+		else
+		{
+			v.u = READ_64_FROM_PC(opPtr + 1);
+			char scope = (op == O_LiteralDoubleToGlobal) ? 'g' : 'l';
+			ops.appendFormat( "%c[0x%02X] imm=0x%08X%08X", scope, (unsigned int)opPtr[0], (unsigned int)(v.u >> 32), (unsigned int)v.u );
+		}
+		note.appendFormat( "double=%g", v.d );
 		return;
 	}
 
@@ -721,7 +750,7 @@ void wr_disassemble( const uint8_t* bytecode, const unsigned int len, WRstr& out
 		return;
 	}
 
-	WRContext* context = wr_createContext( w, bytecode, (int)len, false );
+	WRContext* context = wr_newContext( w, bytecode, (int)len, false );
 	if ( !context )
 	{
 		out.appendFormat( "err: context failed (%s)\n", c_errStrings[wr_getLastError(w)] );

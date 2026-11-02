@@ -24,10 +24,18 @@ SOFTWARE.
 
 #include "wrench.h"
 
-#ifdef WRENCH_COMPACT
+#if defined(WRENCH_COMPACT)
+
+#ifdef WRENCH_DOUBLE_PRECISION
+	#define WR_COMPACT_FLOAT double
+	#define WR_COMPACT_FLOAT_MEMBER d
+#else
+	#define WR_COMPACT_FLOAT float
+	#define WR_COMPACT_FLOAT_MEMBER f
+#endif
 
 extern bool CompareEQI( int a, int b );
-extern bool CompareEQF( float a, float b );
+extern bool CompareEQF( WR_COMPACT_FLOAT a, WR_COMPACT_FLOAT b );
 
 //------------------------------------------------------------------------------
 void unaryPost_E( WRValue* value, WRValue* stack, int add )
@@ -40,7 +48,7 @@ void unaryPost_E( WRValue* value, WRValue* stack, int add )
 }
 void unaryPost_I( WRValue* value, WRValue* stack, int add ) { stack->p2 = INIT_AS_INT; stack->i = value->i; value->i += add; }
 void unaryPost_R( WRValue* value, WRValue* stack, int add ) { m_unaryPost[ value->r->type ]( value->r, stack, add ); }
-void unaryPost_F( WRValue* value, WRValue* stack, int add ) { stack->p2 = INIT_AS_FLOAT; stack->f = value->f; value->f += add; }
+void unaryPost_F( WRValue* value, WRValue* stack, int add ) { stack->p2 = INIT_AS_FLOAT; stack->WR_COMPACT_FLOAT_MEMBER = value->WR_COMPACT_FLOAT_MEMBER; value->WR_COMPACT_FLOAT_MEMBER += add; }
 WRVoidPlusFunc m_unaryPost[4] = 
 {
 	unaryPost_I,  unaryPost_F,  unaryPost_R, unaryPost_E
@@ -54,7 +62,7 @@ void FuncAssign_E_E( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 {
 	if ( IS_CONTAINER_MEMBER(from->xtype) )
 	{
-		WRValue& V = from->deref();
+		WRValue V = from->deref();
 
 		wr_FuncAssign[(WR_EX<<2)|V.type]( to, &V, intCall, floatCall );
 		*from = to->deref();
@@ -112,7 +120,7 @@ void FuncAssign_X_R( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 
 void FuncAssign_F_F( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	to->f = floatCall( to->f, from->f );
+	to->WR_COMPACT_FLOAT_MEMBER = floatCall( to->WR_COMPACT_FLOAT_MEMBER, from->WR_COMPACT_FLOAT_MEMBER );
 }
 
 void FuncAssign_I_I( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
@@ -123,11 +131,11 @@ void FuncAssign_I_I( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFl
 void FuncAssign_I_F( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
 	to->p2 = INIT_AS_FLOAT;
-	to->f = floatCall( (float)to->i, from->f );
+	to->WR_COMPACT_FLOAT_MEMBER = floatCall( (WR_COMPACT_FLOAT)to->i, from->WR_COMPACT_FLOAT_MEMBER );
 }
 void FuncAssign_F_I( WRValue* to, WRValue* from, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	to->f = floatCall( to->f, (float)from->i );
+	to->WR_COMPACT_FLOAT_MEMBER = floatCall( to->WR_COMPACT_FLOAT_MEMBER, (WR_COMPACT_FLOAT)from->i );
 }
 
 WRFuncAssignFunc wr_FuncAssign[16] = 
@@ -201,17 +209,17 @@ void FuncBinary_I_I( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall 
 
 void FuncBinary_I_F( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	target->p2 = INIT_AS_FLOAT; target->f = floatCall( (float)to->i, from->f );
+	target->p2 = INIT_AS_FLOAT; target->WR_COMPACT_FLOAT_MEMBER = floatCall( (WR_COMPACT_FLOAT)to->i, from->WR_COMPACT_FLOAT_MEMBER );
 }
 
 void FuncBinary_F_I( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall )
 {
-	target->p2 = INIT_AS_FLOAT; target->f = floatCall( to->f, (float)from->i );
+	target->p2 = INIT_AS_FLOAT; target->WR_COMPACT_FLOAT_MEMBER = floatCall( to->WR_COMPACT_FLOAT_MEMBER, (WR_COMPACT_FLOAT)from->i );
 }
 
 void FuncBinary_F_F( WRValue* to, WRValue* from, WRValue* target, WRFuncIntCall intCall, WRFuncFloatCall floatCall  )
 {
-	target->p2 = INIT_AS_FLOAT; target->f = floatCall( to->f, from->f );
+	target->p2 = INIT_AS_FLOAT; target->WR_COMPACT_FLOAT_MEMBER = floatCall( to->WR_COMPACT_FLOAT_MEMBER, from->WR_COMPACT_FLOAT_MEMBER );
 }
 
 WRTargetCallbackFunc wr_funcBinary[16] = 
@@ -246,9 +254,9 @@ bool Compare_R_R( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCo
 bool Compare_R_X( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return wr_Compare[(to->r->type<<2)|from->type](to->r, from, intCall, floatCall); }
 bool Compare_X_R( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return wr_Compare[(to->type<<2)+from->r->type](to, from->r, intCall, floatCall); }
 bool Compare_I_I( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return intCall( to->i, from->i ); }
-bool Compare_I_F( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return floatCall( (float)to->i, from->f); }
-bool Compare_F_I( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return floatCall( to->f, (float)from->i); }
-bool Compare_F_F( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return floatCall( to->f, from->f); }
+bool Compare_I_F( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return floatCall( (WR_COMPACT_FLOAT)to->i, from->WR_COMPACT_FLOAT_MEMBER); }
+bool Compare_F_I( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return floatCall( to->WR_COMPACT_FLOAT_MEMBER, (WR_COMPACT_FLOAT)from->i); }
+bool Compare_F_F( WRValue* to, WRValue* from, WRCompareFuncIntCall intCall, WRCompareFuncFloatCall floatCall ) { return floatCall( to->WR_COMPACT_FLOAT_MEMBER, from->WR_COMPACT_FLOAT_MEMBER); }
 WRBoolCallbackReturnFunc wr_Compare[16] = 
 {
 	Compare_I_I, Compare_I_F, Compare_X_R, Compare_X_E,
@@ -257,5 +265,7 @@ WRBoolCallbackReturnFunc wr_Compare[16] =
 	Compare_E_X, Compare_E_X, Compare_E_R, Compare_E_E,
 };
 
+#undef WR_COMPACT_FLOAT
+#undef WR_COMPACT_FLOAT_MEMBER
 
 #endif

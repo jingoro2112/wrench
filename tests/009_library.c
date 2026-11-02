@@ -59,6 +59,11 @@ println( math::sqrt(72.25) );
 
 println( math::ceil(-4.1) );
 
+if ( math::pow(2, 3) != 8 ) println("bad math pow");
+if ( math::fmod(7, 4) != 3 ) println("bad math fmod");
+if ( math::ldexp(1.5, 3) != 12 ) println("bad math ldexp");
+if ( math::atan2(1, 0) < 1.5 ) println("bad math atan2");
+
 //str::sprintf( s, 			"%-10.4g", 12.45 );if ( s != "12.45" ) println("bad 1245 ");
 
 str::sprintf( s, 			"%0s", "x" );if ( s != "x" ) println("bad 001");

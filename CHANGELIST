@@ -1,3 +1,26 @@
+8.0.0 ----------------------------------------------------------------------------------
+- Major version change required to add 3 new opcodes:
+    O_LiteralDouble
+    O_LiteralDoubleToGlobal
+    O_LiteralDoubleToLocal
+  This supports WRENCH_DOUBLE_PRECISION 
+  If defined, the all floating point math will be done as 64-bit double-precision. This includes
+  compiling and runtime. non-double code can be run by a double-defined vm and vice versa, 
+  in the latter case the doubles will be down-converted via simple cast "(float)d" so precision
+  will be lost.
+- IAR compiled finickiness accounted for, some minor changes made to accomodate, all cosmetic
+- fixed math::atan2, math::pow, math::fmod, and math::ldexp reading their two arguments in
+  reverse order in both single- and double-precision builds
+- fixed desktop file reads leaking handles on failure, closing null handles, and io::deleteFile
+  using a filename after its temporary storage had been released
+- fixed TCP IPv4 byte order on big-endian systems, send argument handling, receive sizing and
+  timeout behavior, invalid address/port handling, and Windows socket calls
+- fixed character-array conversion reporting a zero length, which caused TCP to send empty data
+- fixed FastLED setup not allocating its LED buffer and brightness/set registering the show callback
+- fixed array::truncate accepting one argument and reading a missing size argument
+- added regression coverage for the math, file I/O, and container fixes and verified TCP with a
+  loopback send/receive test
+
 7.2.2 ----------------------------------------------------------------------------------
 - adding ternary expressions
 - adding some more tests, fixing existing ones

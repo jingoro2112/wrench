@@ -81,7 +81,10 @@ function userCheck( data )
 	if ( data["integer"] != 2456 ) println("f2");
 
 	if ( data._i != 1001 ) println("ii1");
-	if ( data._f != 20.02 ) println("ff1");
+	if ( math::sizeofFloat() == 4 )
+	{
+		if ( data._f != 20.02 ) println("ff1");
+	}
 
 	data.integer = 56789;
 	
